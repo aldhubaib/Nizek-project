@@ -2,6 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
+import { revalidatePath } from "next/cache";
+import type { SystemRole } from "@/generated/prisma/client";
 
 export async function getTeamMembers() {
   await requireUser();
@@ -23,6 +25,7 @@ export async function getTeamMembers() {
     email: u.email,
     name: u.name,
     imageUrl: u.imageUrl,
+    systemRole: u.systemRole,
     createdAt: u.createdAt,
     projects: u.projects.map((p) => ({
       id: p.project.id,
@@ -31,6 +34,20 @@ export async function getTeamMembers() {
       roleName: p.projectRole?.name ?? p.role,
     })),
   }));
+}
+
+export async function updateUserRole(userId: string, systemRole: SystemRole) {
+  const currentUser = await requireUser();
+  if (currentUser.systemRole !== "ADMIN") {
+    throw new Error("Only admins can change user roles");
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { systemRole },
+  });
+
+  revalidatePath("/dashboard/team");
 }
 
 export async function getPendingInvitations() {

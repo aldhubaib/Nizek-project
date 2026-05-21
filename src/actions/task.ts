@@ -4,42 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { requireProjectMember, requireProjectRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { logTaskActivity } from "@/lib/activity";
-
-async function getMemberPermissions(member: { roleId: string | null; role: string }) {
-  if (member.roleId) {
-    const pRole = await prisma.projectRole.findUnique({
-      where: { id: member.roleId },
-    });
-    if (pRole) {
-      const allStages = [
-        "NEW_REQUEST", "CLARIFICATION", "READY_FOR_DEV", "IN_DEVELOPMENT",
-        "INTERNAL_REVIEW", "CLIENT_REVIEW", "READY_FOR_RELEASE", "DONE",
-      ];
-      let stages: string[] = allStages;
-      if (pRole.allowedStages) {
-        try { stages = JSON.parse(pRole.allowedStages); } catch { stages = allStages; }
-      }
-      return {
-        isAdmin: pRole.isAdmin,
-        canCreateTask: pRole.canCreateTask,
-        canModifyTask: pRole.canModifyTask,
-        canMoveTask: pRole.canMoveTask,
-        allowedStages: stages,
-      };
-    }
-  }
-  const isAdmin = member.role === "ADMIN";
-  return {
-    isAdmin,
-    canCreateTask: isAdmin,
-    canModifyTask: isAdmin,
-    canMoveTask: isAdmin,
-    allowedStages: isAdmin
-      ? ["NEW_REQUEST", "CLARIFICATION", "READY_FOR_DEV", "IN_DEVELOPMENT",
-         "INTERNAL_REVIEW", "CLIENT_REVIEW", "READY_FOR_RELEASE", "DONE"]
-      : [],
-  };
-}
+import {
+  canMoveFromStage,
+  canCreateTask as checkCanCreate,
+  canModifyTask as checkCanModify,
+} from "@/lib/permissions";
 
 export async function createTask(data: {
   projectId: string;
@@ -62,9 +31,8 @@ export async function createTask(data: {
   );
   if (!isActive) throw new Error("Project is inactive — contract expired");
 
-  const { user, member } = await requireProjectMember(project.id);
-  const perms = await getMemberPermissions(member);
-  if (!perms.isAdmin && !perms.canCreateTask) {
+  const { user } = await requireProjectMember(project.id);
+  if (!checkCanCreate(user.systemRole, data.taskType)) {
     throw new Error("You do not have permission to create tasks");
   }
 
@@ -154,9 +122,8 @@ export async function updateTask(data: {
   );
   if (!isActive) throw new Error("Project is inactive — contract expired");
 
-  const { user, member } = await requireProjectMember(task.projectId);
-  const perms = await getMemberPermissions(member);
-  if (!perms.isAdmin && !perms.canModifyTask) {
+  const { user } = await requireProjectMember(task.projectId);
+  if (!checkCanModify(user.systemRole)) {
     throw new Error("You do not have permission to modify tasks");
   }
 
@@ -223,16 +190,10 @@ export async function moveTask(data: {
   );
   if (!isActive) throw new Error("Project is inactive — contract expired");
 
-  const { user, member } = await requireProjectMember(task.projectId);
-  const perms = await getMemberPermissions(member);
+  const { user } = await requireProjectMember(task.projectId);
 
-  if (!perms.isAdmin) {
-    if (!perms.canMoveTask) {
-      throw new Error("You do not have permission to move tasks");
-    }
-    if (!perms.allowedStages.includes(data.stage)) {
-      throw new Error(`Your role cannot move tasks to ${data.stage.replaceAll("_", " ")}`);
-    }
+  if (!canMoveFromStage(user.systemRole, task.stage)) {
+    throw new Error(`Your role (${user.systemRole}) cannot move tasks from ${task.stage.replaceAll("_", " ")}`);
   }
 
   const oldStage = task.stage;

@@ -4,6 +4,12 @@ import { useState } from "react";
 import { Users, Mail, Clock, FolderKanban, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
+import { updateUserRole } from "@/actions/team";
+import { SYSTEM_ROLE_CONFIG } from "@/lib/permissions";
+
+type SystemRole = "ADMIN" | "PM" | "TECH_LEAD" | "DEVELOPER" | "DESIGNER" | "CLIENT";
+
+const ALL_ROLES: SystemRole[] = ["ADMIN", "PM", "TECH_LEAD", "DEVELOPER", "DESIGNER", "CLIENT"];
 
 interface MemberProject {
   id: string;
@@ -17,6 +23,7 @@ interface Member {
   email: string;
   name: string | null;
   imageUrl: string | null;
+  systemRole: SystemRole;
   createdAt: Date;
   projects: MemberProject[];
 }
@@ -35,10 +42,23 @@ interface Invitation {
 interface Props {
   members: Member[];
   invitations: Invitation[];
+  isAdmin: boolean;
 }
 
-export function TeamPageClient({ members, invitations }: Props) {
+export function TeamPageClient({ members, invitations, isAdmin }: Props) {
   const [search, setSearch] = useState("");
+  const [changingRole, setChangingRole] = useState<string | null>(null);
+
+  async function handleRoleChange(userId: string, newRole: SystemRole) {
+    setChangingRole(userId);
+    try {
+      await updateUserRole(userId, newRole);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setChangingRole(null);
+    }
+  }
 
   const filteredMembers = members.filter(
     (m) =>
@@ -111,6 +131,20 @@ export function TeamPageClient({ members, invitations }: Props) {
                   <span className="text-[13px] font-medium text-foreground truncate">
                     {member.name || member.email}
                   </span>
+                  {(() => {
+                    const cfg = SYSTEM_ROLE_CONFIG[member.systemRole];
+                    return (
+                      <span
+                        className={cn(
+                          "text-[10px] px-1.5 py-0.5 rounded-full border font-medium",
+                          cfg.color,
+                          cfg.bg
+                        )}
+                      >
+                        {cfg.label}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div className="flex items-center gap-3 mt-0.5">
                   <span className="text-[11px] text-muted-foreground truncate">
@@ -126,26 +160,45 @@ export function TeamPageClient({ members, invitations }: Props) {
                 </div>
               </div>
 
-              {member.projects.length > 0 && (
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <FolderKanban className="w-3.5 h-3.5 text-muted-foreground" />
-                  <div className="flex items-center gap-1">
-                    {member.projects.slice(0, 3).map((p) => (
-                      <span
-                        key={p.id}
-                        className="text-[10px] px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground"
-                      >
-                        {p.name}
-                      </span>
-                    ))}
-                    {member.projects.length > 3 && (
-                      <span className="text-[10px] text-muted-foreground">
-                        +{member.projects.length - 3}
-                      </span>
-                    )}
+              <div className="flex items-center gap-2 shrink-0">
+                {member.projects.length > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <FolderKanban className="w-3.5 h-3.5 text-muted-foreground" />
+                    <div className="flex items-center gap-1">
+                      {member.projects.slice(0, 2).map((p) => (
+                        <span
+                          key={p.id}
+                          className="text-[10px] px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground"
+                        >
+                          {p.name}
+                        </span>
+                      ))}
+                      {member.projects.length > 2 && (
+                        <span className="text-[10px] text-muted-foreground">
+                          +{member.projects.length - 2}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+
+                {isAdmin && (
+                  <select
+                    value={member.systemRole}
+                    onChange={(e) =>
+                      handleRoleChange(member.id, e.target.value as SystemRole)
+                    }
+                    disabled={changingRole === member.id}
+                    className="h-7 px-2 text-[11px] rounded-md border border-border bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50"
+                  >
+                    {ALL_ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {SYSTEM_ROLE_CONFIG[r].label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
             </div>
           ))}
           {filteredMembers.length === 0 && (

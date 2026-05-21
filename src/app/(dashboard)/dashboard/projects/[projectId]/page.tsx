@@ -5,7 +5,6 @@ import { getAssets } from "@/actions/asset";
 import { getTaskQuestions } from "@/actions/task-question";
 import { getRoles } from "@/actions/role";
 import { requireProjectMember } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { ProjectDetailClient } from "./project-detail-client";
 import type { KanbanTask } from "@/store/kanban";
 
@@ -27,36 +26,15 @@ export default async function ProjectDetailPage({ params }: Props) {
 
   const { user, member } = await requireProjectMember(project.id);
 
-  let userPermissions = {
-    canCreateTask: member.role === "ADMIN",
-    canModifyTask: member.role === "ADMIN",
-    canMoveTask: member.role === "ADMIN",
+  const sRole = user.systemRole;
+  const userPermissions = {
+    canCreateTask: sRole === "ADMIN" || sRole === "PM" || sRole === "TECH_LEAD" || sRole === "CLIENT",
+    canModifyTask: sRole === "ADMIN" || sRole === "PM" || sRole === "TECH_LEAD",
+    canMoveTask: true,
     allowedStages: [] as string[],
-    isAdmin: member.role === "ADMIN",
+    isAdmin: sRole === "ADMIN",
+    systemRole: sRole,
   };
-
-  if (member.roleId) {
-    const pRole = await prisma.projectRole.findUnique({
-      where: { id: member.roleId },
-    });
-    if (pRole) {
-      const allStages = [
-        "NEW_REQUEST", "CLARIFICATION", "READY_FOR_DEV", "IN_DEVELOPMENT",
-        "INTERNAL_REVIEW", "CLIENT_REVIEW", "READY_FOR_RELEASE", "DONE",
-      ];
-      let stages: string[] = allStages;
-      if (pRole.allowedStages) {
-        try { stages = JSON.parse(pRole.allowedStages); } catch { stages = allStages; }
-      }
-      userPermissions = {
-        canCreateTask: pRole.canCreateTask,
-        canModifyTask: pRole.canModifyTask,
-        canMoveTask: pRole.canMoveTask,
-        allowedStages: stages,
-        isAdmin: pRole.isAdmin,
-      };
-    }
-  }
 
   const now = new Date();
   const isActive = project.contracts.some(

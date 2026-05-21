@@ -31,6 +31,7 @@ export interface UserPermissions {
   canMoveTask: boolean;
   allowedStages: string[];
   isAdmin: boolean;
+  systemRole: string;
 }
 
 interface Contract {

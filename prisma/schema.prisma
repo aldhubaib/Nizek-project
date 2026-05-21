@@ -16,6 +16,15 @@ enum Role {
   CLIENT
 }
 
+enum SystemRole {
+  ADMIN
+  PM
+  TECH_LEAD
+  DEVELOPER
+  DESIGNER
+  CLIENT
+}
+
 enum Stage {
   NEW_REQUEST
   CLARIFICATION
@@ -59,11 +68,12 @@ enum EstimateAccuracy {
 // ─── Models ──────────────────────────────────────────────
 
 model User {
-  id       String  @id @default(cuid())
-  clerkId  String  @unique
-  email    String  @unique
-  name     String?
-  imageUrl String?
+  id         String     @id @default(cuid())
+  clerkId    String     @unique
+  email      String     @unique
+  name       String?
+  imageUrl   String?
+  systemRole SystemRole @default(DEVELOPER)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
