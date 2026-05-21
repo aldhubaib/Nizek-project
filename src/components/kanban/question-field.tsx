@@ -429,7 +429,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
           />
         </div>
       ) : question.type === "select" && parsedOptions.length > 0 ? (
-        <Select value={value} onValueChange={(val) => onChange(val)}>
+        <Select value={value} onValueChange={(val) => onChange(val ?? "")}>
           <SelectTrigger className="w-full h-9 text-[13px]">
             <SelectValue placeholder="Select..." />
           </SelectTrigger>

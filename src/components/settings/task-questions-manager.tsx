@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash2, MessageCircleQuestion, List, Type, Sparkles, Wrench, Bug, Paperclip, AlertCircle, Palette } from "lucide-react";
-import { addTaskQuestion, deleteTaskQuestion, updateTaskQuestion } from "@/actions/task-question";
+import { addDefaultQuestion as addTaskQuestion, deleteDefaultQuestion as deleteTaskQuestion, updateDefaultQuestion as updateTaskQuestion } from "@/actions/default-question";
 import {
   Select,
   SelectContent,
@@ -67,9 +67,8 @@ export function TaskQuestionsManager({ questions, projectId }: Props) {
           : undefined;
 
       await addTaskQuestion({
-        projectId,
         question: newQuestion.trim(),
-        type: newType,
+        type: newType as "text" | "select" | "file" | "link" | "client",
         options,
         taskType: activeType,
       });

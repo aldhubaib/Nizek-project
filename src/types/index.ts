@@ -83,12 +83,16 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   FEATURE: "Feature",
   ENHANCEMENT: "Enhancement",
   BUG: "Bug",
+  REPORTED_BUG: "Reported Bug",
+  DESIGN: "Design",
 };
 
 export const TASK_TYPE_CONFIG: Record<TaskType, { label: string; color: string; bg: string }> = {
   FEATURE: { label: "Feature", color: "text-primary", bg: "bg-primary/15 border-primary/20" },
   ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bg: "bg-violet-500/15 border-violet-500/20" },
   BUG: { label: "Bug", color: "text-destructive", bg: "bg-destructive/15 border-destructive/20" },
+  REPORTED_BUG: { label: "Reported Bug", color: "text-amber-400", bg: "bg-amber-500/15 border-amber-500/20" },
+  DESIGN: { label: "Design", color: "text-cyan-400", bg: "bg-cyan-500/15 border-cyan-500/20" },
 };
 
 export const ROLE_LABELS: Record<Role, string> = {

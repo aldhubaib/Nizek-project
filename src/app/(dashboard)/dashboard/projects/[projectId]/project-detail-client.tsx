@@ -224,7 +224,7 @@ export function ProjectDetailClient({
               userRole={userRole}
               userId={currentUserId}
               tasks={tasks as unknown as KanbanTask[]}
-              questions={questions}
+              questions={questions as unknown as (TaskQuestion & { taskType: string })[]}
             />
           </TabsContent>
 
@@ -235,7 +235,7 @@ export function ProjectDetailClient({
               userRole={userRole}
               userPermissions={userPermissions}
               isProjectActive={isActive}
-              questions={questions}
+              questions={questions as unknown as (TaskQuestion & { taskType: string })[]}
             />
           </TabsContent>
 
