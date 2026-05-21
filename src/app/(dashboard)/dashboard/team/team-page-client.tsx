@@ -39,6 +39,13 @@ interface Invitation {
   projectRole: { id: string; name: string } | null;
 }
 
+interface TeamInvite {
+  id: string;
+  email: string;
+  systemRole: SystemRole;
+  createdAt: Date;
+}
+
 interface ProjectWithRoles {
   id: string;
   name: string;
@@ -48,11 +55,12 @@ interface ProjectWithRoles {
 interface Props {
   members: Member[];
   invitations: Invitation[];
+  teamInvites: TeamInvite[];
   projects: ProjectWithRoles[];
   isAdmin: boolean;
 }
 
-export function TeamPageClient({ members, invitations, projects, isAdmin }: Props) {
+export function TeamPageClient({ members, invitations, teamInvites, projects, isAdmin }: Props) {
   const [search, setSearch] = useState("");
   const [changingRole, setChangingRole] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
@@ -108,6 +116,12 @@ export function TeamPageClient({ members, invitations, projects, isAdmin }: Prop
     inv.email.toLowerCase().includes(search.toLowerCase())
   );
 
+  const filteredTeamInvites = teamInvites.filter((inv) =>
+    inv.email.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const totalPending = invitations.length + teamInvites.length;
+
   return (
     <div className="space-y-6">
       {/* Stats + Invite */}
@@ -119,12 +133,12 @@ export function TeamPageClient({ members, invitations, projects, isAdmin }: Prop
               {members.length} member{members.length !== 1 ? "s" : ""}
             </span>
           </div>
-          {invitations.length > 0 && (
+          {totalPending > 0 && (
             <div className="flex items-center gap-2 text-[13px] text-amber-400">
               <Mail className="w-4 h-4" />
               <span>
-                {invitations.length} pending invitation
-                {invitations.length !== 1 ? "s" : ""}
+                {totalPending} pending invitation
+                {totalPending !== 1 ? "s" : ""}
               </span>
             </div>
           )}
@@ -368,12 +382,44 @@ export function TeamPageClient({ members, invitations, projects, isAdmin }: Prop
       </div>
 
       {/* Pending Invitations */}
-      {filteredInvitations.length > 0 && (
+      {(filteredTeamInvites.length > 0 || filteredInvitations.length > 0) && (
         <div>
           <h2 className="text-[13px] font-semibold text-foreground mb-3">
             Pending Invitations
           </h2>
           <div className="space-y-1">
+            {filteredTeamInvites.map((inv) => {
+              const cfg = SYSTEM_ROLE_CONFIG[inv.systemRole];
+              return (
+                <div
+                  key={inv.id}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
+                    <Mail className="w-3.5 h-3.5 text-amber-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[13px] font-medium text-foreground truncate block">
+                      {inv.email}
+                    </span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={cn(
+                        "text-[10px] px-1.5 py-0.5 rounded-full border font-medium",
+                        cfg.color, cfg.bg
+                      )}>
+                        {cfg.label}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground/50">
+                        Invited{" "}
+                        {formatDistanceToNow(new Date(inv.createdAt), {
+                          addSuffix: true,
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
             {filteredInvitations.map((inv) => (
               <div
                 key={inv.id}
@@ -382,7 +428,6 @@ export function TeamPageClient({ members, invitations, projects, isAdmin }: Prop
                 <div className="w-8 h-8 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
                   <Mail className="w-3.5 h-3.5 text-amber-400" />
                 </div>
-
                 <div className="flex-1 min-w-0">
                   <span className="text-[13px] font-medium text-foreground truncate block">
                     {inv.email}

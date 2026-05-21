@@ -138,6 +138,13 @@ export async function inviteToTeam(data: {
   revalidatePath("/dashboard/team");
 }
 
+export async function getPendingTeamInvites() {
+  await requireUser();
+  return prisma.pendingTeamInvite.findMany({
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 export async function getProjectsWithRoles() {
   const user = await requireUser();
   if (user.systemRole !== "ADMIN") return [];
