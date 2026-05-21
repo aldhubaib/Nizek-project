@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Users, Mail, Clock, FolderKanban, Search } from "lucide-react";
+import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { updateUserRole } from "@/actions/team";
+import { inviteMember } from "@/actions/project";
 import { SYSTEM_ROLE_CONFIG } from "@/lib/permissions";
 
 type SystemRole = "ADMIN" | "PM" | "TECH_LEAD" | "DEVELOPER" | "DESIGNER" | "CLIENT";
@@ -39,15 +40,29 @@ interface Invitation {
   projectRole: { id: string; name: string } | null;
 }
 
+interface ProjectWithRoles {
+  id: string;
+  name: string;
+  roles: { id: string; name: string; isAdmin: boolean }[];
+}
+
 interface Props {
   members: Member[];
   invitations: Invitation[];
+  projects: ProjectWithRoles[];
   isAdmin: boolean;
 }
 
-export function TeamPageClient({ members, invitations, isAdmin }: Props) {
+export function TeamPageClient({ members, invitations, projects, isAdmin }: Props) {
   const [search, setSearch] = useState("");
   const [changingRole, setChangingRole] = useState<string | null>(null);
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteProjectId, setInviteProjectId] = useState(projects[0]?.id ?? "");
+  const [inviteRoleId, setInviteRoleId] = useState("");
+  const [inviting, setInviting] = useState(false);
+
+  const selectedProject = projects.find((p) => p.id === inviteProjectId);
 
   async function handleRoleChange(userId: string, newRole: SystemRole) {
     setChangingRole(userId);
@@ -57,6 +72,26 @@ export function TeamPageClient({ members, invitations, isAdmin }: Props) {
       alert((err as Error).message);
     } finally {
       setChangingRole(null);
+    }
+  }
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!inviteEmail.trim() || !inviteProjectId || !inviteRoleId) return;
+    setInviting(true);
+    try {
+      await inviteMember({
+        projectId: inviteProjectId,
+        email: inviteEmail.trim(),
+        roleId: inviteRoleId,
+      });
+      setShowInvite(false);
+      setInviteEmail("");
+      setInviteRoleId("");
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setInviting(false);
     }
   }
 
@@ -72,24 +107,115 @@ export function TeamPageClient({ members, invitations, isAdmin }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
-          <Users className="w-4 h-4" />
-          <span>
-            {members.length} member{members.length !== 1 ? "s" : ""}
-          </span>
-        </div>
-        {invitations.length > 0 && (
-          <div className="flex items-center gap-2 text-[13px] text-amber-400">
-            <Mail className="w-4 h-4" />
+      {/* Stats + Invite */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+            <Users className="w-4 h-4" />
             <span>
-              {invitations.length} pending invitation
-              {invitations.length !== 1 ? "s" : ""}
+              {members.length} member{members.length !== 1 ? "s" : ""}
             </span>
           </div>
+          {invitations.length > 0 && (
+            <div className="flex items-center gap-2 text-[13px] text-amber-400">
+              <Mail className="w-4 h-4" />
+              <span>
+                {invitations.length} pending invitation
+                {invitations.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+          )}
+        </div>
+        {isAdmin && projects.length > 0 && (
+          <button
+            onClick={() => setShowInvite(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 transition-colors"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            Invite Member
+          </button>
         )}
       </div>
+
+      {/* Invite Dialog */}
+      {showInvite && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-sm rounded-xl border border-border bg-sidebar p-5 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[14px] font-semibold text-foreground">Invite Member</h3>
+              <button
+                onClick={() => setShowInvite(false)}
+                className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-card transition-colors text-muted-foreground"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <form onSubmit={handleInvite} className="space-y-3">
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="colleague@company.com"
+                  className="w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Project</label>
+                <select
+                  value={inviteProjectId}
+                  onChange={(e) => {
+                    setInviteProjectId(e.target.value);
+                    setInviteRoleId("");
+                  }}
+                  className="w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Project Role</label>
+                <select
+                  value={inviteRoleId}
+                  onChange={(e) => setInviteRoleId(e.target.value)}
+                  required
+                  className="w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                >
+                  <option value="">Select a role...</option>
+                  {(selectedProject?.roles ?? []).map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+                {selectedProject && selectedProject.roles.length === 0 && (
+                  <p className="text-[11px] text-amber-400 mt-1">
+                    No roles defined for this project. Add roles in project settings first.
+                  </p>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowInvite(false)}
+                  className="px-3 py-1.5 rounded-lg text-[13px] text-muted-foreground hover:bg-card transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={inviting || !inviteRoleId}
+                  className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {inviting ? "Sending..." : "Send Invite"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative">

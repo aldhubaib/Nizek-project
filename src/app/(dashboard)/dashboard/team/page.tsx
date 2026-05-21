@@ -1,12 +1,13 @@
-import { getTeamMembers, getPendingInvitations } from "@/actions/team";
+import { getTeamMembers, getPendingInvitations, getProjectsWithRoles } from "@/actions/team";
 import { requireUser } from "@/lib/auth";
 import { TeamPageClient } from "./team-page-client";
 
 export default async function TeamPage() {
   const user = await requireUser();
-  const [members, invitations] = await Promise.all([
+  const [members, invitations, projects] = await Promise.all([
     getTeamMembers(),
     getPendingInvitations(),
+    getProjectsWithRoles(),
   ]);
 
   return (
@@ -18,6 +19,7 @@ export default async function TeamPage() {
         <TeamPageClient
           members={members}
           invitations={invitations}
+          projects={projects}
           isAdmin={user.systemRole === "ADMIN"}
         />
       </div>
