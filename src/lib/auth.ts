@@ -40,6 +40,7 @@ export async function getCurrentUser() {
 export async function requireUser() {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
+  if (user.blocked) throw new Error("ACCOUNT_BLOCKED");
   return user;
 }
 

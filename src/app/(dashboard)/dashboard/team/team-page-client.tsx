@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X } from "lucide-react";
+import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, Trash2, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { updateUserRole, inviteToTeam } from "@/actions/team";
+import { updateUserRole, inviteToTeam, toggleBlockUser, cancelTeamInvite, resendTeamInvite } from "@/actions/team";
 import { SYSTEM_ROLE_CONFIG } from "@/lib/permissions";
 
 type SystemRole = "ADMIN" | "PM" | "TECH_LEAD" | "DEVELOPER" | "DESIGNER" | "CLIENT";
@@ -24,6 +24,7 @@ interface Member {
   name: string | null;
   imageUrl: string | null;
   systemRole: SystemRole;
+  blocked: boolean;
   createdAt: Date;
   projects: MemberProject[];
 }
@@ -103,6 +104,43 @@ export function TeamPageClient({ members, invitations, teamInvites, projects, is
       alert((err as Error).message);
     } finally {
       setInviting(false);
+    }
+  }
+
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  async function handleBlock(userId: string) {
+    if (!confirm("Are you sure you want to block/unblock this user?")) return;
+    setActionLoading(userId);
+    try {
+      await toggleBlockUser(userId);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleResendInvite(inviteId: string) {
+    setActionLoading(inviteId);
+    try {
+      await resendTeamInvite(inviteId);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleCancelInvite(inviteId: string) {
+    if (!confirm("Cancel this invitation?")) return;
+    setActionLoading(inviteId);
+    try {
+      await cancelTeamInvite(inviteId);
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setActionLoading(null);
     }
   }
 
@@ -317,6 +355,11 @@ export function TeamPageClient({ members, invitations, teamInvites, projects, is
                       </span>
                     );
                   })()}
+                  {member.blocked && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full border font-medium text-destructive bg-destructive/15 border-destructive/30">
+                      Blocked
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 mt-0.5">
                   <span className="text-[11px] text-muted-foreground truncate">
@@ -355,20 +398,39 @@ export function TeamPageClient({ members, invitations, teamInvites, projects, is
                 )}
 
                 {isAdmin && (
-                  <select
-                    value={member.systemRole}
-                    onChange={(e) =>
-                      handleRoleChange(member.id, e.target.value as SystemRole)
-                    }
-                    disabled={changingRole === member.id}
-                    className="h-7 px-2 text-[11px] rounded-md border border-border bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50"
-                  >
-                    {ALL_ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {SYSTEM_ROLE_CONFIG[r].label}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <select
+                      value={member.systemRole}
+                      onChange={(e) =>
+                        handleRoleChange(member.id, e.target.value as SystemRole)
+                      }
+                      disabled={changingRole === member.id}
+                      className="h-7 px-2 text-[11px] rounded-md border border-border bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50"
+                    >
+                      {ALL_ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {SYSTEM_ROLE_CONFIG[r].label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => handleBlock(member.id)}
+                      disabled={actionLoading === member.id}
+                      title={member.blocked ? "Unblock user" : "Block user"}
+                      className={cn(
+                        "w-7 h-7 rounded-md flex items-center justify-center transition-colors disabled:opacity-50",
+                        member.blocked
+                          ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
+                          : "bg-destructive/10 text-destructive hover:bg-destructive/20"
+                      )}
+                    >
+                      {member.blocked ? (
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                      ) : (
+                        <Ban className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -417,6 +479,26 @@ export function TeamPageClient({ members, invitations, teamInvites, projects, is
                       </span>
                     </div>
                   </div>
+                  {isAdmin && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleResendInvite(inv.id)}
+                        disabled={actionLoading === inv.id}
+                        title="Resend invitation"
+                        className="w-7 h-7 rounded-md flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
+                      >
+                        <RotateCw className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleCancelInvite(inv.id)}
+                        disabled={actionLoading === inv.id}
+                        title="Cancel invitation"
+                        className="w-7 h-7 rounded-md flex items-center justify-center bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
