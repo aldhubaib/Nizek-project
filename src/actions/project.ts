@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireUser, requireProjectMember, requireProjectRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { Resend } from "resend";
 
 export async function createProject(data: {
   name: string;
@@ -158,16 +159,22 @@ export async function inviteMember(data: {
     throw new Error("Invalid role");
   }
 
-  const invitation = await prisma.invitation.create({
-    data: {
-      email: data.email,
-      role: pRole.isAdmin ? "ADMIN" : "MEMBER",
-      roleId: data.roleId,
-      projectId: data.projectId,
-      invitedById: user.id,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    },
-  });
+  const [invitation, project] = await Promise.all([
+    prisma.invitation.create({
+      data: {
+        email: data.email,
+        role: pRole.isAdmin ? "ADMIN" : "MEMBER",
+        roleId: data.roleId,
+        projectId: data.projectId,
+        invitedById: user.id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    }),
+    prisma.project.findUnique({
+      where: { id: data.projectId },
+      select: { name: true },
+    }),
+  ]);
 
   try {
     await fetch("https://api.clerk.com/v1/allowlist_identifiers", {
@@ -179,7 +186,41 @@ export async function inviteMember(data: {
       body: JSON.stringify({ identifier: data.email, notify: false }),
     });
   } catch {
-    // Non-blocking — user can still be added manually if this fails
+    // Non-blocking
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://amused-wonder-production-c7e9.up.railway.app";
+  const inviterName = user.name || user.email;
+  const projectName = project?.name || "a project";
+
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    await resend.emails.send({
+      from: "Nizek Project <onboarding@resend.dev>",
+      to: data.email,
+      subject: `You've been invited to ${projectName}`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+          <div style="background: #1a1a2e; border-radius: 12px; padding: 32px; color: #e0e0e0;">
+            <h2 style="margin: 0 0 8px; color: #ffffff; font-size: 20px;">You're invited!</h2>
+            <p style="margin: 0 0 24px; color: #a0a0b0; font-size: 14px; line-height: 1.5;">
+              <strong style="color: #ffffff;">${inviterName}</strong> has invited you to join
+              <strong style="color: #4ade80;">${projectName}</strong> on Nizek Project as
+              <strong style="color: #c084fc;">${pRole.name}</strong>.
+            </p>
+            <a href="${appUrl}/sign-in"
+               style="display: inline-block; background: #4ade80; color: #0a0a0a; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
+              Accept Invitation
+            </a>
+            <p style="margin: 24px 0 0; color: #666680; font-size: 12px;">
+              This invitation expires in 7 days.
+            </p>
+          </div>
+        </div>
+      `,
+    });
+  } catch {
+    // Non-blocking — invitation is still created even if email fails
   }
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
@@ -256,10 +297,14 @@ export async function getProjectInvitations(projectId: string) {
 }
 
 export async function resendInvitation(data: { projectId: string; invitationId: string }) {
-  await requireProjectRole(data.projectId, ["ADMIN"]);
+  const { user } = await requireProjectRole(data.projectId, ["ADMIN"]);
 
   const invitation = await prisma.invitation.findUnique({
     where: { id: data.invitationId },
+    include: {
+      project: { select: { name: true } },
+      projectRole: { select: { name: true } },
+    },
   });
   if (!invitation || invitation.projectId !== data.projectId) {
     throw new Error("Invitation not found");
@@ -272,6 +317,39 @@ export async function resendInvitation(data: { projectId: string; invitationId: 
       createdAt: new Date(),
     },
   });
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://amused-wonder-production-c7e9.up.railway.app";
+  const inviterName = user.name || user.email;
+
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    await resend.emails.send({
+      from: "Nizek Project <onboarding@resend.dev>",
+      to: invitation.email,
+      subject: `Reminder: You've been invited to ${invitation.project.name}`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+          <div style="background: #1a1a2e; border-radius: 12px; padding: 32px; color: #e0e0e0;">
+            <h2 style="margin: 0 0 8px; color: #ffffff; font-size: 20px;">Reminder: You're invited!</h2>
+            <p style="margin: 0 0 24px; color: #a0a0b0; font-size: 14px; line-height: 1.5;">
+              <strong style="color: #ffffff;">${inviterName}</strong> invited you to join
+              <strong style="color: #4ade80;">${invitation.project.name}</strong> on Nizek Project
+              ${invitation.projectRole ? `as <strong style="color: #c084fc;">${invitation.projectRole.name}</strong>` : ""}.
+            </p>
+            <a href="${appUrl}/sign-in"
+               style="display: inline-block; background: #4ade80; color: #0a0a0a; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
+              Accept Invitation
+            </a>
+            <p style="margin: 24px 0 0; color: #666680; font-size: 12px;">
+              This invitation expires in 7 days.
+            </p>
+          </div>
+        </div>
+      `,
+    });
+  } catch {
+    // Non-blocking
+  }
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
 }
