@@ -314,6 +314,13 @@ model Invitation {
   @@unique([email, projectId])
 }
 
+model PendingTeamInvite {
+  id         String     @id @default(cuid())
+  email      String     @unique
+  systemRole SystemRole
+  createdAt  DateTime   @default(now())
+}
+
 model DefaultQuestion {
   id       String   @id @default(cuid())
   question String

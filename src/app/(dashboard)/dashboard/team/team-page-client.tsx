@@ -4,8 +4,7 @@ import { useState } from "react";
 import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { updateUserRole } from "@/actions/team";
-import { inviteMember } from "@/actions/project";
+import { updateUserRole, inviteToTeam } from "@/actions/team";
 import { SYSTEM_ROLE_CONFIG } from "@/lib/permissions";
 
 type SystemRole = "ADMIN" | "PM" | "TECH_LEAD" | "DEVELOPER" | "DESIGNER" | "CLIENT";
@@ -58,11 +57,13 @@ export function TeamPageClient({ members, invitations, projects, isAdmin }: Prop
   const [changingRole, setChangingRole] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteSystemRole, setInviteSystemRole] = useState<SystemRole>("DEVELOPER");
   const [inviteProjectId, setInviteProjectId] = useState(projects[0]?.id ?? "");
   const [inviteRoleId, setInviteRoleId] = useState("");
   const [inviting, setInviting] = useState(false);
 
   const selectedProject = projects.find((p) => p.id === inviteProjectId);
+  const isClientInvite = inviteSystemRole === "CLIENT";
 
   async function handleRoleChange(userId: string, newRole: SystemRole) {
     setChangingRole(userId);
@@ -77,16 +78,18 @@ export function TeamPageClient({ members, invitations, projects, isAdmin }: Prop
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
-    if (!inviteEmail.trim() || !inviteProjectId || !inviteRoleId) return;
+    if (!inviteEmail.trim()) return;
+    if (isClientInvite && (!inviteProjectId || !inviteRoleId)) return;
     setInviting(true);
     try {
-      await inviteMember({
-        projectId: inviteProjectId,
+      await inviteToTeam({
         email: inviteEmail.trim(),
-        roleId: inviteRoleId,
+        systemRole: inviteSystemRole,
+        ...(isClientInvite && { projectId: inviteProjectId, roleId: inviteRoleId }),
       });
       setShowInvite(false);
       setInviteEmail("");
+      setInviteSystemRole("DEVELOPER");
       setInviteRoleId("");
     } catch (err) {
       alert((err as Error).message);
@@ -163,39 +166,68 @@ export function TeamPageClient({ members, invitations, projects, isAdmin }: Prop
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Project</label>
-                <select
-                  value={inviteProjectId}
-                  onChange={(e) => {
-                    setInviteProjectId(e.target.value);
-                    setInviteRoleId("");
-                  }}
-                  className="w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
-                >
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Role</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {ALL_ROLES.map((r) => {
+                    const cfg = SYSTEM_ROLE_CONFIG[r];
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => {
+                          setInviteSystemRole(r);
+                          if (r !== "CLIENT") {
+                            setInviteRoleId("");
+                          }
+                        }}
+                        className={cn(
+                          "px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition-colors",
+                          inviteSystemRole === r
+                            ? `${cfg.bg} ${cfg.color}`
+                            : "border-border text-muted-foreground hover:border-muted-foreground/40"
+                        )}
+                      >
+                        {cfg.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Project Role</label>
-                <select
-                  value={inviteRoleId}
-                  onChange={(e) => setInviteRoleId(e.target.value)}
-                  required
-                  className="w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
-                >
-                  <option value="">Select a role...</option>
-                  {(selectedProject?.roles ?? []).map((r) => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
-                  ))}
-                </select>
-                {selectedProject && selectedProject.roles.length === 0 && (
-                  <p className="text-[11px] text-amber-400 mt-1">
-                    No roles defined for this project. Add roles in project settings first.
-                  </p>
-                )}
-              </div>
+
+              {isClientInvite && (
+                <>
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Project</label>
+                    <select
+                      value={inviteProjectId}
+                      onChange={(e) => {
+                        setInviteProjectId(e.target.value);
+                        setInviteRoleId("");
+                      }}
+                      className="w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                    >
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Project Role</label>
+                    <select
+                      value={inviteRoleId}
+                      onChange={(e) => setInviteRoleId(e.target.value)}
+                      required
+                      className="w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                    >
+                      <option value="">Select a role...</option>
+                      {(selectedProject?.roles ?? []).map((r) => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
               <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
@@ -206,7 +238,7 @@ export function TeamPageClient({ members, invitations, projects, isAdmin }: Prop
                 </button>
                 <button
                   type="submit"
-                  disabled={inviting || !inviteRoleId}
+                  disabled={inviting || (isClientInvite && !inviteRoleId)}
                   className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {inviting ? "Sending..." : "Send Invite"}

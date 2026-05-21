@@ -11,16 +11,27 @@ export async function getCurrentUser() {
     const clerkUser = await currentUser();
     if (!clerkUser) return null;
 
+    const email = clerkUser.emailAddresses[0]?.emailAddress ?? "";
+
+    const pendingInvite = await prisma.pendingTeamInvite.findUnique({
+      where: { email },
+    });
+
     user = await prisma.user.create({
       data: {
         clerkId,
-        email: clerkUser.emailAddresses[0]?.emailAddress ?? "",
+        email,
         name:
           `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim() ||
           null,
         imageUrl: clerkUser.imageUrl,
+        ...(pendingInvite && { systemRole: pendingInvite.systemRole }),
       },
     });
+
+    if (pendingInvite) {
+      await prisma.pendingTeamInvite.delete({ where: { email } });
+    }
   }
 
   return user;

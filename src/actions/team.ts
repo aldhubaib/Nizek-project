@@ -64,6 +64,80 @@ export async function getPendingInvitations() {
   });
 }
 
+export async function inviteToTeam(data: {
+  email: string;
+  systemRole: SystemRole;
+  projectId?: string;
+  roleId?: string;
+}) {
+  const currentUser = await requireUser();
+  if (currentUser.systemRole !== "ADMIN") {
+    throw new Error("Only admins can invite team members");
+  }
+
+  await prisma.pendingTeamInvite.upsert({
+    where: { email: data.email },
+    update: { systemRole: data.systemRole },
+    create: { email: data.email, systemRole: data.systemRole },
+  });
+
+  if (data.systemRole === "CLIENT" && data.projectId && data.roleId) {
+    const { inviteMember } = await import("@/actions/project");
+    await inviteMember({
+      projectId: data.projectId,
+      email: data.email,
+      roleId: data.roleId,
+    });
+  } else {
+    try {
+      await fetch("https://api.clerk.com/v1/allowlist_identifiers", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ identifier: data.email, notify: false }),
+      });
+    } catch {
+      // Non-blocking
+    }
+
+    const { Resend } = await import("resend");
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://amused-wonder-production-c7e9.up.railway.app";
+    const inviterName = currentUser.name || currentUser.email;
+    const roleLabel = data.systemRole.replace("_", " ");
+
+    try {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({
+        from: "Nizek Project <onboarding@resend.dev>",
+        to: data.email,
+        subject: "You've been invited to Nizek Project",
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+            <div style="background: #1a1a2e; border-radius: 12px; padding: 32px; color: #e0e0e0;">
+              <h2 style="margin: 0 0 8px; color: #ffffff; font-size: 20px;">You're invited!</h2>
+              <p style="margin: 0 0 24px; color: #a0a0b0; font-size: 14px; line-height: 1.5;">
+                <strong style="color: #ffffff;">${inviterName}</strong> has invited you to join
+                <strong style="color: #4ade80;">Nizek Project</strong> as
+                <strong style="color: #c084fc;">${roleLabel}</strong>.
+              </p>
+              <a href="${appUrl}/sign-in"
+                 style="display: inline-block; background: #4ade80; color: #0a0a0a; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
+                Get Started
+              </a>
+            </div>
+          </div>
+        `,
+      });
+    } catch {
+      // Non-blocking
+    }
+  }
+
+  revalidatePath("/dashboard/team");
+}
+
 export async function getProjectsWithRoles() {
   const user = await requireUser();
   if (user.systemRole !== "ADMIN") return [];
