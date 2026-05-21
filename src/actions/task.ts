@@ -348,7 +348,7 @@ export async function moveTask(data: {
   return updated;
 }
 
-const DECLINE_TARGETS: Record<string, string> = {
+const DECLINE_TARGETS: Record<string, "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "READY_FOR_RELEASE" | "DONE"> = {
   INTERNAL_REVIEW: "IN_DEVELOPMENT",
   CLIENT_REVIEW: "INTERNAL_REVIEW",
 };
