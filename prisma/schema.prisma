@@ -1,0 +1,322 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  PROJECT_MANAGER
+  MEMBER
+  CLIENT
+}
+
+enum Stage {
+  NEW_REQUEST
+  CLARIFICATION
+  READY_FOR_DEV
+  IN_DEVELOPMENT
+  INTERNAL_REVIEW
+  CLIENT_REVIEW
+  READY_FOR_RELEASE
+  DONE
+}
+
+enum TaskType {
+  FEATURE
+  ENHANCEMENT
+  BUG
+  REPORTED_BUG
+  DESIGN
+}
+
+enum ProjectType {
+  FULL_TEAM
+  PART_TEAM
+  FIXED
+  MAINTENANCE
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
+
+enum EstimateAccuracy {
+  WAY_OVER
+  OVER
+  ON_TRACK
+  UNDER
+  WAY_UNDER
+}
+
+// ─── Models ──────────────────────────────────────────────
+
+model User {
+  id       String  @id @default(cuid())
+  clerkId  String  @unique
+  email    String  @unique
+  name     String?
+  imageUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects       ProjectMember[]
+  assignedTasks  Task[]         @relation("TaskAssignee")
+  createdTasks   Task[]         @relation("TaskCreator")
+  taskActivities TaskActivity[] @relation("ActivityUser")
+  taskComments   TaskComment[]  @relation("CommentUser")
+  commentMentions TaskCommentMention[] @relation("MentionedUser")
+  meetingNotes   MeetingNote[]
+  assets         Asset[]
+  invitations    Invitation[]
+}
+
+model Project {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  logoUrl     String?
+  projectType ProjectType @default(FULL_TEAM)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members      ProjectMember[]
+  roles        ProjectRole[]
+  contracts    Contract[]
+  tasks        Task[]
+  meetingNotes MeetingNote[]
+  assets       Asset[]
+  invitations  Invitation[]
+}
+
+model ProjectMember {
+  id   String @id @default(cuid())
+  role Role   @default(MEMBER)
+
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  roleId    String?
+  projectRole ProjectRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, projectId])
+}
+
+model ProjectRole {
+  id             String  @id @default(cuid())
+  name           String
+  isAdmin        Boolean @default(false)
+  canCreateTask  Boolean @default(false)
+  canModifyTask  Boolean @default(false)
+  canMoveTask    Boolean @default(false)
+  allowedStages  String?
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  members     ProjectMember[]
+  invitations Invitation[]
+
+  @@unique([projectId, name])
+}
+
+model Contract {
+  id        String   @id @default(cuid())
+  label     String?
+  startDate DateTime
+  endDate   DateTime
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  taskNumber  Int      @default(0)
+  title       String
+  description String?
+  priority          Int?
+  taskType          TaskType @default(FEATURE)
+  stage             Stage
+  order             Int
+  estimatedMinutes  Int?
+  estimateAccuracy  EstimateAccuracy?
+
+  projectId   String
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assigneeId  String?
+  assignee    User?   @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdById String
+  createdBy   User    @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  startedAt DateTime?
+
+  answers    TaskAnswer[]
+  activities TaskActivity[]
+  comments   TaskComment[]
+  stageLogs  StageLog[]
+
+  @@unique([projectId, taskNumber])
+  @@index([projectId, stage])
+}
+
+model StageLog {
+  id        String   @id @default(cuid())
+  stage     Stage
+  enteredAt DateTime @default(now())
+  exitedAt  DateTime?
+
+  taskId String
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model TaskComment {
+  id      String @id @default(cuid())
+  content String
+
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation("CommentUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  mentions TaskCommentMention[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId])
+}
+
+model TaskCommentMention {
+  id        String    @id @default(cuid())
+  commentId String
+  comment   TaskComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User   @relation("MentionedUser", fields: [userId], references: [id], onDelete: Cascade)
+  readAt    DateTime?
+
+  @@unique([commentId, userId])
+  @@index([userId])
+}
+
+model TaskActivity {
+  id       String  @id @default(cuid())
+  action   String
+  field    String?
+  oldValue String?
+  newValue String?
+
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation("ActivityUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model MeetingNote {
+  id      String   @id @default(cuid())
+  title   String
+  content String
+  date    DateTime
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+model Asset {
+  id       String  @id @default(cuid())
+  filename String
+  url      String
+  fileSize Int?
+  mimeType String?
+
+  projectId    String
+  project      Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedById String
+  uploadedBy   User    @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+}
+
+model TaskAnswer {
+  id     String @id @default(cuid())
+  answer String
+
+  taskId     String
+  task       Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  questionId String
+  question   DefaultQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, questionId])
+  @@index([taskId])
+}
+
+model Invitation {
+  id    String           @id @default(cuid())
+  email String
+  role  Role             @default(MEMBER)
+  status InvitationStatus @default(PENDING)
+
+  projectId   String
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invitedById String
+  invitedBy   User      @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+  roleId      String?
+  projectRole ProjectRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@unique([email, projectId])
+}
+
+model DefaultQuestion {
+  id       String   @id @default(cuid())
+  question String
+  type     String   @default("text")
+  options  String?
+  mandatory Boolean  @default(false)
+  required  Boolean  @default(false)
+  order     Int
+  taskType TaskType @default(FEATURE)
+
+  createdAt DateTime @default(now())
+
+  answers TaskAnswer[]
+
+  @@index([taskType])
+}
