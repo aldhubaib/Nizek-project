@@ -57,6 +57,7 @@ export function KanbanBoard({
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
   const [pendingMove, setPendingMove] = useState<{ taskId: string; fromStage: Stage; toStage: Stage; order: number } | null>(null);
   const [pendingDecline, setPendingDecline] = useState<{ taskId: string; fromStage: Stage } | null>(null);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
 
   useEffect(() => {
     setTasks(initialTasks);
@@ -173,7 +174,13 @@ export function KanbanBoard({
       if (task.taskType === "BUG" && fromStage === "INTERNAL_REVIEW" && dropStage === "CLIENT_REVIEW") {
         effectiveDrop = "READY_FOR_RELEASE";
       }
-      if (!canMoveFromTo(fromStage, effectiveDrop)) { setTasks(initialTasks); return; }
+      if (!canMoveFromTo(fromStage, effectiveDrop)) {
+        setTasks(initialTasks);
+        const fromLabel = STAGES.find((s) => s.id === fromStage)?.label ?? fromStage;
+        const toLabel = STAGES.find((s) => s.id === effectiveDrop)?.label ?? effectiveDrop;
+        setPermissionError(`You don't have permission to move tasks from "${fromLabel}" to "${toLabel}".`);
+        return;
+      }
       if (!isValidMove(fromStage, effectiveDrop, task.taskType)) { setTasks(initialTasks); return; }
       if (fromStage === "CLARIFICATION" && !canLeaveClarRef.current) { setTasks(initialTasks); return; }
       targetStage = effectiveDrop;
@@ -236,6 +243,8 @@ export function KanbanBoard({
         }
       } else if (msg === "ESTIMATE_REQUIRED") {
         alert("An estimated time is required before moving to Ready for Dev.");
+      } else if (msg.includes("permission") || msg.includes("Permission")) {
+        setPermissionError(msg);
       } else {
         alert(msg || "Failed to move task. Please try again.");
       }
@@ -348,6 +357,38 @@ export function KanbanBoard({
           onCancel={handleCancelDecline}
         />
       )}
+
+      {permissionError && (
+        <PermissionDeniedDialog
+          message={permissionError}
+          onClose={() => setPermissionError(null)}
+        />
+      )}
     </DndContext>
+  );
+}
+
+function PermissionDeniedDialog({ message, onClose }: { message: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 rounded-full bg-destructive/15 flex items-center justify-center shrink-0">
+            <svg className="w-5 h-5 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+            </svg>
+          </div>
+          <h3 className="text-[14px] font-semibold text-foreground">Permission Denied</h3>
+        </div>
+        <p className="text-[13px] text-muted-foreground mb-1">{message}</p>
+        <p className="text-[11px] text-muted-foreground/60 mb-5">The task has been returned to its previous stage.</p>
+        <button
+          onClick={onClose}
+          className="w-full rounded-lg bg-primary text-primary-foreground py-2 text-[13px] font-medium hover:bg-primary/90 transition-colors"
+        >
+          OK
+        </button>
+      </div>
+    </div>
   );
 }
