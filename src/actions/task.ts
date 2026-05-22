@@ -8,6 +8,8 @@ import {
   getPermissionsFromRole,
   getAdminPermissions,
   canTransition,
+  canCreateInStage,
+  canModifyInStage,
 } from "@/lib/permissions";
 
 export async function createTask(data: {
@@ -34,7 +36,7 @@ export async function createTask(data: {
   const { user, member } = await requireProjectMember(project.id);
   if (user.systemRole !== "ADMIN") {
     const perms = getPermissionsFromRole(member.projectRole);
-    if (!perms.isAdmin && !perms.canCreateTask) {
+    if (!canCreateInStage(perms, "NEW_REQUEST")) {
       throw new Error("You do not have permission to create tasks");
     }
   }
@@ -128,8 +130,8 @@ export async function updateTask(data: {
   const { user, member } = await requireProjectMember(task.projectId);
   if (user.systemRole !== "ADMIN") {
     const perms = getPermissionsFromRole(member.projectRole);
-    if (!perms.isAdmin && !perms.canModifyTask) {
-      throw new Error("You do not have permission to modify tasks");
+    if (!canModifyInStage(perms, task.stage)) {
+      throw new Error("You do not have permission to modify tasks in this stage");
     }
   }
 

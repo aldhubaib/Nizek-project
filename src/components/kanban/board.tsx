@@ -319,7 +319,7 @@ export function KanbanBoard({
               tasks={stageTasks}
               projectId={projectId}
               questions={questions}
-              canCreateTask={userPermissions.canCreateTask || userPermissions.isAdmin}
+              canCreateTask={userPermissions.isAdmin || (userPermissions.createStages ?? []).includes(stage.id)}
               dragFromStage={dragFromStage}
               dragTaskType={dragTaskType}
             />

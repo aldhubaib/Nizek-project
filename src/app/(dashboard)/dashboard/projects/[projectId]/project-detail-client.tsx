@@ -33,6 +33,8 @@ export interface UserPermissions {
   canDeclineTask: boolean;
   allowedStages: string[];
   allowedTransitions: Record<string, string[]>;
+  createStages: string[];
+  modifyStages: string[];
   isAdmin: boolean;
   systemRole: string;
 }

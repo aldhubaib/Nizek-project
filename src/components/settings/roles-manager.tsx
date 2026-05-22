@@ -44,13 +44,37 @@ interface Props {
   roles: WorkspaceRole[];
 }
 
-function parseTransitions(raw: string | null): Record<string, string[]> {
-  if (!raw) return {};
+interface StagePerms {
+  transitions: Record<string, string[]>;
+  createStages: string[];
+  modifyStages: string[];
+}
+
+function parseAllData(raw: string | null): StagePerms {
+  if (!raw) return { transitions: {}, createStages: [], modifyStages: [] };
   try {
-    return JSON.parse(raw);
+    const data = JSON.parse(raw);
+    const createStages: string[] = data._create ?? [];
+    const modifyStages: string[] = data._modify ?? [];
+    const transitions: Record<string, string[]> = {};
+    for (const [key, val] of Object.entries(data)) {
+      if (!key.startsWith("_")) transitions[key] = val as string[];
+    }
+    return { transitions, createStages, modifyStages };
   } catch {
-    return {};
+    return { transitions: {}, createStages: [], modifyStages: [] };
   }
+}
+
+function serializeAllData(perms: StagePerms): Record<string, string[]> {
+  const result: Record<string, string[]> = { ...perms.transitions };
+  if (perms.createStages.length > 0) result._create = perms.createStages;
+  if (perms.modifyStages.length > 0) result._modify = perms.modifyStages;
+  return result;
+}
+
+function toggleInArray(arr: string[], item: string): string[] {
+  return arr.includes(item) ? arr.filter((s) => s !== item) : [...arr, item];
 }
 
 function toggleTransitionTarget(
@@ -62,7 +86,6 @@ function toggleTransitionTarget(
   const updated = current.includes(toStage)
     ? current.filter((s) => s !== toStage)
     : [...current, toStage];
-
   const result = { ...transitions };
   if (updated.length === 0) {
     delete result[fromStage];
@@ -80,25 +103,29 @@ export function RolesManager({ roles }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPerms, setNewPerms] = useState({
-    canCreateTask: false,
-    canModifyTask: false,
     canMoveTask: false,
     canDeleteTask: false,
     canDeclineTask: false,
   });
-  const [newTransitions, setNewTransitions] = useState<Record<string, string[]>>({});
+  const [newStagePerms, setNewStagePerms] = useState<StagePerms>({
+    transitions: {},
+    createStages: [],
+    modifyStages: [],
+  });
   const [creating, setCreating] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editPerms, setEditPerms] = useState({
-    canCreateTask: false,
-    canModifyTask: false,
     canMoveTask: false,
     canDeleteTask: false,
     canDeclineTask: false,
   });
-  const [editTransitions, setEditTransitions] = useState<Record<string, string[]>>({});
+  const [editStagePerms, setEditStagePerms] = useState<StagePerms>({
+    transitions: {},
+    createStages: [],
+    modifyStages: [],
+  });
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -107,16 +134,16 @@ export function RolesManager({ roles }: Props) {
     try {
       await createRole({
         name: newName.trim(),
-        canCreateTask: newPerms.canCreateTask,
-        canModifyTask: newPerms.canModifyTask,
+        canCreateTask: newStagePerms.createStages.length > 0,
+        canModifyTask: newStagePerms.modifyStages.length > 0,
         canMoveTask: newPerms.canMoveTask,
         canDeleteTask: newPerms.canDeleteTask,
         canDeclineTask: newPerms.canDeclineTask,
-        allowedTransitions: newTransitions,
+        allowedTransitions: serializeAllData(newStagePerms),
       });
       setNewName("");
-      setNewPerms({ canCreateTask: false, canModifyTask: false, canMoveTask: false, canDeleteTask: false, canDeclineTask: false });
-      setNewTransitions({});
+      setNewPerms({ canMoveTask: false, canDeleteTask: false, canDeclineTask: false });
+      setNewStagePerms({ transitions: {}, createStages: [], modifyStages: [] });
       setShowCreate(false);
     } catch (err) {
       console.error(err);
@@ -129,13 +156,18 @@ export function RolesManager({ roles }: Props) {
     setEditingId(role.id);
     setEditName(role.name);
     setEditPerms({
-      canCreateTask: role.canCreateTask,
-      canModifyTask: role.canModifyTask,
       canMoveTask: role.canMoveTask,
       canDeleteTask: role.canDeleteTask,
       canDeclineTask: role.canDeclineTask,
     });
-    setEditTransitions(parseTransitions(role.allowedTransitions));
+    const parsed = parseAllData(role.allowedTransitions);
+    if (parsed.createStages.length === 0 && role.canCreateTask) {
+      parsed.createStages = ALL_STAGES.map((s) => s.id);
+    }
+    if (parsed.modifyStages.length === 0 && role.canModifyTask) {
+      parsed.modifyStages = ALL_STAGES.map((s) => s.id);
+    }
+    setEditStagePerms(parsed);
   }
 
   async function handleSave(roleId: string) {
@@ -143,12 +175,12 @@ export function RolesManager({ roles }: Props) {
       await updateRole({
         roleId,
         name: editName.trim() || undefined,
-        canCreateTask: editPerms.canCreateTask,
-        canModifyTask: editPerms.canModifyTask,
+        canCreateTask: editStagePerms.createStages.length > 0,
+        canModifyTask: editStagePerms.modifyStages.length > 0,
         canMoveTask: editPerms.canMoveTask,
         canDeleteTask: editPerms.canDeleteTask,
         canDeclineTask: editPerms.canDeclineTask,
-        allowedTransitions: editTransitions,
+        allowedTransitions: serializeAllData(editStagePerms),
       });
       setEditingId(null);
     } catch (err) {
@@ -171,7 +203,7 @@ export function RolesManager({ roles }: Props) {
         <div>
           <h2 className="text-[13px] font-semibold text-foreground">Roles & Permissions</h2>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            Define roles with specific task permissions and stage transitions.
+            Define roles with specific task permissions per stage.
           </p>
         </div>
         <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
@@ -195,19 +227,16 @@ export function RolesManager({ roles }: Props) {
           />
 
           <div className="flex flex-wrap gap-3">
-            <PermToggle label="Create tasks" checked={newPerms.canCreateTask} onChange={(v) => setNewPerms((p) => ({ ...p, canCreateTask: v }))} />
-            <PermToggle label="Modify tasks" checked={newPerms.canModifyTask} onChange={(v) => setNewPerms((p) => ({ ...p, canModifyTask: v }))} />
-            <PermToggle label="Move tasks" checked={newPerms.canMoveTask} onChange={(v) => setNewPerms((p) => ({ ...p, canMoveTask: v }))} />
             <PermToggle label="Delete tasks" checked={newPerms.canDeleteTask} onChange={(v) => setNewPerms((p) => ({ ...p, canDeleteTask: v }))} />
             <PermToggle label="Decline tasks" checked={newPerms.canDeclineTask} onChange={(v) => setNewPerms((p) => ({ ...p, canDeclineTask: v }))} />
           </div>
 
-          {newPerms.canMoveTask && (
-            <TransitionMatrix
-              transitions={newTransitions}
-              onChange={setNewTransitions}
-            />
-          )}
+          <StagePermissionsTable
+            stagePerms={newStagePerms}
+            onChange={setNewStagePerms}
+            canMoveTask={newPerms.canMoveTask}
+            onMoveTaskChange={(v) => setNewPerms((p) => ({ ...p, canMoveTask: v }))}
+          />
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => setShowCreate(false)}>
@@ -230,7 +259,7 @@ export function RolesManager({ roles }: Props) {
         <div className="space-y-2">
           {roles.map((role) => {
             const isEditing = editingId === role.id;
-            const transitions = parseTransitions(role.allowedTransitions);
+            const parsed = parseAllData(role.allowedTransitions);
 
             return (
               <div
@@ -247,19 +276,16 @@ export function RolesManager({ roles }: Props) {
                     />
 
                     <div className="flex flex-wrap gap-3">
-                      <PermToggle label="Create tasks" checked={editPerms.canCreateTask} onChange={(v) => setEditPerms((p) => ({ ...p, canCreateTask: v }))} />
-                      <PermToggle label="Modify tasks" checked={editPerms.canModifyTask} onChange={(v) => setEditPerms((p) => ({ ...p, canModifyTask: v }))} />
-                      <PermToggle label="Move tasks" checked={editPerms.canMoveTask} onChange={(v) => setEditPerms((p) => ({ ...p, canMoveTask: v }))} />
                       <PermToggle label="Delete tasks" checked={editPerms.canDeleteTask} onChange={(v) => setEditPerms((p) => ({ ...p, canDeleteTask: v }))} />
                       <PermToggle label="Decline tasks" checked={editPerms.canDeclineTask} onChange={(v) => setEditPerms((p) => ({ ...p, canDeclineTask: v }))} />
                     </div>
 
-                    {editPerms.canMoveTask && (
-                      <TransitionMatrix
-                        transitions={editTransitions}
-                        onChange={setEditTransitions}
-                      />
-                    )}
+                    <StagePermissionsTable
+                      stagePerms={editStagePerms}
+                      onChange={setEditStagePerms}
+                      canMoveTask={editPerms.canMoveTask}
+                      onMoveTaskChange={(v) => setEditPerms((p) => ({ ...p, canMoveTask: v }))}
+                    />
 
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="sm" onClick={() => setEditingId(null)}>
@@ -308,38 +334,12 @@ export function RolesManager({ roles }: Props) {
 
                     {/* Permission badges */}
                     <div className="flex flex-wrap gap-1.5 mb-2">
-                      <PermBadge label="Create" enabled={role.canCreateTask} />
-                      <PermBadge label="Modify" enabled={role.canModifyTask} />
-                      <PermBadge label="Move" enabled={role.canMoveTask} />
                       <PermBadge label="Delete" enabled={role.canDeleteTask} />
                       <PermBadge label="Decline" enabled={role.canDeclineTask} />
                     </div>
 
-                    {/* Allowed transitions summary */}
-                    {role.canMoveTask && Object.keys(transitions).length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {Object.entries(transitions).map(([from, targets]) =>
-                          (targets as string[]).map((to) => {
-                            const fromIdx = ALL_STAGES.findIndex((s) => s.id === from);
-                            const toIdx = ALL_STAGES.findIndex((s) => s.id === to);
-                            const isForward = toIdx > fromIdx;
-                            return (
-                              <span
-                                key={`${from}-${to}`}
-                                className={cn(
-                                  "inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px]",
-                                  isForward
-                                    ? "bg-emerald-500/10 text-emerald-400"
-                                    : "bg-amber-500/10 text-amber-400"
-                                )}
-                              >
-                                {stageLabel(from)} {isForward ? "→" : "←"} {stageLabel(to)}
-                              </span>
-                            );
-                          })
-                        )}
-                      </div>
-                    )}
+                    {/* Stage summary */}
+                    <RoleStageSummary parsed={parsed} canMoveTask={role.canMoveTask} />
                   </div>
                 )}
               </div>
@@ -351,19 +351,92 @@ export function RolesManager({ roles }: Props) {
   );
 }
 
-function TransitionMatrix({
-  transitions,
-  onChange,
-}: {
-  transitions: Record<string, string[]>;
-  onChange: (t: Record<string, string[]>) => void;
-}) {
-  function toggle(from: string, to: string) {
-    onChange(toggleTransitionTarget(transitions, from, to));
-  }
+function RoleStageSummary({ parsed, canMoveTask }: { parsed: StagePerms; canMoveTask: boolean }) {
+  const hasCreate = parsed.createStages.length > 0;
+  const hasModify = parsed.modifyStages.length > 0;
+  const hasTransitions = canMoveTask && Object.keys(parsed.transitions).length > 0;
 
-  function isEnabled(from: string, to: string) {
-    return (transitions[from] ?? []).includes(to);
+  if (!hasCreate && !hasModify && !hasTransitions) return null;
+
+  return (
+    <div className="space-y-1 mt-2">
+      {hasCreate && (
+        <div className="flex items-center gap-1.5 text-[10px]">
+          <span className="text-muted-foreground shrink-0 w-12">Create:</span>
+          <div className="flex flex-wrap gap-1">
+            {parsed.createStages.map((s) => (
+              <span key={s} className="bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded">{stageLabel(s)}</span>
+            ))}
+          </div>
+        </div>
+      )}
+      {hasModify && (
+        <div className="flex items-center gap-1.5 text-[10px]">
+          <span className="text-muted-foreground shrink-0 w-12">Modify:</span>
+          <div className="flex flex-wrap gap-1">
+            {parsed.modifyStages.map((s) => (
+              <span key={s} className="bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded">{stageLabel(s)}</span>
+            ))}
+          </div>
+        </div>
+      )}
+      {hasTransitions && (
+        <div className="flex items-center gap-1.5 text-[10px]">
+          <span className="text-muted-foreground shrink-0 w-12">Move:</span>
+          <div className="flex flex-wrap gap-1">
+            {Object.entries(parsed.transitions).map(([from, targets]) =>
+              (targets as string[]).map((to) => {
+                const fromIdx = ALL_STAGES.findIndex((s) => s.id === from);
+                const toIdx = ALL_STAGES.findIndex((s) => s.id === to);
+                const isForward = toIdx > fromIdx;
+                return (
+                  <span
+                    key={`${from}-${to}`}
+                    className={cn(
+                      "px-1.5 py-0.5 rounded",
+                      isForward ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
+                    )}
+                  >
+                    {stageLabel(from)} {isForward ? "→" : "←"} {stageLabel(to)}
+                  </span>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StagePermissionsTable({
+  stagePerms,
+  onChange,
+  canMoveTask,
+  onMoveTaskChange,
+}: {
+  stagePerms: StagePerms;
+  onChange: (p: StagePerms) => void;
+  canMoveTask: boolean;
+  onMoveTaskChange: (v: boolean) => void;
+}) {
+  function toggleCreate(stageId: string) {
+    onChange({ ...stagePerms, createStages: toggleInArray(stagePerms.createStages, stageId) });
+  }
+  function toggleModify(stageId: string) {
+    onChange({ ...stagePerms, modifyStages: toggleInArray(stagePerms.modifyStages, stageId) });
+  }
+  function toggleForward(fromId: string, toId: string) {
+    onChange({ ...stagePerms, transitions: toggleTransitionTarget(stagePerms.transitions, fromId, toId) });
+    if (!(stagePerms.transitions[fromId] ?? []).includes(toId) && !canMoveTask) {
+      onMoveTaskChange(true);
+    }
+  }
+  function toggleRollback(fromId: string, toId: string) {
+    onChange({ ...stagePerms, transitions: toggleTransitionTarget(stagePerms.transitions, fromId, toId) });
+    if (!(stagePerms.transitions[fromId] ?? []).includes(toId) && !canMoveTask) {
+      onMoveTaskChange(true);
+    }
   }
 
   const pipeline = ALL_STAGES.map((stage, i) => ({
@@ -376,53 +449,41 @@ function TransitionMatrix({
     <div>
       <p className="text-[11px] text-muted-foreground mb-2 font-medium">Stage Permissions</p>
       <div className="rounded-lg border border-border overflow-hidden">
-        <div className="grid grid-cols-[1fr_90px_90px] text-[10px] font-medium text-muted-foreground bg-muted/30 px-3 py-2 border-b border-border">
+        <div className="grid grid-cols-[1fr_64px_64px_64px_64px] text-[10px] font-medium text-muted-foreground bg-muted/30 px-3 py-2 border-b border-border">
           <span>Stage</span>
-          <span className="text-center">Forward →</span>
-          <span className="text-center">← Rollback</span>
+          <span className="text-center">Create</span>
+          <span className="text-center">Modify</span>
+          <span className="text-center">Forward</span>
+          <span className="text-center">Rollback</span>
         </div>
         {pipeline.map((stage) => {
-          const forwardEnabled = stage.next ? isEnabled(stage.id, stage.next.id) : false;
-          const rollbackEnabled = stage.prev ? isEnabled(stage.id, stage.prev.id) : false;
+          const createEnabled = stagePerms.createStages.includes(stage.id);
+          const modifyEnabled = stagePerms.modifyStages.includes(stage.id);
+          const forwardEnabled = stage.next ? (stagePerms.transitions[stage.id] ?? []).includes(stage.next.id) : false;
+          const rollbackEnabled = stage.prev ? (stagePerms.transitions[stage.id] ?? []).includes(stage.prev.id) : false;
 
           return (
             <div
               key={stage.id}
-              className="grid grid-cols-[1fr_90px_90px] items-center px-3 py-2 border-b border-border last:border-b-0 hover:bg-muted/10 transition-colors"
+              className="grid grid-cols-[1fr_64px_64px_64px_64px] items-center px-3 py-1.5 border-b border-border last:border-b-0 hover:bg-muted/10 transition-colors"
             >
               <span className="text-[11px] font-medium text-foreground/80">{stage.label}</span>
               <div className="flex justify-center">
+                <StageCheckbox enabled={createEnabled} onClick={() => toggleCreate(stage.id)} color="blue" />
+              </div>
+              <div className="flex justify-center">
+                <StageCheckbox enabled={modifyEnabled} onClick={() => toggleModify(stage.id)} color="purple" />
+              </div>
+              <div className="flex justify-center">
                 {stage.next ? (
-                  <button
-                    type="button"
-                    onClick={() => toggle(stage.id, stage.next!.id)}
-                    className={cn(
-                      "w-7 h-7 rounded-md border flex items-center justify-center transition-colors",
-                      forwardEnabled
-                        ? "bg-emerald-500/15 border-emerald-500/40"
-                        : "border-border hover:border-muted-foreground/40"
-                    )}
-                  >
-                    {forwardEnabled && <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={2.5} />}
-                  </button>
+                  <StageCheckbox enabled={forwardEnabled} onClick={() => toggleForward(stage.id, stage.next!.id)} color="emerald" />
                 ) : (
                   <span className="text-[10px] text-muted-foreground/30">—</span>
                 )}
               </div>
               <div className="flex justify-center">
                 {stage.prev ? (
-                  <button
-                    type="button"
-                    onClick={() => toggle(stage.id, stage.prev!.id)}
-                    className={cn(
-                      "w-7 h-7 rounded-md border flex items-center justify-center transition-colors",
-                      rollbackEnabled
-                        ? "bg-amber-500/15 border-amber-500/40"
-                        : "border-border hover:border-muted-foreground/40"
-                    )}
-                  >
-                    {rollbackEnabled && <Check className="w-3.5 h-3.5 text-amber-400" strokeWidth={2.5} />}
-                  </button>
+                  <StageCheckbox enabled={rollbackEnabled} onClick={() => toggleRollback(stage.id, stage.prev!.id)} color="amber" />
                 ) : (
                   <span className="text-[10px] text-muted-foreground/30">—</span>
                 )}
@@ -432,9 +493,32 @@ function TransitionMatrix({
         })}
       </div>
       <p className="text-[10px] text-muted-foreground/50 mt-1.5">
-        Forward moves to the next stage. Rollback sends back to the previous stage.
+        Create = can create tasks in this stage. Modify = can edit tasks in this stage. Forward/Rollback = can move tasks to next/previous stage.
       </p>
     </div>
+  );
+}
+
+function StageCheckbox({ enabled, onClick, color }: { enabled: boolean; onClick: () => void; color: string }) {
+  const colorMap: Record<string, { bg: string; border: string; text: string }> = {
+    blue: { bg: "bg-blue-500/15", border: "border-blue-500/40", text: "text-blue-400" },
+    purple: { bg: "bg-purple-500/15", border: "border-purple-500/40", text: "text-purple-400" },
+    emerald: { bg: "bg-emerald-500/15", border: "border-emerald-500/40", text: "text-emerald-400" },
+    amber: { bg: "bg-amber-500/15", border: "border-amber-500/40", text: "text-amber-400" },
+  };
+  const c = colorMap[color] ?? colorMap.blue;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "w-6 h-6 rounded-md border flex items-center justify-center transition-colors",
+        enabled ? `${c.bg} ${c.border}` : "border-border hover:border-muted-foreground/40"
+      )}
+    >
+      {enabled && <Check className={cn("w-3.5 h-3.5", c.text)} strokeWidth={2.5} />}
+    </button>
   );
 }
 

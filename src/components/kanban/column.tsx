@@ -88,7 +88,7 @@ export function KanbanColumn({ stage, tasks, disabled, projectId, questions, can
           <h3 className="text-sm font-medium">{stage.label}</h3>
           <span className="text-xs text-muted-foreground">{tasks.length}</span>
         </div>
-        {!disabled && canCreateTask && stage.id === "NEW_REQUEST" && (
+        {!disabled && canCreateTask && (
           <button
             onClick={() => router.push(`/dashboard/projects/${projectId}/tasks/new`)}
             className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"

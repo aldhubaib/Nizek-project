@@ -29,15 +29,10 @@ export default async function ProjectDetailPage({ params }: Props) {
 
   let userPermissions;
   if (user.systemRole === "ADMIN") {
+    const adminPerms = getAdminPermissions();
     userPermissions = {
-      canCreateTask: true,
-      canModifyTask: true,
-      canMoveTask: true,
-      canDeleteTask: true,
-      canDeclineTask: true,
+      ...adminPerms,
       allowedStages: [] as string[],
-      allowedTransitions: {} as Record<string, string[]>,
-      isAdmin: true,
       systemRole: "ADMIN",
     };
   } else {
