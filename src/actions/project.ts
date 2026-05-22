@@ -249,6 +249,49 @@ export async function updateMemberRole(data: {
   revalidatePath(`/dashboard/projects/${data.projectId}`);
 }
 
+export async function addMemberToProject(data: {
+  projectId: string;
+  userId: string;
+  roleId: string;
+}) {
+  await requireProjectRole(data.projectId, ["ADMIN"]);
+
+  const existing = await prisma.projectMember.findUnique({
+    where: { userId_projectId: { userId: data.userId, projectId: data.projectId } },
+  });
+  if (existing) throw new Error("User is already a member of this project");
+
+  const pRole = await prisma.projectRole.findUnique({ where: { id: data.roleId } });
+  if (!pRole) throw new Error("Invalid role");
+
+  await prisma.projectMember.create({
+    data: {
+      userId: data.userId,
+      projectId: data.projectId,
+      role: pRole.isAdmin ? "ADMIN" : "MEMBER",
+      roleId: data.roleId,
+    },
+  });
+
+  revalidatePath(`/dashboard/projects/${data.projectId}`);
+}
+
+export async function getAvailableUsers(projectId: string) {
+  const existingMemberIds = await prisma.projectMember.findMany({
+    where: { projectId },
+    select: { userId: true },
+  });
+  const ids = new Set(existingMemberIds.map((m) => m.userId));
+
+  const allUsers = await prisma.user.findMany({
+    where: { blocked: false },
+    select: { id: true, name: true, email: true, imageUrl: true },
+    orderBy: { name: "asc" },
+  });
+
+  return allUsers.filter((u) => !ids.has(u.id));
+}
+
 export async function deleteProject(data: {
   projectId: string;
   confirmName: string;
