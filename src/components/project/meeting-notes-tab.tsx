@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,15 +12,24 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, FileText, Trash2 } from "lucide-react";
+import { Plus, FileText, Trash2, Gavel } from "lucide-react";
 import { createMeetingNote, deleteMeetingNote } from "@/actions/meeting-note";
 import { RichTextEditor } from "@/components/rich-text-editor";
+import { cn } from "@/lib/utils";
+
+type NoteType = "MEETING_NOTE" | "DECISION";
+
+const NOTE_TYPE_CONFIG: Record<NoteType, { label: string; color: string; bgColor: string; icon: typeof FileText }> = {
+  MEETING_NOTE: { label: "Meeting Note", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: FileText },
+  DECISION: { label: "Decision", color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/20", icon: Gavel },
+};
 
 interface MeetingNote {
   id: string;
   title: string;
   content: string;
   date: Date;
+  noteType: string;
   author: { id: string; name: string | null; imageUrl: string | null };
 }
 
@@ -34,7 +43,14 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [content, setContent] = useState("");
+  const [noteType, setNoteType] = useState<NoteType>("MEETING_NOTE");
   const [selectedNote, setSelectedNote] = useState<MeetingNote | null>(null);
+  const [filter, setFilter] = useState<NoteType | "ALL">("ALL");
+
+  const filtered = useMemo(() => {
+    if (filter === "ALL") return notes;
+    return notes.filter((n) => n.noteType === filter);
+  }, [notes, filter]);
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -46,9 +62,11 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
         title: formData.get("title") as string,
         content,
         date: formData.get("date") as string,
+        noteType,
       });
       setOpen(false);
       setContent("");
+      setNoteType("MEETING_NOTE");
     } catch (err) {
       console.error(err);
     } finally {
@@ -66,6 +84,8 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
   }
 
   if (selectedNote) {
+    const config = NOTE_TYPE_CONFIG[(selectedNote.noteType as NoteType) ?? "MEETING_NOTE"];
+    const Icon = config?.icon ?? FileText;
     return (
       <div>
         <button
@@ -77,6 +97,14 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
         <div className="rounded-lg border border-border bg-card p-6">
           <div className="flex items-start justify-between">
             <div>
+              <div className="flex items-center gap-2 mb-1">
+                {config && (
+                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${config.bgColor} ${config.color}`}>
+                    <Icon className="w-3 h-3" />
+                    {config.label}
+                  </span>
+                )}
+              </div>
               <h2 className="text-xl font-semibold">{selectedNote.title}</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {format(new Date(selectedNote.date), "MMMM d, yyyy")} ·{" "}
@@ -106,21 +134,70 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">Meeting Notes</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-semibold">Notes</h2>
+          <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5">
+            {(["ALL", "MEETING_NOTE", "DECISION"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setFilter(t)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors",
+                  filter === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {t === "ALL" ? "All" : NOTE_TYPE_CONFIG[t].label}
+                <span className="ml-1 text-[10px] opacity-60">
+                  {t === "ALL" ? notes.length : notes.filter((n) => n.noteType === t).length}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
         {canEdit && (
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setContent(""); setNoteType("MEETING_NOTE"); } }}>
             <DialogTrigger render={<Button size="sm" />}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               New Note
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>New Meeting Note</DialogTitle>
+                <DialogTitle>New Note</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleCreate} className="space-y-4">
+                {/* Type picker */}
+                <div className="space-y-2">
+                  <Label>Type</Label>
+                  <div className="flex gap-2">
+                    {(Object.entries(NOTE_TYPE_CONFIG) as [NoteType, typeof NOTE_TYPE_CONFIG[NoteType]][]).map(([id, cfg]) => {
+                      const Icon = cfg.icon;
+                      const isActive = noteType === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setNoteType(id)}
+                          className={cn(
+                            "flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px] font-medium transition-colors flex-1",
+                            isActive ? `${cfg.bgColor} ${cfg.color}` : "border-border text-muted-foreground hover:border-muted-foreground/40"
+                          )}
+                        >
+                          <Icon className="w-4 h-4" strokeWidth={1.5} />
+                          {cfg.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="title">Title</Label>
-                  <Input id="title" name="title" required placeholder="Sprint Review" />
+                  <Input
+                    id="title"
+                    name="title"
+                    required
+                    placeholder={noteType === "DECISION" ? "e.g. Use PostgreSQL for the database" : "e.g. Sprint Review"}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="date">Date</Label>
@@ -141,7 +218,7 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
                     Cancel
                   </Button>
                   <Button type="submit" disabled={loading}>
-                    {loading ? "Saving..." : "Save Note"}
+                    {loading ? "Saving..." : "Save"}
                   </Button>
                 </div>
               </form>
@@ -150,30 +227,44 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
         )}
       </div>
 
-      {notes.length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <FileText className="h-10 w-10 mb-2 opacity-40" />
-          <p className="text-sm">No meeting notes yet</p>
+          <p className="text-sm">
+            {filter === "ALL" ? "No notes yet" : `No ${NOTE_TYPE_CONFIG[filter].label.toLowerCase()}s yet`}
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
-          {notes.map((note) => (
-            <button
-              key={note.id}
-              onClick={() => setSelectedNote(note)}
-              className="w-full text-left rounded-lg border border-border/60 bg-card p-4 hover:border-border transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium">{note.title}</h3>
-                <span className="text-xs text-muted-foreground">
-                  {format(new Date(note.date), "MMM d, yyyy")}
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                by {note.author.name ?? "Unknown"}
-              </p>
-            </button>
-          ))}
+          {filtered.map((note) => {
+            const config = NOTE_TYPE_CONFIG[(note.noteType as NoteType) ?? "MEETING_NOTE"];
+            const Icon = config?.icon ?? FileText;
+            return (
+              <button
+                key={note.id}
+                onClick={() => setSelectedNote(note)}
+                className="w-full text-left rounded-lg border border-border/60 bg-card p-4 hover:border-border transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {config && (
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${config.bgColor} ${config.color}`}>
+                        <Icon className="w-2.5 h-2.5" />
+                        {config.label}
+                      </span>
+                    )}
+                    <h3 className="text-sm font-medium">{note.title}</h3>
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                    {format(new Date(note.date), "MMM d, yyyy")}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  by {note.author.name ?? "Unknown"}
+                </p>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

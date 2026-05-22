@@ -9,6 +9,7 @@ export async function createMeetingNote(data: {
   title: string;
   content: string;
   date: string;
+  noteType?: "MEETING_NOTE" | "DECISION";
 }) {
   const { user, member } = await requireProjectMember(data.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot create notes");
@@ -18,6 +19,7 @@ export async function createMeetingNote(data: {
       title: data.title,
       content: data.content,
       date: new Date(data.date),
+      noteType: data.noteType ?? "MEETING_NOTE",
       projectId: data.projectId,
       authorId: user.id,
     },

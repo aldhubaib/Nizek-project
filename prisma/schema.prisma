@@ -247,11 +247,17 @@ model TaskActivity {
   @@index([taskId])
 }
 
+enum NoteType {
+  MEETING_NOTE
+  DECISION
+}
+
 model MeetingNote {
-  id      String   @id @default(cuid())
-  title   String
-  content String
-  date    DateTime
+  id       String   @id @default(cuid())
+  title    String
+  content  String
+  date     DateTime
+  noteType NoteType @default(MEETING_NOTE)
 
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

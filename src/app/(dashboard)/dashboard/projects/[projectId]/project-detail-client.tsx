@@ -95,6 +95,7 @@ interface MeetingNote {
   title: string;
   content: string;
   date: Date;
+  noteType: string;
   author: { id: string; name: string | null; imageUrl: string | null };
 }
 
