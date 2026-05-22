@@ -43,7 +43,7 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [content, setContent] = useState("");
-  const [noteType, setNoteType] = useState<NoteType>("MEETING_NOTE");
+  const [noteType, setNoteType] = useState<NoteType | null>(null);
   const [selectedNote, setSelectedNote] = useState<MeetingNote | null>(null);
   const [filter, setFilter] = useState<NoteType | "ALL">("ALL");
 
@@ -52,8 +52,15 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
     return notes.filter((n) => n.noteType === filter);
   }, [notes, filter]);
 
+  const [typeError, setTypeError] = useState(false);
+
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!noteType) {
+      setTypeError(true);
+      return;
+    }
+    setTypeError(false);
     setLoading(true);
     const formData = new FormData(e.currentTarget);
     try {
@@ -66,7 +73,7 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
       });
       setOpen(false);
       setContent("");
-      setNoteType("MEETING_NOTE");
+      setNoteType(null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -155,7 +162,7 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
           </div>
         </div>
         {canEdit && (
-          <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setContent(""); setNoteType("MEETING_NOTE"); } }}>
+          <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setContent(""); setNoteType(null); setTypeError(false); } }}>
             <DialogTrigger render={<Button size="sm" />}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               New Note
@@ -167,7 +174,7 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
               <form onSubmit={handleCreate} className="space-y-4">
                 {/* Type picker */}
                 <div className="space-y-2">
-                  <Label>Type</Label>
+                  <Label>Type <span className="text-destructive">*</span></Label>
                   <div className="flex gap-2">
                     {(Object.entries(NOTE_TYPE_CONFIG) as [NoteType, typeof NOTE_TYPE_CONFIG[NoteType]][]).map(([id, cfg]) => {
                       const Icon = cfg.icon;
@@ -176,10 +183,11 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
                         <button
                           key={id}
                           type="button"
-                          onClick={() => setNoteType(id)}
+                          onClick={() => { setNoteType(id); setTypeError(false); }}
                           className={cn(
                             "flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px] font-medium transition-colors flex-1",
-                            isActive ? `${cfg.bgColor} ${cfg.color}` : "border-border text-muted-foreground hover:border-muted-foreground/40"
+                            isActive ? `${cfg.bgColor} ${cfg.color}` : "border-border text-muted-foreground hover:border-muted-foreground/40",
+                            typeError && !isActive && "border-destructive/40"
                           )}
                         >
                           <Icon className="w-4 h-4" strokeWidth={1.5} />
@@ -188,6 +196,9 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
                       );
                     })}
                   </div>
+                  {typeError && (
+                    <p className="text-[11px] text-destructive">Please select a type</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
