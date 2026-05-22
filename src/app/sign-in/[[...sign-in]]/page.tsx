@@ -7,11 +7,13 @@ export default function SignInPage() {
       <SignIn
         appearance={{
           elements: {
-            rootBox: "w-full",
-            cardBox: "w-full shadow-none bg-transparent",
-            card: "w-full bg-transparent shadow-none p-0",
-            header: "hidden",
-            footer: "hidden",
+            rootBox: { width: "100%" },
+            cardBox: { width: "100%", boxShadow: "none", background: "transparent" },
+            card: { width: "100%", background: "transparent", boxShadow: "none", padding: 0 },
+            headerTitle: { display: "none" },
+            headerSubtitle: { display: "none" },
+            header: { display: "none" },
+            footer: { display: "none" },
           },
         }}
       />
