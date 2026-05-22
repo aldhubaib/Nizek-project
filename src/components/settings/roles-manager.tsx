@@ -317,24 +317,27 @@ export function RolesManager({ roles }: Props) {
 
                     {/* Allowed transitions summary */}
                     {role.canMoveTask && Object.keys(transitions).length > 0 && (
-                      <div className="space-y-1 mt-2">
-                        {Object.entries(transitions).map(([from, targets]) => (
-                          <div key={from} className="flex items-center gap-1.5 text-[10px]">
-                            <span className="text-muted-foreground shrink-0">
-                              {stageLabel(from)} &rarr;
-                            </span>
-                            <div className="flex flex-wrap gap-1">
-                              {(targets as string[]).map((to) => (
-                                <span
-                                  key={to}
-                                  className="bg-primary/10 text-primary/80 px-1.5 py-0.5 rounded"
-                                >
-                                  {stageLabel(to)}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {Object.entries(transitions).map(([from, targets]) =>
+                          (targets as string[]).map((to) => {
+                            const fromIdx = ALL_STAGES.findIndex((s) => s.id === from);
+                            const toIdx = ALL_STAGES.findIndex((s) => s.id === to);
+                            const isForward = toIdx > fromIdx;
+                            return (
+                              <span
+                                key={`${from}-${to}`}
+                                className={cn(
+                                  "inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px]",
+                                  isForward
+                                    ? "bg-emerald-500/10 text-emerald-400"
+                                    : "bg-amber-500/10 text-amber-400"
+                                )}
+                              >
+                                {stageLabel(from)} {isForward ? "→" : "←"} {stageLabel(to)}
+                              </span>
+                            );
+                          })
+                        )}
                       </div>
                     )}
                   </div>
@@ -355,44 +358,82 @@ function TransitionMatrix({
   transitions: Record<string, string[]>;
   onChange: (t: Record<string, string[]>) => void;
 }) {
-  const sourceStages = ALL_STAGES.filter((s) => s.id !== "DONE");
+  function toggle(from: string, to: string) {
+    onChange(toggleTransitionTarget(transitions, from, to));
+  }
+
+  function isEnabled(from: string, to: string) {
+    return (transitions[from] ?? []).includes(to);
+  }
+
+  const pipeline = ALL_STAGES.map((stage, i) => ({
+    ...stage,
+    next: ALL_STAGES[i + 1] ?? null,
+    prev: ALL_STAGES[i - 1] ?? null,
+  }));
 
   return (
     <div>
-      <p className="text-[11px] text-muted-foreground mb-2 font-medium">Allowed Transitions</p>
-      <div className="space-y-2">
-        {sourceStages.map((from) => {
-          const possibleTargets = ALL_STAGES.filter((s) => s.id !== from.id);
-          const currentTargets = transitions[from.id] ?? [];
+      <p className="text-[11px] text-muted-foreground mb-2 font-medium">Stage Permissions</p>
+      <div className="rounded-lg border border-border overflow-hidden">
+        <div className="grid grid-cols-[1fr_90px_90px] text-[10px] font-medium text-muted-foreground bg-muted/30 px-3 py-2 border-b border-border">
+          <span>Stage</span>
+          <span className="text-center">Forward →</span>
+          <span className="text-center">← Rollback</span>
+        </div>
+        {pipeline.map((stage) => {
+          const forwardEnabled = stage.next ? isEnabled(stage.id, stage.next.id) : false;
+          const rollbackEnabled = stage.prev ? isEnabled(stage.id, stage.prev.id) : false;
 
           return (
-            <div key={from.id} className="flex items-start gap-2">
-              <span className="text-[10px] text-muted-foreground mt-1 shrink-0 w-[100px] text-right">
-                {from.label} &rarr;
-              </span>
-              <div className="flex flex-wrap gap-1">
-                {possibleTargets.map((to) => (
+            <div
+              key={stage.id}
+              className="grid grid-cols-[1fr_90px_90px] items-center px-3 py-2 border-b border-border last:border-b-0 hover:bg-muted/10 transition-colors"
+            >
+              <span className="text-[11px] font-medium text-foreground/80">{stage.label}</span>
+              <div className="flex justify-center">
+                {stage.next ? (
                   <button
-                    key={to.id}
                     type="button"
-                    onClick={() =>
-                      onChange(toggleTransitionTarget(transitions, from.id, to.id))
-                    }
+                    onClick={() => toggle(stage.id, stage.next!.id)}
                     className={cn(
-                      "rounded-md border px-1.5 py-0.5 text-[10px] transition-colors",
-                      currentTargets.includes(to.id)
-                        ? "bg-primary/15 border-primary/40 text-primary"
-                        : "border-border text-muted-foreground/50 hover:border-muted-foreground/40"
+                      "w-7 h-7 rounded-md border flex items-center justify-center transition-colors",
+                      forwardEnabled
+                        ? "bg-emerald-500/15 border-emerald-500/40"
+                        : "border-border hover:border-muted-foreground/40"
                     )}
                   >
-                    {to.label}
+                    {forwardEnabled && <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={2.5} />}
                   </button>
-                ))}
+                ) : (
+                  <span className="text-[10px] text-muted-foreground/30">—</span>
+                )}
+              </div>
+              <div className="flex justify-center">
+                {stage.prev ? (
+                  <button
+                    type="button"
+                    onClick={() => toggle(stage.id, stage.prev!.id)}
+                    className={cn(
+                      "w-7 h-7 rounded-md border flex items-center justify-center transition-colors",
+                      rollbackEnabled
+                        ? "bg-amber-500/15 border-amber-500/40"
+                        : "border-border hover:border-muted-foreground/40"
+                    )}
+                  >
+                    {rollbackEnabled && <Check className="w-3.5 h-3.5 text-amber-400" strokeWidth={2.5} />}
+                  </button>
+                ) : (
+                  <span className="text-[10px] text-muted-foreground/30">—</span>
+                )}
               </div>
             </div>
           );
         })}
       </div>
+      <p className="text-[10px] text-muted-foreground/50 mt-1.5">
+        Forward moves to the next stage. Rollback sends back to the previous stage.
+      </p>
     </div>
   );
 }
