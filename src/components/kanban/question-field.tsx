@@ -148,9 +148,9 @@ interface Props {
   showRequiredAs?: "all" | "mandatory" | "transition";
 }
 
-function parseClientValue(raw: string): { needed: boolean; note: string; completed: boolean } {
-  if (!raw) return { needed: false, note: "", completed: false };
-  try { return { needed: false, note: "", completed: false, ...JSON.parse(raw) }; } catch { return { needed: false, note: "", completed: false }; }
+function parseClientValue(raw: string): { needed: boolean | null; note: string; completed: boolean } {
+  if (!raw) return { needed: null, note: "", completed: false };
+  try { return { needed: null, note: "", completed: false, ...JSON.parse(raw) }; } catch { return { needed: null, note: "", completed: false }; }
 }
 
 export function QuestionField({ question, index, value, onChange, compact, readonly: isReadonly, showRequiredAs = "all" }: Props) {
@@ -218,20 +218,21 @@ export function QuestionField({ question, index, value, onChange, compact, reado
   function renderReadonly() {
     if (question.type === "client") {
       const cv = parseClientValue(value);
+      if (cv.needed === null) return <span className="text-[11px] text-muted-foreground/60">Not answered</span>;
       return (
         <div className="space-y-1.5">
           <span className={cn(
             "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold",
-            cv.needed
+            cv.needed === true
               ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
               : "border-primary/30 bg-primary/10 text-primary"
           )}>
             {cv.needed ? "Yes" : "No"}
           </span>
-          {cv.needed && cv.note && (
+          {cv.needed === true && cv.note && (
             <p className="text-[13px] text-foreground/80 whitespace-pre-wrap">{cv.note}</p>
           )}
-          {cv.needed && (
+          {cv.needed === true && (
             <span className={cn("text-[11px]", cv.completed ? "text-emerald-400" : "text-muted-foreground/60")}>
               {cv.completed ? "Received from client" : "Waiting on client"}
             </span>
@@ -306,7 +307,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
                 onClick={() => updateClient({ needed: true })}
                 className={cn(
                   "flex-1 rounded-lg border px-3 py-2 text-[12px] font-medium transition-colors",
-                  cv.needed
+                  cv.needed === true
                     ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
                     : "border-border text-muted-foreground hover:border-muted-foreground/40"
                 )}
@@ -318,7 +319,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
                 onClick={() => updateClient({ needed: false, note: "", completed: false })}
                 className={cn(
                   "flex-1 rounded-lg border px-3 py-2 text-[12px] font-medium transition-colors",
-                  !cv.needed
+                  cv.needed === false
                     ? "border-primary/40 bg-primary/10 text-primary"
                     : "border-border text-muted-foreground hover:border-muted-foreground/40"
                 )}
@@ -326,7 +327,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
                 No
               </button>
             </div>
-            {cv.needed && (
+            {cv.needed === true && (
               <>
                 <Textarea
                   ref={clientTextareaRef}
