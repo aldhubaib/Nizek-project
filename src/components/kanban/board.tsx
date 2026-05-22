@@ -15,7 +15,7 @@ import {
 import { KanbanColumn } from "./column";
 import { TaskCard } from "./task-card";
 import { useKanbanStore, type KanbanTask, type Stage } from "@/store/kanban";
-import { moveTask as moveTaskAction, declineTask } from "@/actions/task";
+import { moveTask as moveTaskAction, declineTask, pollTaskUpdates } from "@/actions/task";
 import type { TaskQuestion } from "./question-field";
 import { StageConfirmDialog, getCheckpoint } from "./stage-confirm-dialog";
 import { DeclineDialog } from "./decline-dialog";
@@ -59,9 +59,63 @@ export function KanbanBoard({
   const [pendingDecline, setPendingDecline] = useState<{ taskId: string; fromStage: Stage } | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
+  const isDragging = useRef(false);
+
   useEffect(() => {
     setTasks(initialTasks);
   }, [initialTasks, setTasks]);
+
+  // Poll for real-time updates every 5 seconds
+  useEffect(() => {
+    if (!isProjectActive) return;
+
+    const interval = setInterval(async () => {
+      if (isDragging.current) return;
+      try {
+        const updates = await pollTaskUpdates(projectId);
+        setTasks((prev: KanbanTask[]) => {
+          const updateMap = new Map(updates.map((u) => [u.id, u]));
+          const currentIds = new Set(prev.map((t) => t.id));
+          const updateIds = new Set(updates.map((u) => u.id));
+
+          let changed = false;
+
+          const merged = prev.map((task) => {
+            const update = updateMap.get(task.id);
+            if (!update) { changed = true; return task; }
+            if (task.stage !== update.stage || task.order !== update.order || task.title !== update.title || task.priority !== update.priority) {
+              changed = true;
+              return { ...task, ...update };
+            }
+            return task;
+          }).filter((t) => updateIds.has(t.id));
+
+          // Add new tasks
+          for (const u of updates) {
+            if (!currentIds.has(u.id)) {
+              changed = true;
+              merged.push({
+                ...u,
+                description: null,
+                isReadyForTransition: false,
+                declineCount: 0,
+                internalDeclines: 0,
+                clientDeclines: 0,
+              } as KanbanTask);
+            }
+          }
+
+          if (prev.length !== merged.length) changed = true;
+
+          return changed ? merged : prev;
+        });
+      } catch {
+        // Silently ignore polling errors
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [projectId, isProjectActive, setTasks]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -105,6 +159,7 @@ export function KanbanBoard({
   const dragTaskType = activeTask?.taskType ?? null;
 
   function handleDragStart(event: DragStartEvent) {
+    isDragging.current = true;
     const task = tasks.find((t) => t.id === event.active.id);
     if (task) {
       dragOriginRef.current = task.stage;
@@ -150,6 +205,7 @@ export function KanbanBoard({
   }
 
   async function handleDragEnd(event: DragEndEvent) {
+    isDragging.current = false;
     const fromStage = dragOriginRef.current;
     setActiveTask(null);
     dragOriginRef.current = null;

@@ -484,6 +484,51 @@ export async function getTasksByProject(projectId: string) {
   });
 }
 
+export async function pollTaskUpdates(projectId: string) {
+  await requireProjectMember(projectId);
+
+  const tasks = await prisma.task.findMany({
+    where: { projectId },
+    select: {
+      id: true,
+      stage: true,
+      order: true,
+      title: true,
+      priority: true,
+      taskType: true,
+      taskNumber: true,
+      estimatedMinutes: true,
+      estimateAccuracy: true,
+      startedAt: true,
+      assignee: { select: { id: true, name: true, email: true, imageUrl: true } },
+      createdBy: { select: { id: true, name: true, email: true, imageUrl: true } },
+      stageLogs: {
+        where: { exitedAt: null },
+        orderBy: { enteredAt: "desc" },
+        take: 1,
+        select: { enteredAt: true },
+      },
+    },
+    orderBy: { order: "asc" },
+  });
+
+  return tasks.map((t) => ({
+    id: t.id,
+    stage: t.stage,
+    order: t.order,
+    title: t.title,
+    priority: t.priority,
+    taskType: t.taskType,
+    taskNumber: t.taskNumber,
+    estimatedMinutes: t.estimatedMinutes,
+    estimateAccuracy: t.estimateAccuracy,
+    startedAt: t.startedAt?.toISOString() ?? null,
+    stageEnteredAt: t.stageLogs[0]?.enteredAt?.toISOString() ?? null,
+    assignee: t.assignee,
+    createdBy: t.createdBy,
+  }));
+}
+
 export async function getTaskStageLogs(taskId: string) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },

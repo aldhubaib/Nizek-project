@@ -28,7 +28,7 @@ export interface KanbanTask {
 
 interface KanbanState {
   tasks: KanbanTask[];
-  setTasks: (tasks: KanbanTask[]) => void;
+  setTasks: (tasks: KanbanTask[] | ((prev: KanbanTask[]) => KanbanTask[])) => void;
   moveTask: (taskId: string, toStage: Stage, toOrder: number) => void;
   addTask: (task: KanbanTask) => void;
   updateTask: (taskId: string, data: Partial<KanbanTask>) => void;
@@ -37,7 +37,10 @@ interface KanbanState {
 
 export const useKanbanStore = create<KanbanState>((set) => ({
   tasks: [],
-  setTasks: (tasks) => set({ tasks }),
+  setTasks: (tasks) =>
+    set((state) => ({
+      tasks: typeof tasks === "function" ? tasks(state.tasks) : tasks,
+    })),
 
   moveTask: (taskId, toStage, toOrder) =>
     set((state) => ({
