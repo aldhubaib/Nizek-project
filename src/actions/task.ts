@@ -200,7 +200,7 @@ export async function moveTask(data: {
 
   const { user, member } = await requireProjectMember(task.projectId);
 
-  if (user.systemRole !== "ADMIN") {
+  if (user.systemRole !== "ADMIN" && task.stage !== data.stage) {
     const perms = getPermissionsFromRole(member.projectRole);
     if (!canTransition(perms, task.stage, data.stage)) {
       throw new Error(`Your role cannot move tasks from ${task.stage.replaceAll("_", " ")} to ${data.stage.replaceAll("_", " ")}`);
