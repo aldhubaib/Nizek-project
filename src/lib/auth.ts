@@ -17,8 +17,10 @@ export async function getCurrentUser() {
       where: { email },
     });
 
-    user = await prisma.user.create({
-      data: {
+    user = await prisma.user.upsert({
+      where: { clerkId },
+      update: {},
+      create: {
         clerkId,
         email,
         name:
@@ -30,7 +32,34 @@ export async function getCurrentUser() {
     });
 
     if (pendingInvite) {
-      await prisma.pendingTeamInvite.delete({ where: { email } });
+      await prisma.pendingTeamInvite
+        .delete({ where: { email } })
+        .catch(() => {});
+    }
+
+    // Auto-accept pending project invitations for this email
+    const projectInvitations = await prisma.invitation.findMany({
+      where: { email, status: "PENDING" },
+    });
+
+    for (const inv of projectInvitations) {
+      const alreadyMember = await prisma.projectMember.findUnique({
+        where: { userId_projectId: { userId: user.id, projectId: inv.projectId } },
+      });
+      if (!alreadyMember) {
+        await prisma.projectMember.create({
+          data: {
+            userId: user.id,
+            projectId: inv.projectId,
+            role: inv.role,
+            roleId: inv.roleId,
+          },
+        });
+      }
+      await prisma.invitation.update({
+        where: { id: inv.id },
+        data: { status: "ACCEPTED" },
+      });
     }
   }
 
@@ -47,15 +76,16 @@ export async function requireUser() {
 export async function requireProjectMember(projectId: string) {
   const user = await requireUser();
 
+  const member = await prisma.projectMember.findUnique({
+    where: { userId_projectId: { userId: user.id, projectId } },
+    include: { projectRole: true },
+  });
+
   if (user.systemRole === "ADMIN") {
-    const member = await prisma.projectMember.findUnique({
-      where: { userId_projectId: { userId: user.id, projectId } },
-      include: { projectRole: true },
-    });
     return {
       user,
       member: member ?? {
-        id: "admin",
+        id: "admin-virtual",
         role: "ADMIN" as const,
         roleId: null,
         userId: user.id,
@@ -66,10 +96,6 @@ export async function requireProjectMember(projectId: string) {
     };
   }
 
-  const member = await prisma.projectMember.findUnique({
-    where: { userId_projectId: { userId: user.id, projectId } },
-    include: { projectRole: true },
-  });
   if (!member) throw new Error("Not a member of this project");
   return { user, member };
 }
