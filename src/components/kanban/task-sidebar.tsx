@@ -345,15 +345,13 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            {startedAt && stageLogs.length > 0 && (
-              <button
-                onClick={() => setTimeTrackingOpen(true)}
-                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                title="Time Tracking"
-              >
-                <Clock className="w-4 h-4" />
-              </button>
-            )}
+            <button
+              onClick={() => setTimeTrackingOpen(true)}
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Time Tracking"
+            >
+              <Clock className="w-4 h-4" />
+            </button>
             <button
               onClick={() => setActivityOpen(true)}
               className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -693,7 +691,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
         </div>
       )}
       {/* Time Tracking Modal */}
-      {timeTrackingOpen && startedAt && stageLogs.length > 0 && (
+      {timeTrackingOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-xs"
@@ -713,36 +711,46 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
               </button>
             </div>
             <div className="overflow-y-auto flex-1 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5" />
-                  Total time
-                </span>
-                <span className="text-[14px] font-semibold font-mono tabular-nums">
-                  {formatDuration(new Date(startedAt), new Date())}
-                </span>
-              </div>
-              <div className="border-t border-border/30 pt-3 space-y-2">
-                {stageLogs
-                  .filter((l) => l.stage !== "NEW_REQUEST" && l.stage !== "CLARIFICATION")
-                  .map((log, i) => {
-                    const entered = new Date(log.enteredAt);
-                    const exited = log.exitedAt ? new Date(log.exitedAt) : new Date();
-                    const stageInfo = STAGES.find((s) => s.id === log.stage);
-                    return (
-                      <div key={i} className="flex items-center justify-between">
-                        <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
-                          <span className={cn("w-2 h-2 rounded-full", stageInfo?.color ?? "bg-zinc-500")} />
-                          {stageInfo?.label ?? log.stage}
-                          {!log.exitedAt && <span className="text-[10px] text-primary ml-1">(current)</span>}
-                        </span>
-                        <span className="text-[12px] font-mono tabular-nums text-muted-foreground">
-                          {formatDuration(entered, exited)}
-                        </span>
-                      </div>
-                    );
-                  })}
-              </div>
+              {startedAt && stageLogs.length > 0 ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" />
+                      Total time
+                    </span>
+                    <span className="text-[14px] font-semibold font-mono tabular-nums">
+                      {formatDuration(new Date(startedAt), new Date())}
+                    </span>
+                  </div>
+                  <div className="border-t border-border/30 pt-3 space-y-2">
+                    {stageLogs
+                      .filter((l) => l.stage !== "NEW_REQUEST" && l.stage !== "CLARIFICATION")
+                      .map((log, i) => {
+                        const entered = new Date(log.enteredAt);
+                        const exited = log.exitedAt ? new Date(log.exitedAt) : new Date();
+                        const stageInfo = STAGES.find((s) => s.id === log.stage);
+                        return (
+                          <div key={i} className="flex items-center justify-between">
+                            <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                              <span className={cn("w-2 h-2 rounded-full", stageInfo?.color ?? "bg-zinc-500")} />
+                              {stageInfo?.label ?? log.stage}
+                              {!log.exitedAt && <span className="text-[10px] text-primary ml-1">(current)</span>}
+                            </span>
+                            <span className="text-[12px] font-mono tabular-nums text-muted-foreground">
+                              {formatDuration(entered, exited)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-6 text-center">
+                  <Clock className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                  <p className="text-[12px] text-muted-foreground">No time tracking yet</p>
+                  <p className="text-[11px] text-muted-foreground/60">Tracking starts when the task moves to Ready for Dev</p>
+                </div>
+              )}
               {(task.estimatedMinutes || task.estimateAccuracy) && (
                 <div className="border-t border-border/30 pt-3">
                   <div className="flex items-center gap-2 flex-wrap">
