@@ -66,12 +66,13 @@ export function KanbanBoard({
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  const canMoveToStage = useCallback(
-    (stage: Stage) => {
+  const canMoveFromTo = useCallback(
+    (from: Stage, to: Stage) => {
       if (!isProjectActive) return false;
       if (userPermissions.isAdmin) return true;
       if (!userPermissions.canMoveTask) return false;
-      return userPermissions.allowedStages.includes(stage);
+      const allowed = userPermissions.allowedTransitions?.[from];
+      return allowed ? allowed.includes(to) : false;
     },
     [userPermissions, isProjectActive]
   );
@@ -139,7 +140,7 @@ export function KanbanBoard({
       if (activeTaskItem.taskType === "BUG" && fromStage === "INTERNAL_REVIEW" && targetStage === "CLIENT_REVIEW") {
         effectiveTarget = "READY_FOR_RELEASE";
       }
-      if (!canMoveToStage(effectiveTarget)) return;
+      if (!canMoveFromTo(fromStage, effectiveTarget)) return;
       if (!isValidMove(fromStage, effectiveTarget, activeTaskItem.taskType)) return;
       if (fromStage === "CLARIFICATION" && !canLeaveClarRef.current) return;
       const tasksInTarget = tasks.filter((t) => t.stage === effectiveTarget);
@@ -172,7 +173,7 @@ export function KanbanBoard({
       if (task.taskType === "BUG" && fromStage === "INTERNAL_REVIEW" && dropStage === "CLIENT_REVIEW") {
         effectiveDrop = "READY_FOR_RELEASE";
       }
-      if (!canMoveToStage(effectiveDrop)) { setTasks(initialTasks); return; }
+      if (!canMoveFromTo(fromStage, effectiveDrop)) { setTasks(initialTasks); return; }
       if (!isValidMove(fromStage, effectiveDrop, task.taskType)) { setTasks(initialTasks); return; }
       if (fromStage === "CLARIFICATION" && !canLeaveClarRef.current) { setTasks(initialTasks); return; }
       targetStage = effectiveDrop;

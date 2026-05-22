@@ -29,7 +29,10 @@ export interface UserPermissions {
   canCreateTask: boolean;
   canModifyTask: boolean;
   canMoveTask: boolean;
+  canDeleteTask: boolean;
+  canDeclineTask: boolean;
   allowedStages: string[];
+  allowedTransitions: Record<string, string[]>;
   isAdmin: boolean;
   systemRole: string;
 }
@@ -48,7 +51,10 @@ interface ProjectRole {
   canCreateTask: boolean;
   canModifyTask: boolean;
   canMoveTask: boolean;
+  canDeleteTask: boolean;
+  canDeclineTask: boolean;
   allowedStages: string | null;
+  allowedTransitions: string | null;
   _count: { members: number };
 }
 

@@ -1,107 +1,106 @@
-import type { SystemRole } from "@/generated/prisma/client";
-
-type Stage =
-  | "NEW_REQUEST"
-  | "CLARIFICATION"
-  | "READY_FOR_DEV"
-  | "IN_DEVELOPMENT"
-  | "INTERNAL_REVIEW"
-  | "CLIENT_REVIEW"
-  | "READY_FOR_RELEASE"
-  | "DONE";
-
-/**
- * Which system roles can move a task OUT of each stage.
- * ADMIN always has full access and is not listed explicitly.
- */
-const STAGE_OWNERS: Record<Stage, SystemRole[]> = {
-  NEW_REQUEST: ["PM"],
-  CLARIFICATION: ["PM"],
-  READY_FOR_DEV: ["DEVELOPER", "TECH_LEAD", "DESIGNER"],
-  IN_DEVELOPMENT: ["DEVELOPER", "TECH_LEAD", "DESIGNER"],
-  INTERNAL_REVIEW: ["PM", "TECH_LEAD"],
-  CLIENT_REVIEW: ["CLIENT"],
-  READY_FOR_RELEASE: ["PM", "TECH_LEAD"],
-  DONE: [],
-};
-
-/**
- * Which system roles can create tasks (move INTO NEW_REQUEST).
- * Clients can only create REPORTED_BUG tasks.
- */
-const TASK_CREATORS: SystemRole[] = ["ADMIN", "PM", "TECH_LEAD"];
-const CLIENT_TASK_TYPES = ["REPORTED_BUG"];
-
-export function canMoveFromStage(role: SystemRole, stage: Stage): boolean {
-  if (role === "ADMIN") return true;
-  return STAGE_OWNERS[stage]?.includes(role) ?? false;
+export interface ProjectRolePermissions {
+  isAdmin: boolean;
+  canCreateTask: boolean;
+  canModifyTask: boolean;
+  canDeleteTask: boolean;
+  canDeclineTask: boolean;
+  canMoveTask: boolean;
+  allowedTransitions: Record<string, string[]>;
 }
 
-export function canCreateTask(role: SystemRole, taskType?: string): boolean {
-  if (role === "ADMIN") return true;
-  if (role === "CLIENT") {
-    return taskType ? CLIENT_TASK_TYPES.includes(taskType) : true;
+export function parseTransitions(raw: string | null): Record<string, string[]> {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
   }
-  return TASK_CREATORS.includes(role);
 }
 
-export function canModifyTask(role: SystemRole): boolean {
-  return role === "ADMIN" || role === "PM" || role === "TECH_LEAD";
+export function canTransition(
+  permissions: ProjectRolePermissions,
+  fromStage: string,
+  toStage: string,
+): boolean {
+  if (permissions.isAdmin) return true;
+  if (!permissions.canMoveTask) return false;
+  const allowed = permissions.allowedTransitions[fromStage];
+  return allowed ? allowed.includes(toStage) : false;
 }
 
-export function canDeleteTask(role: SystemRole): boolean {
-  return role === "ADMIN" || role === "PM";
-}
-
-export function canManageTeam(role: SystemRole): boolean {
-  return role === "ADMIN";
-}
-
-export function canAccessSettings(role: SystemRole): boolean {
-  return role === "ADMIN" || role === "PM";
-}
-
-export function getMovableStages(role: SystemRole): Stage[] {
-  if (role === "ADMIN") {
-    return Object.keys(STAGE_OWNERS) as Stage[];
+export function getPermissionsFromRole(role: {
+  isAdmin: boolean;
+  canCreateTask: boolean;
+  canModifyTask: boolean;
+  canDeleteTask?: boolean;
+  canDeclineTask?: boolean;
+  canMoveTask: boolean;
+  allowedTransitions?: string | null;
+  allowedStages?: string | null;
+} | null): ProjectRolePermissions {
+  if (!role) {
+    return {
+      isAdmin: false,
+      canCreateTask: false,
+      canModifyTask: false,
+      canDeleteTask: false,
+      canDeclineTask: false,
+      canMoveTask: false,
+      allowedTransitions: {},
+    };
   }
-  return (Object.entries(STAGE_OWNERS) as [Stage, SystemRole[]][])
-    .filter(([, roles]) => roles.includes(role))
-    .map(([stage]) => stage);
+
+  let transitions = parseTransitions(role.allowedTransitions ?? null);
+  if (Object.keys(transitions).length === 0 && role.allowedStages) {
+    transitions = migrateStagesToTransitions(role.allowedStages);
+  }
+
+  return {
+    isAdmin: role.isAdmin,
+    canCreateTask: role.canCreateTask,
+    canModifyTask: role.canModifyTask,
+    canDeleteTask: role.canDeleteTask ?? false,
+    canDeclineTask: role.canDeclineTask ?? false,
+    canMoveTask: role.canMoveTask,
+    allowedTransitions: transitions,
+  };
 }
 
-export const SYSTEM_ROLE_CONFIG: Record<
-  SystemRole,
-  { label: string; color: string; bg: string }
-> = {
-  ADMIN: {
-    label: "Admin",
-    color: "text-purple-400",
-    bg: "bg-purple-500/15 border-purple-500/30",
-  },
-  PM: {
-    label: "PM",
-    color: "text-blue-400",
-    bg: "bg-blue-500/15 border-blue-500/30",
-  },
-  TECH_LEAD: {
-    label: "Tech Lead",
-    color: "text-amber-400",
-    bg: "bg-amber-500/15 border-amber-500/30",
-  },
-  DEVELOPER: {
-    label: "Developer",
-    color: "text-emerald-400",
-    bg: "bg-emerald-500/15 border-emerald-500/30",
-  },
-  DESIGNER: {
-    label: "Designer",
-    color: "text-pink-400",
-    bg: "bg-pink-500/15 border-pink-500/30",
-  },
-  CLIENT: {
-    label: "Client",
-    color: "text-cyan-400",
-    bg: "bg-cyan-500/15 border-cyan-500/30",
-  },
-};
+function migrateStagesToTransitions(
+  allowedStages: string | null,
+): Record<string, string[]> {
+  if (!allowedStages) return {};
+  try {
+    const stages: string[] = JSON.parse(allowedStages);
+    const ALL_STAGES = [
+      "NEW_REQUEST",
+      "CLARIFICATION",
+      "READY_FOR_DEV",
+      "IN_DEVELOPMENT",
+      "INTERNAL_REVIEW",
+      "CLIENT_REVIEW",
+      "READY_FOR_RELEASE",
+      "DONE",
+    ];
+    const transitions: Record<string, string[]> = {};
+    for (const from of ALL_STAGES) {
+      const targets = stages.filter((s) => s !== from);
+      if (targets.length > 0) transitions[from] = targets;
+    }
+    return transitions;
+  } catch {
+    return {};
+  }
+}
+
+export function getAdminPermissions(): ProjectRolePermissions {
+  return {
+    isAdmin: true,
+    canCreateTask: true,
+    canModifyTask: true,
+    canDeleteTask: true,
+    canDeclineTask: true,
+    canMoveTask: true,
+    allowedTransitions: {},
+  };
+}

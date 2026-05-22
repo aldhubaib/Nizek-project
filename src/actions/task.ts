@@ -1,13 +1,13 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireProjectMember, requireProjectRole } from "@/lib/auth";
+import { requireProjectMember } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { logTaskActivity } from "@/lib/activity";
 import {
-  canMoveFromStage,
-  canCreateTask as checkCanCreate,
-  canModifyTask as checkCanModify,
+  getPermissionsFromRole,
+  getAdminPermissions,
+  canTransition,
 } from "@/lib/permissions";
 
 export async function createTask(data: {
@@ -31,9 +31,12 @@ export async function createTask(data: {
   );
   if (!isActive) throw new Error("Project is inactive — contract expired");
 
-  const { user } = await requireProjectMember(project.id);
-  if (!checkCanCreate(user.systemRole, data.taskType)) {
-    throw new Error("You do not have permission to create tasks");
+  const { user, member } = await requireProjectMember(project.id);
+  if (user.systemRole !== "ADMIN") {
+    const perms = getPermissionsFromRole(member.projectRole);
+    if (!perms.isAdmin && !perms.canCreateTask) {
+      throw new Error("You do not have permission to create tasks");
+    }
   }
 
   const [maxOrder, maxTaskNumber] = await Promise.all([
@@ -122,9 +125,12 @@ export async function updateTask(data: {
   );
   if (!isActive) throw new Error("Project is inactive — contract expired");
 
-  const { user } = await requireProjectMember(task.projectId);
-  if (!checkCanModify(user.systemRole)) {
-    throw new Error("You do not have permission to modify tasks");
+  const { user, member } = await requireProjectMember(task.projectId);
+  if (user.systemRole !== "ADMIN") {
+    const perms = getPermissionsFromRole(member.projectRole);
+    if (!perms.isAdmin && !perms.canModifyTask) {
+      throw new Error("You do not have permission to modify tasks");
+    }
   }
 
   const activities: Promise<unknown>[] = [];
@@ -190,10 +196,13 @@ export async function moveTask(data: {
   );
   if (!isActive) throw new Error("Project is inactive — contract expired");
 
-  const { user } = await requireProjectMember(task.projectId);
+  const { user, member } = await requireProjectMember(task.projectId);
 
-  if (!canMoveFromStage(user.systemRole, task.stage)) {
-    throw new Error(`Your role (${user.systemRole}) cannot move tasks from ${task.stage.replaceAll("_", " ")}`);
+  if (user.systemRole !== "ADMIN") {
+    const perms = getPermissionsFromRole(member.projectRole);
+    if (!canTransition(perms, task.stage, data.stage)) {
+      throw new Error(`Your role cannot move tasks from ${task.stage.replaceAll("_", " ")} to ${data.stage.replaceAll("_", " ")}`);
+    }
   }
 
   const oldStage = task.stage;
@@ -333,9 +342,15 @@ export async function declineTask(data: {
     throw new Error("This task cannot be declined from its current stage");
   }
 
-  const { user } = await requireProjectMember(task.projectId);
+  const { user, member } = await requireProjectMember(task.projectId);
 
-  // Create the decline comment
+  if (user.systemRole !== "ADMIN") {
+    const perms = getPermissionsFromRole(member.projectRole);
+    if (!perms.isAdmin && !perms.canDeclineTask) {
+      throw new Error("You do not have permission to decline tasks");
+    }
+  }
+
   await prisma.taskComment.create({
     data: {
       content: `⚠️ **Declined from ${task.stage.replaceAll("_", " ")}**: ${data.comment}`,
@@ -344,7 +359,6 @@ export async function declineTask(data: {
     },
   });
 
-  // Move task back
   const oldStage = task.stage;
   const tasksInTarget = await prisma.task.count({
     where: { projectId: task.projectId, stage: targetStage },
@@ -355,7 +369,6 @@ export async function declineTask(data: {
     data: { stage: targetStage, order: tasksInTarget },
   });
 
-  // Update stage logs
   await prisma.stageLog.updateMany({
     where: { taskId: task.id, stage: oldStage, exitedAt: null },
     data: { exitedAt: new Date() },
@@ -384,7 +397,13 @@ export async function deleteTask(taskId: string) {
   });
   if (!task) throw new Error("Task not found");
 
-  await requireProjectRole(task.projectId, ["ADMIN", "PROJECT_MANAGER"]);
+  const { user, member } = await requireProjectMember(task.projectId);
+  if (user.systemRole !== "ADMIN") {
+    const perms = getPermissionsFromRole(member.projectRole);
+    if (!perms.isAdmin && !perms.canDeleteTask) {
+      throw new Error("You do not have permission to delete tasks");
+    }
+  }
 
   await prisma.task.delete({ where: { id: taskId } });
   revalidatePath(`/dashboard/projects/${task.projectId}`);

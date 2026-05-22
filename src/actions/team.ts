@@ -51,6 +51,20 @@ export async function updateUserRole(userId: string, systemRole: SystemRole) {
   revalidatePath("/dashboard/team");
 }
 
+export async function updateUserAdmin(userId: string, isAdmin: boolean) {
+  const currentUser = await requireUser();
+  if (currentUser.systemRole !== "ADMIN") {
+    throw new Error("Only admins can change user roles");
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { systemRole: isAdmin ? "ADMIN" : "DEVELOPER" },
+  });
+
+  revalidatePath("/dashboard/team");
+}
+
 export async function getPendingInvitations() {
   await requireUser();
 

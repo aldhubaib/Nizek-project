@@ -17,12 +17,28 @@ export async function createProject(data: {
 }) {
   const user = await requireUser();
 
-  const allStages = JSON.stringify([
-    "NEW_REQUEST", "CLARIFICATION", "READY_FOR_DEV", "IN_DEVELOPMENT",
-    "INTERNAL_REVIEW", "CLIENT_REVIEW", "READY_FOR_RELEASE", "DONE",
-  ]);
-  const devStages = JSON.stringify(["IN_DEVELOPMENT", "INTERNAL_REVIEW"]);
-  const clientStages = JSON.stringify(["NEW_REQUEST"]);
+  const allTransitions = JSON.stringify({
+    NEW_REQUEST: ["CLARIFICATION"],
+    CLARIFICATION: ["READY_FOR_DEV", "NEW_REQUEST"],
+    READY_FOR_DEV: ["IN_DEVELOPMENT"],
+    IN_DEVELOPMENT: ["INTERNAL_REVIEW", "READY_FOR_DEV"],
+    INTERNAL_REVIEW: ["CLIENT_REVIEW", "IN_DEVELOPMENT"],
+    CLIENT_REVIEW: ["READY_FOR_RELEASE", "INTERNAL_REVIEW"],
+    READY_FOR_RELEASE: ["DONE"],
+  });
+  const pmTransitions = JSON.stringify({
+    NEW_REQUEST: ["CLARIFICATION"],
+    CLARIFICATION: ["READY_FOR_DEV", "NEW_REQUEST"],
+    INTERNAL_REVIEW: ["CLIENT_REVIEW", "IN_DEVELOPMENT"],
+    READY_FOR_RELEASE: ["DONE"],
+  });
+  const devTransitions = JSON.stringify({
+    READY_FOR_DEV: ["IN_DEVELOPMENT"],
+    IN_DEVELOPMENT: ["INTERNAL_REVIEW", "READY_FOR_DEV"],
+  });
+  const clientTransitions = JSON.stringify({
+    CLIENT_REVIEW: ["READY_FOR_RELEASE", "INTERNAL_REVIEW"],
+  });
 
   const project = await prisma.project.create({
     data: {
@@ -38,10 +54,11 @@ export async function createProject(data: {
       },
       roles: {
         create: [
-          { name: "Admin", isAdmin: true, canCreateTask: true, canModifyTask: true, canMoveTask: true, allowedStages: allStages },
-          { name: "Project Manager", isAdmin: false, canCreateTask: true, canModifyTask: true, canMoveTask: true, allowedStages: allStages },
-          { name: "Developer", isAdmin: false, canCreateTask: false, canModifyTask: true, canMoveTask: true, allowedStages: devStages },
-          { name: "Client", isAdmin: false, canCreateTask: true, canModifyTask: false, canMoveTask: false, allowedStages: clientStages },
+          { name: "Admin", isAdmin: true, canCreateTask: true, canModifyTask: true, canMoveTask: true, canDeleteTask: true, canDeclineTask: true, allowedTransitions: allTransitions },
+          { name: "Project Manager", canCreateTask: true, canModifyTask: true, canMoveTask: true, canDeleteTask: true, canDeclineTask: true, allowedTransitions: pmTransitions },
+          { name: "Developer", canCreateTask: false, canModifyTask: true, canMoveTask: true, canDeleteTask: false, canDeclineTask: false, allowedTransitions: devTransitions },
+          { name: "Designer", canCreateTask: false, canModifyTask: true, canMoveTask: true, canDeleteTask: false, canDeclineTask: false, allowedTransitions: devTransitions },
+          { name: "Client", canCreateTask: true, canModifyTask: false, canMoveTask: true, canDeleteTask: false, canDeclineTask: true, allowedTransitions: clientTransitions },
         ],
       },
     },
@@ -64,8 +81,9 @@ export async function createProject(data: {
 
 export async function getProjects() {
   const user = await requireUser();
+  const where = user.systemRole === "ADMIN" ? {} : { members: { some: { userId: user.id } } };
   return prisma.project.findMany({
-    where: { members: { some: { userId: user.id } } },
+    where,
     include: {
       contracts: true,
       members: { include: { user: true, projectRole: true } },

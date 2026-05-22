@@ -19,7 +19,10 @@ export async function createRole(data: {
   canCreateTask: boolean;
   canModifyTask: boolean;
   canMoveTask: boolean;
+  canDeleteTask?: boolean;
+  canDeclineTask?: boolean;
   allowedStages?: string[];
+  allowedTransitions?: Record<string, string[]>;
 }) {
   await requireProjectRole(data.projectId, ["ADMIN"]);
 
@@ -30,7 +33,10 @@ export async function createRole(data: {
       canCreateTask: data.canCreateTask,
       canModifyTask: data.canModifyTask,
       canMoveTask: data.canMoveTask,
+      canDeleteTask: data.canDeleteTask ?? false,
+      canDeclineTask: data.canDeclineTask ?? false,
       allowedStages: data.allowedStages ? JSON.stringify(data.allowedStages) : null,
+      allowedTransitions: data.allowedTransitions ? JSON.stringify(data.allowedTransitions) : null,
       projectId: data.projectId,
     },
   });
@@ -45,7 +51,10 @@ export async function updateRole(data: {
   canCreateTask?: boolean;
   canModifyTask?: boolean;
   canMoveTask?: boolean;
+  canDeleteTask?: boolean;
+  canDeclineTask?: boolean;
   allowedStages?: string[];
+  allowedTransitions?: Record<string, string[]>;
 }) {
   const role = await prisma.projectRole.findUnique({ where: { id: data.roleId } });
   if (!role) throw new Error("Role not found");
@@ -58,7 +67,10 @@ export async function updateRole(data: {
       ...(data.canCreateTask !== undefined && { canCreateTask: data.canCreateTask }),
       ...(data.canModifyTask !== undefined && { canModifyTask: data.canModifyTask }),
       ...(data.canMoveTask !== undefined && { canMoveTask: data.canMoveTask }),
+      ...(data.canDeleteTask !== undefined && { canDeleteTask: data.canDeleteTask }),
+      ...(data.canDeclineTask !== undefined && { canDeclineTask: data.canDeclineTask }),
       ...(data.allowedStages !== undefined && { allowedStages: JSON.stringify(data.allowedStages) }),
+      ...(data.allowedTransitions !== undefined && { allowedTransitions: JSON.stringify(data.allowedTransitions) }),
     },
   });
 

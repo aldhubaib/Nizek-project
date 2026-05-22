@@ -46,8 +46,29 @@ export async function requireUser() {
 
 export async function requireProjectMember(projectId: string) {
   const user = await requireUser();
+
+  if (user.systemRole === "ADMIN") {
+    const member = await prisma.projectMember.findUnique({
+      where: { userId_projectId: { userId: user.id, projectId } },
+      include: { projectRole: true },
+    });
+    return {
+      user,
+      member: member ?? {
+        id: "admin",
+        role: "ADMIN" as const,
+        roleId: null,
+        userId: user.id,
+        projectId,
+        createdAt: new Date(),
+        projectRole: null,
+      },
+    };
+  }
+
   const member = await prisma.projectMember.findUnique({
     where: { userId_projectId: { userId: user.id, projectId } },
+    include: { projectRole: true },
   });
   if (!member) throw new Error("Not a member of this project");
   return { user, member };
@@ -55,6 +76,7 @@ export async function requireProjectMember(projectId: string) {
 
 export async function requireProjectRole(projectId: string, roles: string[]) {
   const { user, member } = await requireProjectMember(projectId);
+  if (user.systemRole === "ADMIN") return { user, member };
   if (!roles.includes(member.role))
     throw new Error("Insufficient permissions");
   return { user, member };

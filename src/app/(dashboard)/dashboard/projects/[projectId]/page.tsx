@@ -5,6 +5,7 @@ import { getAssets } from "@/actions/asset";
 import { getTaskQuestions } from "@/actions/task-question";
 import { getRoles } from "@/actions/role";
 import { requireProjectMember } from "@/lib/auth";
+import { getPermissionsFromRole, getAdminPermissions } from "@/lib/permissions";
 import { ProjectDetailClient } from "./project-detail-client";
 import type { KanbanTask } from "@/store/kanban";
 
@@ -26,15 +27,27 @@ export default async function ProjectDetailPage({ params }: Props) {
 
   const { user, member } = await requireProjectMember(project.id);
 
-  const sRole = user.systemRole;
-  const userPermissions = {
-    canCreateTask: sRole === "ADMIN" || sRole === "PM" || sRole === "TECH_LEAD" || sRole === "CLIENT",
-    canModifyTask: sRole === "ADMIN" || sRole === "PM" || sRole === "TECH_LEAD",
-    canMoveTask: true,
-    allowedStages: [] as string[],
-    isAdmin: sRole === "ADMIN",
-    systemRole: sRole,
-  };
+  let userPermissions;
+  if (user.systemRole === "ADMIN") {
+    userPermissions = {
+      canCreateTask: true,
+      canModifyTask: true,
+      canMoveTask: true,
+      canDeleteTask: true,
+      canDeclineTask: true,
+      allowedStages: [] as string[],
+      allowedTransitions: {} as Record<string, string[]>,
+      isAdmin: true,
+      systemRole: "ADMIN",
+    };
+  } else {
+    const perms = getPermissionsFromRole(member.projectRole);
+    userPermissions = {
+      ...perms,
+      allowedStages: [] as string[],
+      systemRole: user.systemRole,
+    };
+  }
 
   const now = new Date();
   const isActive = project.contracts.some(
