@@ -21,7 +21,7 @@ export async function createProject(data: {
   const startDate = new Date(data.contract.startDate);
   const endDate = new Date(data.contract.endDate);
   const dateError = validateContractDates(startDate, endDate, []);
-  if (dateError) throw new Error(dateError);
+  if (dateError) return { error: dateError } as any;
 
   const project = await prisma.project.create({
     data: {
@@ -108,7 +108,7 @@ export async function addContract(data: {
   contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE";
   startDate: string;
   endDate: string;
-}) {
+}): Promise<{ error?: string }> {
   await requireProjectRole(data.projectId, ["ADMIN"]);
 
   const existing = await prisma.contract.findMany({
@@ -119,9 +119,9 @@ export async function addContract(data: {
   const startDate = new Date(data.startDate);
   const endDate = new Date(data.endDate);
   const dateError = validateContractDates(startDate, endDate, existing);
-  if (dateError) throw new Error(dateError);
+  if (dateError) return { error: dateError };
 
-  const contract = await prisma.contract.create({
+  await prisma.contract.create({
     data: {
       label: data.label,
       contractType: data.contractType ?? "FULL_TEAM",
@@ -132,7 +132,7 @@ export async function addContract(data: {
   });
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
-  return contract;
+  return {};
 }
 
 export async function deleteContract(contractId: string) {

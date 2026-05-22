@@ -32,16 +32,20 @@ export function AddContractDialog({ projectId }: Props) {
 
     const formData = new FormData(e.currentTarget);
     try {
-      await addContract({
+      const result = await addContract({
         projectId,
         label: (formData.get("label") as string) || undefined,
         contractType,
         startDate: formData.get("startDate") as string,
         endDate: formData.get("endDate") as string,
       });
-      setOpen(false);
-    } catch (err) {
-      setError((err as Error).message || "Failed to add contract");
+      if (result.error) {
+        setError(result.error);
+      } else {
+        setOpen(false);
+      }
+    } catch {
+      setError("Failed to add contract. Please try again.");
     } finally {
       setLoading(false);
     }
