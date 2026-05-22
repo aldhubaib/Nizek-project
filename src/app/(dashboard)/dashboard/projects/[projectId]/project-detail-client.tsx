@@ -21,8 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { LayoutGrid, BarChart3, FileText, Paperclip, ScrollText, Users, Settings, Trash2, Upload, X as XIcon } from "lucide-react";
-import { ProjectDashboard } from "@/components/dashboard/project-dashboard";
+import { LayoutGrid, FileText, Paperclip, ScrollText, Users, Settings, Trash2, Upload, X as XIcon } from "lucide-react";
 import { deleteProject, updateProject } from "@/actions/project";
 import type { KanbanTask } from "@/store/kanban";
 export interface UserPermissions {
@@ -156,7 +155,7 @@ export function ProjectDetailClient({
   const isAdmin = userPermissions.isAdmin;
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get("tab") ?? "dashboard";
+  const initialTab = searchParams.get("tab") ?? "board";
   const [activeTab, setActiveTab] = useState(initialTab);
 
   return (
@@ -188,10 +187,6 @@ export function ProjectDetailClient({
       <div className="px-6 py-4">
         <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as string)} className="space-y-4">
           <TabsList className="bg-muted/50">
-            <TabsTrigger value="dashboard" className="gap-1.5">
-              <BarChart3 className="h-3.5 w-3.5" />
-              Dashboard
-            </TabsTrigger>
             <TabsTrigger value="board" className="gap-1.5">
               <LayoutGrid className="h-3.5 w-3.5" />
               Board
@@ -231,16 +226,6 @@ export function ProjectDetailClient({
               </TabsTrigger>
             )}
           </TabsList>
-
-          <TabsContent value="dashboard">
-            <ProjectDashboard
-              projectId={project.id}
-              userRole={userRole}
-              userId={currentUserId}
-              tasks={tasks as unknown as KanbanTask[]}
-              questions={questions as unknown as (TaskQuestion & { taskType: string })[]}
-            />
-          </TabsContent>
 
           <TabsContent value="board">
             <KanbanBoard
