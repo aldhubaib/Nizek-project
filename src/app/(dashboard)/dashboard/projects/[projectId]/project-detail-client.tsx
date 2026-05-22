@@ -245,6 +245,7 @@ export function ProjectDetailClient({
               userPermissions={userPermissions}
               isProjectActive={isActive}
               questions={questions as unknown as (TaskQuestion & { taskType: string })[]}
+              currentUserId={currentUserId}
             />
           </TabsContent>
 

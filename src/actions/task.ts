@@ -11,6 +11,7 @@ import {
   canCreateInStage,
   canModifyInStage,
 } from "@/lib/permissions";
+import { broadcastTaskEvent } from "@/lib/pusher";
 
 export async function createTask(data: {
   projectId: string;
@@ -105,6 +106,7 @@ export async function createTask(data: {
   });
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
+  broadcastTaskEvent(data.projectId, { type: "task-created", taskId: task.id, userId: user.id });
   return task;
 }
 
@@ -177,6 +179,7 @@ export async function updateTask(data: {
   await Promise.all(activities);
 
   revalidatePath(`/dashboard/projects/${task.projectId}`);
+  broadcastTaskEvent(task.projectId, { type: "task-updated", taskId: data.taskId, userId: user.id });
   return updated;
 }
 
@@ -317,6 +320,13 @@ export async function moveTask(data: {
   }
 
   revalidatePath(`/dashboard/projects/${task.projectId}`);
+  broadcastTaskEvent(task.projectId, {
+    type: "task-moved",
+    taskId: data.taskId,
+    stage: updated.stage,
+    order: updated.order,
+    userId: user.id,
+  });
   return updated;
 }
 
@@ -390,6 +400,7 @@ export async function declineTask(data: {
   });
 
   revalidatePath(`/dashboard/projects/${task.projectId}`);
+  broadcastTaskEvent(task.projectId, { type: "task-declined", taskId: task.id, userId: user.id });
 }
 
 export async function deleteTask(taskId: string) {
@@ -409,6 +420,7 @@ export async function deleteTask(taskId: string) {
 
   await prisma.task.delete({ where: { id: taskId } });
   revalidatePath(`/dashboard/projects/${task.projectId}`);
+  broadcastTaskEvent(task.projectId, { type: "task-deleted", taskId, userId: user.id });
 }
 
 export async function getTasksByProject(projectId: string) {

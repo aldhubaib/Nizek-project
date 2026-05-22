@@ -19,6 +19,8 @@ import { moveTask as moveTaskAction, declineTask, pollTaskUpdates } from "@/acti
 import type { TaskQuestion } from "./question-field";
 import { StageConfirmDialog, getCheckpoint } from "./stage-confirm-dialog";
 import { DeclineDialog } from "./decline-dialog";
+import { getPusherClient, projectChannel } from "@/lib/pusher-client";
+import type { TaskEvent } from "@/lib/pusher";
 
 interface QuestionWithType extends TaskQuestion {
   taskType: string;
@@ -43,6 +45,7 @@ interface BoardProps {
   userPermissions: UserPermissions;
   isProjectActive: boolean;
   questions: QuestionWithType[];
+  currentUserId?: string;
 }
 
 export function KanbanBoard({
@@ -52,6 +55,7 @@ export function KanbanBoard({
   userPermissions,
   isProjectActive,
   questions,
+  currentUserId,
 }: BoardProps) {
   const { tasks, setTasks, moveTask } = useKanbanStore();
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
@@ -65,57 +69,71 @@ export function KanbanBoard({
     setTasks(initialTasks);
   }, [initialTasks, setTasks]);
 
-  // Poll for real-time updates every 5 seconds
+  const refetchTasks = useCallback(async () => {
+    if (isDragging.current) return;
+    try {
+      const updates = await pollTaskUpdates(projectId);
+      setTasks((prev: KanbanTask[]) => {
+        const updateMap = new Map(updates.map((u) => [u.id, u]));
+        const currentIds = new Set(prev.map((t) => t.id));
+        const updateIds = new Set(updates.map((u) => u.id));
+
+        let changed = false;
+
+        const merged = prev.map((task) => {
+          const update = updateMap.get(task.id);
+          if (!update) { changed = true; return task; }
+          if (task.stage !== update.stage || task.order !== update.order || task.title !== update.title || task.priority !== update.priority) {
+            changed = true;
+            return { ...task, ...update };
+          }
+          return task;
+        }).filter((t) => updateIds.has(t.id));
+
+        for (const u of updates) {
+          if (!currentIds.has(u.id)) {
+            changed = true;
+            merged.push({
+              ...u,
+              description: null,
+              isReadyForTransition: false,
+              declineCount: 0,
+              internalDeclines: 0,
+              clientDeclines: 0,
+            } as KanbanTask);
+          }
+        }
+
+        if (prev.length !== merged.length) changed = true;
+        return changed ? merged : prev;
+      });
+    } catch {
+      // Silently ignore
+    }
+  }, [projectId, setTasks]);
+
+  // Pusher real-time subscription
   useEffect(() => {
     if (!isProjectActive) return;
 
-    const interval = setInterval(async () => {
-      if (isDragging.current) return;
-      try {
-        const updates = await pollTaskUpdates(projectId);
-        setTasks((prev: KanbanTask[]) => {
-          const updateMap = new Map(updates.map((u) => [u.id, u]));
-          const currentIds = new Set(prev.map((t) => t.id));
-          const updateIds = new Set(updates.map((u) => u.id));
+    const pusher = getPusherClient();
+    if (pusher) {
+      const channel = pusher.subscribe(projectChannel(projectId));
+      channel.bind("task-change", (event: TaskEvent) => {
+        if (event.userId === currentUserId) return;
+        refetchTasks();
+      });
 
-          let changed = false;
+      return () => {
+        channel.unbind_all();
+        pusher.unsubscribe(projectChannel(projectId));
+      };
+    }
 
-          const merged = prev.map((task) => {
-            const update = updateMap.get(task.id);
-            if (!update) { changed = true; return task; }
-            if (task.stage !== update.stage || task.order !== update.order || task.title !== update.title || task.priority !== update.priority) {
-              changed = true;
-              return { ...task, ...update };
-            }
-            return task;
-          }).filter((t) => updateIds.has(t.id));
-
-          // Add new tasks
-          for (const u of updates) {
-            if (!currentIds.has(u.id)) {
-              changed = true;
-              merged.push({
-                ...u,
-                description: null,
-                isReadyForTransition: false,
-                declineCount: 0,
-                internalDeclines: 0,
-                clientDeclines: 0,
-              } as KanbanTask);
-            }
-          }
-
-          if (prev.length !== merged.length) changed = true;
-
-          return changed ? merged : prev;
-        });
-      } catch {
-        // Silently ignore polling errors
-      }
-    }, 5000);
-
+    // Fallback: poll every 5s if Pusher is not configured
+    const interval = setInterval(refetchTasks, 5000);
     return () => clearInterval(interval);
-  }, [projectId, isProjectActive, setTasks]);
+  }, [projectId, isProjectActive, currentUserId, refetchTasks]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
