@@ -121,6 +121,8 @@ interface Props {
   members: Member[];
   currentUserId: string;
   invitations: Invitation[];
+  allowedTaskTypes?: string[];
+  activeContractType?: string | null;
 }
 
 interface Invitation {
@@ -147,6 +149,8 @@ export function ProjectDetailClient({
   members,
   currentUserId,
   invitations,
+  allowedTaskTypes,
+  activeContractType,
 }: Props) {
   const canEdit = userPermissions.canModifyTask || userPermissions.isAdmin;
   const isAdmin = userPermissions.isAdmin;
@@ -247,6 +251,8 @@ export function ProjectDetailClient({
               isProjectActive={isActive}
               questions={questions as unknown as (TaskQuestion & { taskType: string })[]}
               currentUserId={currentUserId}
+              allowedTaskTypes={allowedTaskTypes}
+              activeContractType={activeContractType}
             />
           </TabsContent>
 

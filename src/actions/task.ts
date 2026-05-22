@@ -12,6 +12,7 @@ import {
   canModifyInStage,
 } from "@/lib/permissions";
 import { broadcastTaskEvent } from "@/lib/pusher";
+import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 
 export async function createTask(data: {
   projectId: string;
@@ -28,18 +29,23 @@ export async function createTask(data: {
   });
   if (!project) throw new Error("Project not found");
 
-  const now = new Date();
-  const isActive = project.contracts.some(
-    (c) => c.startDate <= now && c.endDate >= now
-  );
-  if (!isActive) throw new Error("Project is inactive — contract expired");
+  const activeContract = getActiveContract(project.contracts);
+  if (!activeContract) throw new Error("No active contract — this project is read-only");
 
   const { user, member } = await requireProjectMember(project.id);
-  if (user.systemRole !== "ADMIN") {
+  const isAdmin = user.systemRole === "ADMIN";
+
+  if (!isAdmin) {
     const perms = getPermissionsFromRole(member.projectRole);
     if (!canCreateInStage(perms, "NEW_REQUEST")) {
       throw new Error("You do not have permission to create tasks");
     }
+  }
+
+  const taskType = data.taskType ?? "FEATURE";
+  const allowedTypes = getAllowedTaskTypes(activeContract.contractType, isAdmin);
+  if (!allowedTypes.includes(taskType)) {
+    throw new Error(`Cannot create "${taskType}" tasks under a ${activeContract.contractType.replace(/_/g, " ")} contract`);
   }
 
   const [maxOrder, maxTaskNumber] = await Promise.all([
@@ -52,8 +58,6 @@ export async function createTask(data: {
       _max: { taskNumber: true },
     }),
   ]);
-
-  const taskType = data.taskType ?? "FEATURE";
   const mandatoryQuestions = await prisma.defaultQuestion.findMany({
     where: { taskType, mandatory: true },
     select: { id: true, question: true },
@@ -123,11 +127,8 @@ export async function updateTask(data: {
   });
   if (!task) throw new Error("Task not found");
 
-  const now = new Date();
-  const isActive = task.project.contracts.some(
-    (c) => c.startDate <= now && c.endDate >= now
-  );
-  if (!isActive) throw new Error("Project is inactive — contract expired");
+  const activeContract = getActiveContract(task.project.contracts);
+  if (!activeContract) throw new Error("No active contract — this project is read-only");
 
   const { user, member } = await requireProjectMember(task.projectId);
   if (user.systemRole !== "ADMIN") {
@@ -195,11 +196,8 @@ export async function moveTask(data: {
   });
   if (!task) throw new Error("Task not found");
 
-  const now = new Date();
-  const isActive = task.project.contracts.some(
-    (c) => c.startDate <= now && c.endDate >= now
-  );
-  if (!isActive) throw new Error("Project is inactive — contract expired");
+  const activeContract = getActiveContract(task.project.contracts);
+  if (!activeContract) throw new Error("No active contract — this project is read-only");
 
   const { user, member } = await requireProjectMember(task.projectId);
 

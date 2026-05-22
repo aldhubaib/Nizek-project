@@ -23,10 +23,12 @@ export function AddContractDialog({ projectId }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [contractType, setContractType] = useState<ContractType>("FULL_TEAM");
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
+    setError(null);
 
     const formData = new FormData(e.currentTarget);
     try {
@@ -39,14 +41,14 @@ export function AddContractDialog({ projectId }: Props) {
       });
       setOpen(false);
     } catch (err) {
-      console.error(err);
+      setError((err as Error).message || "Failed to add contract");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setError(null); }}>
       <DialogTrigger
         render={<Button variant="outline" size="sm" />}
       >
@@ -76,6 +78,11 @@ export function AddContractDialog({ projectId }: Props) {
               <Input id="endDate" name="endDate" type="date" required />
             </div>
           </div>
+          {error && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
+              <p className="text-[12px] text-destructive">{error}</p>
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancel

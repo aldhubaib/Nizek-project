@@ -6,6 +6,7 @@ import { getTaskQuestions } from "@/actions/task-question";
 import { getRoles } from "@/actions/role";
 import { requireProjectMember } from "@/lib/auth";
 import { getPermissionsFromRole, getAdminPermissions } from "@/lib/permissions";
+import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import { ProjectDetailClient } from "./project-detail-client";
 import type { KanbanTask } from "@/store/kanban";
 
@@ -44,10 +45,12 @@ export default async function ProjectDetailPage({ params }: Props) {
     };
   }
 
-  const now = new Date();
-  const isActive = project.contracts.some(
-    (c) => new Date(c.startDate) <= now && new Date(c.endDate) >= now
-  );
+  const activeContract = getActiveContract(project.contracts);
+  const isActive = !!activeContract;
+  const isAdmin = user.systemRole === "ADMIN";
+  const allowedTaskTypes = activeContract
+    ? getAllowedTaskTypes(activeContract.contractType, isAdmin)
+    : [];
 
   return (
     <ProjectDetailClient
@@ -63,6 +66,8 @@ export default async function ProjectDetailPage({ params }: Props) {
       members={project.members}
       currentUserId={user.id}
       invitations={invitations}
+      allowedTaskTypes={allowedTaskTypes}
+      activeContractType={activeContract?.contractType ?? null}
     />
   );
 }

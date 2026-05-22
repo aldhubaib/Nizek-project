@@ -26,12 +26,16 @@ interface Props {
   projectId: string;
   projectName: string;
   questions: QuestionWithType[];
+  allowedTaskTypes: string[];
+  activeContractType: string;
 }
 
-export function NewTaskForm({ projectId, projectName, questions }: Props) {
+export function NewTaskForm({ projectId, projectName, questions, allowedTaskTypes, activeContractType }: Props) {
   const router = useRouter();
   const [title, setTitle] = useState("");
-  const [taskType, setTaskType] = useState<TaskType>("FEATURE");
+
+  const visibleTypes = TASK_TYPES.filter((t) => allowedTaskTypes.includes(t.id));
+  const [taskType, setTaskType] = useState<TaskType>(visibleTypes[0]?.id ?? "FEATURE");
   const [priority, setPriority] = useState<number | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -109,9 +113,14 @@ export function NewTaskForm({ projectId, projectName, questions }: Props) {
           <div className="space-y-2">
             <label className="text-[13px] font-semibold text-foreground">
               Type
+              {activeContractType === "MAINTENANCE" && (
+                <span className="ml-2 text-[10px] font-normal text-amber-400 bg-amber-500/10 rounded-full px-2 py-0.5">
+                  Maintenance contract — bugs only
+                </span>
+              )}
             </label>
             <div className="flex gap-2">
-              {TASK_TYPES.map((t) => {
+              {visibleTypes.map((t) => {
                 const Icon = t.icon;
                 const isActive = taskType === t.id;
                 return (

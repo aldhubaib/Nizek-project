@@ -46,6 +46,8 @@ interface BoardProps {
   isProjectActive: boolean;
   questions: QuestionWithType[];
   currentUserId?: string;
+  allowedTaskTypes?: string[];
+  activeContractType?: string | null;
 }
 
 export function KanbanBoard({
@@ -56,6 +58,8 @@ export function KanbanBoard({
   isProjectActive,
   questions,
   currentUserId,
+  allowedTaskTypes,
+  activeContractType,
 }: BoardProps) {
   const { tasks, setTasks, moveTask } = useKanbanStore();
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
@@ -357,8 +361,7 @@ export function KanbanBoard({
       <div>
         <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
           <p className="text-sm font-medium text-amber-400">
-            Contract expired — this project is read-only. Add a new contract to
-            re-enable editing.
+            No active contract — this project is read-only. Add a new contract to re-enable editing.
           </p>
         </div>
         <div className="flex gap-4 overflow-x-auto pb-4 h-[calc(100vh-220px)] scrollbar-hidden">

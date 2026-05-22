@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser, requireProjectMember, requireProjectRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { Resend } from "resend";
+import { validateContractDates } from "@/lib/contract-rules";
 
 export async function createProject(data: {
   name: string;
@@ -17,6 +18,11 @@ export async function createProject(data: {
 }) {
   const user = await requireUser();
 
+  const startDate = new Date(data.contract.startDate);
+  const endDate = new Date(data.contract.endDate);
+  const dateError = validateContractDates(startDate, endDate, []);
+  if (dateError) throw new Error(dateError);
+
   const project = await prisma.project.create({
     data: {
       name: data.name,
@@ -25,8 +31,8 @@ export async function createProject(data: {
         create: {
           label: data.contract.label,
           contractType: data.contract.contractType ?? "FULL_TEAM",
-          startDate: new Date(data.contract.startDate),
-          endDate: new Date(data.contract.endDate),
+          startDate,
+          endDate,
         },
       },
     },
@@ -105,12 +111,22 @@ export async function addContract(data: {
 }) {
   await requireProjectRole(data.projectId, ["ADMIN"]);
 
+  const existing = await prisma.contract.findMany({
+    where: { projectId: data.projectId },
+    select: { id: true, label: true, startDate: true, endDate: true },
+  });
+
+  const startDate = new Date(data.startDate);
+  const endDate = new Date(data.endDate);
+  const dateError = validateContractDates(startDate, endDate, existing);
+  if (dateError) throw new Error(dateError);
+
   const contract = await prisma.contract.create({
     data: {
       label: data.label,
       contractType: data.contractType ?? "FULL_TEAM",
-      startDate: new Date(data.startDate),
-      endDate: new Date(data.endDate),
+      startDate,
+      endDate,
       projectId: data.projectId,
     },
   });
