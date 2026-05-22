@@ -90,6 +90,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const [savingAnswers, setSavingAnswers] = useState<Record<string, "saving" | "saved">>({});
   const [activityKey, setActivityKey] = useState(0);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
   const [movingStage, setMovingStage] = useState(false);
   const [moveError, setMoveError] = useState<string[] | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -344,6 +345,15 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            {startedAt && stageLogs.length > 0 && (
+              <button
+                onClick={() => setTimeTrackingOpen(true)}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                title="Time Tracking"
+              >
+                <Clock className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={() => setActivityOpen(true)}
               className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -561,71 +571,9 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
             )}
           </div>
 
-          {startedAt && stageLogs.length > 0 && (
-            <div className="mb-5">
-              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
-                Time Tracking
-              </label>
-              <div className="rounded-lg border border-border/50 bg-muted/20 p-3 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                    <Clock className="w-3 h-3" />
-                    Total time
-                  </span>
-                  <span className="text-[12px] font-semibold font-mono tabular-nums">
-                    {formatDuration(new Date(startedAt), new Date())}
-                  </span>
-                </div>
-                <div className="border-t border-border/30 pt-2 space-y-1.5">
-                  {stageLogs
-                    .filter((l) => l.stage !== "NEW_REQUEST" && l.stage !== "CLARIFICATION")
-                    .map((log, i) => {
-                      const entered = new Date(log.enteredAt);
-                      const exited = log.exitedAt ? new Date(log.exitedAt) : new Date();
-                      const stageInfo = STAGES.find((s) => s.id === log.stage);
-                      return (
-                        <div key={i} className="flex items-center justify-between">
-                          <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                            <span className={cn("w-1.5 h-1.5 rounded-full", stageInfo?.color ?? "bg-zinc-500")} />
-                            {stageInfo?.label ?? log.stage}
-                            {!log.exitedAt && <span className="text-[9px] text-primary">(current)</span>}
-                          </span>
-                          <span className="text-[11px] font-mono tabular-nums text-muted-foreground">
-                            {formatDuration(entered, exited)}
-                          </span>
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Time Tracking moved to modal via Clock icon button */}
 
-          {(task.estimatedMinutes || task.estimateAccuracy) && (
-            <div className="mb-5">
-              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
-                Estimate
-              </label>
-              <div className="flex items-center gap-2 flex-wrap">
-                {task.estimatedMinutes && (
-                  <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-1 text-[12px] font-semibold text-foreground">
-                    <Timer className="w-3 h-3 text-muted-foreground" />
-                    {formatEstimate(task.estimatedMinutes)}
-                  </span>
-                )}
-                {task.estimateAccuracy && ACCURACY_CONFIG[task.estimateAccuracy] && (
-                  <span className={cn(
-                    "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[12px] font-semibold",
-                    ACCURACY_CONFIG[task.estimateAccuracy].bg,
-                    ACCURACY_CONFIG[task.estimateAccuracy].color
-                  )}>
-                    <Gauge className="w-3 h-3" />
-                    {ACCURACY_CONFIG[task.estimateAccuracy].label}
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Estimate section moved to Time Tracking modal */}
 
           {task.assignee && (
             <div className="mb-5">
@@ -744,6 +692,84 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
           </div>
         </div>
       )}
+      {/* Time Tracking Modal */}
+      {timeTrackingOpen && startedAt && stageLogs.length > 0 && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-xs"
+            onClick={() => setTimeTrackingOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-md mx-4 max-h-[80vh] bg-popover rounded-xl border border-border shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+                <h3 className="text-sm font-semibold">Time Tracking</h3>
+              </div>
+              <button
+                onClick={() => setTimeTrackingOpen(false)}
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5" />
+                  Total time
+                </span>
+                <span className="text-[14px] font-semibold font-mono tabular-nums">
+                  {formatDuration(new Date(startedAt), new Date())}
+                </span>
+              </div>
+              <div className="border-t border-border/30 pt-3 space-y-2">
+                {stageLogs
+                  .filter((l) => l.stage !== "NEW_REQUEST" && l.stage !== "CLARIFICATION")
+                  .map((log, i) => {
+                    const entered = new Date(log.enteredAt);
+                    const exited = log.exitedAt ? new Date(log.exitedAt) : new Date();
+                    const stageInfo = STAGES.find((s) => s.id === log.stage);
+                    return (
+                      <div key={i} className="flex items-center justify-between">
+                        <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                          <span className={cn("w-2 h-2 rounded-full", stageInfo?.color ?? "bg-zinc-500")} />
+                          {stageInfo?.label ?? log.stage}
+                          {!log.exitedAt && <span className="text-[10px] text-primary ml-1">(current)</span>}
+                        </span>
+                        <span className="text-[12px] font-mono tabular-nums text-muted-foreground">
+                          {formatDuration(entered, exited)}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+              {(task.estimatedMinutes || task.estimateAccuracy) && (
+                <div className="border-t border-border/30 pt-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {task.estimatedMinutes && (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-1 text-[12px] font-semibold text-foreground">
+                        <Timer className="w-3 h-3 text-muted-foreground" />
+                        Est: {formatEstimate(task.estimatedMinutes)}
+                      </span>
+                    )}
+                    {task.estimateAccuracy && ACCURACY_CONFIG[task.estimateAccuracy] && (
+                      <span className={cn(
+                        "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[12px] font-semibold",
+                        ACCURACY_CONFIG[task.estimateAccuracy].bg,
+                        ACCURACY_CONFIG[task.estimateAccuracy].color
+                      )}>
+                        <Gauge className="w-3 h-3" />
+                        {ACCURACY_CONFIG[task.estimateAccuracy].label}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showConfirm && nextStage && (() => {
         const checkpoint = getCheckpoint(task.stage as Stage, nextStage.id);
         return checkpoint ? (
