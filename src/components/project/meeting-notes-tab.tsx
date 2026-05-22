@@ -240,11 +240,12 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
           </div>
 
           {/* Editor */}
-          <div className="[&_.ProseMirror]:min-h-[400px] [&_.ProseMirror]:text-base [&_.ProseMirror]:leading-relaxed">
+          <div>
             <RichTextEditor
               content={content}
               onChange={setContent}
-              placeholder={noteType === "DECISION" ? "Describe the context, options considered, and rationale..." : "Write your meeting notes here..."}
+              placeholder={noteType === "DECISION" ? "Describe the context, options considered, and rationale... (type / for commands)" : "Write your meeting notes here... (type / for commands)"}
+              borderless
             />
           </div>
         </div>
@@ -360,8 +361,8 @@ function NoteFullScreenDetail({
 
           {/* Content */}
           {isEditing ? (
-            <div className="[&_.ProseMirror]:min-h-[400px] [&_.ProseMirror]:text-base [&_.ProseMirror]:leading-relaxed">
-              <RichTextEditor content={content} onChange={setContent} />
+            <div>
+              <RichTextEditor content={content} onChange={setContent} borderless />
             </div>
           ) : (
             <div
