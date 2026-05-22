@@ -36,31 +36,31 @@ export async function getCurrentUser() {
         .delete({ where: { email } })
         .catch(() => {});
     }
+  }
 
-    // Auto-accept pending project invitations for this email
-    const projectInvitations = await prisma.invitation.findMany({
-      where: { email, status: "PENDING" },
+  // Auto-accept pending project invitations every time user loads
+  const pendingProjectInvites = await prisma.invitation.findMany({
+    where: { email: user.email, status: "PENDING" },
+  });
+
+  for (const inv of pendingProjectInvites) {
+    const alreadyMember = await prisma.projectMember.findUnique({
+      where: { userId_projectId: { userId: user.id, projectId: inv.projectId } },
     });
-
-    for (const inv of projectInvitations) {
-      const alreadyMember = await prisma.projectMember.findUnique({
-        where: { userId_projectId: { userId: user.id, projectId: inv.projectId } },
-      });
-      if (!alreadyMember) {
-        await prisma.projectMember.create({
-          data: {
-            userId: user.id,
-            projectId: inv.projectId,
-            role: inv.role,
-            roleId: inv.roleId,
-          },
-        });
-      }
-      await prisma.invitation.update({
-        where: { id: inv.id },
-        data: { status: "ACCEPTED" },
+    if (!alreadyMember) {
+      await prisma.projectMember.create({
+        data: {
+          userId: user.id,
+          projectId: inv.projectId,
+          role: inv.role,
+          roleId: inv.roleId,
+        },
       });
     }
+    await prisma.invitation.update({
+      where: { id: inv.id },
+      data: { status: "ACCEPTED" },
+    });
   }
 
   return user;
