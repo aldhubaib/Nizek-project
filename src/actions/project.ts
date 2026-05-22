@@ -147,6 +147,47 @@ export async function deleteContract(contractId: string) {
   revalidatePath(`/dashboard/projects/${contract.projectId}`);
 }
 
+export async function updateContract(data: {
+  contractId: string;
+  label?: string;
+  contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE";
+  startDate?: string;
+  endDate?: string;
+}): Promise<{ error?: string }> {
+  const contract = await prisma.contract.findUnique({
+    where: { id: data.contractId },
+    include: { project: { include: { contracts: true } } },
+  });
+  if (!contract) return { error: "Contract not found" };
+  await requireProjectRole(contract.projectId, ["ADMIN"]);
+
+  const startDate = data.startDate ? new Date(data.startDate) : contract.startDate;
+  const endDate = data.endDate ? new Date(data.endDate) : contract.endDate;
+
+  const existing = contract.project.contracts.map((c) => ({
+    id: c.id,
+    label: c.label,
+    startDate: c.startDate,
+    endDate: c.endDate,
+  }));
+
+  const dateError = validateContractDates(startDate, endDate, existing, contract.id);
+  if (dateError) return { error: dateError };
+
+  await prisma.contract.update({
+    where: { id: data.contractId },
+    data: {
+      ...(data.label !== undefined && { label: data.label }),
+      ...(data.contractType && { contractType: data.contractType }),
+      startDate,
+      endDate,
+    },
+  });
+
+  revalidatePath(`/dashboard/projects/${contract.projectId}`);
+  return {};
+}
+
 export async function inviteMember(data: {
   projectId: string;
   email: string;

@@ -8,6 +8,7 @@ import { MeetingNotesTab } from "@/components/project/meeting-notes-tab";
 import { AssetsTab } from "@/components/project/assets-tab";
 import { ContractBadge } from "@/components/project/contract-badge";
 import { AddContractDialog } from "@/components/project/add-contract-dialog";
+import { EditContractDialog } from "@/components/project/edit-contract-dialog";
 import { MemberList } from "@/components/team/member-list";
 import { InviteMemberDialog } from "@/components/team/invite-member-dialog";
 
@@ -22,7 +23,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { LayoutGrid, FileText, Paperclip, ScrollText, Users, Settings, Trash2, Upload, X as XIcon } from "lucide-react";
-import { deleteProject, updateProject } from "@/actions/project";
+import { deleteProject, updateProject, deleteContract } from "@/actions/project";
 import type { KanbanTask } from "@/store/kanban";
 export interface UserPermissions {
   canCreateTask: boolean;
@@ -271,16 +272,11 @@ export function ProjectDetailClient({
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {project.contracts.map((contract) => (
-                    <div
-                      key={contract.id}
-                      className="rounded-lg border border-border bg-card p-4"
-                    >
-                      <ContractBadge contract={contract} />
-                    </div>
-                  ))}
-                </div>
+                <ContractList
+                  contracts={project.contracts}
+                  isAdmin={isAdmin}
+                  projectId={project.id}
+                />
               )}
             </div>
           </TabsContent>
@@ -506,5 +502,68 @@ function DeleteProjectSection({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function ContractList({ contracts, isAdmin, projectId }: { contracts: Contract[]; isAdmin: boolean; projectId: string }) {
+  const [editingContract, setEditingContract] = useState<Contract | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const router = useRouter();
+
+  async function handleDelete(contractId: string) {
+    if (!confirm("Delete this contract? This cannot be undone.")) return;
+    setDeletingId(contractId);
+    try {
+      await deleteContract(contractId);
+      router.refresh();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <>
+      <div className="space-y-2">
+        {contracts.map((contract) => (
+          <div
+            key={contract.id}
+            className="rounded-lg border border-border bg-card p-4 flex items-center justify-between gap-3"
+          >
+            <ContractBadge contract={contract} />
+            {isAdmin && (
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => setEditingContract(contract)}
+                  className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  title="Edit contract"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => handleDelete(contract.id)}
+                  disabled={deletingId === contract.id}
+                  className="rounded-md p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                  title="Delete contract"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {editingContract && (
+        <EditContractDialog
+          contract={editingContract}
+          open={!!editingContract}
+          onClose={() => setEditingContract(null)}
+        />
+      )}
+    </>
   );
 }
