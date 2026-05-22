@@ -8,9 +8,9 @@ import { Resend } from "resend";
 export async function createProject(data: {
   name: string;
   description?: string;
-  projectType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE";
   contract: {
     label?: string;
+    contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE";
     startDate: string;
     endDate: string;
   };
@@ -21,10 +21,10 @@ export async function createProject(data: {
     data: {
       name: data.name,
       description: data.description,
-      projectType: data.projectType ?? "FULL_TEAM",
       contracts: {
         create: {
           label: data.contract.label,
+          contractType: data.contract.contractType ?? "FULL_TEAM",
           startDate: new Date(data.contract.startDate),
           endDate: new Date(data.contract.endDate),
         },
@@ -99,6 +99,7 @@ export async function updateProject(data: {
 export async function addContract(data: {
   projectId: string;
   label?: string;
+  contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE";
   startDate: string;
   endDate: string;
 }) {
@@ -107,6 +108,7 @@ export async function addContract(data: {
   const contract = await prisma.contract.create({
     data: {
       label: data.label,
+      contractType: data.contractType ?? "FULL_TEAM",
       startDate: new Date(data.startDate),
       endDate: new Date(data.endDate),
       projectId: data.projectId,

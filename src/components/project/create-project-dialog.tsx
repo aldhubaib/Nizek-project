@@ -17,19 +17,47 @@ import { Plus, Users, UserMinus, Lock, Wrench } from "lucide-react";
 import { createProject } from "@/actions/project";
 import { cn } from "@/lib/utils";
 
-type ProjectType = "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE";
+export type ContractType = "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE";
 
-const PROJECT_TYPES: { id: ProjectType; label: string; icon: typeof Users; description: string; color: string }[] = [
+export const CONTRACT_TYPES: { id: ContractType; label: string; icon: typeof Users; description: string; color: string }[] = [
   { id: "FULL_TEAM", label: "Full Team", icon: Users, description: "Dedicated team, ongoing work", color: "bg-primary/15 border-primary/40 text-primary" },
   { id: "PART_TEAM", label: "Part Team", icon: UserMinus, description: "Shared resources, part-time", color: "bg-violet-500/15 border-violet-500/40 text-violet-400" },
   { id: "FIXED", label: "Fixed", icon: Lock, description: "Fixed scope and timeline", color: "bg-amber-500/15 border-amber-500/40 text-amber-400" },
   { id: "MAINTENANCE", label: "Maintenance", icon: Wrench, description: "Bug fixes and upkeep", color: "bg-cyan-500/15 border-cyan-500/40 text-cyan-400" },
 ];
 
+export function ContractTypePicker({ value, onChange }: { value: ContractType; onChange: (v: ContractType) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {CONTRACT_TYPES.map((t) => {
+        const Icon = t.icon;
+        const isActive = value === t.id;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onChange(t.id)}
+            className={cn(
+              "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-colors",
+              isActive ? t.color : "border-border text-muted-foreground hover:border-muted-foreground/40"
+            )}
+          >
+            <Icon className="w-4 h-4 mt-0.5 shrink-0" strokeWidth={1.5} />
+            <div className="min-w-0">
+              <div className="text-[13px] font-medium leading-tight">{t.label}</div>
+              <div className="text-[10px] opacity-60 leading-tight mt-0.5">{t.description}</div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CreateProjectDialog() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [projectType, setProjectType] = useState<ProjectType>("FULL_TEAM");
+  const [contractType, setContractType] = useState<ContractType>("FULL_TEAM");
   const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -41,9 +69,9 @@ export function CreateProjectDialog() {
       const project = await createProject({
         name: formData.get("name") as string,
         description: (formData.get("description") as string) || undefined,
-        projectType,
         contract: {
           label: (formData.get("contractLabel") as string) || undefined,
+          contractType,
           startDate: formData.get("startDate") as string,
           endDate: formData.get("endDate") as string,
         },
@@ -74,33 +102,6 @@ export function CreateProjectDialog() {
           </div>
 
           <div className="space-y-2">
-            <Label>Project Type</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {PROJECT_TYPES.map((t) => {
-                const Icon = t.icon;
-                const isActive = projectType === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setProjectType(t.id)}
-                    className={cn(
-                      "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-colors",
-                      isActive ? t.color : "border-border text-muted-foreground hover:border-muted-foreground/40"
-                    )}
-                  >
-                    <Icon className="w-4 h-4 mt-0.5 shrink-0" strokeWidth={1.5} />
-                    <div className="min-w-0">
-                      <div className="text-[13px] font-medium leading-tight">{t.label}</div>
-                      <div className="text-[10px] opacity-60 leading-tight mt-0.5">{t.description}</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
             <Textarea
               id="description"
@@ -121,6 +122,12 @@ export function CreateProjectDialog() {
               placeholder="e.g. Phase 1, MVP"
             />
           </div>
+
+          <div className="space-y-2">
+            <Label>Contract Type</Label>
+            <ContractTypePicker value={contractType} onChange={setContractType} />
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="startDate">Start Date</Label>

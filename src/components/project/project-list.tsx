@@ -6,6 +6,7 @@ import { FolderKanban } from "lucide-react";
 
 interface Contract {
   id: string;
+  contractType: string;
   startDate: Date;
   endDate: Date;
 }
@@ -15,12 +16,11 @@ interface Project {
   name: string;
   description: string | null;
   logoUrl: string | null;
-  projectType: string;
   contracts: Contract[];
   _count: { tasks: number; meetingNotes: number; assets: number; members: number };
 }
 
-const PROJECT_TYPE_LABELS: Record<string, { label: string; color: string }> = {
+const CONTRACT_TYPE_LABELS: Record<string, { label: string; color: string }> = {
   FULL_TEAM: { label: "Full Team", color: "text-primary bg-primary/10 border-primary/20" },
   PART_TEAM: { label: "Part Team", color: "text-violet-400 bg-violet-500/10 border-violet-500/20" },
   FIXED: { label: "Fixed", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
@@ -47,12 +47,14 @@ export function ProjectList({ projects }: Props) {
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {projects.map((project) => {
         const now = new Date();
-        const isActive = project.contracts.some((c) =>
+        const activeContract = project.contracts.find((c) =>
           isWithinInterval(now, {
             start: new Date(c.startDate),
             end: new Date(c.endDate),
           })
         );
+        const isActive = !!activeContract;
+        const contractType = activeContract?.contractType ?? project.contracts[0]?.contractType;
 
         return (
           <Link key={project.id} href={`/dashboard/projects/${project.id}`}>
@@ -94,9 +96,9 @@ export function ProjectList({ projects }: Props) {
                 </div>
               </div>
               <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                {PROJECT_TYPE_LABELS[project.projectType] && (
-                  <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium border ${PROJECT_TYPE_LABELS[project.projectType].color}`}>
-                    {PROJECT_TYPE_LABELS[project.projectType].label}
+                {contractType && CONTRACT_TYPE_LABELS[contractType] && (
+                  <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium border ${CONTRACT_TYPE_LABELS[contractType].color}`}>
+                    {CONTRACT_TYPE_LABELS[contractType].label}
                   </span>
                 )}
                 <span>{project._count.members} members</span>

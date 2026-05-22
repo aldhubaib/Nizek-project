@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus } from "lucide-react";
 import { addContract } from "@/actions/project";
+import { ContractTypePicker, type ContractType } from "./create-project-dialog";
 
 interface Props {
   projectId: string;
@@ -21,6 +22,7 @@ interface Props {
 export function AddContractDialog({ projectId }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [contractType, setContractType] = useState<ContractType>("FULL_TEAM");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -31,6 +33,7 @@ export function AddContractDialog({ projectId }: Props) {
       await addContract({
         projectId,
         label: (formData.get("label") as string) || undefined,
+        contractType,
         startDate: formData.get("startDate") as string,
         endDate: formData.get("endDate") as string,
       });
@@ -50,7 +53,7 @@ export function AddContractDialog({ projectId }: Props) {
         <Plus className="mr-1.5 h-3.5 w-3.5" />
         Add Contract
       </DialogTrigger>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add Contract</DialogTitle>
         </DialogHeader>
@@ -58,6 +61,10 @@ export function AddContractDialog({ projectId }: Props) {
           <div className="space-y-2">
             <Label htmlFor="label">Label</Label>
             <Input id="label" name="label" placeholder="e.g. Phase 2, Renewal" />
+          </div>
+          <div className="space-y-2">
+            <Label>Contract Type</Label>
+            <ContractTypePicker value={contractType} onChange={setContractType} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">

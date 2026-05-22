@@ -42,6 +42,7 @@ export interface UserPermissions {
 interface Contract {
   id: string;
   label: string | null;
+  contractType: string;
   startDate: Date;
   endDate: Date;
 }

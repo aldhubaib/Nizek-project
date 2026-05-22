@@ -162,3 +162,18 @@
     scrollbar-width: none;
   }
 }
+
+@keyframes scroll-up {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+@keyframes scroll-down {
+  0% { transform: translateY(-50%); }
+  100% { transform: translateY(0); }
+}
+.animate-scroll-up {
+  animation: scroll-up 30s linear infinite;
+}
+.animate-scroll-down {
+  animation: scroll-down 30s linear infinite;
+}
