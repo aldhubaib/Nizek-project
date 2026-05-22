@@ -164,20 +164,15 @@ export async function getProjectsWithRoles() {
   const user = await requireUser();
   if (user.systemRole !== "ADMIN") return [];
 
-  const projects = await prisma.project.findMany({
-    orderBy: { name: "asc" },
-    include: {
-      roles: {
-        orderBy: { createdAt: "asc" },
-        select: { id: true, name: true, isAdmin: true },
-      },
-    },
-  });
+  const [projects, roles] = await Promise.all([
+    prisma.project.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.projectRole.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, name: true, isAdmin: true } }),
+  ]);
 
   return projects.map((p) => ({
     id: p.id,
     name: p.name,
-    roles: p.roles,
+    roles,
   }));
 }
 

@@ -42,7 +42,6 @@ interface WorkspaceRole {
 
 interface Props {
   roles: WorkspaceRole[];
-  projectId: string;
 }
 
 function parseTransitions(raw: string | null): Record<string, string[]> {
@@ -77,7 +76,7 @@ function stageLabel(id: string): string {
   return ALL_STAGES.find((s) => s.id === id)?.label ?? id;
 }
 
-export function RolesManager({ roles, projectId }: Props) {
+export function RolesManager({ roles }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPerms, setNewPerms] = useState({
@@ -107,7 +106,6 @@ export function RolesManager({ roles, projectId }: Props) {
     setCreating(true);
     try {
       await createRole({
-        projectId,
         name: newName.trim(),
         canCreateTask: newPerms.canCreateTask,
         canModifyTask: newPerms.canModifyTask,

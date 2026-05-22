@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   FolderKanban,
   Users,
+  Shield,
   Settings,
   Pin,
   PinOff,
@@ -22,6 +23,7 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Projects", href: "/dashboard/projects", icon: FolderKanban },
   { name: "Team", href: "/dashboard/team", icon: Users },
+  { name: "Roles", href: "/dashboard/roles", icon: Shield },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 

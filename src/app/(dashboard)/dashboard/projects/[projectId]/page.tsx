@@ -16,13 +16,13 @@ interface Props {
 export default async function ProjectDetailPage({ params }: Props) {
   const { projectId } = await params;
   const project = await getProject(projectId);
-  const [tasks, notes, assets, questions, roles, invitations] = await Promise.all([
+  const [tasks, notes, assets, questions, invitations, roles] = await Promise.all([
     getTasksByProject(projectId),
     getMeetingNotes(projectId),
     getAssets(projectId),
     getTaskQuestions(),
-    getRoles(project.id),
     getProjectInvitations(project.id),
+    getRoles(),
   ]);
 
   const { user, member } = await requireProjectMember(project.id);

@@ -101,7 +101,6 @@ model Project {
   updatedAt DateTime @updatedAt
 
   members      ProjectMember[]
-  roles        ProjectRole[]
   contracts    Contract[]
   tasks        Task[]
   meetingNotes MeetingNote[]
@@ -127,7 +126,8 @@ model ProjectMember {
 
 model ProjectRole {
   id                 String  @id @default(cuid())
-  name               String
+  name               String  @unique
+  description        String?
   isAdmin            Boolean @default(false)
   canCreateTask      Boolean @default(false)
   canModifyTask      Boolean @default(false)
@@ -137,15 +137,10 @@ model ProjectRole {
   allowedStages      String?
   allowedTransitions String?
 
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
   createdAt DateTime @default(now())
 
   members     ProjectMember[]
   invitations Invitation[]
-
-  @@unique([projectId, name])
 }
 
 model Contract {

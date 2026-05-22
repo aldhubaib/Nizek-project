@@ -17,29 +17,6 @@ export async function createProject(data: {
 }) {
   const user = await requireUser();
 
-  const allTransitions = JSON.stringify({
-    NEW_REQUEST: ["CLARIFICATION"],
-    CLARIFICATION: ["READY_FOR_DEV", "NEW_REQUEST"],
-    READY_FOR_DEV: ["IN_DEVELOPMENT"],
-    IN_DEVELOPMENT: ["INTERNAL_REVIEW", "READY_FOR_DEV"],
-    INTERNAL_REVIEW: ["CLIENT_REVIEW", "IN_DEVELOPMENT"],
-    CLIENT_REVIEW: ["READY_FOR_RELEASE", "INTERNAL_REVIEW"],
-    READY_FOR_RELEASE: ["DONE"],
-  });
-  const pmTransitions = JSON.stringify({
-    NEW_REQUEST: ["CLARIFICATION"],
-    CLARIFICATION: ["READY_FOR_DEV", "NEW_REQUEST"],
-    INTERNAL_REVIEW: ["CLIENT_REVIEW", "IN_DEVELOPMENT"],
-    READY_FOR_RELEASE: ["DONE"],
-  });
-  const devTransitions = JSON.stringify({
-    READY_FOR_DEV: ["IN_DEVELOPMENT"],
-    IN_DEVELOPMENT: ["INTERNAL_REVIEW", "READY_FOR_DEV"],
-  });
-  const clientTransitions = JSON.stringify({
-    CLIENT_REVIEW: ["READY_FOR_RELEASE", "INTERNAL_REVIEW"],
-  });
-
   const project = await prisma.project.create({
     data: {
       name: data.name,
@@ -52,20 +29,10 @@ export async function createProject(data: {
           endDate: new Date(data.contract.endDate),
         },
       },
-      roles: {
-        create: [
-          { name: "Admin", isAdmin: true, canCreateTask: true, canModifyTask: true, canMoveTask: true, canDeleteTask: true, canDeclineTask: true, allowedTransitions: allTransitions },
-          { name: "Project Manager", canCreateTask: true, canModifyTask: true, canMoveTask: true, canDeleteTask: true, canDeclineTask: true, allowedTransitions: pmTransitions },
-          { name: "Developer", canCreateTask: false, canModifyTask: true, canMoveTask: true, canDeleteTask: false, canDeclineTask: false, allowedTransitions: devTransitions },
-          { name: "Designer", canCreateTask: false, canModifyTask: true, canMoveTask: true, canDeleteTask: false, canDeclineTask: false, allowedTransitions: devTransitions },
-          { name: "Client", canCreateTask: true, canModifyTask: false, canMoveTask: true, canDeleteTask: false, canDeclineTask: true, allowedTransitions: clientTransitions },
-        ],
-      },
     },
-    include: { roles: true },
   });
 
-  const adminRole = project.roles.find((r) => r.isAdmin);
+  const adminRole = await prisma.projectRole.findFirst({ where: { isAdmin: true } });
   await prisma.projectMember.create({
     data: {
       userId: user.id,
@@ -99,7 +66,6 @@ export async function getProject(projectId: string) {
     include: {
       contracts: { orderBy: { startDate: "desc" } },
       members: { include: { user: true, projectRole: true } },
-      roles: true,
       _count: { select: { tasks: true, meetingNotes: true, assets: true } },
     },
   });
@@ -173,7 +139,7 @@ export async function inviteMember(data: {
   const pRole = await prisma.projectRole.findUnique({
     where: { id: data.roleId },
   });
-  if (!pRole || pRole.projectId !== data.projectId) {
+  if (!pRole) {
     throw new Error("Invalid role");
   }
 
@@ -268,7 +234,7 @@ export async function updateMemberRole(data: {
   const pRole = await prisma.projectRole.findUnique({
     where: { id: data.roleId },
   });
-  if (!pRole || pRole.projectId !== data.projectId) {
+  if (!pRole) {
     throw new Error("Invalid role");
   }
 

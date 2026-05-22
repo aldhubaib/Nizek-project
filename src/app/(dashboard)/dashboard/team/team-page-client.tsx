@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, Trash2, ShieldCheck } from "lucide-react";
+import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, Trash2, ShieldCheck, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { updateUserAdmin, inviteToTeam, toggleBlockUser, cancelTeamInvite, resendTeamInvite } from "@/actions/team";
@@ -42,14 +42,22 @@ interface TeamInvite {
   createdAt: Date;
 }
 
+interface GlobalRole {
+  id: string;
+  name: string;
+  isAdmin: boolean;
+  _count: { members: number };
+}
+
 interface Props {
   members: Member[];
   invitations: Invitation[];
   teamInvites: TeamInvite[];
+  roles: GlobalRole[];
   isAdmin: boolean;
 }
 
-export function TeamPageClient({ members, invitations, teamInvites, isAdmin }: Props) {
+export function TeamPageClient({ members, invitations, teamInvites, roles, isAdmin }: Props) {
   const [search, setSearch] = useState("");
   const [changingRole, setChangingRole] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
@@ -142,24 +150,22 @@ export function TeamPageClient({ members, invitations, teamInvites, isAdmin }: P
 
   return (
     <div className="space-y-6">
-      {/* Stats + Invite */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
             <Users className="w-4 h-4" />
-            <span>
-              {members.length} member{members.length !== 1 ? "s" : ""}
-            </span>
+            <span>{members.length} member{members.length !== 1 ? "s" : ""}</span>
           </div>
           {totalPending > 0 && (
             <div className="flex items-center gap-2 text-[13px] text-amber-400">
               <Mail className="w-4 h-4" />
-              <span>
-                {totalPending} pending invitation
-                {totalPending !== 1 ? "s" : ""}
-              </span>
+              <span>{totalPending} pending</span>
             </div>
           )}
+          <div className="flex items-center gap-2 text-[13px] text-muted-foreground/60">
+            <Shield className="w-4 h-4" />
+            <span>{roles.length} role{roles.length !== 1 ? "s" : ""}</span>
+          </div>
         </div>
         {isAdmin && (
           <button
@@ -219,10 +225,9 @@ export function TeamPageClient({ members, invitations, teamInvites, isAdmin }: P
                   Grant system admin access
                 </button>
                 <p className="text-[10px] text-muted-foreground/60 mt-1 ml-1">
-                  Admins have full access to all projects. Other permissions are set per-project via roles.
+                  Admins have full access. Assign project roles when adding members to projects.
                 </p>
               </div>
-
               <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
@@ -258,9 +263,7 @@ export function TeamPageClient({ members, invitations, teamInvites, isAdmin }: P
 
       {/* Members */}
       <div>
-        <h2 className="text-[13px] font-semibold text-foreground mb-3">
-          Members
-        </h2>
+        <h2 className="text-[13px] font-semibold text-foreground mb-3">Members</h2>
         <div className="space-y-1">
           {filteredMembers.map((member) => (
             <div
@@ -268,11 +271,7 @@ export function TeamPageClient({ members, invitations, teamInvites, isAdmin }: P
               className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors group"
             >
               {member.imageUrl ? (
-                <img
-                  src={member.imageUrl}
-                  alt=""
-                  className="w-8 h-8 rounded-full shrink-0"
-                />
+                <img src={member.imageUrl} alt="" className="w-8 h-8 rounded-full shrink-0" />
               ) : (
                 <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-[11px] font-semibold text-primary shrink-0">
                   {(member.name?.[0] || member.email[0]).toUpperCase()}
@@ -296,15 +295,10 @@ export function TeamPageClient({ members, invitations, teamInvites, isAdmin }: P
                   )}
                 </div>
                 <div className="flex items-center gap-3 mt-0.5">
-                  <span className="text-[11px] text-muted-foreground truncate">
-                    {member.email}
-                  </span>
+                  <span className="text-[11px] text-muted-foreground truncate">{member.email}</span>
                   <span className="text-[11px] text-muted-foreground/50 flex items-center gap-1">
                     <Clock className="w-3 h-3" />
-                    Joined{" "}
-                    {formatDistanceToNow(new Date(member.createdAt), {
-                      addSuffix: true,
-                    })}
+                    Joined {formatDistanceToNow(new Date(member.createdAt), { addSuffix: true })}
                   </span>
                 </div>
                 {member.projects.length > 0 && (
@@ -318,9 +312,7 @@ export function TeamPageClient({ members, invitations, teamInvites, isAdmin }: P
                         >
                           {p.name}
                           {p.roleName && (
-                            <span className="text-muted-foreground/50 ml-0.5">
-                              ({p.roleName})
-                            </span>
+                            <span className="text-muted-foreground/50 ml-0.5">({p.roleName})</span>
                           )}
                         </span>
                       ))}
@@ -356,11 +348,7 @@ export function TeamPageClient({ members, invitations, teamInvites, isAdmin }: P
                           : "bg-destructive/10 text-destructive hover:bg-destructive/20"
                       )}
                     >
-                      {member.blocked ? (
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                      ) : (
-                        <Ban className="w-3.5 h-3.5" />
-                      )}
+                      {member.blocked ? <ShieldCheck className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />}
                     </button>
                   </>
                 )}
@@ -368,9 +356,7 @@ export function TeamPageClient({ members, invitations, teamInvites, isAdmin }: P
             </div>
           ))}
           {filteredMembers.length === 0 && (
-            <p className="text-[13px] text-muted-foreground py-4 text-center">
-              No members found.
-            </p>
+            <p className="text-[13px] text-muted-foreground py-4 text-center">No members found.</p>
           )}
         </div>
       </div>
@@ -378,52 +364,32 @@ export function TeamPageClient({ members, invitations, teamInvites, isAdmin }: P
       {/* Pending Invitations */}
       {(filteredTeamInvites.length > 0 || filteredInvitations.length > 0) && (
         <div>
-          <h2 className="text-[13px] font-semibold text-foreground mb-3">
-            Pending Invitations
-          </h2>
+          <h2 className="text-[13px] font-semibold text-foreground mb-3">Pending Invitations</h2>
           <div className="space-y-1">
             {filteredTeamInvites.map((inv) => (
-              <div
-                key={inv.id}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors"
-              >
+              <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors">
                 <div className="w-8 h-8 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
                   <Mail className="w-3.5 h-3.5 text-amber-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="text-[13px] font-medium text-foreground truncate block">
-                    {inv.email}
-                  </span>
+                  <span className="text-[13px] font-medium text-foreground truncate block">{inv.email}</span>
                   <div className="flex items-center gap-2 mt-0.5">
                     {inv.systemRole === "ADMIN" && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full border font-medium text-purple-400 bg-purple-500/15 border-purple-500/30">
-                        Admin
-                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full border font-medium text-purple-400 bg-purple-500/15 border-purple-500/30">Admin</span>
                     )}
                     <span className="text-[11px] text-muted-foreground/50">
-                      Invited{" "}
-                      {formatDistanceToNow(new Date(inv.createdAt), {
-                        addSuffix: true,
-                      })}
+                      Invited {formatDistanceToNow(new Date(inv.createdAt), { addSuffix: true })}
                     </span>
                   </div>
                 </div>
                 {isAdmin && (
                   <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() => handleResendInvite(inv.id)}
-                      disabled={actionLoading === inv.id}
-                      title="Resend invitation"
-                      className="w-7 h-7 rounded-md flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
-                    >
+                    <button onClick={() => handleResendInvite(inv.id)} disabled={actionLoading === inv.id} title="Resend invitation"
+                      className="w-7 h-7 rounded-md flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50">
                       <RotateCw className="w-3.5 h-3.5" />
                     </button>
-                    <button
-                      onClick={() => handleCancelInvite(inv.id)}
-                      disabled={actionLoading === inv.id}
-                      title="Cancel invitation"
-                      className="w-7 h-7 rounded-md flex items-center justify-center bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50"
-                    >
+                    <button onClick={() => handleCancelInvite(inv.id)} disabled={actionLoading === inv.id} title="Cancel invitation"
+                      className="w-7 h-7 rounded-md flex items-center justify-center bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -431,34 +397,22 @@ export function TeamPageClient({ members, invitations, teamInvites, isAdmin }: P
               </div>
             ))}
             {filteredInvitations.map((inv) => (
-              <div
-                key={inv.id}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors"
-              >
+              <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors">
                 <div className="w-8 h-8 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
                   <Mail className="w-3.5 h-3.5 text-amber-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="text-[13px] font-medium text-foreground truncate block">
-                    {inv.email}
-                  </span>
+                  <span className="text-[13px] font-medium text-foreground truncate block">{inv.email}</span>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground">
-                      {inv.project.name}
-                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground">{inv.project.name}</span>
                     <span className={cn(
                       "text-[10px] px-1.5 py-0.5 rounded-full border",
-                      inv.role === "ADMIN"
-                        ? "bg-primary/10 border-primary/20 text-primary"
-                        : "bg-card border-border text-muted-foreground"
+                      inv.role === "ADMIN" ? "bg-primary/10 border-primary/20 text-primary" : "bg-card border-border text-muted-foreground"
                     )}>
                       {inv.projectRole?.name ?? inv.role}
                     </span>
                     <span className="text-[11px] text-muted-foreground/50">
-                      Invited{" "}
-                      {formatDistanceToNow(new Date(inv.createdAt), {
-                        addSuffix: true,
-                      })}
+                      Invited {formatDistanceToNow(new Date(inv.createdAt), { addSuffix: true })}
                     </span>
                   </div>
                 </div>

@@ -10,7 +10,7 @@ import { ContractBadge } from "@/components/project/contract-badge";
 import { AddContractDialog } from "@/components/project/add-contract-dialog";
 import { MemberList } from "@/components/team/member-list";
 import { InviteMemberDialog } from "@/components/team/invite-member-dialog";
-import { RolesManager } from "@/components/settings/roles-manager";
+
 import type { TaskQuestion } from "@/components/kanban/question-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -317,7 +317,7 @@ export function ProjectDetailClient({
                   currentLogo={project.logoUrl}
                   projectName={project.name}
                 />
-                <RolesManager roles={roles} projectId={project.id} />
+                
                 <DeleteProjectSection
                   projectId={project.id}
                   projectName={project.name}
