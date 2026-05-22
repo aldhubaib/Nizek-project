@@ -36,6 +36,7 @@ interface AvailableUser {
   name: string | null;
   email: string;
   imageUrl: string | null;
+  pending: boolean;
 }
 
 interface Props {
@@ -188,7 +189,14 @@ export function InviteMemberDialog({ projectId, roles }: Props) {
                         </div>
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="text-[12px] font-medium text-foreground truncate">{u.name || u.email}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-[12px] font-medium text-foreground truncate">{u.name || u.email}</p>
+                          {u.pending && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-medium shrink-0">
+                              Pending
+                            </span>
+                          )}
+                        </div>
                         {u.name && <p className="text-[10px] text-muted-foreground truncate">{u.email}</p>}
                       </div>
                       {selectedUserId === u.id && (

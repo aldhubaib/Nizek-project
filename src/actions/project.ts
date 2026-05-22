@@ -254,15 +254,35 @@ export async function addMemberToProject(data: {
   userId: string;
   roleId: string;
 }) {
-  await requireProjectRole(data.projectId, ["ADMIN"]);
+  const { user } = await requireProjectRole(data.projectId, ["ADMIN"]);
+
+  const pRole = await prisma.projectRole.findUnique({ where: { id: data.roleId } });
+  if (!pRole) throw new Error("Invalid role");
+
+  if (data.userId.startsWith("pending:")) {
+    const inviteId = data.userId.replace("pending:", "");
+    const pendingInvite = await prisma.pendingTeamInvite.findUnique({ where: { id: inviteId } });
+    if (!pendingInvite) throw new Error("Pending invite not found");
+
+    await prisma.invitation.create({
+      data: {
+        email: pendingInvite.email,
+        role: pRole.isAdmin ? "ADMIN" : "MEMBER",
+        roleId: data.roleId,
+        projectId: data.projectId,
+        invitedById: user.id,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    revalidatePath(`/dashboard/projects/${data.projectId}`);
+    return;
+  }
 
   const existing = await prisma.projectMember.findUnique({
     where: { userId_projectId: { userId: data.userId, projectId: data.projectId } },
   });
   if (existing) throw new Error("User is already a member of this project");
-
-  const pRole = await prisma.projectRole.findUnique({ where: { id: data.roleId } });
-  if (!pRole) throw new Error("Invalid role");
 
   await prisma.projectMember.create({
     data: {
@@ -277,19 +297,40 @@ export async function addMemberToProject(data: {
 }
 
 export async function getAvailableUsers(projectId: string) {
-  const existingMemberIds = await prisma.projectMember.findMany({
-    where: { projectId },
-    select: { userId: true },
-  });
-  const ids = new Set(existingMemberIds.map((m) => m.userId));
+  const [existingMembers, existingInvites] = await Promise.all([
+    prisma.projectMember.findMany({ where: { projectId }, select: { userId: true } }),
+    prisma.invitation.findMany({ where: { projectId, status: "PENDING" }, select: { email: true } }),
+  ]);
+  const memberIds = new Set(existingMembers.map((m) => m.userId));
+  const invitedEmails = new Set(existingInvites.map((i) => i.email));
 
-  const allUsers = await prisma.user.findMany({
-    where: { blocked: false },
-    select: { id: true, name: true, email: true, imageUrl: true },
-    orderBy: { name: "asc" },
-  });
+  const [allUsers, pendingInvites] = await Promise.all([
+    prisma.user.findMany({
+      where: { blocked: false },
+      select: { id: true, name: true, email: true, imageUrl: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.pendingTeamInvite.findMany({
+      select: { id: true, email: true },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
 
-  return allUsers.filter((u) => !ids.has(u.id));
+  const users = allUsers
+    .filter((u) => !memberIds.has(u.id))
+    .map((u) => ({ ...u, pending: false as const }));
+
+  const pendingUsers = pendingInvites
+    .filter((p) => !invitedEmails.has(p.email) && !allUsers.some((u) => u.email === p.email))
+    .map((p) => ({
+      id: `pending:${p.id}`,
+      name: null as string | null,
+      email: p.email,
+      imageUrl: null as string | null,
+      pending: true as const,
+    }));
+
+  return [...users, ...pendingUsers];
 }
 
 export async function deleteProject(data: {
