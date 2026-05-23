@@ -6,6 +6,7 @@ import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, moveTask as moveTaskAction, declineTask, getTaskStageLogs } from "@/actions/task";
 import { createMeetingNote } from "@/actions/meeting-note";
+import { RichTextEditor } from "@/components/rich-text-editor";
 import { useRouter } from "next/navigation";
 import { QuestionField, type TaskQuestion } from "./question-field";
 import { ActivityTimeline } from "./activity-timeline";
@@ -94,7 +95,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const [activityKey, setActivityKey] = useState(0);
   const [activityOpen, setActivityOpen] = useState(false);
   const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
-  const [creatingNote, setCreatingNote] = useState(false);
+  const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [movingStage, setMovingStage] = useState(false);
   const [moveError, setMoveError] = useState<string[] | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -103,26 +104,6 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const [declineComment, setDeclineComment] = useState("");
 
   const taskTypeMeta = TASK_TYPE_META[task.taskType] ?? TASK_TYPE_META.FEATURE;
-
-  async function handleCreateNote() {
-    setCreatingNote(true);
-    try {
-      const noteType = task.taskType as "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
-      await createMeetingNote({
-        projectId,
-        title: `${taskTypeMeta.label}: ${task.title}`,
-        content: "",
-        date: new Date().toISOString().split("T")[0],
-        noteType,
-        taskId: task.id,
-      });
-      router.push(`/dashboard/projects/${projectId}?tab=notes`);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setCreatingNote(false);
-    }
-  }
   const [declining, setDeclining] = useState(false);
   const [editingAnswers, setEditingAnswers] = useState<Record<string, boolean>>({});
   const [editingTitle, setEditingTitle] = useState(false);
@@ -372,9 +353,8 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <button
-              onClick={handleCreateNote}
-              disabled={creatingNote}
-              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+              onClick={() => setNoteEditorOpen(true)}
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               title="Create Note"
             >
               <FileText className="w-4 h-4" />
@@ -822,6 +802,107 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
           />
         ) : null;
       })()}
+
+      {noteEditorOpen && (
+        <TaskNoteEditor
+          task={task}
+          projectId={projectId}
+          taskTypeMeta={taskTypeMeta}
+          onClose={() => setNoteEditorOpen(false)}
+        />
+      )}
     </>
+  );
+}
+
+/* ─── Task Note Editor (full-screen) ─── */
+
+function TaskNoteEditor({
+  task,
+  projectId,
+  taskTypeMeta,
+  onClose,
+}: {
+  task: KanbanTask;
+  projectId: string;
+  taskTypeMeta: { prefix: string; label: string; color: string };
+  onClose: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [saving, setSaving] = useState(false);
+  const router = useRouter();
+
+  async function handleSave() {
+    if (!title.trim()) return;
+    setSaving(true);
+    try {
+      const noteType = task.taskType as "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+      await createMeetingNote({
+        projectId,
+        title: title.trim(),
+        content,
+        date: new Date().toISOString().split("T")[0],
+        noteType,
+        taskId: task.id,
+      });
+      onClose();
+      router.push(`/dashboard/projects/${projectId}?tab=notes`);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[200] bg-background flex flex-col">
+      <div className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0">
+        <div className="flex items-center gap-3">
+          <button onClick={onClose} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <X className="w-4 h-4" />
+            Close
+          </button>
+          <span className="text-[11px] text-muted-foreground/50">|</span>
+          <span className={`text-[12px] font-medium ${taskTypeMeta.color}`}>
+            {taskTypeMeta.prefix}-{String(task.taskNumber).padStart(3, "0")}
+          </span>
+          <span className="text-[12px] text-muted-foreground truncate max-w-[200px]">
+            {task.title}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={handleSave} disabled={saving || !title.trim()}>
+            {saving ? "Saving..." : "Save Note"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
+          <div className="mb-6">
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold ${taskTypeMeta.color} bg-muted/50 border-border`}>
+              {taskTypeMeta.label} Note
+            </span>
+          </div>
+
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Note title..."
+            className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-8"
+            autoFocus
+          />
+
+          <RichTextEditor
+            content={content}
+            onChange={setContent}
+            placeholder="Write your note... (type / for commands)"
+            borderless
+          />
+        </div>
+      </div>
+    </div>
   );
 }
