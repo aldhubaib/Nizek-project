@@ -177,51 +177,61 @@ export function RichTextEditor({
     );
   }
 
-  function deleteSlashText() {
-    if (!editor) return;
+  function getSlashRange(): { from: number; to: number } | null {
+    if (!editor) return null;
     const { from } = editor.state.selection;
     const textBefore = editor.state.doc.textBetween(Math.max(0, from - 20), from, "\0");
     const slashMatch = textBefore.match(/\/([a-zA-Z0-9]*)$/);
     if (slashMatch) {
-      editor.chain().focus().deleteRange({ from: from - slashMatch[0].length, to: from }).run();
+      return { from: from - slashMatch[0].length, to: from };
     }
+    return null;
   }
 
   const executeCommand = useCallback((id: string) => {
     if (!editor) return;
 
-    deleteSlashText();
+    const range = getSlashRange();
+
+    if (id === "image") {
+      if (range) editor.chain().focus().deleteRange(range).run();
+      fileInputRef.current?.click();
+      setSlashMenu(null);
+      return;
+    }
+
+    let chain = editor.chain().focus();
+    if (range) {
+      chain = chain.deleteRange(range);
+    }
 
     switch (id) {
       case "h1":
-        editor.chain().focus().setHeading({ level: 1 }).run();
+        chain.setHeading({ level: 1 }).run();
         break;
       case "h2":
-        editor.chain().focus().setHeading({ level: 2 }).run();
+        chain.setHeading({ level: 2 }).run();
         break;
       case "h3":
-        editor.chain().focus().setHeading({ level: 3 }).run();
+        chain.setHeading({ level: 3 }).run();
         break;
       case "text":
-        editor.chain().focus().setParagraph().run();
+        chain.setParagraph().run();
         break;
       case "bullet":
-        editor.chain().focus().toggleBulletList().run();
+        chain.toggleBulletList().run();
         break;
       case "numbered":
-        editor.chain().focus().toggleOrderedList().run();
+        chain.toggleOrderedList().run();
         break;
       case "quote":
-        editor.chain().focus().toggleBlockquote().run();
+        chain.toggleBlockquote().run();
         break;
       case "divider":
-        editor.chain().focus().setHorizontalRule().run();
+        chain.setHorizontalRule().run();
         break;
       case "code":
-        editor.chain().focus().toggleCodeBlock().run();
-        break;
-      case "image":
-        fileInputRef.current?.click();
+        chain.toggleCodeBlock().run();
         break;
     }
     setSlashMenu(null);
