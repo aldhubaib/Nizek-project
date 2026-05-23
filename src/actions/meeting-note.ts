@@ -9,7 +9,7 @@ export async function createMeetingNote(data: {
   title: string;
   content: string;
   date: string;
-  noteType?: "MEETING_NOTE" | "DECISION";
+  noteType?: "MEETING_NOTE" | "DECISION" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
 }) {
   const { user, member } = await requireProjectMember(data.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot create notes");

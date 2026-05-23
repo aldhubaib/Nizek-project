@@ -4,16 +4,21 @@ import { useState, useMemo } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, FileText, Trash2, Gavel, ArrowLeft, Clock, History, User, Pencil } from "lucide-react";
+import { Plus, FileText, Trash2, Gavel, ArrowLeft, Clock, History, User, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette } from "lucide-react";
 import { createMeetingNote, updateMeetingNote, deleteMeetingNote } from "@/actions/meeting-note";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { cn } from "@/lib/utils";
 
-type NoteType = "MEETING_NOTE" | "DECISION";
+type NoteType = "MEETING_NOTE" | "DECISION" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
 
 const NOTE_TYPE_CONFIG: Record<NoteType, { label: string; color: string; bgColor: string; icon: typeof FileText }> = {
   MEETING_NOTE: { label: "Meeting Note", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: FileText },
   DECISION: { label: "Decision", color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/20", icon: Gavel },
+  FEATURE: { label: "Feature", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: Sparkles },
+  ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bgColor: "bg-violet-500/10 border-violet-500/20", icon: Wrench },
+  BUG: { label: "Bug", color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/20", icon: Bug },
+  REPORTED_BUG: { label: "Reported Bug", color: "text-destructive", bgColor: "bg-destructive/10 border-destructive/20", icon: AlertCircle },
+  DESIGN: { label: "Design", color: "text-cyan-400", bgColor: "bg-cyan-500/10 border-cyan-500/20", icon: Palette },
 };
 
 interface NoteHistoryEntry {
@@ -43,6 +48,8 @@ interface Props {
   canEdit: boolean;
 }
 
+const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
+
 export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
   const [filter, setFilter] = useState<NoteType | "ALL">("ALL");
   const [view, setView] = useState<"list" | "create" | "detail">("list");
@@ -52,6 +59,11 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
     if (filter === "ALL") return notes;
     return notes.filter((n) => n.noteType === filter);
   }, [notes, filter]);
+
+  const usedTypes = useMemo(() => {
+    const types = new Set(notes.map((n) => n.noteType));
+    return ALL_NOTE_TYPES.filter((t) => types.has(t));
+  }, [notes]);
 
   function openNote(note: MeetingNote) {
     setSelectedNote(note);
@@ -90,8 +102,8 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold">Notes</h2>
-          <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5">
-            {(["ALL", "MEETING_NOTE", "DECISION"] as const).map((t) => (
+          <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5 flex-wrap">
+            {(["ALL" as const, ...usedTypes]).map((t) => (
               <button
                 key={t}
                 onClick={() => setFilter(t)}

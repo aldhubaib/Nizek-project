@@ -251,6 +251,11 @@ model TaskActivity {
 enum NoteType {
   MEETING_NOTE
   DECISION
+  FEATURE
+  ENHANCEMENT
+  BUG
+  REPORTED_BUG
+  DESIGN
 }
 
 model MeetingNote {
