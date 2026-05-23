@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Undo2, Gauge, Timer, FileText } from "lucide-react";
+import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Undo2, Gauge, Timer, FileText, Plus } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, moveTask as moveTaskAction, declineTask, getTaskStageLogs } from "@/actions/task";
-import { createMeetingNote } from "@/actions/meeting-note";
+import { createMeetingNote, getTaskNotes } from "@/actions/meeting-note";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { useRouter } from "next/navigation";
+import { formatDistanceToNow } from "date-fns";
 import { QuestionField, type TaskQuestion } from "./question-field";
 import { ActivityTimeline } from "./activity-timeline";
 import { CommentSection } from "./comment-section";
@@ -95,6 +96,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const [activityKey, setActivityKey] = useState(0);
   const [activityOpen, setActivityOpen] = useState(false);
   const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
+  const [notePanelOpen, setNotePanelOpen] = useState(false);
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [movingStage, setMovingStage] = useState(false);
   const [moveError, setMoveError] = useState<string[] | null>(null);
@@ -353,9 +355,9 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <button
-              onClick={() => setNoteEditorOpen(true)}
+              onClick={() => setNotePanelOpen(true)}
               className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              title="Create Note"
+              title="Notes"
             >
               <FileText className="w-4 h-4" />
             </button>
@@ -803,15 +805,146 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
         ) : null;
       })()}
 
+      {notePanelOpen && (
+        <TaskNotesPanel
+          task={task}
+          projectId={projectId}
+          taskTypeMeta={taskTypeMeta}
+          onClose={() => setNotePanelOpen(false)}
+          onCreateNote={() => { setNotePanelOpen(false); setNoteEditorOpen(true); }}
+        />
+      )}
+
       {noteEditorOpen && (
         <TaskNoteEditor
           task={task}
           projectId={projectId}
           taskTypeMeta={taskTypeMeta}
           onClose={() => setNoteEditorOpen(false)}
+          onSaved={() => { setNoteEditorOpen(false); setNotePanelOpen(true); }}
         />
       )}
     </>
+  );
+}
+
+/* ─── Task Note Editor (full-screen) ─── */
+
+/* ─── Task Notes Panel (modal list) ─── */
+
+function TaskNotesPanel({
+  task,
+  projectId,
+  taskTypeMeta,
+  onClose,
+  onCreateNote,
+}: {
+  task: KanbanTask;
+  projectId: string;
+  taskTypeMeta: { prefix: string; label: string; color: string };
+  onClose: () => void;
+  onCreateNote: () => void;
+}) {
+  const [notes, setNotes] = useState<{ id: string; title: string; content: string; createdAt: Date; author: { name: string | null } }[]>([]);
+  const [loadingNotes, setLoadingNotes] = useState(true);
+  const [viewingNote, setViewingNote] = useState<typeof notes[number] | null>(null);
+
+  useEffect(() => {
+    getTaskNotes(task.id).then((data) => {
+      setNotes(data);
+      setLoadingNotes(false);
+    }).catch(() => setLoadingNotes(false));
+  }, [task.id]);
+
+  if (viewingNote) {
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={() => setViewingNote(null)} />
+        <div className="relative z-10 w-full max-w-2xl mx-4 max-h-[80vh] bg-popover rounded-xl border border-border shadow-2xl flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <div className="flex items-center gap-2">
+              <button onClick={() => setViewingNote(null)} className="text-muted-foreground hover:text-foreground transition-colors">
+                <ChevronRight className="w-4 h-4 rotate-180" />
+              </button>
+              <h3 className="text-sm font-semibold truncate">{viewingNote.title}</h3>
+            </div>
+            <button onClick={onClose} className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="text-[11px] text-muted-foreground mb-4">
+              by {viewingNote.author.name ?? "Unknown"} · {formatDistanceToNow(new Date(viewingNote.createdAt), { addSuffix: true })}
+            </div>
+            {viewingNote.content ? (
+              <div
+                className="prose prose-invert prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: viewingNote.content }}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground/50 italic">No content</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md mx-4 max-h-[80vh] bg-popover rounded-xl border border-border shadow-2xl flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+            <h3 className="text-sm font-semibold">Notes</h3>
+            <span className={`text-[11px] font-medium ${taskTypeMeta.color}`}>
+              {taskTypeMeta.prefix}-{String(task.taskNumber).padStart(3, "0")}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={onCreateNote} className="h-7 text-xs">
+              <Plus className="w-3 h-3 mr-1" />
+              New
+            </Button>
+            <button onClick={onClose} className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {loadingNotes ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : notes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <FileText className="w-8 h-8 mb-2 opacity-30" />
+              <p className="text-sm">No notes for this task</p>
+              <Button size="sm" variant="ghost" onClick={onCreateNote} className="mt-3 text-xs">
+                <Plus className="w-3 h-3 mr-1" />
+                Create first note
+              </Button>
+            </div>
+          ) : (
+            <div className="py-1">
+              {notes.map((note) => (
+                <button
+                  key={note.id}
+                  onClick={() => setViewingNote(note)}
+                  className="w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors border-b border-border/30 last:border-0"
+                >
+                  <p className="text-[13px] font-medium truncate">{note.title}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    by {note.author.name ?? "Unknown"} · {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -822,16 +955,17 @@ function TaskNoteEditor({
   projectId,
   taskTypeMeta,
   onClose,
+  onSaved,
 }: {
   task: KanbanTask;
   projectId: string;
   taskTypeMeta: { prefix: string; label: string; color: string };
   onClose: () => void;
+  onSaved: () => void;
 }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
-  const router = useRouter();
 
   async function handleSave() {
     if (!title.trim()) return;
@@ -846,8 +980,7 @@ function TaskNoteEditor({
         noteType,
         taskId: task.id,
       });
-      onClose();
-      router.push(`/dashboard/projects/${projectId}?tab=notes`);
+      onSaved();
     } catch (err) {
       console.error(err);
     } finally {

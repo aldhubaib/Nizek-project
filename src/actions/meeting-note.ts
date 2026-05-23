@@ -116,6 +116,22 @@ export async function getMeetingNotes(projectId: string) {
   });
 }
 
+export async function getTaskNotes(taskId: string) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { projectId: true },
+  });
+  if (!task) throw new Error("Task not found");
+
+  await requireProjectMember(task.projectId);
+
+  return prisma.meetingNote.findMany({
+    where: { taskId },
+    include: { author: true },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 export async function getNoteHistory(noteId: string) {
   const note = await prisma.meetingNote.findUnique({
     where: { id: noteId },
