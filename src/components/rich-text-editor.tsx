@@ -42,10 +42,13 @@ export function RichTextEditor({
   const [slashMenu, setSlashMenu] = useState<{ x: number; y: number; query: string } | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        heading: { levels: [1, 2, 3] },
+      }),
       Placeholder.configure({ placeholder }),
       Image.configure({ inline: false, allowBase64: true }),
     ],
@@ -59,7 +62,7 @@ export function RichTextEditor({
         class: cn(
           "focus:outline-none prose prose-invert max-w-none",
           borderless
-            ? "min-h-[400px] text-base leading-relaxed"
+            ? "min-h-[60vh] text-lg leading-relaxed prose-headings:font-bold prose-h1:text-4xl prose-h2:text-2xl prose-h3:text-xl prose-p:text-base prose-img:rounded-lg prose-img:max-w-full"
             : "min-h-[120px] px-3 py-2 text-sm prose-sm"
         ),
       },
@@ -90,8 +93,45 @@ export function RichTextEditor({
         }
         return false;
       },
+      handleDrop: (_view, event) => {
+        const files = event.dataTransfer?.files;
+        if (files && files.length > 0) {
+          event.preventDefault();
+          Array.from(files).forEach((file) => {
+            if (file.type.startsWith("image/")) {
+              insertImageFile(file);
+            }
+          });
+          return true;
+        }
+        return false;
+      },
+      handlePaste: (_view, event) => {
+        const items = event.clipboardData?.items;
+        if (items) {
+          for (const item of Array.from(items)) {
+            if (item.type.startsWith("image/")) {
+              event.preventDefault();
+              const file = item.getAsFile();
+              if (file) insertImageFile(file);
+              return true;
+            }
+          }
+        }
+        return false;
+      },
     },
   });
+
+  function insertImageFile(file: File) {
+    if (!editor) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      editor.chain().focus().setImage({ src: base64 }).run();
+    };
+    reader.readAsDataURL(file);
+  }
 
   function checkSlashCommand(ed: Editor) {
     const { state } = ed;
@@ -126,7 +166,7 @@ export function RichTextEditor({
     { id: "quote", label: "Quote", description: "Block quote", icon: Quote },
     { id: "divider", label: "Divider", description: "Horizontal rule", icon: Minus },
     { id: "code", label: "Code Block", description: "Code snippet", icon: Code },
-    { id: "image", label: "Image", description: "Upload or paste URL", icon: ImageIcon },
+    { id: "image", label: "Image", description: "Upload from device", icon: ImageIcon },
   ];
 
   function getFilteredCommands(query: string) {
@@ -137,25 +177,30 @@ export function RichTextEditor({
     );
   }
 
-  const executeCommand = useCallback((id: string) => {
+  function deleteSlashText() {
     if (!editor) return;
-
     const { from } = editor.state.selection;
     const textBefore = editor.state.doc.textBetween(Math.max(0, from - 20), from, "\0");
     const slashMatch = textBefore.match(/\/([a-zA-Z0-9]*)$/);
     if (slashMatch) {
       editor.chain().focus().deleteRange({ from: from - slashMatch[0].length, to: from }).run();
     }
+  }
+
+  const executeCommand = useCallback((id: string) => {
+    if (!editor) return;
+
+    deleteSlashText();
 
     switch (id) {
       case "h1":
-        editor.chain().focus().toggleHeading({ level: 1 }).run();
+        editor.chain().focus().setHeading({ level: 1 }).run();
         break;
       case "h2":
-        editor.chain().focus().toggleHeading({ level: 2 }).run();
+        editor.chain().focus().setHeading({ level: 2 }).run();
         break;
       case "h3":
-        editor.chain().focus().toggleHeading({ level: 3 }).run();
+        editor.chain().focus().setHeading({ level: 3 }).run();
         break;
       case "text":
         editor.chain().focus().setParagraph().run();
@@ -175,16 +220,21 @@ export function RichTextEditor({
       case "code":
         editor.chain().focus().toggleCodeBlock().run();
         break;
-      case "image": {
-        const url = prompt("Enter image URL:");
-        if (url) {
-          editor.chain().focus().setImage({ src: url }).run();
-        }
+      case "image":
+        fileInputRef.current?.click();
         break;
-      }
     }
     setSlashMenu(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor]);
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith("image/")) {
+      insertImageFile(file);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -200,9 +250,20 @@ export function RichTextEditor({
 
   const filteredCmds = slashMenu ? getFilteredCommands(slashMenu.query) : [];
 
+  const hiddenInput = (
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept="image/*"
+      className="hidden"
+      onChange={handleFileSelect}
+    />
+  );
+
   if (borderless) {
     return (
       <div className="relative">
+        {hiddenInput}
         <EditorContent editor={editor} />
         {slashMenu && filteredCmds.length > 0 && (
           <SlashCommandMenu
@@ -220,6 +281,7 @@ export function RichTextEditor({
 
   return (
     <div className="rounded-md border border-input bg-background">
+      {hiddenInput}
       <div className="flex items-center gap-0.5 border-b border-border px-1.5 py-1">
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBold().run()}

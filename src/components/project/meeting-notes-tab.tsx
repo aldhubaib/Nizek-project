@@ -194,7 +194,7 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
 
       {/* Content area */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto px-6 py-10">
+        <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
           {/* Type picker */}
           <div className="mb-6">
             <div className="flex gap-2">
@@ -225,7 +225,7 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={noteType === "DECISION" ? "What was decided?" : "Meeting title..."}
-            className="w-full text-3xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-4"
+            className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-4"
             autoFocus
           />
 
@@ -240,14 +240,12 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
           </div>
 
           {/* Editor */}
-          <div>
-            <RichTextEditor
-              content={content}
-              onChange={setContent}
-              placeholder={noteType === "DECISION" ? "Describe the context, options considered, and rationale... (type / for commands)" : "Write your meeting notes here... (type / for commands)"}
-              borderless
-            />
-          </div>
+          <RichTextEditor
+            content={content}
+            onChange={setContent}
+            placeholder={noteType === "DECISION" ? "Describe the context, options considered, and rationale... (type / for commands)" : "Write your meeting notes here... (type / for commands)"}
+            borderless
+          />
         </div>
       </div>
     </div>
@@ -329,7 +327,7 @@ function NoteFullScreenDetail({
 
       {/* Content area */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto px-6 py-10">
+        <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
           {/* Type badge + meta */}
           <div className="flex items-center gap-3 mb-4">
             {config && (
@@ -352,18 +350,16 @@ function NoteFullScreenDetail({
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full text-3xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-8"
+              className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-8"
               autoFocus
             />
           ) : (
-            <h1 className="text-3xl font-bold mb-8">{note.title}</h1>
+            <h1 className="text-4xl font-bold mb-8">{note.title}</h1>
           )}
 
           {/* Content */}
           {isEditing ? (
-            <div>
-              <RichTextEditor content={content} onChange={setContent} borderless />
-            </div>
+            <RichTextEditor content={content} onChange={setContent} borderless />
           ) : (
             <div
               className="prose prose-invert max-w-none text-base leading-relaxed"
