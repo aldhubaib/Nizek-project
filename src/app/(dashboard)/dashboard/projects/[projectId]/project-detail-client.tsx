@@ -170,12 +170,13 @@ export function ProjectDetailClient({
   const isAdmin = userPermissions.isAdmin;
   const router = useRouter();
   const searchParams = useSearchParams();
-  const activeTab = searchParams.get("tab") ?? "board";
+  const [activeTab, setActiveTabState] = useState(searchParams.get("tab") ?? "board");
 
   function setActiveTab(tab: string) {
+    setActiveTabState(tab);
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", tab);
-    router.replace(`?${params.toString()}`, { scroll: false });
+    window.history.replaceState(null, "", `?${params.toString()}`);
   }
 
   return (
