@@ -86,6 +86,7 @@ model User {
   taskComments   TaskComment[]  @relation("CommentUser")
   commentMentions TaskCommentMention[] @relation("MentionedUser")
   meetingNotes   MeetingNote[]
+  noteEdits      NoteHistory[]
   assets         Asset[]
   invitations    Invitation[]
 }
@@ -264,10 +265,28 @@ model MeetingNote {
   authorId  String
   author    User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
+  history NoteHistory[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([projectId])
+}
+
+model NoteHistory {
+  id        String   @id @default(cuid())
+  field     String
+  oldValue  String?  @db.Text
+  newValue  String?  @db.Text
+
+  noteId    String
+  note      MeetingNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([noteId])
 }
 
 model Asset {

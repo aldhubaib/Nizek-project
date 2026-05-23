@@ -90,13 +90,25 @@ interface Project {
   _count: { tasks: number; meetingNotes: number; assets: number };
 }
 
+interface NoteHistoryEntry {
+  id: string;
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  createdAt: Date;
+  user: { id: string; name: string | null; imageUrl: string | null };
+}
+
 interface MeetingNote {
   id: string;
   title: string;
   content: string;
   date: Date;
   noteType: string;
+  createdAt: Date;
+  updatedAt: Date;
   author: { id: string; name: string | null; imageUrl: string | null };
+  history: NoteHistoryEntry[];
 }
 
 interface Asset {

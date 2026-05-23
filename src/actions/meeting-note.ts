@@ -41,17 +41,44 @@ export async function updateMeetingNote(data: {
   });
   if (!note) throw new Error("Note not found");
 
-  const { member } = await requireProjectMember(note.projectId);
+  const { user, member } = await requireProjectMember(note.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot edit notes");
 
-  const updated = await prisma.meetingNote.update({
-    where: { id: data.noteId },
-    data: {
-      ...(data.title && { title: data.title }),
-      ...(data.content !== undefined && { content: data.content }),
-      ...(data.date && { date: new Date(data.date) }),
-    },
-  });
+  const historyEntries: { field: string; oldValue: string | null; newValue: string | null; noteId: string; userId: string }[] = [];
+
+  if (data.title && data.title !== note.title) {
+    historyEntries.push({
+      field: "title",
+      oldValue: note.title,
+      newValue: data.title,
+      noteId: note.id,
+      userId: user.id,
+    });
+  }
+
+  if (data.content !== undefined && data.content !== note.content) {
+    historyEntries.push({
+      field: "content",
+      oldValue: null,
+      newValue: null,
+      noteId: note.id,
+      userId: user.id,
+    });
+  }
+
+  const [updated] = await prisma.$transaction([
+    prisma.meetingNote.update({
+      where: { id: data.noteId },
+      data: {
+        ...(data.title && { title: data.title }),
+        ...(data.content !== undefined && { content: data.content }),
+        ...(data.date && { date: new Date(data.date) }),
+      },
+    }),
+    ...(historyEntries.length > 0
+      ? [prisma.noteHistory.createMany({ data: historyEntries })]
+      : []),
+  ]);
 
   revalidatePath(`/dashboard/projects/${note.projectId}`);
   return updated;
@@ -75,7 +102,29 @@ export async function getMeetingNotes(projectId: string) {
 
   return prisma.meetingNote.findMany({
     where: { projectId },
-    include: { author: true },
+    include: {
+      author: true,
+      history: {
+        include: { user: true },
+        orderBy: { createdAt: "desc" },
+      },
+    },
     orderBy: { date: "desc" },
+  });
+}
+
+export async function getNoteHistory(noteId: string) {
+  const note = await prisma.meetingNote.findUnique({
+    where: { id: noteId },
+    select: { projectId: true },
+  });
+  if (!note) throw new Error("Note not found");
+
+  await requireProjectMember(note.projectId);
+
+  return prisma.noteHistory.findMany({
+    where: { noteId },
+    include: { user: true },
+    orderBy: { createdAt: "desc" },
   });
 }

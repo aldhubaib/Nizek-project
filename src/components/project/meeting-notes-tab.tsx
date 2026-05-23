@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, FileText, Trash2, Gavel, ArrowLeft, X } from "lucide-react";
+import { Plus, FileText, Trash2, Gavel, ArrowLeft, Clock, History, User, Pencil } from "lucide-react";
 import { createMeetingNote, updateMeetingNote, deleteMeetingNote } from "@/actions/meeting-note";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { cn } from "@/lib/utils";
@@ -16,13 +16,25 @@ const NOTE_TYPE_CONFIG: Record<NoteType, { label: string; color: string; bgColor
   DECISION: { label: "Decision", color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/20", icon: Gavel },
 };
 
+interface NoteHistoryEntry {
+  id: string;
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  createdAt: Date;
+  user: { id: string; name: string | null; imageUrl: string | null };
+}
+
 interface MeetingNote {
   id: string;
   title: string;
   content: string;
   date: Date;
   noteType: string;
+  createdAt: Date;
+  updatedAt: Date;
   author: { id: string; name: string | null; imageUrl: string | null };
+  history: NoteHistoryEntry[];
 }
 
 interface Props {
@@ -55,12 +67,10 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
     setSelectedNote(null);
   }
 
-  // Full-screen create view
   if (view === "create") {
     return <NoteFullScreenCreate projectId={projectId} onBack={goBack} />;
   }
 
-  // Full-screen detail view
   if (view === "detail" && selectedNote) {
     return (
       <NoteFullScreenDetail
@@ -75,7 +85,6 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
     );
   }
 
-  // List view
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -141,6 +150,11 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   by {note.author.name ?? "Unknown"}
+                  {note.history?.length > 0 && (
+                    <span className="ml-2 text-muted-foreground/50">
+                      · edited {note.history.length} time{note.history.length > 1 ? "s" : ""}
+                    </span>
+                  )}
                 </p>
               </button>
             );
@@ -178,7 +192,6 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
-      {/* Top bar */}
       <div className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0">
         <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="w-4 h-4" />
@@ -192,7 +205,6 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
         </div>
       </div>
 
-      {/* Content area */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
           {/* Type picker */}
@@ -220,7 +232,6 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
             {typeError && <p className="text-[11px] text-destructive mt-1.5">Please select a type</p>}
           </div>
 
-          {/* Title */}
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -229,7 +240,6 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
             autoFocus
           />
 
-          {/* Date */}
           <div className="flex items-center gap-3 mb-8 pb-6 border-b border-border/50">
             <Input
               type="date"
@@ -239,7 +249,6 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
             />
           </div>
 
-          {/* Editor */}
           <RichTextEditor
             content={content}
             onChange={setContent}
@@ -270,6 +279,7 @@ function NoteFullScreenDetail({
   const [content, setContent] = useState(note.content);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const config = NOTE_TYPE_CONFIG[(note.noteType as NoteType) ?? "MEETING_NOTE"];
   const Icon = config?.icon ?? FileText;
@@ -306,9 +316,24 @@ function NoteFullScreenDetail({
           Back
         </button>
         <div className="flex items-center gap-2">
+          {note.history?.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowHistory(!showHistory)}
+              className={cn(showHistory && "bg-accent")}
+            >
+              <History className="w-3.5 h-3.5 mr-1.5" />
+              History
+              <span className="ml-1 text-[10px] text-muted-foreground">({note.history.length})</span>
+            </Button>
+          )}
           {canEdit && !isEditing && (
             <>
-              <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)}>Edit</Button>
+              <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
+                <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                Edit
+              </Button>
               <Button variant="ghost" size="sm" onClick={handleDelete} disabled={deleting} className="text-destructive hover:text-destructive">
                 <Trash2 className="w-3.5 h-3.5" />
               </Button>
@@ -325,48 +350,119 @@ function NoteFullScreenDetail({
         </div>
       </div>
 
-      {/* Content area */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
-          {/* Type badge + meta */}
-          <div className="flex items-center gap-3 mb-4">
-            {config && (
-              <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${config.bgColor} ${config.color}`}>
-                <Icon className="w-3.5 h-3.5" />
-                {config.label}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Main content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
+            {/* Type badge + meta */}
+            <div className="flex flex-wrap items-center gap-3 mb-2">
+              {config && (
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${config.bgColor} ${config.color}`}>
+                  <Icon className="w-3.5 h-3.5" />
+                  {config.label}
+                </span>
+              )}
+              <span className="text-[13px] text-muted-foreground">
+                {format(new Date(note.date), "MMMM d, yyyy")}
               </span>
+            </div>
+
+            {/* Created by + timestamps */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-6 text-[12px] text-muted-foreground/70">
+              <span className="inline-flex items-center gap-1">
+                <User className="w-3 h-3" />
+                Created by {note.author.name ?? "Unknown"}
+              </span>
+              <span>·</span>
+              <span className="inline-flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {format(new Date(note.createdAt), "MMM d, yyyy 'at' h:mm a")}
+              </span>
+              {note.history?.length > 0 && (
+                <>
+                  <span>·</span>
+                  <span>
+                    Last edited {formatDistanceToNow(new Date(note.updatedAt), { addSuffix: true })}
+                  </span>
+                </>
+              )}
+            </div>
+
+            {/* Title */}
+            {isEditing ? (
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-8"
+                autoFocus
+              />
+            ) : (
+              <h1 className="text-4xl font-bold mb-8">{note.title}</h1>
             )}
-            <span className="text-[13px] text-muted-foreground">
-              {format(new Date(note.date), "MMMM d, yyyy")}
-            </span>
-            <span className="text-[13px] text-muted-foreground/50">·</span>
-            <span className="text-[13px] text-muted-foreground">
-              {note.author.name ?? "Unknown"}
-            </span>
+
+            {/* Content */}
+            {isEditing ? (
+              <RichTextEditor content={content} onChange={setContent} borderless />
+            ) : (
+              <div
+                className="prose prose-invert max-w-none text-base leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: note.content }}
+              />
+            )}
           </div>
-
-          {/* Title */}
-          {isEditing ? (
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-8"
-              autoFocus
-            />
-          ) : (
-            <h1 className="text-4xl font-bold mb-8">{note.title}</h1>
-          )}
-
-          {/* Content */}
-          {isEditing ? (
-            <RichTextEditor content={content} onChange={setContent} borderless />
-          ) : (
-            <div
-              className="prose prose-invert max-w-none text-base leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: note.content }}
-            />
-          )}
         </div>
+
+        {/* History sidebar */}
+        {showHistory && note.history?.length > 0 && (
+          <div className="w-72 border-l border-border bg-card/50 overflow-y-auto shrink-0">
+            <div className="p-4">
+              <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                <History className="w-4 h-4" />
+                Edit History
+              </h3>
+              <div className="space-y-0">
+                {note.history.map((entry, idx) => (
+                  <div key={entry.id} className="relative pl-5">
+                    {/* Timeline line */}
+                    {idx < note.history.length - 1 && (
+                      <div className="absolute left-[7px] top-5 bottom-0 w-px bg-border" />
+                    )}
+                    {/* Timeline dot */}
+                    <div className="absolute left-0 top-1.5 w-[15px] h-[15px] rounded-full border-2 border-border bg-background flex items-center justify-center">
+                      <Pencil className="w-2 h-2 text-muted-foreground" />
+                    </div>
+                    <div className="pb-5">
+                      <p className="text-[12px] font-medium text-foreground">
+                        {entry.user.name ?? "Unknown"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {entry.field === "title" ? (
+                          <>
+                            Changed title
+                            {entry.oldValue && (
+                              <span className="block mt-0.5">
+                                <span className="line-through text-muted-foreground/40">{entry.oldValue}</span>
+                                {" → "}
+                                <span className="text-foreground/80">{entry.newValue}</span>
+                              </span>
+                            )}
+                          </>
+                        ) : entry.field === "content" ? (
+                          "Updated content"
+                        ) : (
+                          `Changed ${entry.field}`
+                        )}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground/50 mt-1">
+                        {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
