@@ -185,6 +185,7 @@ model Task {
   activities TaskActivity[]
   comments   TaskComment[]
   stageLogs  StageLog[]
+  notes      MeetingNote[]
 
   @@unique([projectId, taskNumber])
   @@index([projectId, stage])
@@ -269,6 +270,8 @@ model MeetingNote {
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   authorId  String
   author    User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  taskId    String?
+  task      Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   history NoteHistory[]
 
@@ -276,6 +279,7 @@ model MeetingNote {
   updatedAt DateTime @updatedAt
 
   @@index([projectId])
+  @@index([taskId])
 }
 
 model NoteHistory {

@@ -108,6 +108,7 @@ interface MeetingNote {
   createdAt: Date;
   updatedAt: Date;
   author: { id: string; name: string | null; imageUrl: string | null };
+  task: { id: string; title: string; taskNumber: number; taskType: string } | null;
   history: NoteHistoryEntry[];
 }
 

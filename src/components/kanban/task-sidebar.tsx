@@ -2,9 +2,11 @@
 
 import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Undo2, Gauge, Timer } from "lucide-react";
+import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Undo2, Gauge, Timer, FileText } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, moveTask as moveTaskAction, declineTask, getTaskStageLogs } from "@/actions/task";
+import { createMeetingNote } from "@/actions/meeting-note";
+import { useRouter } from "next/navigation";
 import { QuestionField, type TaskQuestion } from "./question-field";
 import { ActivityTimeline } from "./activity-timeline";
 import { CommentSection } from "./comment-section";
@@ -81,6 +83,7 @@ interface Props {
 
 export function TaskSidebar({ task, open, onClose, questions: allQuestions, projectId }: Props) {
   const questions = allQuestions.filter((q) => q.taskType === task.taskType);
+  const router = useRouter();
 
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const answersRef = useRef<Record<string, string>>({});
@@ -91,12 +94,35 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const [activityKey, setActivityKey] = useState(0);
   const [activityOpen, setActivityOpen] = useState(false);
   const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
+  const [creatingNote, setCreatingNote] = useState(false);
   const [movingStage, setMovingStage] = useState(false);
   const [moveError, setMoveError] = useState<string[] | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [questionsOpen, setQuestionsOpen] = useState(true);
   const [showDecline, setShowDecline] = useState(false);
   const [declineComment, setDeclineComment] = useState("");
+
+  const taskTypeMeta = TASK_TYPE_META[task.taskType] ?? TASK_TYPE_META.FEATURE;
+
+  async function handleCreateNote() {
+    setCreatingNote(true);
+    try {
+      const noteType = task.taskType as "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+      await createMeetingNote({
+        projectId,
+        title: `${taskTypeMeta.label}: ${task.title}`,
+        content: "",
+        date: new Date().toISOString().split("T")[0],
+        noteType,
+        taskId: task.id,
+      });
+      router.push(`/dashboard/projects/${projectId}?tab=notes`);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCreatingNote(false);
+    }
+  }
   const [declining, setDeclining] = useState(false);
   const [editingAnswers, setEditingAnswers] = useState<Record<string, boolean>>({});
   const [editingTitle, setEditingTitle] = useState(false);
@@ -345,6 +371,14 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={handleCreateNote}
+              disabled={creatingNote}
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+              title="Create Note"
+            >
+              <FileText className="w-4 h-4" />
+            </button>
             <button
               onClick={() => setTimeTrackingOpen(true)}
               className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"

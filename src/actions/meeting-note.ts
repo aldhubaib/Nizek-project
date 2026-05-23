@@ -10,6 +10,7 @@ export async function createMeetingNote(data: {
   content: string;
   date: string;
   noteType?: "MEETING_NOTE" | "DECISION" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+  taskId?: string;
 }) {
   const { user, member } = await requireProjectMember(data.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot create notes");
@@ -22,6 +23,7 @@ export async function createMeetingNote(data: {
       noteType: data.noteType ?? "MEETING_NOTE",
       projectId: data.projectId,
       authorId: user.id,
+      ...(data.taskId && { taskId: data.taskId }),
     },
   });
 
@@ -104,6 +106,7 @@ export async function getMeetingNotes(projectId: string) {
     where: { projectId },
     include: {
       author: true,
+      task: { select: { id: true, title: true, taskNumber: true, taskType: true } },
       history: {
         include: { user: true },
         orderBy: { createdAt: "desc" },

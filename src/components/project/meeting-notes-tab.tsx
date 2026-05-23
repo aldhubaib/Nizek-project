@@ -39,6 +39,7 @@ interface MeetingNote {
   createdAt: Date;
   updatedAt: Date;
   author: { id: string; name: string | null; imageUrl: string | null };
+  task: { id: string; title: string; taskNumber: number; taskType: string } | null;
   history: NoteHistoryEntry[];
 }
 
@@ -49,6 +50,7 @@ interface Props {
 }
 
 const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
+const STANDALONE_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION"];
 
 export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
   const [filter, setFilter] = useState<NoteType | "ALL">("ALL");
@@ -162,6 +164,11 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   by {note.author.name ?? "Unknown"}
+                  {note.task && (
+                    <span className="ml-2 text-muted-foreground/50">
+                      · linked to {note.task.taskType === "BUG" ? "B" : note.task.taskType === "REPORTED_BUG" ? "RB" : note.task.taskType === "ENHANCEMENT" ? "E" : note.task.taskType === "DESIGN" ? "D" : "F"}-{String(note.task.taskNumber).padStart(3, "0")}
+                    </span>
+                  )}
                   {note.history?.length > 0 && (
                     <span className="ml-2 text-muted-foreground/50">
                       · edited {note.history.length} time{note.history.length > 1 ? "s" : ""}
@@ -222,7 +229,8 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
           {/* Type picker */}
           <div className="mb-6">
             <div className="flex gap-2">
-              {(Object.entries(NOTE_TYPE_CONFIG) as [NoteType, typeof NOTE_TYPE_CONFIG[NoteType]][]).map(([id, cfg]) => {
+              {STANDALONE_NOTE_TYPES.map((id) => {
+                const cfg = NOTE_TYPE_CONFIG[id];
                 const Icon = cfg.icon;
                 const isActive = noteType === id;
                 return (
@@ -379,7 +387,7 @@ function NoteFullScreenDetail({
               </span>
             </div>
 
-            {/* Created by + timestamps */}
+            {/* Created by + timestamps + linked task */}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-6 text-[12px] text-muted-foreground/70">
               <span className="inline-flex items-center gap-1">
                 <User className="w-3 h-3" />
@@ -390,6 +398,14 @@ function NoteFullScreenDetail({
                 <Clock className="w-3 h-3" />
                 {format(new Date(note.createdAt), "MMM d, yyyy 'at' h:mm a")}
               </span>
+              {note.task && (
+                <>
+                  <span>·</span>
+                  <span className="inline-flex items-center gap-1 text-foreground/60">
+                    Linked to <span className="font-mono font-medium">{note.task.taskType === "BUG" ? "B" : note.task.taskType === "REPORTED_BUG" ? "RB" : note.task.taskType === "ENHANCEMENT" ? "E" : note.task.taskType === "DESIGN" ? "D" : "F"}-{String(note.task.taskNumber).padStart(3, "0")}</span> {note.task.title}
+                  </span>
+                </>
+              )}
               {note.history?.length > 0 && (
                 <>
                   <span>·</span>
