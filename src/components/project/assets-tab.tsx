@@ -109,46 +109,55 @@ export function AssetsTab({ assets, projectId, canEdit }: Props) {
       ) : (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {assets.map((asset) => {
+            const isImage = asset.mimeType?.startsWith("image/");
             const Icon = getFileIcon(asset.mimeType);
             return (
               <div
                 key={asset.id}
-                className="group rounded-lg border border-border/60 bg-card p-4 hover:border-border transition-colors"
+                className="group rounded-lg border border-border/60 bg-card overflow-hidden hover:border-border transition-colors"
               >
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
-                    <Icon className="h-5 w-5 text-muted-foreground" />
+                {isImage ? (
+                  <div className="relative w-full aspect-video bg-muted">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={asset.url}
+                      alt={asset.filename}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{asset.filename}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatFileSize(asset.fileSize)} ·{" "}
-                      {format(new Date(asset.createdAt), "MMM d, yyyy")}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      by {asset.uploadedBy.name ?? "Unknown"}
-                    </p>
+                ) : (
+                  <div className="flex h-28 items-center justify-center bg-muted/50">
+                    <Icon className="h-10 w-10 text-muted-foreground/40" />
                   </div>
-                </div>
-                <div className="mt-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <a
-                    href={asset.url}
-                    download={asset.filename}
-                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                  >
-                    <Download className="h-3 w-3" />
-                    Download
-                  </a>
-                  {canEdit && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(asset.id)}
-                      className="text-destructive"
+                )}
+                <div className="p-3">
+                  <p className="text-sm font-medium truncate">{asset.filename}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {formatFileSize(asset.fileSize)} · {format(new Date(asset.createdAt), "MMM d, yyyy")}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    by {asset.uploadedBy.name ?? "Unknown"}
+                  </p>
+                  <div className="mt-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <a
+                      href={asset.url}
+                      download={asset.filename}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                     >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  )}
+                      <Download className="h-3 w-3" />
+                      Download
+                    </a>
+                    {canEdit && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(asset.id)}
+                        className="text-destructive"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
