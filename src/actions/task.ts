@@ -436,6 +436,7 @@ export async function getTasksByProject(projectId: string) {
         take: 1,
         select: { enteredAt: true },
       },
+      _count: { select: { notes: true } },
     },
     orderBy: { order: "asc" },
   });
@@ -490,6 +491,7 @@ export async function getTasksByProject(projectId: string) {
       clientDeclines: declinesByTask.get(task.id)?.client ?? 0,
       estimatedMinutes: task.estimatedMinutes,
       estimateAccuracy: task.estimateAccuracy,
+      notesCount: task._count.notes,
     };
   });
 }

@@ -24,6 +24,7 @@ export interface KanbanTask {
   clientDeclines?: number;
   estimatedMinutes?: number | null;
   estimateAccuracy?: EstimateAccuracy | null;
+  notesCount?: number;
 }
 
 interface KanbanState {

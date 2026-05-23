@@ -356,10 +356,15 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => setNotePanelOpen(true)}
-              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              className="relative p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               title="Notes"
             >
               <FileText className="w-4 h-4" />
+              {(task.notesCount ?? 0) > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] rounded-full bg-primary text-[9px] font-bold text-primary-foreground flex items-center justify-center px-0.5">
+                  {task.notesCount}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setTimeTrackingOpen(true)}

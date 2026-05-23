@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, FileText, Trash2, Gavel, ArrowLeft, Clock, History, User, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette } from "lucide-react";
+import { Plus, FileText, Trash2, Gavel, ArrowLeft, Clock, History, User, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink } from "lucide-react";
 import { createMeetingNote, updateMeetingNote, deleteMeetingNote } from "@/actions/meeting-note";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { cn } from "@/lib/utils";
@@ -401,9 +401,18 @@ function NoteFullScreenDetail({
               {note.task && (
                 <>
                   <span>·</span>
-                  <span className="inline-flex items-center gap-1 text-foreground/60">
-                    Linked to <span className="font-mono font-medium">{note.task.taskType === "BUG" ? "B" : note.task.taskType === "REPORTED_BUG" ? "RB" : note.task.taskType === "ENHANCEMENT" ? "E" : note.task.taskType === "DESIGN" ? "D" : "F"}-{String(note.task.taskNumber).padStart(3, "0")}</span> {note.task.title}
-                  </span>
+                  <button
+                    onClick={() => {
+                      onBack();
+                      window.history.replaceState(null, "", `?tab=board&task=${note.task!.id}`);
+                      window.location.href = `?tab=board&task=${note.task!.id}`;
+                    }}
+                    className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span className="font-mono font-medium">{note.task.taskType === "BUG" ? "B" : note.task.taskType === "REPORTED_BUG" ? "RB" : note.task.taskType === "ENHANCEMENT" ? "E" : note.task.taskType === "DESIGN" ? "D" : "F"}-{String(note.task.taskNumber).padStart(3, "0")}</span>
+                    {note.task.title}
+                  </button>
                 </>
               )}
               {note.history?.length > 0 && (
