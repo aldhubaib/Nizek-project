@@ -6,12 +6,22 @@ import { revalidatePath } from "next/cache";
 import { Resend } from "resend";
 import { validateContractDates } from "@/lib/contract-rules";
 
+async function generateContractCode(prefixId: string): Promise<{ code: string; prefixId: string }> {
+  const prefix = await prisma.contractPrefix.update({
+    where: { id: prefixId },
+    data: { nextNumber: { increment: 1 } },
+  });
+  const num = prefix.nextNumber - 1;
+  return { code: `${prefix.prefix}-${String(num).padStart(3, "0")}`, prefixId };
+}
+
 export async function createProject(data: {
   name: string;
   description?: string;
   teamId?: string;
   contract: {
     label?: string;
+    prefixId?: string;
     contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE" | "STARTUP";
     startDate?: string;
     endDate?: string;
@@ -33,6 +43,11 @@ export async function createProject(data: {
     if (dateError) return { error: dateError } as any;
   }
 
+  let codeData: { code?: string; prefixId?: string } = {};
+  if (data.contract.prefixId) {
+    codeData = await generateContractCode(data.contract.prefixId);
+  }
+
   const project = await prisma.project.create({
     data: {
       name: data.name,
@@ -44,6 +59,8 @@ export async function createProject(data: {
           contractType: data.contract.contractType ?? "FULL_TEAM",
           startDate: startDate ?? null,
           endDate: endDate ?? null,
+          ...(codeData.code && { code: codeData.code }),
+          ...(codeData.prefixId && { prefixId: codeData.prefixId }),
         },
       },
     },
@@ -120,6 +137,7 @@ export async function updateProject(data: {
 export async function addContract(data: {
   projectId: string;
   label?: string;
+  prefixId?: string;
   contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE" | "STARTUP";
   startDate?: string;
   endDate?: string;
@@ -143,6 +161,11 @@ export async function addContract(data: {
     if (dateError) return { error: dateError };
   }
 
+  let codeData: { code?: string; prefixId?: string } = {};
+  if (data.prefixId) {
+    codeData = await generateContractCode(data.prefixId);
+  }
+
   await prisma.contract.create({
     data: {
       label: data.label,
@@ -150,6 +173,8 @@ export async function addContract(data: {
       startDate: startDate ?? null,
       endDate: endDate ?? null,
       projectId: data.projectId,
+      ...(codeData.code && { code: codeData.code }),
+      ...(codeData.prefixId && { prefixId: codeData.prefixId }),
     },
   });
 
@@ -237,6 +262,7 @@ export async function inviteMember(data: {
   roleId: string;
 }) {
   const { user } = await requireProjectRole(data.projectId, ["ADMIN"]);
+  const email = data.email.toLowerCase().trim();
 
   const pRole = await prisma.projectRole.findUnique({
     where: { id: data.roleId },
@@ -248,7 +274,7 @@ export async function inviteMember(data: {
   const [invitation, project] = await Promise.all([
     prisma.invitation.create({
       data: {
-        email: data.email,
+        email,
         role: pRole.isAdmin ? "ADMIN" : "MEMBER",
         roleId: data.roleId,
         projectId: data.projectId,
@@ -318,6 +344,27 @@ export async function removeMember(data: {
   memberId: string;
 }) {
   await requireProjectRole(data.projectId, ["ADMIN"]);
+
+  const member = await prisma.projectMember.findUnique({
+    where: { id: data.memberId },
+    select: { userId: true },
+  });
+  if (!member) throw new Error("Member not found");
+
+  const hasData = await prisma.task.findFirst({
+    where: {
+      projectId: data.projectId,
+      OR: [
+        { createdById: member.userId },
+        { assigneeId: member.userId },
+      ],
+    },
+    select: { id: true },
+  });
+
+  if (hasData) {
+    throw new Error("Cannot remove this member — they have tasks in this project. Block them instead to preserve history.");
+  }
 
   await prisma.projectMember.delete({
     where: { id: data.memberId },

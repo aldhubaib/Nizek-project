@@ -1,11 +1,12 @@
 import { getProjects } from "@/actions/project";
 import { getTeams } from "@/actions/team";
+import { getContractPrefixes } from "@/actions/contract-prefix";
 import { CreateProjectDialog } from "@/components/project/create-project-dialog";
 import { ProjectCard } from "@/components/project/project-card";
 import { FolderKanban, Archive } from "lucide-react";
 
 export default async function ProjectsPage() {
-  const [projects, teams] = await Promise.all([getProjects(), getTeams()]);
+  const [projects, teams, contractPrefixes] = await Promise.all([getProjects(), getTeams(), getContractPrefixes()]);
 
   const now = new Date();
   const isProjectActive = (p: (typeof projects)[number]) =>
@@ -26,7 +27,7 @@ export default async function ProjectsPage() {
           <span className="text-[11px] text-muted-foreground font-mono">
             {projects.length} project{projects.length !== 1 ? "s" : ""}
           </span>
-          <CreateProjectDialog teams={teams} />
+          <CreateProjectDialog teams={teams} contractPrefixes={contractPrefixes} />
         </div>
       </div>
 
@@ -36,7 +37,7 @@ export default async function ProjectsPage() {
           <p className="text-[13px] text-muted-foreground">
             No projects yet. Create your first project.
           </p>
-          <CreateProjectDialog teams={teams} />
+          <CreateProjectDialog teams={teams} contractPrefixes={contractPrefixes} />
         </div>
       ) : (
         <div className="px-6 py-6">

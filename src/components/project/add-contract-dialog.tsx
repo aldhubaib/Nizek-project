@@ -15,14 +15,22 @@ import { Plus } from "lucide-react";
 import { addContract } from "@/actions/project";
 import { ContractTypePicker, type ContractType } from "./create-project-dialog";
 
-interface Props {
-  projectId: string;
+interface ContractPrefixOption {
+  id: string;
+  prefix: string;
+  name: string;
 }
 
-export function AddContractDialog({ projectId }: Props) {
+interface Props {
+  projectId: string;
+  contractPrefixes?: ContractPrefixOption[];
+}
+
+export function AddContractDialog({ projectId, contractPrefixes = [] }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [contractType, setContractType] = useState<ContractType>("FULL_TEAM");
+  const [prefixId, setPrefixId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -36,6 +44,7 @@ export function AddContractDialog({ projectId }: Props) {
       const result = await addContract({
         projectId,
         label: (formData.get("label") as string) || undefined,
+        prefixId: prefixId || undefined,
         contractType,
         startDate: isStartup ? undefined : (formData.get("startDate") as string),
         endDate: isStartup ? undefined : (formData.get("endDate") as string),
@@ -65,9 +74,29 @@ export function AddContractDialog({ projectId }: Props) {
           <DialogTitle>Add Contract</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {contractPrefixes.length > 0 && (
+            <div className="space-y-2">
+              <Label>Contract Code</Label>
+              <select
+                value={prefixId}
+                onChange={(e) => setPrefixId(e.target.value)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">No prefix (optional)</option>
+                {contractPrefixes.map((p) => (
+                  <option key={p.id} value={p.id}>{p.prefix} — {p.name}</option>
+                ))}
+              </select>
+              {prefixId && (
+                <p className="text-[10px] text-muted-foreground font-mono">
+                  Code will be auto-generated (e.g. {contractPrefixes.find((p) => p.id === prefixId)?.prefix}-001)
+                </p>
+              )}
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="label">Label</Label>
-            <Input id="label" name="label" placeholder="e.g. Phase 2, Renewal" />
+            <Input id="label" name="label" placeholder="e.g. Phase 2, Renewal (optional)" />
           </div>
           <div className="space-y-2">
             <Label>Contract Type</Label>

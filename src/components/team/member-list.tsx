@@ -74,10 +74,11 @@ export function MemberList({
   }
 
   async function handleRemove(memberId: string) {
+    if (!confirm("Remove this member from the project?")) return;
     try {
       await removeMember({ projectId, memberId });
     } catch (err) {
-      console.error(err);
+      alert((err as Error).message || "Failed to remove member");
     }
   }
 

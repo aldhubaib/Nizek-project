@@ -13,6 +13,7 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
 interface Contract {
   id: string;
   label: string | null;
+  code?: string | null;
   contractType: string;
   startDate: Date | null;
   endDate: Date | null;
@@ -59,6 +60,11 @@ export function ContractBadge({ contract }: { contract: Contract }) {
       {typeLabel && (
         <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
           {typeLabel}
+        </span>
+      )}
+      {contract.code && (
+        <span className="inline-flex items-center rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-mono font-semibold text-foreground">
+          {contract.code}
         </span>
       )}
       <span className="text-[11px] text-muted-foreground">

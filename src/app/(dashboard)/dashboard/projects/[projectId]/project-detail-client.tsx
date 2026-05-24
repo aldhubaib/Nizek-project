@@ -33,6 +33,7 @@ export interface UserPermissions {
 interface Contract {
   id: string;
   label: string | null;
+  code: string | null;
   contractType: string;
   startDate: Date | null;
   endDate: Date | null;
@@ -114,6 +115,12 @@ interface Asset {
   uploadedBy: { id: string; name: string | null };
 }
 
+interface ContractPrefixOption {
+  id: string;
+  prefix: string;
+  name: string;
+}
+
 interface Props {
   project: Project;
   tasks: KanbanTask[];
@@ -129,6 +136,7 @@ interface Props {
   invitations: Invitation[];
   allowedTaskTypes?: string[];
   activeContractType?: string | null;
+  contractPrefixes?: ContractPrefixOption[];
 }
 
 interface Invitation {
@@ -157,6 +165,7 @@ export function ProjectDetailClient({
   invitations,
   allowedTaskTypes,
   activeContractType,
+  contractPrefixes = [],
 }: Props) {
   const canEdit = userPermissions.canModifyTask || userPermissions.isAdmin;
   const isAdmin = userPermissions.isAdmin;
@@ -268,7 +277,7 @@ export function ProjectDetailClient({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-[13px] font-semibold">Contracts</h2>
-                {isAdmin && <AddContractDialog projectId={project.id} />}
+                {isAdmin && <AddContractDialog projectId={project.id} contractPrefixes={contractPrefixes} />}
               </div>
               {project.contracts.length === 0 ? (
                 <div className="flex flex-col items-center justify-center text-center gap-3 py-12">

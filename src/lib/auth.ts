@@ -11,7 +11,7 @@ export async function getCurrentUser() {
     const clerkUser = await currentUser();
     if (!clerkUser) return null;
 
-    const email = clerkUser.emailAddresses[0]?.emailAddress ?? "";
+    const email = (clerkUser.emailAddresses[0]?.emailAddress ?? "").toLowerCase();
 
     const pendingInvite = await prisma.pendingTeamInvite.findUnique({
       where: { email },
@@ -43,9 +43,8 @@ export async function getCurrentUser() {
     }
   }
 
-  // Auto-accept pending project invitations every time user loads
   const pendingProjectInvites = await prisma.invitation.findMany({
-    where: { email: user.email, status: "PENDING" },
+    where: { email: { equals: user.email, mode: "insensitive" }, status: "PENDING" },
   });
 
   for (const inv of pendingProjectInvites) {

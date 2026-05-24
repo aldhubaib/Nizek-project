@@ -157,13 +157,27 @@ model ProjectRole {
   invitations Invitation[]
 }
 
+model ContractPrefix {
+  id        String   @id @default(cuid())
+  prefix    String   @unique
+  name      String
+  nextNumber Int     @default(1)
+  createdAt DateTime @default(now())
+
+  contracts Contract[]
+}
+
 model Contract {
   id           String       @id @default(cuid())
   label        String?
+  code         String?      @unique
   contractType ContractType @default(FULL_TEAM)
   startDate    DateTime?
   endDate      DateTime?
   latePayment  Boolean      @default(false)
+
+  prefixId  String?
+  prefix    ContractPrefix? @relation(fields: [prefixId], references: [id])
 
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -171,6 +185,7 @@ model Contract {
   createdAt DateTime @default(now())
 
   @@index([projectId])
+  @@index([prefixId])
 }
 
 model Task {

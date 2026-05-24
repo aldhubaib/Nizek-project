@@ -60,11 +60,18 @@ export function ContractTypePicker({ value, onChange }: { value: ContractType; o
   );
 }
 
-export function CreateProjectDialog({ teams = [] }: { teams?: Team[] }) {
+interface ContractPrefixOption {
+  id: string;
+  prefix: string;
+  name: string;
+}
+
+export function CreateProjectDialog({ teams = [], contractPrefixes = [] }: { teams?: Team[]; contractPrefixes?: ContractPrefixOption[] }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [contractType, setContractType] = useState<ContractType>("FULL_TEAM");
   const [teamId, setTeamId] = useState("");
+  const [prefixId, setPrefixId] = useState("");
   const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -81,6 +88,7 @@ export function CreateProjectDialog({ teams = [] }: { teams?: Team[] }) {
         teamId,
         contract: {
           label: (formData.get("contractLabel") as string) || undefined,
+          prefixId: prefixId || undefined,
           contractType,
           startDate: isStartup ? undefined : (formData.get("startDate") as string),
           endDate: isStartup ? undefined : (formData.get("endDate") as string),
@@ -146,35 +154,62 @@ export function CreateProjectDialog({ teams = [] }: { teams?: Team[] }) {
             />
           </div>
 
-          <Separator />
+          <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-4">
+            <p className="text-sm font-medium">Initial Contract</p>
 
-          <p className="text-sm font-medium">Initial Contract</p>
-          <div className="space-y-2">
-            <Label htmlFor="contractLabel">Contract Label</Label>
-            <Input
-              id="contractLabel"
-              name="contractLabel"
-              placeholder="e.g. Phase 1, MVP"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Contract Type</Label>
-            <ContractTypePicker value={contractType} onChange={setContractType} />
-          </div>
-
-          {contractType !== "STARTUP" && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="startDate">Start Date</Label>
-                <Input id="startDate" name="startDate" type="date" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="endDate">End Date</Label>
-                <Input id="endDate" name="endDate" type="date" required />
-              </div>
+            <div className="space-y-2">
+              <Label>Contract Code</Label>
+              {contractPrefixes.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground">
+                  No prefixes defined. Add them in{" "}
+                  <a href="/dashboard/settings" className="text-primary underline">Settings</a>.
+                </p>
+              ) : (
+                <select
+                  value={prefixId}
+                  onChange={(e) => setPrefixId(e.target.value)}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">No prefix (optional)</option>
+                  {contractPrefixes.map((p) => (
+                    <option key={p.id} value={p.id}>{p.prefix} — {p.name}</option>
+                  ))}
+                </select>
+              )}
+              {prefixId && (
+                <p className="text-[10px] text-muted-foreground font-mono">
+                  Code will be auto-generated (e.g. {contractPrefixes.find((p) => p.id === prefixId)?.prefix}-001)
+                </p>
+              )}
             </div>
-          )}
+
+            <div className="space-y-2">
+              <Label htmlFor="contractLabel">Label</Label>
+              <Input
+                id="contractLabel"
+                name="contractLabel"
+                placeholder="e.g. Phase 1, MVP (optional)"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Contract Type</Label>
+              <ContractTypePicker value={contractType} onChange={setContractType} />
+            </div>
+
+            {contractType !== "STARTUP" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="startDate">Start Date</Label>
+                  <Input id="startDate" name="startDate" type="date" required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="endDate">End Date</Label>
+                  <Input id="endDate" name="endDate" type="date" required />
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
@@ -190,6 +225,3 @@ export function CreateProjectDialog({ teams = [] }: { teams?: Team[] }) {
   );
 }
 
-function Separator() {
-  return <div className="border-t border-border" />;
-}

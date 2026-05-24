@@ -247,17 +247,6 @@ export function InviteMemberDialog({ projectId, roles }: Props) {
             </Select>
           </div>
 
-          {selectedRole && (
-            <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-1.5">
-              <p className="text-[11px] font-medium text-muted-foreground">Permissions</p>
-              <div className="flex flex-wrap gap-1.5">
-                <PermBadge label="Create tasks" enabled={selectedRole.canCreateTask} />
-                <PermBadge label="Modify tasks" enabled={selectedRole.canModifyTask} />
-                <PermBadge label="Move tasks" enabled={selectedRole.canMoveTask} />
-              </div>
-            </div>
-          )}
-
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancel
@@ -275,18 +264,3 @@ export function InviteMemberDialog({ projectId, roles }: Props) {
   );
 }
 
-function PermBadge({ label, enabled }: { label: string; enabled: boolean }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border",
-        enabled
-          ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-          : "bg-muted text-muted-foreground/50 border-border"
-      )}
-    >
-      {enabled && <Check className="w-2.5 h-2.5" strokeWidth={2.5} />}
-      {label}
-    </span>
-  );
-}

@@ -4,6 +4,7 @@ import { getMeetingNotes } from "@/actions/meeting-note";
 import { getAssets } from "@/actions/asset";
 import { getTaskQuestions } from "@/actions/task-question";
 import { getRoles } from "@/actions/role";
+import { getContractPrefixes } from "@/actions/contract-prefix";
 import { requireProjectMember } from "@/lib/auth";
 import { getPermissionsFromRole, getAdminPermissions } from "@/lib/permissions";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
@@ -17,13 +18,14 @@ interface Props {
 export default async function ProjectDetailPage({ params }: Props) {
   const { projectId } = await params;
   const project = await getProject(projectId);
-  const [tasks, notes, assets, questions, invitations, roles] = await Promise.all([
+  const [tasks, notes, assets, questions, invitations, roles, contractPrefixes] = await Promise.all([
     getTasksByProject(projectId),
     getMeetingNotes(projectId),
     getAssets(projectId),
     getTaskQuestions(),
     getProjectInvitations(project.id),
     getRoles(),
+    getContractPrefixes(),
   ]);
 
   const { user, member } = await requireProjectMember(project.id);
@@ -68,6 +70,7 @@ export default async function ProjectDetailPage({ params }: Props) {
       invitations={invitations}
       allowedTaskTypes={allowedTaskTypes}
       activeContractType={activeContract?.contractType ?? null}
+      contractPrefixes={contractPrefixes}
     />
   );
 }

@@ -156,17 +156,19 @@ export async function inviteToTeam(data: {
     throw new Error("Only admins can invite team members");
   }
 
+  const email = data.email.toLowerCase().trim();
+
   await prisma.pendingTeamInvite.upsert({
-    where: { email: data.email },
+    where: { email },
     update: { systemRole: data.systemRole },
-    create: { email: data.email, systemRole: data.systemRole },
+    create: { email, systemRole: data.systemRole },
   });
 
   if (data.systemRole === "CLIENT" && data.projectId && data.roleId) {
     const { inviteMember } = await import("@/actions/project");
     await inviteMember({
       projectId: data.projectId,
-      email: data.email,
+      email,
       roleId: data.roleId,
     });
   } else {
@@ -177,7 +179,7 @@ export async function inviteToTeam(data: {
           Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ identifier: data.email, notify: false }),
+        body: JSON.stringify({ identifier: email, notify: false }),
       });
     } catch {
       // Non-blocking
@@ -192,7 +194,7 @@ export async function inviteToTeam(data: {
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
         from: "Nizek Project <onboarding@resend.dev>",
-        to: data.email,
+        to: email,
         subject: "You've been invited to Nizek Project",
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
