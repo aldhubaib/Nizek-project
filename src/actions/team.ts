@@ -5,6 +5,72 @@ import { requireUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import type { SystemRole } from "@/generated/prisma/client";
 
+async function requireAdmin() {
+  const user = await requireUser();
+  if (user.systemRole !== "ADMIN") throw new Error("Unauthorized");
+  return user;
+}
+
+// ─── Team CRUD ───────────────────────────────────────────────
+
+export async function getTeams() {
+  await requireUser();
+  return prisma.team.findMany({
+    orderBy: { name: "asc" },
+    include: { _count: { select: { projects: true } } },
+  });
+}
+
+export async function createTeam(data: { name: string }) {
+  await requireAdmin();
+  const name = data.name.trim();
+  if (!name) throw new Error("Team name is required");
+
+  const existing = await prisma.team.findUnique({ where: { name } });
+  if (existing) return { error: "A team with this name already exists" };
+
+  await prisma.team.create({ data: { name } });
+  revalidatePath("/dashboard/settings");
+  return {};
+}
+
+export async function updateTeam(data: { teamId: string; name: string }) {
+  await requireAdmin();
+  const name = data.name.trim();
+  if (!name) throw new Error("Team name is required");
+
+  const existing = await prisma.team.findFirst({
+    where: { name, NOT: { id: data.teamId } },
+  });
+  if (existing) return { error: "A team with this name already exists" };
+
+  await prisma.team.update({
+    where: { id: data.teamId },
+    data: { name },
+  });
+  revalidatePath("/dashboard/settings");
+  return {};
+}
+
+export async function deleteTeam(teamId: string) {
+  await requireAdmin();
+
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    include: { _count: { select: { projects: true } } },
+  });
+  if (!team) throw new Error("Team not found");
+  if (team._count.projects > 0) {
+    return { error: "Cannot delete a team that has projects. Reassign them first." };
+  }
+
+  await prisma.team.delete({ where: { id: teamId } });
+  revalidatePath("/dashboard/settings");
+  return {};
+}
+
+// ─── Team Members ────────────────────────────────────────────
+
 export async function getTeamMembers() {
   await requireUser();
 

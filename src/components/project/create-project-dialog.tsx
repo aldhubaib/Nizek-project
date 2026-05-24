@@ -17,6 +17,11 @@ import { Plus, Users, UserMinus, Lock, Wrench } from "lucide-react";
 import { createProject } from "@/actions/project";
 import { cn } from "@/lib/utils";
 
+interface Team {
+  id: string;
+  name: string;
+}
+
 export type ContractType = "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE";
 
 export const CONTRACT_TYPES: { id: ContractType; label: string; icon: typeof Users; description: string; color: string }[] = [
@@ -54,14 +59,16 @@ export function ContractTypePicker({ value, onChange }: { value: ContractType; o
   );
 }
 
-export function CreateProjectDialog() {
+export function CreateProjectDialog({ teams = [] }: { teams?: Team[] }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [contractType, setContractType] = useState<ContractType>("FULL_TEAM");
+  const [teamId, setTeamId] = useState("");
   const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!teamId) return;
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
@@ -69,6 +76,7 @@ export function CreateProjectDialog() {
       const project = await createProject({
         name: formData.get("name") as string,
         description: (formData.get("description") as string) || undefined,
+        teamId,
         contract: {
           label: (formData.get("contractLabel") as string) || undefined,
           contractType,
@@ -99,6 +107,31 @@ export function CreateProjectDialog() {
           <div className="space-y-2">
             <Label htmlFor="name">Project Name</Label>
             <Input id="name" name="name" required placeholder="e.g. Mobile App Redesign" />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="team">
+              Team <span className="text-destructive">*</span>
+            </Label>
+            {teams.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">
+                No teams yet. Create one in{" "}
+                <a href="/dashboard/settings" className="text-primary underline">Settings</a>.
+              </p>
+            ) : (
+              <select
+                id="team"
+                value={teamId}
+                onChange={(e) => setTeamId(e.target.value)}
+                required
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Select a team...</option>
+                {teams.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -143,7 +176,7 @@ export function CreateProjectDialog() {
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !teamId}>
               {loading ? "Creating..." : "Create Project"}
             </Button>
           </div>

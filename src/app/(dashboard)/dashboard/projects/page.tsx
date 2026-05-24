@@ -1,10 +1,11 @@
 import { getProjects } from "@/actions/project";
+import { getTeams } from "@/actions/team";
 import { CreateProjectDialog } from "@/components/project/create-project-dialog";
 import { ProjectCard } from "@/components/project/project-card";
 import { FolderKanban, Archive } from "lucide-react";
 
 export default async function ProjectsPage() {
-  const projects = await getProjects();
+  const [projects, teams] = await Promise.all([getProjects(), getTeams()]);
 
   const now = new Date();
   const isProjectActive = (p: (typeof projects)[number]) =>
@@ -25,7 +26,7 @@ export default async function ProjectsPage() {
           <span className="text-[11px] text-muted-foreground font-mono">
             {projects.length} project{projects.length !== 1 ? "s" : ""}
           </span>
-          <CreateProjectDialog />
+          <CreateProjectDialog teams={teams} />
         </div>
       </div>
 
@@ -35,14 +36,14 @@ export default async function ProjectsPage() {
           <p className="text-[13px] text-muted-foreground">
             No projects yet. Create your first project.
           </p>
-          <CreateProjectDialog />
+          <CreateProjectDialog teams={teams} />
         </div>
       ) : (
         <div className="px-6 py-6">
           {activeProjects.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {activeProjects.map((project) => (
-                <ProjectCard key={project.id} project={project} />
+                <ProjectCard key={project.id} project={project} teams={teams} />
               ))}
             </div>
           )}
@@ -66,7 +67,7 @@ export default async function ProjectsPage() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 opacity-60">
                 {archivedProjects.map((project) => (
-                  <ProjectCard key={project.id} project={project} />
+                  <ProjectCard key={project.id} project={project} teams={teams} />
                 ))}
               </div>
             </div>

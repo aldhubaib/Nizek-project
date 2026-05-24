@@ -9,6 +9,7 @@ import { validateContractDates } from "@/lib/contract-rules";
 export async function createProject(data: {
   name: string;
   description?: string;
+  teamId: string;
   contract: {
     label?: string;
     contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE";
@@ -17,6 +18,8 @@ export async function createProject(data: {
   };
 }) {
   const user = await requireUser();
+
+  if (!data.teamId) throw new Error("Team is required");
 
   const startDate = new Date(data.contract.startDate);
   const endDate = new Date(data.contract.endDate);
@@ -27,6 +30,7 @@ export async function createProject(data: {
     data: {
       name: data.name,
       description: data.description,
+      teamId: data.teamId,
       contracts: {
         create: {
           label: data.contract.label,
@@ -58,6 +62,7 @@ export async function getProjects() {
   return prisma.project.findMany({
     where,
     include: {
+      team: true,
       contracts: true,
       members: { include: { user: true, projectRole: true } },
       _count: { select: { tasks: true, meetingNotes: true, assets: true, members: true } },
@@ -86,6 +91,7 @@ export async function updateProject(data: {
   name?: string;
   description?: string;
   logoUrl?: string | null;
+  teamId?: string;
 }) {
   await requireProjectRole(data.projectId, ["ADMIN", "PROJECT_MANAGER"]);
 
@@ -95,10 +101,12 @@ export async function updateProject(data: {
       ...(data.name && { name: data.name }),
       ...(data.description !== undefined && { description: data.description }),
       ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
+      ...(data.teamId && { teamId: data.teamId }),
     },
   });
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
+  revalidatePath("/dashboard/projects");
   return updated;
 }
 

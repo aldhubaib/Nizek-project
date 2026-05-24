@@ -91,11 +91,22 @@ model User {
   invitations    Invitation[]
 }
 
+model Team {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  projects Project[]
+}
+
 model Project {
-  id          String      @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
   logoUrl     String?
+
+  teamId String?
+  team   Team?  @relation(fields: [teamId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -106,6 +117,8 @@ model Project {
   meetingNotes MeetingNote[]
   assets       Asset[]
   invitations  Invitation[]
+
+  @@index([teamId])
 }
 
 model ProjectMember {
