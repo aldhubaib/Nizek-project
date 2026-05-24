@@ -211,8 +211,8 @@ export async function inviteToTeam(data: {
           </div>
         `,
       });
-    } catch {
-      // Non-blocking
+    } catch (err) {
+      console.error("[Resend] Failed to send invite email:", err);
     }
   }
 
