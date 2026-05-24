@@ -36,15 +36,18 @@ interface AvailableUser {
   name: string | null;
   email: string;
   imageUrl: string | null;
+  isClient: boolean;
   pending: boolean;
 }
 
 interface Props {
   projectId: string;
   roles: WorkspaceRole[];
+  canInviteMembers: boolean;
+  canInviteClients: boolean;
 }
 
-export function InviteMemberDialog({ projectId, roles }: Props) {
+export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInviteClients }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"add" | "invite">("add");
@@ -64,7 +67,12 @@ export function InviteMemberDialog({ projectId, roles }: Props) {
     }
   }, [open, mode, projectId]);
 
-  const filteredUsers = availableUsers.filter(
+  const visibleUsers = availableUsers.filter((u) => {
+    if (u.isClient) return canInviteClients;
+    return canInviteMembers;
+  });
+
+  const filteredUsers = visibleUsers.filter(
     (u) =>
       u.name?.toLowerCase().includes(userSearch.toLowerCase()) ||
       u.email.toLowerCase().includes(userSearch.toLowerCase())

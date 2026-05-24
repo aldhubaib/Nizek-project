@@ -35,6 +35,8 @@ interface WorkspaceRole {
   canMoveTask: boolean;
   canDeleteTask: boolean;
   canDeclineTask: boolean;
+  canInviteMembers: boolean;
+  canInviteClients: boolean;
   allowedStages: string | null;
   allowedTransitions: string | null;
   _count: { members: number };
@@ -106,6 +108,8 @@ export function RolesManager({ roles }: Props) {
     canMoveTask: false,
     canDeleteTask: false,
     canDeclineTask: false,
+    canInviteMembers: false,
+    canInviteClients: false,
   });
   const [newStagePerms, setNewStagePerms] = useState<StagePerms>({
     transitions: {},
@@ -120,6 +124,8 @@ export function RolesManager({ roles }: Props) {
     canMoveTask: false,
     canDeleteTask: false,
     canDeclineTask: false,
+    canInviteMembers: false,
+    canInviteClients: false,
   });
   const [editStagePerms, setEditStagePerms] = useState<StagePerms>({
     transitions: {},
@@ -139,10 +145,12 @@ export function RolesManager({ roles }: Props) {
         canMoveTask: newPerms.canMoveTask,
         canDeleteTask: newPerms.canDeleteTask,
         canDeclineTask: newPerms.canDeclineTask,
+        canInviteMembers: newPerms.canInviteMembers,
+        canInviteClients: newPerms.canInviteClients,
         allowedTransitions: serializeAllData(newStagePerms),
       });
       setNewName("");
-      setNewPerms({ canMoveTask: false, canDeleteTask: false, canDeclineTask: false });
+      setNewPerms({ canMoveTask: false, canDeleteTask: false, canDeclineTask: false, canInviteMembers: false, canInviteClients: false });
       setNewStagePerms({ transitions: {}, createStages: [], modifyStages: [] });
       setShowCreate(false);
     } catch (err) {
@@ -159,6 +167,8 @@ export function RolesManager({ roles }: Props) {
       canMoveTask: role.canMoveTask,
       canDeleteTask: role.canDeleteTask,
       canDeclineTask: role.canDeclineTask,
+      canInviteMembers: role.canInviteMembers,
+      canInviteClients: role.canInviteClients,
     });
     const parsed = parseAllData(role.allowedTransitions);
     if (parsed.createStages.length === 0 && role.canCreateTask) {
@@ -180,6 +190,8 @@ export function RolesManager({ roles }: Props) {
         canMoveTask: editPerms.canMoveTask,
         canDeleteTask: editPerms.canDeleteTask,
         canDeclineTask: editPerms.canDeclineTask,
+        canInviteMembers: editPerms.canInviteMembers,
+        canInviteClients: editPerms.canInviteClients,
         allowedTransitions: serializeAllData(editStagePerms),
       });
       setEditingId(null);
@@ -229,6 +241,8 @@ export function RolesManager({ roles }: Props) {
           <div className="flex flex-wrap gap-3">
             <PermToggle label="Delete tasks" checked={newPerms.canDeleteTask} onChange={(v) => setNewPerms((p) => ({ ...p, canDeleteTask: v }))} />
             <PermToggle label="Decline tasks" checked={newPerms.canDeclineTask} onChange={(v) => setNewPerms((p) => ({ ...p, canDeclineTask: v }))} />
+            <PermToggle label="Invite members" checked={newPerms.canInviteMembers} onChange={(v) => setNewPerms((p) => ({ ...p, canInviteMembers: v }))} />
+            <PermToggle label="Invite clients" checked={newPerms.canInviteClients} onChange={(v) => setNewPerms((p) => ({ ...p, canInviteClients: v }))} />
           </div>
 
           <StagePermissionsTable
@@ -278,6 +292,8 @@ export function RolesManager({ roles }: Props) {
                     <div className="flex flex-wrap gap-3">
                       <PermToggle label="Delete tasks" checked={editPerms.canDeleteTask} onChange={(v) => setEditPerms((p) => ({ ...p, canDeleteTask: v }))} />
                       <PermToggle label="Decline tasks" checked={editPerms.canDeclineTask} onChange={(v) => setEditPerms((p) => ({ ...p, canDeclineTask: v }))} />
+                      <PermToggle label="Invite members" checked={editPerms.canInviteMembers} onChange={(v) => setEditPerms((p) => ({ ...p, canInviteMembers: v }))} />
+                      <PermToggle label="Invite clients" checked={editPerms.canInviteClients} onChange={(v) => setEditPerms((p) => ({ ...p, canInviteClients: v }))} />
                     </div>
 
                     <StagePermissionsTable
@@ -336,6 +352,8 @@ export function RolesManager({ roles }: Props) {
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       <PermBadge label="Delete" enabled={role.canDeleteTask} />
                       <PermBadge label="Decline" enabled={role.canDeclineTask} />
+                      <PermBadge label="Invite Members" enabled={role.canInviteMembers} />
+                      <PermBadge label="Invite Clients" enabled={role.canInviteClients} />
                     </div>
 
                     {/* Stage summary */}

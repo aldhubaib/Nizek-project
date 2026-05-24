@@ -5,6 +5,8 @@ export interface ProjectRolePermissions {
   canDeleteTask: boolean;
   canDeclineTask: boolean;
   canMoveTask: boolean;
+  canInviteMembers: boolean;
+  canInviteClients: boolean;
   allowedTransitions: Record<string, string[]>;
   createStages: string[];
   modifyStages: string[];
@@ -55,6 +57,8 @@ export function getPermissionsFromRole(role: {
   canDeleteTask?: boolean;
   canDeclineTask?: boolean;
   canMoveTask: boolean;
+  canInviteMembers?: boolean;
+  canInviteClients?: boolean;
   allowedTransitions?: string | null;
   allowedStages?: string | null;
 } | null): ProjectRolePermissions {
@@ -66,6 +70,8 @@ export function getPermissionsFromRole(role: {
       canDeleteTask: false,
       canDeclineTask: false,
       canMoveTask: false,
+      canInviteMembers: false,
+      canInviteClients: false,
       allowedTransitions: {},
       createStages: [],
       modifyStages: [],
@@ -97,6 +103,8 @@ export function getPermissionsFromRole(role: {
     canDeleteTask: role.canDeleteTask ?? false,
     canDeclineTask: role.canDeclineTask ?? false,
     canMoveTask: role.canMoveTask,
+    canInviteMembers: role.isAdmin || (role.canInviteMembers ?? false),
+    canInviteClients: role.isAdmin || (role.canInviteClients ?? false),
     allowedTransitions: transitions,
     createStages: hasCreateStages ? createStages : (role.canCreateTask ? ALL_STAGE_IDS : []),
     modifyStages: hasModifyStages ? modifyStages : (role.canModifyTask ? ALL_STAGE_IDS : []),
@@ -139,6 +147,8 @@ export function getAdminPermissions(): ProjectRolePermissions {
     canDeleteTask: true,
     canDeclineTask: true,
     canMoveTask: true,
+    canInviteMembers: true,
+    canInviteClients: true,
     allowedTransitions: {},
     createStages: ALL_STAGE_IDS,
     modifyStages: ALL_STAGE_IDS,

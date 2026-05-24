@@ -20,6 +20,8 @@ export interface UserPermissions {
   canMoveTask: boolean;
   canDeleteTask: boolean;
   canDeclineTask: boolean;
+  canInviteMembers: boolean;
+  canInviteClients: boolean;
   allowedStages: string[];
   allowedTransitions: Record<string, string[]>;
   createStages: string[];
@@ -285,8 +287,13 @@ export function ProjectDetailClient({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-[13px] font-semibold">Team Members</h2>
-                {isAdmin && (
-                  <InviteMemberDialog projectId={project.id} roles={roles} />
+                {(userPermissions.canInviteMembers || userPermissions.canInviteClients) && (
+                  <InviteMemberDialog
+                    projectId={project.id}
+                    roles={roles}
+                    canInviteMembers={userPermissions.canInviteMembers}
+                    canInviteClients={userPermissions.canInviteClients}
+                  />
                 )}
               </div>
               <MemberList
@@ -296,6 +303,7 @@ export function ProjectDetailClient({
                 currentUserId={currentUserId}
                 roles={roles}
                 invitations={invitations}
+                canManageMembers={userPermissions.canInviteMembers || userPermissions.canInviteClients}
               />
             </div>
           </TabsContent>

@@ -52,6 +52,7 @@ interface Props {
   currentUserId: string;
   roles: WorkspaceRole[];
   invitations?: Invitation[];
+  canManageMembers?: boolean;
 }
 
 export function MemberList({
@@ -61,8 +62,9 @@ export function MemberList({
   currentUserId,
   roles,
   invitations = [],
+  canManageMembers = false,
 }: Props) {
-  const isAdmin = currentUserRole === "ADMIN";
+  const isAdmin = currentUserRole === "ADMIN" || canManageMembers;
   const [resendingId, setResendingId] = useState<string | null>(null);
 
   async function handleRoleChange(memberId: string, roleId: string) {

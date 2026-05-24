@@ -150,6 +150,8 @@ model ProjectRole {
   canMoveTask        Boolean @default(false)
   canDeleteTask      Boolean @default(false)
   canDeclineTask     Boolean @default(false)
+  canInviteMembers   Boolean @default(false)
+  canInviteClients   Boolean @default(false)
   allowedStages      String?
   allowedTransitions String?
 
