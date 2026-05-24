@@ -9,7 +9,7 @@ import { validateContractDates } from "@/lib/contract-rules";
 export async function createProject(data: {
   name: string;
   description?: string;
-  teamId: string;
+  teamId?: string;
   contract: {
     label?: string;
     contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE" | "STARTUP";
@@ -18,8 +18,6 @@ export async function createProject(data: {
   };
 }) {
   const user = await requireUser();
-
-  if (!data.teamId) throw new Error("Team is required");
 
   const isStartup = data.contract.contractType === "STARTUP";
   let startDate: Date | undefined;
@@ -39,7 +37,7 @@ export async function createProject(data: {
     data: {
       name: data.name,
       description: data.description,
-      teamId: data.teamId,
+      ...(data.teamId && { teamId: data.teamId }),
       contracts: {
         create: {
           label: data.contract.label,

@@ -47,12 +47,14 @@ export function ProjectList({ projects }: Props) {
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {projects.map((project) => {
         const now = new Date();
-        const activeContract = project.contracts.find((c) =>
-          isWithinInterval(now, {
+        const activeContract = project.contracts.find((c) => {
+          if (c.contractType === "STARTUP") return true;
+          if (!c.startDate || !c.endDate) return false;
+          return isWithinInterval(now, {
             start: new Date(c.startDate),
             end: new Date(c.endDate),
-          })
-        );
+          });
+        });
         const isActive = !!activeContract;
         const contractType = activeContract?.contractType ?? project.contracts[0]?.contractType;
 

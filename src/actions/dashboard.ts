@@ -26,7 +26,7 @@ export async function getDashboardData(projectId: string) {
       where: { id: projectId },
       select: {
         contracts: {
-          select: { startDate: true, endDate: true, label: true },
+          select: { startDate: true, endDate: true, label: true, contractType: true },
           orderBy: { endDate: "desc" },
         },
       },
@@ -105,9 +105,13 @@ export async function getDashboardData(projectId: string) {
 
   // Contract countdown
   const activeContract = project?.contracts.find(
-    (c) => new Date(c.startDate) <= now && new Date(c.endDate) >= now
+    (c) => {
+      if (c.contractType === "STARTUP") return true;
+      if (!c.startDate || !c.endDate) return false;
+      return new Date(c.startDate) <= now && new Date(c.endDate) >= now;
+    }
   );
-  const daysLeft = activeContract
+  const daysLeft = activeContract?.endDate
     ? Math.ceil((new Date(activeContract.endDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
     : null;
 
@@ -271,7 +275,7 @@ export async function getDashboardData(projectId: string) {
   return {
     stats: { totalTasks, inProgress, doneTasks, byStage },
     contract: activeContract
-      ? { daysLeft: daysLeft!, endDate: activeContract.endDate.toISOString(), label: activeContract.label }
+      ? { daysLeft: daysLeft!, endDate: activeContract.endDate?.toISOString() ?? null, label: activeContract.label }
       : null,
     myTasks,
     stallingTasks,

@@ -52,9 +52,11 @@ export type TaskWithAssignee = Task & {
 
 export function isProjectActive(project: ProjectWithContracts): boolean {
   const now = new Date();
-  return project.contracts.some(
-    (c) => new Date(c.startDate) <= now && new Date(c.endDate) >= now
-  );
+  return project.contracts.some((c) => {
+    if (c.contractType === "STARTUP") return true;
+    if (!c.startDate || !c.endDate) return false;
+    return new Date(c.startDate) <= now && new Date(c.endDate) >= now;
+  });
 }
 
 export const STAGE_ORDER: Stage[] = [

@@ -7,6 +7,7 @@ const CONTRACT_TASK_RULES: Record<ContractType, TaskType[]> = {
   FIXED: ALL_TASK_TYPES,
   PART_TEAM: ALL_TASK_TYPES,
   FULL_TEAM: ALL_TASK_TYPES,
+  STARTUP: ALL_TASK_TYPES,
 };
 
 export function getAllowedTaskTypes(contractType: ContractType, isAdmin: boolean): TaskType[] {
@@ -18,21 +19,25 @@ export interface ActiveContract {
   id: string;
   contractType: ContractType;
   label: string | null;
-  startDate: Date;
-  endDate: Date;
+  startDate: Date | null;
+  endDate: Date | null;
 }
 
 export function getActiveContract(
-  contracts: { id: string; contractType: ContractType; label: string | null; startDate: Date; endDate: Date }[]
+  contracts: { id: string; contractType: ContractType; label: string | null; startDate: Date | null; endDate: Date | null }[]
 ): ActiveContract | null {
   const now = new Date();
-  return contracts.find((c) => new Date(c.startDate) <= now && new Date(c.endDate) >= now) ?? null;
+  return contracts.find((c) => {
+    if (c.contractType === "STARTUP") return true;
+    if (!c.startDate || !c.endDate) return false;
+    return new Date(c.startDate) <= now && new Date(c.endDate) >= now;
+  }) ?? null;
 }
 
 export function validateContractDates(
   startDate: Date,
   endDate: Date,
-  existing: { id: string; label: string | null; startDate: Date; endDate: Date }[],
+  existing: { id: string; label: string | null; startDate: Date | null; endDate: Date | null }[],
   excludeId?: string
 ): string | null {
   if (endDate <= startDate) {
@@ -41,6 +46,7 @@ export function validateContractDates(
 
   for (const c of existing) {
     if (excludeId && c.id === excludeId) continue;
+    if (!c.startDate || !c.endDate) continue;
     const cStart = new Date(c.startDate);
     const cEnd = new Date(c.endDate);
     if (startDate < cEnd && endDate > cStart) {

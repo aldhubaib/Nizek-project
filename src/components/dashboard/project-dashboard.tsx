@@ -339,10 +339,10 @@ function ContractCard({
       </p>
       <p className="text-[11px] text-muted-foreground mt-0.5">
         {contract.label ?? "Contract"} ends{" "}
-        {new Date(contract.endDate).toLocaleDateString("en-US", {
+        {contract.endDate ? new Date(contract.endDate).toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",
-        })}
+        }) : "N/A"}
       </p>
     </div>
   );

@@ -24,7 +24,7 @@ interface ProjectCardProps {
     logoUrl: string | null;
     team?: Team | null;
     _count: { members: number; tasks: number };
-    contracts: { contractType: string; startDate: string | null; endDate: string | null; latePayment: boolean }[];
+    contracts: { contractType: string; startDate: Date | string | null; endDate: Date | string | null; latePayment: boolean }[];
   };
   teams?: Team[];
 }
