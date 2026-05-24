@@ -17,18 +17,19 @@ interface Props {
 
 export default async function ProjectDetailPage({ params }: Props) {
   const { projectId } = await params;
-  const project = await getProject(projectId);
-  const [tasks, notes, assets, questions, invitations, roles, contractPrefixes] = await Promise.all([
+
+  const [project, { user, member }, tasks, notes, assets, questions, roles, contractPrefixes] = await Promise.all([
+    getProject(projectId),
+    requireProjectMember(projectId),
     getTasksByProject(projectId),
     getMeetingNotes(projectId),
     getAssets(projectId),
     getTaskQuestions(),
-    getProjectInvitations(project.id),
     getRoles(),
     getContractPrefixes(),
   ]);
 
-  const { user, member } = await requireProjectMember(project.id);
+  const invitations = await getProjectInvitations(project.id);
 
   let userPermissions;
   if (user.systemRole === "ADMIN") {

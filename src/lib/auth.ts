@@ -1,7 +1,35 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
+import { cache } from "react";
 
-export async function getCurrentUser() {
+async function acceptPendingInvitations(userId: string, email: string) {
+  const pending = await prisma.invitation.findMany({
+    where: { email: { equals: email, mode: "insensitive" }, status: "PENDING" },
+  });
+  if (pending.length === 0) return;
+
+  for (const inv of pending) {
+    const alreadyMember = await prisma.projectMember.findUnique({
+      where: { userId_projectId: { userId, projectId: inv.projectId } },
+    });
+    if (!alreadyMember) {
+      await prisma.projectMember.create({
+        data: {
+          userId,
+          projectId: inv.projectId,
+          role: inv.role,
+          roleId: inv.roleId,
+        },
+      });
+    }
+    await prisma.invitation.update({
+      where: { id: inv.id },
+      data: { status: "ACCEPTED" },
+    });
+  }
+}
+
+export const getCurrentUser = cache(async () => {
   const { userId: clerkId } = await auth();
   if (!clerkId) return null;
 
@@ -41,34 +69,14 @@ export async function getCurrentUser() {
         .delete({ where: { email } })
         .catch(() => {});
     }
-  }
 
-  const pendingProjectInvites = await prisma.invitation.findMany({
-    where: { email: { equals: user.email, mode: "insensitive" }, status: "PENDING" },
-  });
-
-  for (const inv of pendingProjectInvites) {
-    const alreadyMember = await prisma.projectMember.findUnique({
-      where: { userId_projectId: { userId: user.id, projectId: inv.projectId } },
-    });
-    if (!alreadyMember) {
-      await prisma.projectMember.create({
-        data: {
-          userId: user.id,
-          projectId: inv.projectId,
-          role: inv.role,
-          roleId: inv.roleId,
-        },
-      });
-    }
-    await prisma.invitation.update({
-      where: { id: inv.id },
-      data: { status: "ACCEPTED" },
-    });
+    await acceptPendingInvitations(user.id, user.email);
+  } else {
+    acceptPendingInvitations(user.id, user.email).catch(() => {});
   }
 
   return user;
-}
+});
 
 export async function requireUser() {
   const user = await getCurrentUser();
