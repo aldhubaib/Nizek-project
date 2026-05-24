@@ -17,19 +17,24 @@ export async function getCurrentUser() {
       where: { email },
     });
 
-    user = await prisma.user.upsert({
-      where: { clerkId },
-      update: {},
-      create: {
-        clerkId,
-        email,
-        name:
-          `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim() ||
-          null,
-        imageUrl: clerkUser.imageUrl,
-        ...(pendingInvite && { systemRole: pendingInvite.systemRole }),
-      },
-    });
+    try {
+      user = await prisma.user.upsert({
+        where: { clerkId },
+        update: {},
+        create: {
+          clerkId,
+          email,
+          name:
+            `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim() ||
+            null,
+          imageUrl: clerkUser.imageUrl,
+          ...(pendingInvite && { systemRole: pendingInvite.systemRole }),
+        },
+      });
+    } catch {
+      user = await prisma.user.findUnique({ where: { clerkId } });
+      if (!user) return null;
+    }
 
     if (pendingInvite) {
       await prisma.pendingTeamInvite
