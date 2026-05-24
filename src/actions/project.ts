@@ -188,6 +188,22 @@ export async function updateContract(data: {
   return {};
 }
 
+export async function toggleLatePayment(contractId: string) {
+  const contract = await prisma.contract.findUnique({
+    where: { id: contractId },
+  });
+  if (!contract) throw new Error("Contract not found");
+  await requireProjectRole(contract.projectId, ["ADMIN"]);
+
+  await prisma.contract.update({
+    where: { id: contractId },
+    data: { latePayment: !contract.latePayment },
+  });
+
+  revalidatePath(`/dashboard/projects/${contract.projectId}`);
+  revalidatePath("/dashboard/projects");
+}
+
 export async function inviteMember(data: {
   projectId: string;
   email: string;

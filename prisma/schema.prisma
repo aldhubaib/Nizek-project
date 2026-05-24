@@ -149,6 +149,7 @@ model Contract {
   contractType ContractType @default(FULL_TEAM)
   startDate    DateTime
   endDate      DateTime
+  latePayment  Boolean      @default(false)
 
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

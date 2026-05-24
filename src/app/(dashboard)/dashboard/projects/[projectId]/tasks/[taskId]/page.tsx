@@ -1,7 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { getTaskQuestions, getTaskAnswers } from "@/actions/task-question";
+import { getTaskStageLogs } from "@/actions/task";
+import { getTaskNotes } from "@/actions/meeting-note";
 import { requireProjectMember } from "@/lib/auth";
-import { TaskDetailView } from "./task-detail-view";
+import { getPermissionsFromRole, getAdminPermissions } from "@/lib/permissions";
+import { TaskDetailPage as TaskDetailClient } from "./task-detail-view";
 
 interface Props {
   params: Promise<{ projectId: string; taskId: string }>;
@@ -27,11 +30,20 @@ export default async function TaskDetailPage({ params }: Props) {
     );
   }
 
-  await requireProjectMember(task.projectId);
+  const { user, member } = await requireProjectMember(task.projectId);
 
-  const [questions, existingAnswers] = await Promise.all([
+  let userPermissions;
+  if (user.systemRole === "ADMIN") {
+    userPermissions = { ...getAdminPermissions(), systemRole: "ADMIN" };
+  } else {
+    userPermissions = { ...getPermissionsFromRole(member.projectRole), systemRole: user.systemRole };
+  }
+
+  const [questions, existingAnswers, stageLogData, notes] = await Promise.all([
     getTaskQuestions(),
     getTaskAnswers(taskId),
+    getTaskStageLogs(taskId),
+    getTaskNotes(taskId),
   ]);
 
   const answersMap: Record<string, string> = {};
@@ -40,22 +52,29 @@ export default async function TaskDetailPage({ params }: Props) {
   });
 
   return (
-    <TaskDetailView
+    <TaskDetailClient
       task={{
         id: task.id,
+        taskNumber: task.taskNumber,
         title: task.title,
         description: task.description,
-        priority: task.priority ?? 0,
+        priority: task.priority,
         taskType: task.taskType,
         stage: task.stage,
+        order: task.order,
         assignee: task.assignee,
         createdBy: task.createdBy,
-        createdAt: task.createdAt,
+        createdAt: task.createdAt.toISOString(),
+        estimatedMinutes: task.estimatedMinutes,
+        estimateAccuracy: task.estimateAccuracy,
       }}
       projectId={projectId}
       projectName={task.project.name}
       questions={questions}
       initialAnswers={answersMap}
+      stageLogData={stageLogData}
+      initialNotes={notes}
+      isAdmin={user.systemRole === "ADMIN"}
     />
   );
 }

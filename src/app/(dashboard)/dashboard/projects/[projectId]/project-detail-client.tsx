@@ -13,17 +13,8 @@ import { MemberList } from "@/components/team/member-list";
 import { InviteMemberDialog } from "@/components/team/invite-member-dialog";
 
 import type { TaskQuestion } from "@/components/kanban/question-field";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { LayoutGrid, FileText, Paperclip, ScrollText, Users, Settings, Trash2, Upload, X as XIcon } from "lucide-react";
-import { deleteProject, updateProject, deleteContract } from "@/actions/project";
+import { LayoutGrid, FileText, Paperclip, ScrollText, Users, Trash2, AlertTriangle } from "lucide-react";
+import { deleteContract, toggleLatePayment } from "@/actions/project";
 import type { KanbanTask } from "@/store/kanban";
 export interface UserPermissions {
   canCreateTask: boolean;
@@ -45,6 +36,7 @@ interface Contract {
   contractType: string;
   startDate: Date;
   endDate: Date;
+  latePayment: boolean;
 }
 
 interface ProjectRole {
@@ -240,12 +232,6 @@ export function ProjectDetailClient({
                 {members.length + invitations.length}
               </span>
             </TabsTrigger>
-            {isAdmin && (
-              <TabsTrigger value="settings" className="gap-1.5">
-                <Settings className="h-3.5 w-3.5" />
-                Settings
-              </TabsTrigger>
-            )}
           </TabsList>
 
           <TabsContent value="board">
@@ -320,207 +306,8 @@ export function ProjectDetailClient({
             </div>
           </TabsContent>
 
-          {isAdmin && (
-            <TabsContent value="settings">
-              <div className="max-w-2xl space-y-10">
-                <ProjectLogoSection
-                  projectId={project.id}
-                  currentLogo={project.logoUrl}
-                  projectName={project.name}
-                />
-                
-                <DeleteProjectSection
-                  projectId={project.id}
-                  projectName={project.name}
-                  onDeleted={() => router.push("/dashboard")}
-                />
-              </div>
-            </TabsContent>
-          )}
         </Tabs>
       </div>
-    </div>
-  );
-}
-
-function ProjectLogoSection({
-  projectId,
-  currentLogo,
-  projectName,
-}: {
-  projectId: string;
-  currentLogo: string | null;
-  projectName: string;
-}) {
-  const [logo, setLogo] = useState<string | null>(currentLogo);
-  const [saving, setSaving] = useState(false);
-
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 512 * 1024) {
-      alert("Logo must be under 512KB");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
-      setSaving(true);
-      try {
-        await updateProject({ projectId, logoUrl: dataUrl });
-        setLogo(dataUrl);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setSaving(false);
-      }
-    };
-    reader.readAsDataURL(file);
-  }
-
-  async function handleRemove() {
-    setSaving(true);
-    try {
-      await updateProject({ projectId, logoUrl: null });
-      setLogo(null);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      <h2 className="text-[13px] font-semibold">Project Logo</h2>
-      <div className="flex items-center gap-4">
-        {logo ? (
-          <div className="relative group">
-            <img
-              src={logo}
-              alt={projectName}
-              className="w-16 h-16 rounded-lg object-cover border border-border"
-            />
-            <button
-              onClick={handleRemove}
-              disabled={saving}
-              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <XIcon className="w-3 h-3" />
-            </button>
-          </div>
-        ) : (
-          <div className="w-16 h-16 rounded-lg bg-muted border border-dashed border-border flex items-center justify-center">
-            <span className="text-xl font-bold text-muted-foreground">
-              {projectName.charAt(0).toUpperCase()}
-            </span>
-          </div>
-        )}
-        <label className="cursor-pointer">
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            className="hidden"
-          />
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-            <Upload className="w-3.5 h-3.5" />
-            {saving ? "Saving..." : logo ? "Change" : "Upload"}
-          </span>
-        </label>
-      </div>
-      <p className="text-[11px] text-muted-foreground/60">
-        Recommended: Square image, max 512KB
-      </p>
-    </div>
-  );
-}
-
-function DeleteProjectSection({
-  projectId,
-  projectName,
-  onDeleted,
-}: {
-  projectId: string;
-  projectName: string;
-  onDeleted: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [confirmText, setConfirmText] = useState("");
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState("");
-
-  const canDelete = confirmText === projectName;
-
-  async function handleDelete() {
-    if (!canDelete) return;
-    setDeleting(true);
-    setError("");
-    try {
-      await deleteProject({ projectId, confirmName: confirmText });
-      onDeleted();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setDeleting(false);
-    }
-  }
-
-  return (
-    <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-5">
-      <h2 className="text-[13px] font-semibold text-destructive mb-1">Danger Zone</h2>
-      <p className="text-[11px] text-muted-foreground mb-4">
-        Permanently delete this project and all its data. This action cannot be undone.
-      </p>
-      <Dialog open={open} onOpenChange={(v) => { setOpen(v); setConfirmText(""); setError(""); }}>
-        <DialogTrigger render={
-          <Button variant="destructive" size="sm">
-            <Trash2 className="w-3.5 h-3.5 mr-1.5" strokeWidth={1.5} />
-            Delete Project
-          </Button>
-        } />
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-destructive">Delete Project</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-[13px] text-muted-foreground">
-              This will permanently delete <strong className="text-foreground">{projectName}</strong> and
-              all its tasks, notes, assets, contracts, and members.
-            </p>
-            <div className="space-y-2">
-              <p className="text-[12px] text-muted-foreground">
-                Type <strong className="text-foreground">{projectName}</strong> to confirm:
-              </p>
-              <Input
-                value={confirmText}
-                onChange={(e) => setConfirmText(e.target.value)}
-                placeholder={projectName}
-                className="text-[13px]"
-                autoFocus
-              />
-            </div>
-            {error && (
-              <p className="text-[12px] text-destructive">{error}</p>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={!canDelete || deleting}
-                onClick={handleDelete}
-              >
-                {deleting ? "Deleting..." : "Delete Forever"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -528,6 +315,7 @@ function DeleteProjectSection({
 function ContractList({ contracts, isAdmin, projectId }: { contracts: Contract[]; isAdmin: boolean; projectId: string }) {
   const [editingContract, setEditingContract] = useState<Contract | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const router = useRouter();
 
   async function handleDelete(contractId: string) {
@@ -543,17 +331,55 @@ function ContractList({ contracts, isAdmin, projectId }: { contracts: Contract[]
     }
   }
 
+  async function handleToggleLatePayment(contractId: string) {
+    setTogglingId(contractId);
+    try {
+      await toggleLatePayment(contractId);
+      router.refresh();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
   return (
     <>
       <div className="space-y-2">
         {contracts.map((contract) => (
           <div
             key={contract.id}
-            className="rounded-lg border border-border bg-card p-4 flex items-center justify-between gap-3"
+            className={`rounded-lg border bg-card p-4 flex items-center justify-between gap-3 ${
+              contract.latePayment ? "border-amber-500/30 bg-amber-500/5" : "border-border"
+            }`}
           >
-            <ContractBadge contract={contract} />
+            <div className="flex items-center gap-3 min-w-0">
+              <ContractBadge contract={contract} />
+              {contract.latePayment && (
+                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/20 shrink-0">
+                  <AlertTriangle className="w-3 h-3" />
+                  Late Payment
+                </span>
+              )}
+            </div>
             {isAdmin && (
               <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => handleToggleLatePayment(contract.id)}
+                  disabled={togglingId === contract.id}
+                  className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                    contract.latePayment
+                      ? "text-amber-400 hover:bg-amber-500/10"
+                      : "text-muted-foreground hover:text-amber-400 hover:bg-amber-500/10"
+                  }`}
+                  title={contract.latePayment ? "Remove late payment flag" : "Mark as late payment"}
+                >
+                  {togglingId === contract.id
+                    ? "..."
+                    : contract.latePayment
+                      ? "Unmark Late"
+                      : "Late Payment"}
+                </button>
                 <button
                   onClick={() => setEditingContract(contract)}
                   className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
