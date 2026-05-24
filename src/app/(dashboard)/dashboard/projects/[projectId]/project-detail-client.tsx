@@ -243,13 +243,15 @@ export function ProjectDetailClient({
                 {assets.length}
               </span>
             </TabsTrigger>
-            <TabsTrigger value="team" className="gap-1.5">
-              <Users className="h-3.5 w-3.5" />
-              Team
-              <span className="ml-1 text-[10px] text-muted-foreground">
-                {members.length + invitations.length}
-              </span>
-            </TabsTrigger>
+            {(userPermissions.canInviteMembers || userPermissions.canInviteClients) && (
+              <TabsTrigger value="team" className="gap-1.5">
+                <Users className="h-3.5 w-3.5" />
+                Team
+                <span className="ml-1 text-[10px] text-muted-foreground">
+                  {members.length + invitations.length}
+                </span>
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="board">
