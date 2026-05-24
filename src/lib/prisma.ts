@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 const connectionString =
   process.env.DIRECT_DATABASE_URL ??
+  process.env.DATABASE_URL ??
   "postgres://postgres:postgres@localhost:51214/template1?sslmode=disable";
 
 const globalForPrisma = globalThis as unknown as {
