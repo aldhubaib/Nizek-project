@@ -155,7 +155,7 @@ export function ProjectSettingsOverlay({
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-lg mx-auto py-10 px-6 space-y-10">
+        <div className="max-w-2xl mx-auto py-10 px-6 space-y-10">
 
           {/* Logo */}
           <div className="space-y-3">
