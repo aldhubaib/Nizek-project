@@ -3,9 +3,9 @@
 import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Undo2, Gauge, Timer, FileText, Plus, Maximize2 } from "lucide-react";
+import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Undo2, Gauge, Timer, FileText, Plus, Maximize2, Trash2 } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
-import { updateTask, moveTask as moveTaskAction, declineTask, getTaskStageLogs } from "@/actions/task";
+import { updateTask, moveTask as moveTaskAction, declineTask, getTaskStageLogs, deleteTask } from "@/actions/task";
 import { createMeetingNote, updateMeetingNote, getTaskNotes } from "@/actions/meeting-note";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { useRouter } from "next/navigation";
@@ -306,9 +306,11 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const [questionsOpen, setQuestionsOpen] = useState(true);
   const [showDecline, setShowDecline] = useState(false);
   const [declineComment, setDeclineComment] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const taskTypeMeta = TASK_TYPE_META[task.taskType] ?? TASK_TYPE_META.FEATURE;
   const [declining, setDeclining] = useState(false);
+  const canDeleteTask = task.stage === "NEW_REQUEST" || task.stage === "CLARIFICATION";
   const [editingAnswers, setEditingAnswers] = useState<Record<string, boolean>>({});
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingPriority, setEditingPriority] = useState(false);
@@ -516,6 +518,20 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
     }
   }
 
+  async function handleDeleteTask() {
+    if (!confirm("Delete this task? This cannot be undone.")) return;
+    setDeleting(true);
+    try {
+      await deleteTask(task.id);
+      onClose();
+      router.refresh();
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <>
       {/* Backdrop */}
@@ -570,6 +586,16 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
             >
               <History className="w-4 h-4" />
             </button>
+            {canDeleteTask && (
+              <button
+                onClick={handleDeleteTask}
+                disabled={deleting}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                title="Delete task"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              </button>
+            )}
             <button
               onClick={() => router.push(`/dashboard/projects/${projectId}/tasks/${task.id}`)}
               className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"

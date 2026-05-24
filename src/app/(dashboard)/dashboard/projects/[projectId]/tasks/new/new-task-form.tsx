@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Wrench, Bug, AlertCircle, Palette } from "lucide-react";
+import { ArrowLeft, Sparkles, Wrench, Bug, AlertCircle, Palette, Loader2 } from "lucide-react";
 import { createTask } from "@/actions/task";
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
 import { cn } from "@/lib/utils";
@@ -84,7 +84,6 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
       router.refresh();
     } catch (err) {
       console.error(err);
-    } finally {
       setSaving(false);
     }
   }
@@ -237,6 +236,7 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
           {/* Actions */}
           <div className="flex items-center gap-3 pt-4 border-t border-border">
             <Button type="submit" disabled={saving || !title.trim()}>
+              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />}
               {saving ? "Creating..." : "Create Task"}
             </Button>
             <Button
