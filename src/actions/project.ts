@@ -11,20 +11,19 @@ async function requireMemberManagement(projectId: string) {
   if (user.systemRole === "ADMIN") {
     return { user, member, canInviteMembers: true, canInviteClients: true };
   }
-  const role = member.projectRole;
-  if (!role) throw new Error("Insufficient permissions");
-  if (role.isAdmin) {
+  if (member.projectRole?.isAdmin) {
     return { user, member, canInviteMembers: true, canInviteClients: true };
   }
-  if (!role.canInviteMembers && !role.canInviteClients) {
+  const fullMember = await prisma.projectMember.findUnique({
+    where: { id: member.id },
+    select: { canInviteMembers: true, canInviteClients: true },
+  });
+  const canInviteMembers = fullMember?.canInviteMembers ?? false;
+  const canInviteClients = fullMember?.canInviteClients ?? false;
+  if (!canInviteMembers && !canInviteClients) {
     throw new Error("Insufficient permissions");
   }
-  return {
-    user,
-    member,
-    canInviteMembers: role.canInviteMembers,
-    canInviteClients: role.canInviteClients,
-  };
+  return { user, member, canInviteMembers, canInviteClients };
 }
 
 async function generateContractCode(prefixId: string): Promise<{ code: string; prefixId: string }> {
@@ -616,6 +615,28 @@ export async function cancelInvitation(data: { projectId: string; invitationId: 
 
   await prisma.invitation.delete({
     where: { id: data.invitationId },
+  });
+
+  revalidatePath(`/dashboard/projects/${data.projectId}`);
+}
+
+export async function updateMemberInvitePerms(data: {
+  projectId: string;
+  memberId: string;
+  canInviteMembers?: boolean;
+  canInviteClients?: boolean;
+}) {
+  const { user, member } = await requireProjectMember(data.projectId);
+  const isSystemAdmin = user.systemRole === "ADMIN";
+  const isProjectAdmin = member.projectRole?.isAdmin ?? false;
+  if (!isSystemAdmin && !isProjectAdmin) throw new Error("Only admins can manage invite permissions");
+
+  await prisma.projectMember.update({
+    where: { id: data.memberId },
+    data: {
+      ...(data.canInviteMembers !== undefined && { canInviteMembers: data.canInviteMembers }),
+      ...(data.canInviteClients !== undefined && { canInviteClients: data.canInviteClients }),
+    },
   });
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);

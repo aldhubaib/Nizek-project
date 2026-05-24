@@ -133,6 +133,9 @@ model ProjectMember {
   roleId    String?
   projectRole ProjectRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
 
+  canInviteMembers Boolean @default(false)
+  canInviteClients Boolean @default(false)
+
   createdAt DateTime @default(now())
 
   @@unique([userId, projectId])
@@ -150,8 +153,6 @@ model ProjectRole {
   canMoveTask        Boolean @default(false)
   canDeleteTask      Boolean @default(false)
   canDeclineTask     Boolean @default(false)
-  canInviteMembers   Boolean @default(false)
-  canInviteClients   Boolean @default(false)
   allowedStages      String?
   allowedTransitions String?
 

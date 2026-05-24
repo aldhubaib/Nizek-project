@@ -33,13 +33,20 @@ export default async function ProjectDetailPage({ params }: Props) {
 
   const invitations = await getProjectInvitations(project.id);
 
+  const isSystemAdmin = user.systemRole === "ADMIN";
+  const isProjectAdmin = member.projectRole?.isAdmin ?? false;
+  const canInviteMembers = isSystemAdmin || isProjectAdmin || member.canInviteMembers;
+  const canInviteClients = isSystemAdmin || isProjectAdmin || member.canInviteClients;
+
   let userPermissions;
-  if (user.systemRole === "ADMIN") {
+  if (isSystemAdmin) {
     const adminPerms = getAdminPermissions();
     userPermissions = {
       ...adminPerms,
       allowedStages: [] as string[],
       systemRole: "ADMIN",
+      canInviteMembers: true,
+      canInviteClients: true,
     };
   } else {
     const perms = getPermissionsFromRole(member.projectRole);
@@ -47,6 +54,8 @@ export default async function ProjectDetailPage({ params }: Props) {
       ...perms,
       allowedStages: [] as string[],
       systemRole: user.systemRole,
+      canInviteMembers,
+      canInviteClients,
     };
   }
 

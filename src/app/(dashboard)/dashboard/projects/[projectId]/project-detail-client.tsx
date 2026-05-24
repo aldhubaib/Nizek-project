@@ -58,6 +58,8 @@ interface Member {
   id: string;
   role: string;
   roleId: string | null;
+  canInviteMembers: boolean;
+  canInviteClients: boolean;
   projectRole: {
     id: string;
     name: string;

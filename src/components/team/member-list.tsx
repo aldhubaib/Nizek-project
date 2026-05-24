@@ -9,8 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Trash2, Shield, RefreshCw, X, Clock, Mail } from "lucide-react";
-import { removeMember, updateMemberRole, resendInvitation, cancelInvitation } from "@/actions/project";
+import { Trash2, Shield, RefreshCw, X, Clock, Mail, UserPlus, Users } from "lucide-react";
+import { removeMember, updateMemberRole, resendInvitation, cancelInvitation, updateMemberInvitePerms } from "@/actions/project";
 
 interface WorkspaceRole {
   id: string;
@@ -26,6 +26,8 @@ interface Member {
   role: string;
   roleId: string | null;
   projectRole: WorkspaceRole | null;
+  canInviteMembers: boolean;
+  canInviteClients: boolean;
   user: {
     id: string;
     name: string | null;
@@ -98,6 +100,14 @@ export function MemberList({
   async function handleCancelInvite(invitationId: string) {
     try {
       await cancelInvitation({ projectId, invitationId });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function handleToggleInvitePerm(memberId: string, field: "canInviteMembers" | "canInviteClients", value: boolean) {
+    try {
+      await updateMemberInvitePerms({ projectId, memberId, [field]: value });
     } catch (err) {
       console.error(err);
     }
@@ -189,6 +199,23 @@ export function MemberList({
                   {roleName}
                 </span>
               )}
+
+              {isAdmin && !isSelf && (
+                <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border/50">
+                  <InviteToggle
+                    checked={member.canInviteMembers}
+                    onChange={(v) => handleToggleInvitePerm(member.id, "canInviteMembers", v)}
+                    icon={<Users className="w-3 h-3" strokeWidth={1.5} />}
+                    label="Members"
+                  />
+                  <InviteToggle
+                    checked={member.canInviteClients}
+                    onChange={(v) => handleToggleInvitePerm(member.id, "canInviteClients", v)}
+                    icon={<UserPlus className="w-3 h-3" strokeWidth={1.5} />}
+                    label="Clients"
+                  />
+                </div>
+              )}
             </div>
           );
         })}
@@ -276,5 +303,28 @@ export function MemberList({
         </div>
       )}
     </div>
+  );
+}
+
+function InviteToggle({ checked, onChange, icon, label }: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="flex items-center gap-1.5 group/toggle"
+    >
+      <div className={`w-6 h-3.5 rounded-full transition-colors relative ${checked ? "bg-primary/70" : "bg-muted"}`}>
+        <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full transition-all ${checked ? "left-3 bg-white" : "left-0.5 bg-muted-foreground/40"}`} />
+      </div>
+      <span className="text-[10px] text-muted-foreground group-hover/toggle:text-foreground transition-colors flex items-center gap-0.5">
+        {icon}
+        {label}
+      </span>
+    </button>
   );
 }

@@ -20,8 +20,6 @@ export async function createRole(data: {
   canMoveTask: boolean;
   canDeleteTask?: boolean;
   canDeclineTask?: boolean;
-  canInviteMembers?: boolean;
-  canInviteClients?: boolean;
   allowedTransitions?: Record<string, string[]>;
 }) {
   const user = await requireUser();
@@ -37,8 +35,6 @@ export async function createRole(data: {
       canMoveTask: data.canMoveTask,
       canDeleteTask: data.canDeleteTask ?? false,
       canDeclineTask: data.canDeclineTask ?? false,
-      canInviteMembers: data.canInviteMembers ?? false,
-      canInviteClients: data.canInviteClients ?? false,
       allowedTransitions: data.allowedTransitions ? JSON.stringify(data.allowedTransitions) : null,
     },
   });
@@ -56,8 +52,6 @@ export async function updateRole(data: {
   canMoveTask?: boolean;
   canDeleteTask?: boolean;
   canDeclineTask?: boolean;
-  canInviteMembers?: boolean;
-  canInviteClients?: boolean;
   allowedTransitions?: Record<string, string[]>;
 }) {
   const user = await requireUser();
@@ -73,8 +67,6 @@ export async function updateRole(data: {
       ...(data.canMoveTask !== undefined && { canMoveTask: data.canMoveTask }),
       ...(data.canDeleteTask !== undefined && { canDeleteTask: data.canDeleteTask }),
       ...(data.canDeclineTask !== undefined && { canDeclineTask: data.canDeclineTask }),
-      ...(data.canInviteMembers !== undefined && { canInviteMembers: data.canInviteMembers }),
-      ...(data.canInviteClients !== undefined && { canInviteClients: data.canInviteClients }),
       ...(data.allowedTransitions !== undefined && { allowedTransitions: JSON.stringify(data.allowedTransitions) }),
     },
   });

@@ -113,6 +113,8 @@ export async function requireProjectMember(projectId: string) {
         projectId,
         createdAt: new Date(),
         projectRole: null,
+        canInviteMembers: true,
+        canInviteClients: true,
       },
     };
   }
