@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Users, UserMinus, Lock, Wrench } from "lucide-react";
+import { Plus, Users, UserMinus, Lock, Wrench, Rocket } from "lucide-react";
 import { createProject } from "@/actions/project";
 import { cn } from "@/lib/utils";
 
@@ -22,13 +22,14 @@ interface Team {
   name: string;
 }
 
-export type ContractType = "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE";
+export type ContractType = "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE" | "STARTUP";
 
 export const CONTRACT_TYPES: { id: ContractType; label: string; icon: typeof Users; description: string; color: string }[] = [
   { id: "FULL_TEAM", label: "Full Team", icon: Users, description: "Dedicated team, ongoing work", color: "bg-primary/15 border-primary/40 text-primary" },
   { id: "PART_TEAM", label: "Part Team", icon: UserMinus, description: "Shared resources, part-time", color: "bg-violet-500/15 border-violet-500/40 text-violet-400" },
   { id: "FIXED", label: "Fixed", icon: Lock, description: "Fixed scope and timeline", color: "bg-amber-500/15 border-amber-500/40 text-amber-400" },
   { id: "MAINTENANCE", label: "Maintenance", icon: Wrench, description: "Bug fixes and upkeep", color: "bg-cyan-500/15 border-cyan-500/40 text-cyan-400" },
+  { id: "STARTUP", label: "Startup", icon: Rocket, description: "Always active, no end date", color: "bg-rose-500/15 border-rose-500/40 text-rose-400" },
 ];
 
 export function ContractTypePicker({ value, onChange }: { value: ContractType; onChange: (v: ContractType) => void }) {
@@ -72,6 +73,7 @@ export function CreateProjectDialog({ teams = [] }: { teams?: Team[] }) {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
+    const isStartup = contractType === "STARTUP";
     try {
       const project = await createProject({
         name: formData.get("name") as string,
@@ -80,8 +82,8 @@ export function CreateProjectDialog({ teams = [] }: { teams?: Team[] }) {
         contract: {
           label: (formData.get("contractLabel") as string) || undefined,
           contractType,
-          startDate: formData.get("startDate") as string,
-          endDate: formData.get("endDate") as string,
+          startDate: isStartup ? undefined : (formData.get("startDate") as string),
+          endDate: isStartup ? undefined : (formData.get("endDate") as string),
         },
       });
       setOpen(false);
@@ -161,16 +163,18 @@ export function CreateProjectDialog({ teams = [] }: { teams?: Team[] }) {
             <ContractTypePicker value={contractType} onChange={setContractType} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="startDate">Start Date</Label>
-              <Input id="startDate" name="startDate" type="date" required />
+          {contractType !== "STARTUP" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="startDate">Start Date</Label>
+                <Input id="startDate" name="startDate" type="date" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="endDate">End Date</Label>
+                <Input id="endDate" name="endDate" type="date" required />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="endDate">End Date</Label>
-              <Input id="endDate" name="endDate" type="date" required />
-            </div>
-          </div>
+          )}
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>

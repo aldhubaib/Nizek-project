@@ -17,8 +17,8 @@ interface Contract {
   id: string;
   label: string | null;
   contractType: string;
-  startDate: Date;
-  endDate: Date;
+  startDate: Date | null;
+  endDate: Date | null;
 }
 
 interface Props {
@@ -43,13 +43,14 @@ export function EditContractDialog({ contract, open, onClose }: Props) {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
+    const isStartup = contractType === "STARTUP";
     try {
       const result = await updateContract({
         contractId: contract.id,
         label: (formData.get("label") as string) || "",
         contractType,
-        startDate: formData.get("startDate") as string,
-        endDate: formData.get("endDate") as string,
+        startDate: isStartup ? undefined : (formData.get("startDate") as string),
+        endDate: isStartup ? undefined : (formData.get("endDate") as string),
       });
       if (result.error) {
         setError(result.error);
@@ -83,28 +84,30 @@ export function EditContractDialog({ contract, open, onClose }: Props) {
             <Label>Contract Type</Label>
             <ContractTypePicker value={contractType} onChange={setContractType} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="startDate">Start Date</Label>
-              <Input
-                id="startDate"
-                name="startDate"
-                type="date"
-                required
-                defaultValue={toDateInput(contract.startDate)}
-              />
+          {contractType !== "STARTUP" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="startDate">Start Date</Label>
+                <Input
+                  id="startDate"
+                  name="startDate"
+                  type="date"
+                  required
+                  defaultValue={contract.startDate ? toDateInput(contract.startDate) : ""}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="endDate">End Date</Label>
+                <Input
+                  id="endDate"
+                  name="endDate"
+                  type="date"
+                  required
+                  defaultValue={contract.endDate ? toDateInput(contract.endDate) : ""}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="endDate">End Date</Label>
-              <Input
-                id="endDate"
-                name="endDate"
-                type="date"
-                required
-                defaultValue={toDateInput(contract.endDate)}
-              />
-            </div>
-          </div>
+          )}
           {error && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
               <p className="text-[12px] text-destructive">{error}</p>

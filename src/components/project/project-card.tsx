@@ -24,7 +24,7 @@ interface ProjectCardProps {
     logoUrl: string | null;
     team?: Team | null;
     _count: { members: number; tasks: number };
-    contracts: { startDate: string; endDate: string; latePayment: boolean }[];
+    contracts: { contractType: string; startDate: string | null; endDate: string | null; latePayment: boolean }[];
   };
   teams?: Team[];
 }
@@ -35,15 +35,15 @@ export function ProjectCard({ project, teams = [] }: ProjectCardProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const now = new Date();
-  const hasValidContract = project.contracts.some(
-    (c) => new Date(c.startDate) <= now && new Date(c.endDate) >= now
-  );
-  const hasLatePayment = project.contracts.some(
-    (c) =>
-      new Date(c.startDate) <= now &&
-      new Date(c.endDate) >= now &&
-      c.latePayment
-  );
+  const hasValidContract = project.contracts.some((c) => {
+    if (c.contractType === "STARTUP") return true;
+    if (!c.startDate || !c.endDate) return false;
+    return new Date(c.startDate) <= now && new Date(c.endDate) >= now;
+  });
+  const hasLatePayment = project.contracts.some((c) => c.latePayment && (
+    c.contractType === "STARTUP" ||
+    (c.startDate && c.endDate && new Date(c.startDate) <= now && new Date(c.endDate) >= now)
+  ));
   const isActive = hasValidContract && !hasLatePayment;
 
   return (

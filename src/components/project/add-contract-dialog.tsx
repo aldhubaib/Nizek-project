@@ -31,13 +31,14 @@ export function AddContractDialog({ projectId }: Props) {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
+    const isStartup = contractType === "STARTUP";
     try {
       const result = await addContract({
         projectId,
         label: (formData.get("label") as string) || undefined,
         contractType,
-        startDate: formData.get("startDate") as string,
-        endDate: formData.get("endDate") as string,
+        startDate: isStartup ? undefined : (formData.get("startDate") as string),
+        endDate: isStartup ? undefined : (formData.get("endDate") as string),
       });
       if (result.error) {
         setError(result.error);
@@ -72,16 +73,18 @@ export function AddContractDialog({ projectId }: Props) {
             <Label>Contract Type</Label>
             <ContractTypePicker value={contractType} onChange={setContractType} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="startDate">Start Date</Label>
-              <Input id="startDate" name="startDate" type="date" required />
+          {contractType !== "STARTUP" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="startDate">Start Date</Label>
+                <Input id="startDate" name="startDate" type="date" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="endDate">End Date</Label>
+                <Input id="endDate" name="endDate" type="date" required />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="endDate">End Date</Label>
-              <Input id="endDate" name="endDate" type="date" required />
-            </div>
-          </div>
+          )}
           {error && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
               <p className="text-[12px] text-destructive">{error}</p>

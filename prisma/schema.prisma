@@ -49,6 +49,7 @@ enum ContractType {
   PART_TEAM
   FIXED
   MAINTENANCE
+  STARTUP
 }
 
 enum InvitationStatus {
@@ -160,8 +161,8 @@ model Contract {
   id           String       @id @default(cuid())
   label        String?
   contractType ContractType @default(FULL_TEAM)
-  startDate    DateTime
-  endDate      DateTime
+  startDate    DateTime?
+  endDate      DateTime?
   latePayment  Boolean      @default(false)
 
   projectId String

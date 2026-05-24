@@ -7,26 +7,34 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
   PART_TEAM: "Part Team",
   FIXED: "Fixed",
   MAINTENANCE: "Maintenance",
+  STARTUP: "Startup",
 };
 
 interface Contract {
   id: string;
   label: string | null;
   contractType: string;
-  startDate: Date;
-  endDate: Date;
+  startDate: Date | null;
+  endDate: Date | null;
 }
 
 export function ContractBadge({ contract }: { contract: Contract }) {
-  const now = new Date();
-  const start = new Date(contract.startDate);
-  const end = new Date(contract.endDate);
+  const isStartup = contract.contractType === "STARTUP";
 
   let status: "active" | "upcoming" | "expired";
-  if (isWithinInterval(now, { start, end })) {
+  if (isStartup) {
     status = "active";
-  } else if (isFuture(start)) {
-    status = "upcoming";
+  } else if (contract.startDate && contract.endDate) {
+    const now = new Date();
+    const start = new Date(contract.startDate);
+    const end = new Date(contract.endDate);
+    if (isWithinInterval(now, { start, end })) {
+      status = "active";
+    } else if (isFuture(start)) {
+      status = "upcoming";
+    } else {
+      status = "expired";
+    }
   } else {
     status = "expired";
   }
@@ -55,7 +63,11 @@ export function ContractBadge({ contract }: { contract: Contract }) {
       )}
       <span className="text-[11px] text-muted-foreground">
         {contract.label && `${contract.label} · `}
-        {format(start, "MMM d, yyyy")} — {format(end, "MMM d, yyyy")}
+        {isStartup
+          ? "Always active"
+          : contract.startDate && contract.endDate
+            ? `${format(new Date(contract.startDate), "MMM d, yyyy")} — ${format(new Date(contract.endDate), "MMM d, yyyy")}`
+            : "No dates"}
       </span>
     </div>
   );

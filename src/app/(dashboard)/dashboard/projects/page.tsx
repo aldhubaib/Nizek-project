@@ -9,12 +9,12 @@ export default async function ProjectsPage() {
 
   const now = new Date();
   const isProjectActive = (p: (typeof projects)[number]) =>
-    p.contracts.some(
-      (c) =>
-        new Date(c.startDate) <= now &&
-        new Date(c.endDate) >= now &&
-        !c.latePayment
-    );
+    p.contracts.some((c) => {
+      if (c.latePayment) return false;
+      if (c.contractType === "STARTUP") return true;
+      if (!c.startDate || !c.endDate) return false;
+      return new Date(c.startDate) <= now && new Date(c.endDate) >= now;
+    });
   const activeProjects = projects.filter(isProjectActive);
   const archivedProjects = projects.filter((p) => !isProjectActive(p));
 

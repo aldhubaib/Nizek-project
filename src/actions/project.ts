@@ -12,19 +12,28 @@ export async function createProject(data: {
   teamId: string;
   contract: {
     label?: string;
-    contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE";
-    startDate: string;
-    endDate: string;
+    contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE" | "STARTUP";
+    startDate?: string;
+    endDate?: string;
   };
 }) {
   const user = await requireUser();
 
   if (!data.teamId) throw new Error("Team is required");
 
-  const startDate = new Date(data.contract.startDate);
-  const endDate = new Date(data.contract.endDate);
-  const dateError = validateContractDates(startDate, endDate, []);
-  if (dateError) return { error: dateError } as any;
+  const isStartup = data.contract.contractType === "STARTUP";
+  let startDate: Date | undefined;
+  let endDate: Date | undefined;
+
+  if (!isStartup) {
+    if (!data.contract.startDate || !data.contract.endDate) {
+      throw new Error("Start and end dates are required");
+    }
+    startDate = new Date(data.contract.startDate);
+    endDate = new Date(data.contract.endDate);
+    const dateError = validateContractDates(startDate, endDate, []);
+    if (dateError) return { error: dateError } as any;
+  }
 
   const project = await prisma.project.create({
     data: {
@@ -35,8 +44,8 @@ export async function createProject(data: {
         create: {
           label: data.contract.label,
           contractType: data.contract.contractType ?? "FULL_TEAM",
-          startDate,
-          endDate,
+          startDate: startDate ?? null,
+          endDate: endDate ?? null,
         },
       },
     },
@@ -113,28 +122,35 @@ export async function updateProject(data: {
 export async function addContract(data: {
   projectId: string;
   label?: string;
-  contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE";
-  startDate: string;
-  endDate: string;
+  contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE" | "STARTUP";
+  startDate?: string;
+  endDate?: string;
 }): Promise<{ error?: string }> {
   await requireProjectRole(data.projectId, ["ADMIN"]);
 
-  const existing = await prisma.contract.findMany({
-    where: { projectId: data.projectId },
-    select: { id: true, label: true, startDate: true, endDate: true },
-  });
+  const isStartup = data.contractType === "STARTUP";
+  let startDate: Date | undefined;
+  let endDate: Date | undefined;
 
-  const startDate = new Date(data.startDate);
-  const endDate = new Date(data.endDate);
-  const dateError = validateContractDates(startDate, endDate, existing);
-  if (dateError) return { error: dateError };
+  if (!isStartup) {
+    if (!data.startDate || !data.endDate) return { error: "Start and end dates are required" };
+    startDate = new Date(data.startDate);
+    endDate = new Date(data.endDate);
+
+    const existing = await prisma.contract.findMany({
+      where: { projectId: data.projectId },
+      select: { id: true, label: true, startDate: true, endDate: true },
+    });
+    const dateError = validateContractDates(startDate, endDate, existing);
+    if (dateError) return { error: dateError };
+  }
 
   await prisma.contract.create({
     data: {
       label: data.label,
       contractType: data.contractType ?? "FULL_TEAM",
-      startDate,
-      endDate,
+      startDate: startDate ?? null,
+      endDate: endDate ?? null,
       projectId: data.projectId,
     },
   });
@@ -158,7 +174,7 @@ export async function deleteContract(contractId: string) {
 export async function updateContract(data: {
   contractId: string;
   label?: string;
-  contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE";
+  contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE" | "STARTUP";
   startDate?: string;
   endDate?: string;
 }): Promise<{ error?: string }> {
@@ -169,18 +185,23 @@ export async function updateContract(data: {
   if (!contract) return { error: "Contract not found" };
   await requireProjectRole(contract.projectId, ["ADMIN"]);
 
-  const startDate = data.startDate ? new Date(data.startDate) : contract.startDate;
-  const endDate = data.endDate ? new Date(data.endDate) : contract.endDate;
+  const effectiveType = data.contractType ?? contract.contractType;
+  const isStartup = effectiveType === "STARTUP";
 
-  const existing = contract.project.contracts.map((c) => ({
-    id: c.id,
-    label: c.label,
-    startDate: c.startDate,
-    endDate: c.endDate,
-  }));
+  const startDate = isStartup ? null : (data.startDate ? new Date(data.startDate) : contract.startDate);
+  const endDate = isStartup ? null : (data.endDate ? new Date(data.endDate) : contract.endDate);
 
-  const dateError = validateContractDates(startDate, endDate, existing, contract.id);
-  if (dateError) return { error: dateError };
+  if (!isStartup && startDate && endDate) {
+    const existing = contract.project.contracts.map((c) => ({
+      id: c.id,
+      label: c.label,
+      startDate: c.startDate,
+      endDate: c.endDate,
+    }));
+
+    const dateError = validateContractDates(startDate, endDate, existing, contract.id);
+    if (dateError) return { error: dateError };
+  }
 
   await prisma.contract.update({
     where: { id: data.contractId },
