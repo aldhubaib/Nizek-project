@@ -68,9 +68,11 @@ export function KanbanBoard({
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const isDragging = useRef(false);
+  const snapshotRef = useRef<KanbanTask[]>(initialTasks);
 
   useEffect(() => {
     setTasks(initialTasks);
+    snapshotRef.current = initialTasks;
   }, [initialTasks, setTasks]);
 
   const refetchTasks = useCallback(async () => {
@@ -226,7 +228,7 @@ export function KanbanBoard({
     }
   }
 
-  async function handleDragEnd(event: DragEndEvent) {
+  function handleDragEnd(event: DragEndEvent) {
     isDragging.current = false;
     const fromStage = dragOriginRef.current;
     setActiveTask(null);
@@ -234,7 +236,7 @@ export function KanbanBoard({
 
     const { active, over } = event;
     if (!over || !fromStage) {
-      setTasks(initialTasks);
+      setTasks(snapshotRef.current);
       return;
     }
 
@@ -253,38 +255,37 @@ export function KanbanBoard({
         effectiveDrop = "READY_FOR_RELEASE";
       }
       if (!canMoveFromTo(fromStage, effectiveDrop)) {
-        setTasks(initialTasks);
+        setTasks(snapshotRef.current);
         const fromLabel = STAGES.find((s) => s.id === fromStage)?.label ?? fromStage;
         const toLabel = STAGES.find((s) => s.id === effectiveDrop)?.label ?? effectiveDrop;
         setPermissionError(`You don't have permission to move tasks from "${fromLabel}" to "${toLabel}".`);
         return;
       }
-      if (!isValidMove(fromStage, effectiveDrop, task.taskType)) { setTasks(initialTasks); return; }
-      if (fromStage === "CLARIFICATION" && !canLeaveClarRef.current) { setTasks(initialTasks); return; }
+      if (!isValidMove(fromStage, effectiveDrop, task.taskType)) { setTasks(snapshotRef.current); return; }
+      if (fromStage === "CLARIFICATION" && !canLeaveClarRef.current) { setTasks(snapshotRef.current); return; }
       targetStage = effectiveDrop;
       const tasksInTarget = tasks.filter((t) => t.stage === effectiveDrop);
       moveTask(activeId, effectiveDrop, tasksInTarget.length);
     } else if (dropStage && dropStage !== task.stage) {
-      setTasks(initialTasks);
+      setTasks(snapshotRef.current);
       return;
     }
 
     if (fromStage !== targetStage && !isValidMove(fromStage, targetStage, task.taskType)) {
-      setTasks(initialTasks);
+      setTasks(snapshotRef.current);
       return;
     }
 
     if (fromStage === "CLARIFICATION" && fromStage !== targetStage && !canLeaveClarRef.current) {
-      setTasks(initialTasks);
+      setTasks(snapshotRef.current);
       return;
     }
 
     if (fromStage === targetStage) {
-      await executeMoveTask(activeId, targetStage, task.order);
+      executeMoveTask(activeId, targetStage, task.order);
       return;
     }
 
-    // Decline move — show decline dialog
     if (isDeclineMove(fromStage, targetStage)) {
       setPendingDecline({ taskId: activeId, fromStage });
       return;
@@ -296,14 +297,13 @@ export function KanbanBoard({
       return;
     }
 
-    await executeMoveTask(activeId, targetStage, task.order);
+    executeMoveTask(activeId, targetStage, task.order);
   }
 
-  async function executeMoveTask(taskId: string, stage: Stage, order: number, estimatedMinutes?: number) {
-    try {
-      await moveTaskAction({ taskId, stage, order, estimatedMinutes });
-    } catch (err) {
-      setTasks(initialTasks);
+  function executeMoveTask(taskId: string, stage: Stage, order: number, estimatedMinutes?: number) {
+    snapshotRef.current = useKanbanStore.getState().tasks;
+    moveTaskAction({ taskId, stage, order, estimatedMinutes }).catch((err) => {
+      setTasks(snapshotRef.current);
       const msg = (err as Error).message;
       if (msg.startsWith("REQUIRED_QUESTIONS:")) {
         try {
@@ -326,7 +326,7 @@ export function KanbanBoard({
       } else {
         alert(msg || "Failed to move task. Please try again.");
       }
-    }
+    });
   }
 
   function handleConfirmMove(estimatedMinutes?: number) {
@@ -336,7 +336,7 @@ export function KanbanBoard({
   }
 
   function handleCancelMove() {
-    setTasks(initialTasks);
+    setTasks(snapshotRef.current);
     setPendingMove(null);
   }
 
@@ -346,13 +346,13 @@ export function KanbanBoard({
       await declineTask({ taskId: pendingDecline.taskId, comment });
     } catch (err) {
       console.error(err);
-      setTasks(initialTasks);
+      setTasks(snapshotRef.current);
     }
     setPendingDecline(null);
   }
 
   function handleCancelDecline() {
-    setTasks(initialTasks);
+    setTasks(snapshotRef.current);
     setPendingDecline(null);
   }
 

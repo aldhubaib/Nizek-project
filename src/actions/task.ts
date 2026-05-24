@@ -317,7 +317,6 @@ export async function moveTask(data: {
     });
   }
 
-  revalidatePath(`/dashboard/projects/${task.projectId}`);
   broadcastTaskEvent(task.projectId, {
     type: "task-moved",
     taskId: data.taskId,

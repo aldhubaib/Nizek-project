@@ -3,7 +3,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Expand, Sparkles, Wrench, Bug, Clock, Timer, Undo2, AlertCircle, Palette, Gauge } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import type { KanbanTask, TaskType, EstimateAccuracy } from "@/store/kanban";
 import { cn } from "@/lib/utils";
 
@@ -46,7 +46,7 @@ function useLiveDuration(isoDate: string | null | undefined) {
   const [, tick] = useState(0);
   useEffect(() => {
     if (!isoDate) return;
-    const interval = setInterval(() => tick((n) => n + 1), 1_000);
+    const interval = setInterval(() => tick((n) => n + 1), 60_000);
     return () => clearInterval(interval);
   }, [isoDate]);
   if (!isoDate) return null;
@@ -82,7 +82,7 @@ interface TaskCardProps {
   onExpand?: () => void;
 }
 
-export function TaskCard({ task, isOverlay, disabled, locked, onExpand }: TaskCardProps) {
+export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, locked, onExpand }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -225,4 +225,4 @@ export function TaskCard({ task, isOverlay, disabled, locked, onExpand }: TaskCa
       </div>
     </div>
   );
-}
+});

@@ -9,7 +9,7 @@ import { Plus, Zap, CheckCircle2, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { TaskCard } from "./task-card";
 import { TaskSidebar } from "./task-sidebar";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback, memo } from "react";
 import type { KanbanTask, Stage } from "@/store/kanban";
 import type { TaskQuestion } from "./question-field";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ interface ColumnProps {
   dragTaskType?: string | null;
 }
 
-export function KanbanColumn({ stage, tasks, disabled, projectId, questions, canCreateTask, dragFromStage, dragTaskType }: ColumnProps) {
+export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled, projectId, questions, canCreateTask, dragFromStage, dragTaskType }: ColumnProps) {
   const router = useRouter();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
@@ -72,6 +72,8 @@ export function KanbanColumn({ stage, tasks, disabled, projectId, questions, can
   }, [dragFromStage, stage.id, dragTaskType]);
 
   const isDragging = dragFromStage != null;
+
+  const handleExpand = useCallback((taskId: string) => setSelectedTaskId(taskId), []);
 
   return (
     <div
@@ -121,7 +123,7 @@ export function KanbanColumn({ stage, tasks, disabled, projectId, questions, can
                         task={task}
                         disabled={disabled}
                         locked={i > 0}
-                        onExpand={() => setSelectedTaskId(task.id)}
+                        onExpand={() => handleExpand(task.id)}
                       />
                     ))}
                   </div>
@@ -212,4 +214,4 @@ export function KanbanColumn({ stage, tasks, disabled, projectId, questions, can
       )}
     </div>
   );
-}
+});
