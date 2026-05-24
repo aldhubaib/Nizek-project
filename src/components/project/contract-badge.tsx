@@ -15,8 +15,8 @@ interface Contract {
   label: string | null;
   code?: string | null;
   contractType: string;
-  startDate: Date | null;
-  endDate: Date | null;
+  startDate: Date | string | null;
+  endDate: Date | string | null;
 }
 
 export function ContractBadge({ contract }: { contract: Contract }) {

@@ -17,8 +17,8 @@ interface Contract {
   id: string;
   label: string | null;
   contractType: string;
-  startDate: Date | null;
-  endDate: Date | null;
+  startDate: Date | string | null;
+  endDate: Date | string | null;
 }
 
 interface Props {
@@ -93,7 +93,7 @@ export function EditContractDialog({ contract, open, onClose }: Props) {
                   name="startDate"
                   type="date"
                   required
-                  defaultValue={contract.startDate ? toDateInput(contract.startDate) : ""}
+                  defaultValue={contract.startDate ? toDateInput(new Date(contract.startDate)) : ""}
                 />
               </div>
               <div className="space-y-2">
@@ -103,7 +103,7 @@ export function EditContractDialog({ contract, open, onClose }: Props) {
                   name="endDate"
                   type="date"
                   required
-                  defaultValue={contract.endDate ? toDateInput(contract.endDate) : ""}
+                  defaultValue={contract.endDate ? toDateInput(new Date(contract.endDate)) : ""}
                 />
               </div>
             </div>

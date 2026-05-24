@@ -6,15 +6,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KanbanBoard } from "@/components/kanban/board";
 import { MeetingNotesTab } from "@/components/project/meeting-notes-tab";
 import { AssetsTab } from "@/components/project/assets-tab";
-import { ContractBadge } from "@/components/project/contract-badge";
-import { AddContractDialog } from "@/components/project/add-contract-dialog";
-import { EditContractDialog } from "@/components/project/edit-contract-dialog";
 import { MemberList } from "@/components/team/member-list";
 import { InviteMemberDialog } from "@/components/team/invite-member-dialog";
+import { ProjectSettingsOverlay } from "@/components/project/project-settings-overlay";
+import { createPortal } from "react-dom";
 
 import type { TaskQuestion } from "@/components/kanban/question-field";
-import { LayoutGrid, FileText, Paperclip, ScrollText, Users, Trash2, AlertTriangle } from "lucide-react";
-import { deleteContract, toggleLatePayment } from "@/actions/project";
+import { LayoutGrid, FileText, Paperclip, Users, Settings } from "lucide-react";
 import type { KanbanTask } from "@/store/kanban";
 export interface UserPermissions {
   canCreateTask: boolean;
@@ -79,6 +77,7 @@ interface Project {
   name: string;
   description: string | null;
   logoUrl: string | null;
+  team?: { id: string; name: string } | null;
   contracts: Contract[];
   _count: { tasks: number; meetingNotes: number; assets: number };
 }
@@ -121,6 +120,11 @@ interface ContractPrefixOption {
   name: string;
 }
 
+interface Team {
+  id: string;
+  name: string;
+}
+
 interface Props {
   project: Project;
   tasks: KanbanTask[];
@@ -137,6 +141,7 @@ interface Props {
   allowedTaskTypes?: string[];
   activeContractType?: string | null;
   contractPrefixes?: ContractPrefixOption[];
+  teams?: Team[];
 }
 
 interface Invitation {
@@ -166,12 +171,14 @@ export function ProjectDetailClient({
   allowedTaskTypes,
   activeContractType,
   contractPrefixes = [],
+  teams = [],
 }: Props) {
   const canEdit = userPermissions.canModifyTask || userPermissions.isAdmin;
   const isAdmin = userPermissions.isAdmin;
   const router = useRouter();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTabState] = useState(searchParams.get("tab") ?? "board");
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   function setActiveTab(tab: string) {
     setActiveTabState(tab);
@@ -204,6 +211,13 @@ export function ProjectDetailClient({
             </span>
           )}
         </div>
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          title="Project Settings"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
       </div>
 
       <div className="px-6 py-4">
@@ -225,13 +239,6 @@ export function ProjectDetailClient({
               Assets
               <span className="ml-1 text-[10px] text-muted-foreground">
                 {assets.length}
-              </span>
-            </TabsTrigger>
-            <TabsTrigger value="contracts" className="gap-1.5">
-              <ScrollText className="h-3.5 w-3.5" />
-              Contracts
-              <span className="ml-1 text-[10px] text-muted-foreground">
-                {project.contracts.length}
               </span>
             </TabsTrigger>
             <TabsTrigger value="team" className="gap-1.5">
@@ -273,28 +280,6 @@ export function ProjectDetailClient({
             />
           </TabsContent>
 
-          <TabsContent value="contracts">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-[13px] font-semibold">Contracts</h2>
-                {isAdmin && <AddContractDialog projectId={project.id} contractPrefixes={contractPrefixes} />}
-              </div>
-              {project.contracts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center text-center gap-3 py-12">
-                  <ScrollText className="w-10 h-10 text-muted-foreground opacity-50" strokeWidth={1.5} />
-                  <p className="text-[13px] text-muted-foreground">
-                    No contracts added yet.
-                  </p>
-                </div>
-              ) : (
-                <ContractList
-                  contracts={project.contracts}
-                  isAdmin={isAdmin}
-                  projectId={project.id}
-                />
-              )}
-            </div>
-          </TabsContent>
 
           <TabsContent value="team">
             <div className="space-y-4">
@@ -317,108 +302,18 @@ export function ProjectDetailClient({
 
         </Tabs>
       </div>
+
+      {settingsOpen && createPortal(
+        <ProjectSettingsOverlay
+          project={project}
+          teams={teams}
+          contractPrefixes={contractPrefixes}
+          isAdmin={isAdmin}
+          onClose={() => { setSettingsOpen(false); router.refresh(); }}
+        />,
+        document.body
+      )}
     </div>
   );
 }
 
-function ContractList({ contracts, isAdmin, projectId }: { contracts: Contract[]; isAdmin: boolean; projectId: string }) {
-  const [editingContract, setEditingContract] = useState<Contract | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-  const router = useRouter();
-
-  async function handleDelete(contractId: string) {
-    if (!confirm("Delete this contract? This cannot be undone.")) return;
-    setDeletingId(contractId);
-    try {
-      await deleteContract(contractId);
-      router.refresh();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setDeletingId(null);
-    }
-  }
-
-  async function handleToggleLatePayment(contractId: string) {
-    setTogglingId(contractId);
-    try {
-      await toggleLatePayment(contractId);
-      router.refresh();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setTogglingId(null);
-    }
-  }
-
-  return (
-    <>
-      <div className="space-y-2">
-        {contracts.map((contract) => (
-          <div
-            key={contract.id}
-            className={`rounded-lg border bg-card p-4 flex items-center justify-between gap-3 ${
-              contract.latePayment ? "border-amber-500/30 bg-amber-500/5" : "border-border"
-            }`}
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <ContractBadge contract={contract} />
-              {contract.latePayment && (
-                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/20 shrink-0">
-                  <AlertTriangle className="w-3 h-3" />
-                  Late Payment
-                </span>
-              )}
-            </div>
-            {isAdmin && (
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  onClick={() => handleToggleLatePayment(contract.id)}
-                  disabled={togglingId === contract.id}
-                  className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
-                    contract.latePayment
-                      ? "text-amber-400 hover:bg-amber-500/10"
-                      : "text-muted-foreground hover:text-amber-400 hover:bg-amber-500/10"
-                  }`}
-                  title={contract.latePayment ? "Remove late payment flag" : "Mark as late payment"}
-                >
-                  {togglingId === contract.id
-                    ? "..."
-                    : contract.latePayment
-                      ? "Unmark Late"
-                      : "Late Payment"}
-                </button>
-                <button
-                  onClick={() => setEditingContract(contract)}
-                  className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                  title="Edit contract"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => handleDelete(contract.id)}
-                  disabled={deletingId === contract.id}
-                  className="rounded-md p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
-                  title="Delete contract"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {editingContract && (
-        <EditContractDialog
-          contract={editingContract}
-          open={!!editingContract}
-          onClose={() => setEditingContract(null)}
-        />
-      )}
-    </>
-  );
-}
