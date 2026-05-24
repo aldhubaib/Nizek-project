@@ -40,7 +40,7 @@ interface MeetingNote {
   updatedAt: Date;
   author: { id: string; name: string | null; imageUrl: string | null };
   task: { id: string; title: string; taskNumber: number; taskType: string } | null;
-  history: NoteHistoryEntry[];
+  history?: NoteHistoryEntry[];
 }
 
 interface Props {
@@ -169,9 +169,9 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
                       · linked to {note.task.taskType === "BUG" ? "B" : note.task.taskType === "REPORTED_BUG" ? "RB" : note.task.taskType === "ENHANCEMENT" ? "E" : note.task.taskType === "DESIGN" ? "D" : "F"}-{String(note.task.taskNumber).padStart(3, "0")}
                     </span>
                   )}
-                  {note.history?.length > 0 && (
+                  {(note.history?.length ?? 0) > 0 && (
                     <span className="ml-2 text-muted-foreground/50">
-                      · edited {note.history.length} time{note.history.length > 1 ? "s" : ""}
+                      · edited {note.history!.length} time{note.history!.length > 1 ? "s" : ""}
                     </span>
                   )}
                 </p>
@@ -336,7 +336,7 @@ function NoteFullScreenDetail({
           Back
         </button>
         <div className="flex items-center gap-2">
-          {note.history?.length > 0 && (
+          {(note.history?.length ?? 0) > 0 && (
             <Button
               variant="ghost"
               size="sm"
@@ -345,7 +345,7 @@ function NoteFullScreenDetail({
             >
               <History className="w-3.5 h-3.5 mr-1.5" />
               History
-              <span className="ml-1 text-[10px] text-muted-foreground">({note.history.length})</span>
+              <span className="ml-1 text-[10px] text-muted-foreground">({note.history!.length})</span>
             </Button>
           )}
           {canEdit && !isEditing && (
@@ -415,7 +415,7 @@ function NoteFullScreenDetail({
                   </button>
                 </>
               )}
-              {note.history?.length > 0 && (
+              {(note.history?.length ?? 0) > 0 && (
                 <>
                   <span>·</span>
                   <span>
@@ -450,7 +450,7 @@ function NoteFullScreenDetail({
         </div>
 
         {/* History sidebar */}
-        {showHistory && note.history?.length > 0 && (
+        {showHistory && (note.history?.length ?? 0) > 0 && (
           <div className="w-72 border-l border-border bg-card/50 overflow-y-auto shrink-0">
             <div className="p-4">
               <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
@@ -458,10 +458,9 @@ function NoteFullScreenDetail({
                 Edit History
               </h3>
               <div className="space-y-0">
-                {note.history.map((entry, idx) => (
+                {note.history!.map((entry, idx) => (
                   <div key={entry.id} className="relative pl-5">
-                    {/* Timeline line */}
-                    {idx < note.history.length - 1 && (
+                    {idx < note.history!.length - 1 && (
                       <div className="absolute left-[7px] top-5 bottom-0 w-px bg-border" />
                     )}
                     {/* Timeline dot */}

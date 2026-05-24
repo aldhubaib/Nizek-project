@@ -88,7 +88,7 @@ export async function getProjects() {
     include: {
       team: true,
       contracts: true,
-      members: { include: { user: true, projectRole: true } },
+      members: { include: { user: { select: { id: true, name: true, imageUrl: true, email: true } }, projectRole: true } },
       _count: { select: { tasks: true, meetingNotes: true, assets: true, members: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -100,7 +100,7 @@ export async function getProject(projectId: string) {
     where: { id: projectId },
     include: {
       contracts: { orderBy: { startDate: "desc" } },
-      members: { include: { user: true, projectRole: true } },
+      members: { include: { user: { select: { id: true, name: true, imageUrl: true, email: true } }, projectRole: true } },
       _count: { select: { tasks: true, meetingNotes: true, assets: true } },
     },
   });

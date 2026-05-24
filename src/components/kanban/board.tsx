@@ -76,7 +76,7 @@ export function KanbanBoard({
   }, [initialTasks, setTasks]);
 
   const refetchTasks = useCallback(async () => {
-    if (isDragging.current) return;
+    if (isDragging.current || document.hidden) return;
     try {
       const updates = await pollTaskUpdates(projectId);
       setTasks((prev: KanbanTask[]) => {
@@ -356,6 +356,16 @@ export function KanbanBoard({
     setPendingDecline(null);
   }
 
+  const tasksByStage = useMemo(() => {
+    const map: Record<string, KanbanTask[]> = {};
+    for (const stage of STAGES) {
+      map[stage.id] = tasks
+        .filter((t) => t.stage === stage.id)
+        .sort((a, b) => a.order - b.order);
+    }
+    return map;
+  }, [tasks]);
+
   if (!isProjectActive) {
     return (
       <div>
@@ -366,9 +376,7 @@ export function KanbanBoard({
         </div>
         <div className="flex gap-4 overflow-x-auto pb-4 h-[calc(100vh-220px)] scrollbar-hidden">
           {STAGES.map((stage) => {
-            const stageTasks = tasks
-              .filter((t) => t.stage === stage.id)
-              .sort((a, b) => a.order - b.order);
+            const stageTasks = tasksByStage[stage.id] ?? [];
             return (
               <KanbanColumn
                 key={stage.id}
@@ -395,9 +403,7 @@ export function KanbanBoard({
     >
       <div className="flex gap-4 overflow-x-auto pb-4 h-[calc(100vh-220px)] scrollbar-hidden">
         {STAGES.map((stage) => {
-          const stageTasks = tasks
-            .filter((t) => t.stage === stage.id)
-            .sort((a, b) => a.order - b.order);
+          const stageTasks = tasksByStage[stage.id] ?? [];
           return (
             <KanbanColumn
               key={stage.id}

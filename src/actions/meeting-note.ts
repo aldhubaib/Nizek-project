@@ -107,10 +107,6 @@ export async function getMeetingNotes(projectId: string) {
     include: {
       author: true,
       task: { select: { id: true, title: true, taskNumber: true, taskType: true } },
-      history: {
-        include: { user: true },
-        orderBy: { createdAt: "desc" },
-      },
     },
     orderBy: { date: "desc" },
   });

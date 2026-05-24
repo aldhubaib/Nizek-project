@@ -136,6 +136,8 @@ model ProjectMember {
   createdAt DateTime @default(now())
 
   @@unique([userId, projectId])
+  @@index([projectId])
+  @@index([userId])
 }
 
 model ProjectRole {
@@ -219,6 +221,9 @@ model Task {
 
   @@unique([projectId, taskNumber])
   @@index([projectId, stage])
+  @@index([projectId, order])
+  @@index([assigneeId])
+  @@index([createdById])
 }
 
 model StageLog {
@@ -230,7 +235,7 @@ model StageLog {
   taskId String
   task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
-  @@index([taskId])
+  @@index([taskId, exitedAt])
 }
 
 model TaskComment {
@@ -260,6 +265,7 @@ model TaskCommentMention {
 
   @@unique([commentId, userId])
   @@index([userId])
+  @@index([userId, readAt])
 }
 
 model TaskActivity {
@@ -276,7 +282,8 @@ model TaskActivity {
 
   createdAt DateTime @default(now())
 
-  @@index([taskId])
+  @@index([taskId, action])
+  @@index([taskId, createdAt])
 }
 
 enum NoteType {
@@ -310,6 +317,7 @@ model MeetingNote {
 
   @@index([projectId])
   @@index([taskId])
+  @@index([projectId, date])
 }
 
 model NoteHistory {
@@ -356,6 +364,7 @@ model TaskAnswer {
 
   @@unique([taskId, questionId])
   @@index([taskId])
+  @@index([questionId])
 }
 
 model Invitation {
@@ -375,6 +384,8 @@ model Invitation {
   expiresAt DateTime
 
   @@unique([email, projectId])
+  @@index([email, status])
+  @@index([projectId, status])
 }
 
 model PendingTeamInvite {

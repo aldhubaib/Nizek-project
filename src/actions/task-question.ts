@@ -26,27 +26,31 @@ export async function saveTaskAnswers(data: {
 
   const existingMap = new Map(task.answers.map((a) => [a.questionId, a.answer]));
 
-  for (const a of data.answers) {
-    const oldAnswer = existingMap.get(a.questionId);
-    const changed = oldAnswer !== a.answer && (oldAnswer || a.answer.trim());
-
-    await prisma.taskAnswer.upsert({
+  const upserts = data.answers.map((a) =>
+    prisma.taskAnswer.upsert({
       where: { taskId_questionId: { taskId: data.taskId, questionId: a.questionId } },
       update: { answer: a.answer },
       create: { taskId: data.taskId, questionId: a.questionId, answer: a.answer },
-    });
+    })
+  );
+  await prisma.$transaction(upserts);
 
-    if (changed) {
-      await logTaskActivity({
+  const activityLogs = data.answers
+    .filter((a) => {
+      const oldAnswer = existingMap.get(a.questionId);
+      return oldAnswer !== a.answer && (oldAnswer || a.answer.trim());
+    })
+    .map((a) =>
+      logTaskActivity({
         taskId: data.taskId,
         userId: user.id,
         action: "answered",
         field: `answer:${a.questionId}`,
-        oldValue: oldAnswer || null,
+        oldValue: existingMap.get(a.questionId) || null,
         newValue: a.answer || null,
-      });
-    }
-  }
+      })
+    );
+  await Promise.all(activityLogs);
 
   revalidatePath(`/dashboard/projects/${task.projectId}`);
 }

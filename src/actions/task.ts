@@ -426,8 +426,8 @@ export async function getTasksByProject(projectId: string) {
   const tasks = await prisma.task.findMany({
     where: { projectId },
     include: {
-      assignee: true,
-      createdBy: true,
+      assignee: { select: { id: true, name: true, imageUrl: true } },
+      createdBy: { select: { id: true, name: true, imageUrl: true } },
       answers: { select: { questionId: true, answer: true } },
       stageLogs: {
         where: { exitedAt: null },

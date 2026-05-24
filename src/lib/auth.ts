@@ -8,25 +8,34 @@ async function acceptPendingInvitations(userId: string, email: string) {
   });
   if (pending.length === 0) return;
 
-  for (const inv of pending) {
-    const alreadyMember = await prisma.projectMember.findUnique({
-      where: { userId_projectId: { userId, projectId: inv.projectId } },
-    });
-    if (!alreadyMember) {
-      await prisma.projectMember.create({
-        data: {
-          userId,
-          projectId: inv.projectId,
-          role: inv.role,
-          roleId: inv.roleId,
-        },
-      });
-    }
-    await prisma.invitation.update({
-      where: { id: inv.id },
+  const existingMembers = await prisma.projectMember.findMany({
+    where: {
+      userId,
+      projectId: { in: pending.map((inv) => inv.projectId) },
+    },
+    select: { projectId: true },
+  });
+  const memberSet = new Set(existingMembers.map((m) => m.projectId));
+
+  const newMembers = pending.filter((inv) => !memberSet.has(inv.projectId));
+
+  await prisma.$transaction([
+    ...(newMembers.length > 0
+      ? [prisma.projectMember.createMany({
+          data: newMembers.map((inv) => ({
+            userId,
+            projectId: inv.projectId,
+            role: inv.role,
+            roleId: inv.roleId,
+          })),
+          skipDuplicates: true,
+        })]
+      : []),
+    prisma.invitation.updateMany({
+      where: { id: { in: pending.map((inv) => inv.id) } },
       data: { status: "ACCEPTED" },
-    });
-  }
+    }),
+  ]);
 }
 
 export const getCurrentUser = cache(async () => {
