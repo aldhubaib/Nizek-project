@@ -65,7 +65,7 @@ export function EditContractDialog({ contract, open, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md z-[10000]">
         <DialogHeader>
           <DialogTitle>Edit Contract</DialogTitle>
         </DialogHeader>

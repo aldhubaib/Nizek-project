@@ -68,7 +68,7 @@ export function AddContractDialog({ projectId, contractPrefixes = [] }: Props) {
         <Plus className="mr-1.5 h-3.5 w-3.5" />
         Add Contract
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md z-[10000]">
         <DialogHeader>
           <DialogTitle>Add Contract</DialogTitle>
         </DialogHeader>
