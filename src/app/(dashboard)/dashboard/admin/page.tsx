@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { requireUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { getTeams, getOrCreateDefaultTeam, getPendingInvitesForTeam, getTeamMembers, getPendingInvitations, getPendingTeamInvites } from "@/actions/team";
+import { getTeams, ensureDefaultTeams, getPendingInvitesForTeam, getTeamMembers, getPendingInvitations, getPendingTeamInvites } from "@/actions/team";
 import { getRoles } from "@/actions/role";
 import { getContractPrefixes } from "@/actions/contract-prefix";
 import { getDefaultQuestions } from "@/actions/default-question";
@@ -11,7 +11,7 @@ export default async function AdminPage() {
   const user = await requireUser();
   if (user.systemRole !== "ADMIN") redirect("/dashboard");
 
-  await getOrCreateDefaultTeam();
+  await ensureDefaultTeams();
 
   const [teams, pendingInvites, members, invitations, teamInvites, roles, prefixes, questions] = await Promise.all([
     getTeams(),

@@ -79,10 +79,8 @@ export const getCurrentUser = cache(async () => {
         .catch(() => {});
     }
 
-    if (user.systemRole !== "CLIENT") {
-      const { assignUserToDefaultTeam } = await import("@/actions/team");
-      assignUserToDefaultTeam(user.id).catch(() => {});
-    }
+    const { assignUserToDefaultTeam } = await import("@/actions/team");
+    assignUserToDefaultTeam(user.id, user.systemRole === "CLIENT").catch(() => {});
 
     await acceptPendingInvitations(user.id, user.email);
   } else {

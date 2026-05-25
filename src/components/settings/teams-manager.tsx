@@ -257,12 +257,14 @@ export function TeamsManager({ teams, pendingInvites = [] }: { teams: Team[]; pe
                     </div>
                   ) : (
                     <div className="flex items-center gap-0.5 shrink-0">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setEditingId(team.id); setEditName(team.name); setError(""); }}
-                        className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
+                      {!team.isDefault && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditingId(team.id); setEditName(team.name); setError(""); }}
+                          className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {!team.isDefault && (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDelete(team.id); }}
@@ -304,117 +306,139 @@ export function TeamsManager({ teams, pendingInvites = [] }: { teams: Team[]; pe
                               </div>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                onClick={() => handleToggleRole(team.id, m.user.id, m.role)}
-                                className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border transition-colors ${
-                                  m.role === "ADMIN"
-                                    ? "bg-amber-500/15 text-amber-400 border-amber-500/20 hover:bg-amber-500/25"
-                                    : "bg-muted text-muted-foreground border-border hover:bg-accent"
-                                }`}
-                              >
-                                {m.role === "ADMIN" ? <Crown className="w-3 h-3" /> : <Shield className="w-3 h-3" />}
-                                {m.role === "ADMIN" ? "Admin" : "Member"}
-                              </button>
-                              <button
-                                onClick={() => handleRemoveMember(team.id, m.user.id)}
-                                className="rounded-md p-1 text-muted-foreground/40 hover:text-destructive transition-colors"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
+                              {!team.isDefault ? (
+                                <>
+                                  <button
+                                    onClick={() => handleToggleRole(team.id, m.user.id, m.role)}
+                                    className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border transition-colors ${
+                                      m.role === "ADMIN"
+                                        ? "bg-amber-500/15 text-amber-400 border-amber-500/20 hover:bg-amber-500/25"
+                                        : "bg-muted text-muted-foreground border-border hover:bg-accent"
+                                    }`}
+                                  >
+                                    {m.role === "ADMIN" ? <Crown className="w-3 h-3" /> : <Shield className="w-3 h-3" />}
+                                    {m.role === "ADMIN" ? "Admin" : "Member"}
+                                  </button>
+                                  <button
+                                    onClick={() => handleRemoveMember(team.id, m.user.id)}
+                                    className="rounded-md p-1 text-muted-foreground/40 hover:text-destructive transition-colors"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground/50 font-mono">
+                                  {m.user.systemRole.replace("_", " ")}
+                                </span>
+                              )}
                             </div>
                           </div>
                         ))}
                       </div>
                     )}
 
-                    {/* Add member */}
-                    {addingMemberTo === team.id ? (
-                      <div className="flex items-center gap-2 pt-1">
-                        {loadingUsers ? (
-                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />
-                        ) : (
-                          <>
-                            <select
-                              value={selectedUserId}
-                              onChange={(e) => setSelectedUserId(e.target.value)}
-                              className="flex-1 rounded-md border border-border bg-background px-2 py-1 text-[12px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                            >
-                              <option value="">Select a user...</option>
-                              {availableUsers.map((u) => (
-                                <option key={u.id} value={u.id}>
-                                  {u.name ? `${u.name} (${u.email})` : u.email}
-                                </option>
-                              ))}
-                            </select>
-                            <select
-                              value={selectedRole}
-                              onChange={(e) => setSelectedRole(e.target.value as "ADMIN" | "MEMBER")}
-                              className="rounded-md border border-border bg-background px-2 py-1 text-[12px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring w-24"
-                            >
-                              <option value="MEMBER">Member</option>
-                              <option value="ADMIN">Admin</option>
-                            </select>
-                            <Button
-                              size="sm"
-                              onClick={() => handleAddMember(team.id)}
-                              disabled={!selectedUserId || saving}
-                              className="h-7 px-2 text-[11px]"
-                            >
-                              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Add"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setAddingMemberTo(null)}
-                              className="h-7 px-1.5"
-                            >
-                              <X className="w-3 h-3" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleStartAddMember(team.id)}
-                        className="w-full text-[11px] text-muted-foreground hover:text-foreground h-7 border border-dashed border-border"
-                      >
-                        <UserPlus className="w-3 h-3 mr-1" />
-                        Add Member
-                      </Button>
+                    {!team.isDefault && (
+                      addingMemberTo === team.id ? (
+                        <div className="flex items-center gap-2 pt-1">
+                          {loadingUsers ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />
+                          ) : (
+                            <>
+                              <select
+                                value={selectedUserId}
+                                onChange={(e) => setSelectedUserId(e.target.value)}
+                                className="flex-1 rounded-md border border-border bg-background px-2 py-1 text-[12px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                              >
+                                <option value="">Select a user...</option>
+                                {availableUsers.map((u) => (
+                                  <option key={u.id} value={u.id}>
+                                    {u.name ? `${u.name} (${u.email})` : u.email}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                value={selectedRole}
+                                onChange={(e) => setSelectedRole(e.target.value as "ADMIN" | "MEMBER")}
+                                className="rounded-md border border-border bg-background px-2 py-1 text-[12px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring w-24"
+                              >
+                                <option value="MEMBER">Member</option>
+                                <option value="ADMIN">Admin</option>
+                              </select>
+                              <Button
+                                size="sm"
+                                onClick={() => handleAddMember(team.id)}
+                                disabled={!selectedUserId || saving}
+                                className="h-7 px-2 text-[11px]"
+                              >
+                                {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : "Add"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setAddingMemberTo(null)}
+                                className="h-7 px-1.5"
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleStartAddMember(team.id)}
+                          className="w-full text-[11px] text-muted-foreground hover:text-foreground h-7 border border-dashed border-border"
+                        >
+                          <UserPlus className="w-3 h-3 mr-1" />
+                          Add Member
+                        </Button>
+                      )
                     )}
 
-                    {team.isDefault && pendingInvites.length > 0 && (
-                      <div className="pt-2 mt-2 border-t border-border/50">
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <Clock className="w-3 h-3 text-muted-foreground/50" />
-                          <span className="text-[10px] font-medium text-muted-foreground/70">
-                            Pending Platform Invites ({pendingInvites.length})
-                          </span>
-                        </div>
-                        <div className="space-y-1">
-                          {pendingInvites.map((inv) => (
-                            <div key={inv.id} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md bg-muted/30">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div className="w-6 h-6 rounded-full bg-muted/50 flex items-center justify-center shrink-0">
-                                  <Mail className="w-3 h-3 text-muted-foreground" />
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="text-[12px] text-muted-foreground truncate">{inv.email}</p>
-                                </div>
-                              </div>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-semibold shrink-0">
-                                {inv.systemRole.replace("_", " ")}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                        <p className="text-[10px] text-muted-foreground/50 mt-1.5">
-                          These users will be auto-added to this team when they sign in.
-                        </p>
-                      </div>
+                    {team.isDefault && (
+                      <p className="text-[10px] text-muted-foreground/50 mt-1">
+                        Members are auto-managed based on user role. Internal users join Nizek, client users join Clients.
+                      </p>
                     )}
+
+                    {(() => {
+                      if (!team.isDefault) return null;
+                      const filtered = pendingInvites.filter((inv) =>
+                        team.name === "Clients" ? inv.systemRole === "CLIENT" : inv.systemRole !== "CLIENT"
+                      );
+                      if (filtered.length === 0) return null;
+                      return (
+                        <div className="pt-2 mt-2 border-t border-border/50">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Clock className="w-3 h-3 text-muted-foreground/50" />
+                            <span className="text-[10px] font-medium text-muted-foreground/70">
+                              Pending Platform Invites ({filtered.length})
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            {filtered.map((inv) => (
+                              <div key={inv.id} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md bg-muted/30">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-6 h-6 rounded-full bg-muted/50 flex items-center justify-center shrink-0">
+                                    <Mail className="w-3 h-3 text-muted-foreground" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-[12px] text-muted-foreground truncate">{inv.email}</p>
+                                  </div>
+                                </div>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-semibold shrink-0">
+                                  {inv.systemRole.replace("_", " ")}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground/50 mt-1.5">
+                            These users will be auto-added to this team when they sign in.
+                          </p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>

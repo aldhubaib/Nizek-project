@@ -27,13 +27,55 @@ export async function getTeams() {
   });
 }
 
-export async function getOrCreateDefaultTeam() {
+export async function ensureDefaultTeams() {
   await requireAdmin();
-  let defaultTeam = await prisma.team.findFirst({ where: { isDefault: true } });
-  if (!defaultTeam) {
-    defaultTeam = await prisma.team.create({ data: { name: "Nizek", isDefault: true } });
+  const defaults = await prisma.team.findMany({ where: { isDefault: true } });
+  const hasNizek = defaults.some((t) => t.name === "Nizek");
+  const hasClients = defaults.some((t) => t.name === "Clients");
+
+  if (!hasNizek) {
+    await prisma.team.create({ data: { name: "Nizek", isDefault: true } });
   }
-  return defaultTeam;
+  if (!hasClients) {
+    await prisma.team.create({ data: { name: "Clients", isDefault: true } });
+  }
+
+  if (!hasNizek || !hasClients) {
+    await syncDefaultTeamMembers();
+  }
+}
+
+async function syncDefaultTeamMembers() {
+  const [nizek, clients] = await Promise.all([
+    prisma.team.findFirst({ where: { name: "Nizek", isDefault: true } }),
+    prisma.team.findFirst({ where: { name: "Clients", isDefault: true } }),
+  ]);
+
+  if (nizek) {
+    const internalUsers = await prisma.user.findMany({
+      where: { systemRole: { not: "CLIENT" }, blocked: false },
+      select: { id: true },
+    });
+    if (internalUsers.length > 0) {
+      await prisma.teamMember.createMany({
+        data: internalUsers.map((u) => ({ userId: u.id, teamId: nizek.id })),
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  if (clients) {
+    const clientUsers = await prisma.user.findMany({
+      where: { systemRole: "CLIENT", blocked: false },
+      select: { id: true },
+    });
+    if (clientUsers.length > 0) {
+      await prisma.teamMember.createMany({
+        data: clientUsers.map((u) => ({ userId: u.id, teamId: clients.id })),
+        skipDuplicates: true,
+      });
+    }
+  }
 }
 
 export async function createTeam(data: { name: string }) {
@@ -51,6 +93,10 @@ export async function createTeam(data: { name: string }) {
 
 export async function updateTeam(data: { teamId: string; name: string }) {
   await requireAdmin();
+
+  const team = await prisma.team.findUnique({ where: { id: data.teamId } });
+  if (team?.isDefault) return { error: "Cannot rename a default team" };
+
   const name = data.name.trim();
   if (!name) throw new Error("Team name is required");
 
@@ -382,6 +428,9 @@ export async function toggleBlockUser(userId: string) {
 export async function addTeamMember(data: { teamId: string; userId: string; role?: TeamRole }) {
   await requireAdmin();
 
+  const team = await prisma.team.findUnique({ where: { id: data.teamId } });
+  if (team?.isDefault) return { error: "Cannot manually add members to a default team" };
+
   const existing = await prisma.teamMember.findUnique({
     where: { userId_teamId: { userId: data.userId, teamId: data.teamId } },
   });
@@ -396,6 +445,10 @@ export async function addTeamMember(data: { teamId: string; userId: string; role
 
 export async function removeTeamMember(data: { teamId: string; userId: string }) {
   await requireAdmin();
+
+  const team = await prisma.team.findUnique({ where: { id: data.teamId } });
+  if (team?.isDefault) throw new Error("Cannot remove members from a default team");
+
   await prisma.teamMember.delete({
     where: { userId_teamId: { userId: data.userId, teamId: data.teamId } },
   });
@@ -431,13 +484,13 @@ export async function getAvailableUsersForTeam(teamId: string) {
 export async function getPendingInvitesForTeam() {
   await requireAdmin();
   return prisma.pendingTeamInvite.findMany({
-    where: { systemRole: { not: "CLIENT" } },
     orderBy: { createdAt: "desc" },
   });
 }
 
-export async function assignUserToDefaultTeam(userId: string) {
-  const defaultTeam = await prisma.team.findFirst({ where: { isDefault: true } });
+export async function assignUserToDefaultTeam(userId: string, isClient: boolean = false) {
+  const teamName = isClient ? "Clients" : "Nizek";
+  const defaultTeam = await prisma.team.findFirst({ where: { name: teamName, isDefault: true } });
   if (!defaultTeam) return;
 
   await prisma.teamMember.upsert({
