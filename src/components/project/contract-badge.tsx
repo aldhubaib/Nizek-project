@@ -20,12 +20,8 @@ interface Contract {
 }
 
 export function ContractBadge({ contract }: { contract: Contract }) {
-  const isStartup = contract.contractType === "STARTUP";
-
   let status: "active" | "upcoming" | "expired";
-  if (isStartup) {
-    status = "active";
-  } else if (contract.startDate && contract.endDate) {
+  if (contract.startDate && contract.endDate) {
     const now = new Date();
     const start = new Date(contract.startDate);
     const end = new Date(contract.endDate);
@@ -69,11 +65,9 @@ export function ContractBadge({ contract }: { contract: Contract }) {
       )}
       <span className="text-[11px] text-muted-foreground">
         {contract.label && `${contract.label} · `}
-        {isStartup
-          ? "Always active"
-          : contract.startDate && contract.endDate
-            ? `${format(new Date(contract.startDate), "MMM d, yyyy")} — ${format(new Date(contract.endDate), "MMM d, yyyy")}`
-            : "No dates"}
+        {contract.startDate && contract.endDate
+          ? `${format(new Date(contract.startDate), "MMM d, yyyy")} — ${format(new Date(contract.endDate), "MMM d, yyyy")}`
+          : "No dates"}
       </span>
     </div>
   );

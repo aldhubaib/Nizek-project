@@ -29,7 +29,7 @@ export const CONTRACT_TYPES: { id: ContractType; label: string; icon: typeof Use
   { id: "PART_TEAM", label: "Part Team", icon: UserMinus, description: "Shared resources, part-time", color: "bg-violet-500/15 border-violet-500/40 text-violet-400" },
   { id: "FIXED", label: "Fixed", icon: Lock, description: "Fixed scope and timeline", color: "bg-amber-500/15 border-amber-500/40 text-amber-400" },
   { id: "MAINTENANCE", label: "Maintenance", icon: Wrench, description: "Bug fixes and upkeep", color: "bg-cyan-500/15 border-cyan-500/40 text-cyan-400" },
-  { id: "STARTUP", label: "Startup", icon: Rocket, description: "Always active, no end date", color: "bg-rose-500/15 border-rose-500/40 text-rose-400" },
+  { id: "STARTUP", label: "Startup", icon: Rocket, description: "Startup engagement", color: "bg-rose-500/15 border-rose-500/40 text-rose-400" },
 ];
 
 export function ContractTypePicker({ value, onChange }: { value: ContractType; onChange: (v: ContractType) => void }) {
@@ -80,7 +80,6 @@ export function CreateProjectDialog({ teams = [], contractPrefixes = [] }: { tea
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const isStartup = contractType === "STARTUP";
     try {
       const project = await createProject({
         name: formData.get("name") as string,
@@ -90,8 +89,8 @@ export function CreateProjectDialog({ teams = [], contractPrefixes = [] }: { tea
           label: (formData.get("contractLabel") as string) || undefined,
           prefixId: prefixId || undefined,
           contractType,
-          startDate: isStartup ? undefined : (formData.get("startDate") as string),
-          endDate: isStartup ? undefined : (formData.get("endDate") as string),
+          startDate: formData.get("startDate") as string,
+          endDate: formData.get("endDate") as string,
         },
       });
       setOpen(false);
@@ -197,18 +196,16 @@ export function CreateProjectDialog({ teams = [], contractPrefixes = [] }: { tea
               <ContractTypePicker value={contractType} onChange={setContractType} />
             </div>
 
-            {contractType !== "STARTUP" && (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="startDate">Start Date</Label>
-                  <Input id="startDate" name="startDate" type="date" required />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="endDate">End Date</Label>
-                  <Input id="endDate" name="endDate" type="date" required />
-                </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="startDate">Start Date</Label>
+                <Input id="startDate" name="startDate" type="date" required />
               </div>
-            )}
+              <div className="space-y-2">
+                <Label htmlFor="endDate">End Date</Label>
+                <Input id="endDate" name="endDate" type="date" required />
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2">

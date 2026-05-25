@@ -49,14 +49,12 @@ export function ProjectCard({ project, teams = [], contractPrefixes = [] }: Proj
 
   const now = new Date();
   const hasValidContract = project.contracts.some((c) => {
-    if (c.contractType === "STARTUP") return true;
     if (!c.startDate || !c.endDate) return false;
     return new Date(c.startDate) <= now && new Date(c.endDate) >= now;
   });
-  const hasLatePayment = project.contracts.some((c) => c.latePayment && (
-    c.contractType === "STARTUP" ||
-    (c.startDate && c.endDate && new Date(c.startDate) <= now && new Date(c.endDate) >= now)
-  ));
+  const hasLatePayment = project.contracts.some((c) => c.latePayment &&
+    c.startDate && c.endDate && new Date(c.startDate) <= now && new Date(c.endDate) >= now
+  );
   const isActive = hasValidContract && !hasLatePayment;
 
   return (

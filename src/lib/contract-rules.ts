@@ -28,7 +28,6 @@ export function getActiveContract(
 ): ActiveContract | null {
   const now = new Date();
   return contracts.find((c) => {
-    if (c.contractType === "STARTUP") return true;
     if (!c.startDate || !c.endDate) return false;
     return new Date(c.startDate) <= now && new Date(c.endDate) >= now;
   }) ?? null;

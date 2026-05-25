@@ -58,6 +58,11 @@ enum InvitationStatus {
   EXPIRED
 }
 
+enum TeamRole {
+  ADMIN
+  MEMBER
+}
+
 enum EstimateAccuracy {
   WAY_OVER
   OVER
@@ -80,6 +85,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  teams          TeamMember[]
   projects       ProjectMember[]
   assignedTasks  Task[]         @relation("TaskAssignee")
   createdTasks   Task[]         @relation("TaskCreator")
@@ -95,9 +101,27 @@ model User {
 model Team {
   id        String   @id @default(cuid())
   name      String   @unique
+  isDefault Boolean  @default(false)
   createdAt DateTime @default(now())
 
   projects Project[]
+  members  TeamMember[]
+}
+
+model TeamMember {
+  id   String   @id @default(cuid())
+  role TeamRole @default(MEMBER)
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId String
+  team   Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, teamId])
+  @@index([userId])
+  @@index([teamId])
 }
 
 model Project {

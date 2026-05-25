@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import type { SystemRole } from "@/generated/prisma/client";
+import type { SystemRole, TeamRole } from "@/generated/prisma/client";
 
 async function requireAdmin() {
   const user = await requireUser();
@@ -16,9 +16,24 @@ async function requireAdmin() {
 export async function getTeams() {
   await requireUser();
   return prisma.team.findMany({
-    orderBy: { name: "asc" },
-    include: { _count: { select: { projects: true } } },
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+    include: {
+      _count: { select: { projects: true, members: true } },
+      members: {
+        include: { user: { select: { id: true, name: true, email: true, imageUrl: true, systemRole: true } } },
+        orderBy: { createdAt: "asc" },
+      },
+    },
   });
+}
+
+export async function getOrCreateDefaultTeam() {
+  await requireAdmin();
+  let defaultTeam = await prisma.team.findFirst({ where: { isDefault: true } });
+  if (!defaultTeam) {
+    defaultTeam = await prisma.team.create({ data: { name: "Nizek", isDefault: true } });
+  }
+  return defaultTeam;
 }
 
 export async function createTeam(data: { name: string }) {
@@ -60,6 +75,7 @@ export async function deleteTeam(teamId: string) {
     include: { _count: { select: { projects: true } } },
   });
   if (!team) throw new Error("Team not found");
+  if (team.isDefault) return { error: "Cannot delete the default team." };
   if (team._count.projects > 0) {
     return { error: "Cannot delete a team that has projects. Reassign them first." };
   }
@@ -359,6 +375,68 @@ export async function toggleBlockUser(userId: string) {
 
   revalidatePath("/dashboard/team");
   return newBlocked;
+}
+
+// ─── Team Member Management ───────────────────────────────────
+
+export async function addTeamMember(data: { teamId: string; userId: string; role?: TeamRole }) {
+  await requireAdmin();
+
+  const existing = await prisma.teamMember.findUnique({
+    where: { userId_teamId: { userId: data.userId, teamId: data.teamId } },
+  });
+  if (existing) return { error: "User is already a member of this team" };
+
+  await prisma.teamMember.create({
+    data: { userId: data.userId, teamId: data.teamId, role: data.role ?? "MEMBER" },
+  });
+  revalidatePath("/dashboard/settings");
+  return {};
+}
+
+export async function removeTeamMember(data: { teamId: string; userId: string }) {
+  await requireAdmin();
+  await prisma.teamMember.delete({
+    where: { userId_teamId: { userId: data.userId, teamId: data.teamId } },
+  });
+  revalidatePath("/dashboard/settings");
+}
+
+export async function updateTeamMemberRole(data: { teamId: string; userId: string; role: TeamRole }) {
+  await requireAdmin();
+  await prisma.teamMember.update({
+    where: { userId_teamId: { userId: data.userId, teamId: data.teamId } },
+    data: { role: data.role },
+  });
+  revalidatePath("/dashboard/settings");
+}
+
+export async function getAvailableUsersForTeam(teamId: string) {
+  await requireAdmin();
+  const existingMembers = await prisma.teamMember.findMany({
+    where: { teamId },
+    select: { userId: true },
+  });
+  const memberIds = new Set(existingMembers.map((m) => m.userId));
+
+  const users = await prisma.user.findMany({
+    where: { blocked: false, systemRole: { not: "CLIENT" } },
+    select: { id: true, name: true, email: true, imageUrl: true, systemRole: true },
+    orderBy: { name: "asc" },
+  });
+
+  return users.filter((u) => !memberIds.has(u.id));
+}
+
+export async function assignUserToDefaultTeam(userId: string) {
+  const defaultTeam = await prisma.team.findFirst({ where: { isDefault: true } });
+  if (!defaultTeam) return;
+
+  await prisma.teamMember.upsert({
+    where: { userId_teamId: { userId, teamId: defaultTeam.id } },
+    update: {},
+    create: { userId, teamId: defaultTeam.id, role: "MEMBER" },
+  });
 }
 
 export async function removeFromAllowlist(email: string) {

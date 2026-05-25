@@ -48,7 +48,6 @@ export function ProjectList({ projects }: Props) {
       {projects.map((project) => {
         const now = new Date();
         const activeContract = project.contracts.find((c) => {
-          if (c.contractType === "STARTUP") return true;
           if (!c.startDate || !c.endDate) return false;
           return isWithinInterval(now, {
             start: new Date(c.startDate),

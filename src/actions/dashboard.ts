@@ -106,7 +106,6 @@ export async function getDashboardData(projectId: string) {
   // Contract countdown
   const activeContract = project?.contracts.find(
     (c) => {
-      if (c.contractType === "STARTUP") return true;
       if (!c.startDate || !c.endDate) return false;
       return new Date(c.startDate) <= now && new Date(c.endDate) >= now;
     }

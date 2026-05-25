@@ -49,19 +49,13 @@ export async function createProject(data: {
 }) {
   const user = await requireUser();
 
-  const isStartup = data.contract.contractType === "STARTUP";
-  let startDate: Date | undefined;
-  let endDate: Date | undefined;
-
-  if (!isStartup) {
-    if (!data.contract.startDate || !data.contract.endDate) {
-      throw new Error("Start and end dates are required");
-    }
-    startDate = new Date(data.contract.startDate);
-    endDate = new Date(data.contract.endDate);
-    const dateError = validateContractDates(startDate, endDate, []);
-    if (dateError) return { error: dateError } as any;
+  if (!data.contract.startDate || !data.contract.endDate) {
+    throw new Error("Start and end dates are required");
   }
+  const startDate = new Date(data.contract.startDate);
+  const endDate = new Date(data.contract.endDate);
+  const dateError = validateContractDates(startDate, endDate, []);
+  if (dateError) return { error: dateError } as any;
 
   let codeData: { code?: string; prefixId?: string } = {};
   if (data.contract.prefixId) {
@@ -77,8 +71,8 @@ export async function createProject(data: {
         create: {
           label: data.contract.label,
           contractType: data.contract.contractType ?? "FULL_TEAM",
-          startDate: startDate ?? null,
-          endDate: endDate ?? null,
+          startDate,
+          endDate,
           ...(codeData.code && { code: codeData.code }),
           ...(codeData.prefixId && { prefixId: codeData.prefixId }),
         },
@@ -164,22 +158,16 @@ export async function addContract(data: {
 }): Promise<{ error?: string }> {
   await requireProjectRole(data.projectId, ["ADMIN"]);
 
-  const isStartup = data.contractType === "STARTUP";
-  let startDate: Date | undefined;
-  let endDate: Date | undefined;
+  if (!data.startDate || !data.endDate) return { error: "Start and end dates are required" };
+  const startDate = new Date(data.startDate);
+  const endDate = new Date(data.endDate);
 
-  if (!isStartup) {
-    if (!data.startDate || !data.endDate) return { error: "Start and end dates are required" };
-    startDate = new Date(data.startDate);
-    endDate = new Date(data.endDate);
-
-    const existing = await prisma.contract.findMany({
-      where: { projectId: data.projectId },
-      select: { id: true, label: true, startDate: true, endDate: true },
-    });
-    const dateError = validateContractDates(startDate, endDate, existing);
-    if (dateError) return { error: dateError };
-  }
+  const existing = await prisma.contract.findMany({
+    where: { projectId: data.projectId },
+    select: { id: true, label: true, startDate: true, endDate: true },
+  });
+  const dateError = validateContractDates(startDate, endDate, existing);
+  if (dateError) return { error: dateError };
 
   let codeData: { code?: string; prefixId?: string } = {};
   if (data.prefixId) {
@@ -190,8 +178,8 @@ export async function addContract(data: {
     data: {
       label: data.label,
       contractType: data.contractType ?? "FULL_TEAM",
-      startDate: startDate ?? null,
-      endDate: endDate ?? null,
+      startDate,
+      endDate,
       projectId: data.projectId,
       ...(codeData.code && { code: codeData.code }),
       ...(codeData.prefixId && { prefixId: codeData.prefixId }),
@@ -228,13 +216,10 @@ export async function updateContract(data: {
   if (!contract) return { error: "Contract not found" };
   await requireProjectRole(contract.projectId, ["ADMIN"]);
 
-  const effectiveType = data.contractType ?? contract.contractType;
-  const isStartup = effectiveType === "STARTUP";
+  const startDate = data.startDate ? new Date(data.startDate) : contract.startDate;
+  const endDate = data.endDate ? new Date(data.endDate) : contract.endDate;
 
-  const startDate = isStartup ? null : (data.startDate ? new Date(data.startDate) : contract.startDate);
-  const endDate = isStartup ? null : (data.endDate ? new Date(data.endDate) : contract.endDate);
-
-  if (!isStartup && startDate && endDate) {
+  if (startDate && endDate) {
     const existing = contract.project.contracts.map((c) => ({
       id: c.id,
       label: c.label,
