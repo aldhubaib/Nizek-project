@@ -85,6 +85,10 @@ export const getCurrentUser = cache(async () => {
     await acceptPendingInvitations(user.id, user.email);
   } else {
     acceptPendingInvitations(user.id, user.email).catch(() => {});
+
+    prisma.pendingTeamInvite
+      .deleteMany({ where: { email: { equals: user.email, mode: "insensitive" } } })
+      .catch(() => {});
   }
 
   return user;

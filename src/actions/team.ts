@@ -196,7 +196,7 @@ export async function updateUserAdmin(userId: string, isAdmin: boolean) {
 export async function getPendingInvitations() {
   await requireUser();
 
-  return prisma.invitation.findMany({
+  const invitations = await prisma.invitation.findMany({
     where: { status: "PENDING" },
     include: {
       project: { select: { id: true, name: true } },
@@ -205,6 +205,32 @@ export async function getPendingInvitations() {
     },
     orderBy: { createdAt: "desc" },
   });
+
+  if (invitations.length === 0) return [];
+
+  const users = await prisma.user.findMany({
+    where: { email: { in: invitations.map((i) => i.email), mode: "insensitive" } },
+    select: { id: true, email: true },
+  });
+
+  const staleIds: string[] = [];
+  for (const inv of invitations) {
+    const user = users.find((u) => u.email.toLowerCase() === inv.email.toLowerCase());
+    if (!user) continue;
+    const isMember = await prisma.projectMember.findUnique({
+      where: { userId_projectId: { userId: user.id, projectId: inv.projectId } },
+    });
+    if (isMember) staleIds.push(inv.id);
+  }
+
+  if (staleIds.length > 0) {
+    prisma.invitation.updateMany({
+      where: { id: { in: staleIds } },
+      data: { status: "ACCEPTED" },
+    }).catch(() => {});
+  }
+
+  return invitations.filter((i) => !staleIds.includes(i.id));
 }
 
 export async function inviteToTeam(data: {
@@ -285,9 +311,24 @@ export async function inviteToTeam(data: {
 
 export async function getPendingTeamInvites() {
   await requireUser();
-  return prisma.pendingTeamInvite.findMany({
+  const invites = await prisma.pendingTeamInvite.findMany({
     orderBy: { createdAt: "desc" },
   });
+
+  if (invites.length === 0) return [];
+
+  const existingUsers = await prisma.user.findMany({
+    where: { email: { in: invites.map((i) => i.email), mode: "insensitive" } },
+    select: { email: true },
+  });
+  const existingEmails = new Set(existingUsers.map((u) => u.email.toLowerCase()));
+
+  const staleIds = invites.filter((i) => existingEmails.has(i.email.toLowerCase())).map((i) => i.id);
+  if (staleIds.length > 0) {
+    prisma.pendingTeamInvite.deleteMany({ where: { id: { in: staleIds } } }).catch(() => {});
+  }
+
+  return invites.filter((i) => !existingEmails.has(i.email.toLowerCase()));
 }
 
 export async function getProjectsWithRoles() {
