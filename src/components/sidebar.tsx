@@ -6,8 +6,6 @@ import { UserButton } from "@clerk/nextjs";
 import {
   LayoutDashboard,
   FolderKanban,
-  Users,
-  Shield,
   Settings,
   Pin,
   PinOff,
@@ -20,23 +18,23 @@ import {
 import { cn } from "@/lib/utils";
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban },
-  { name: "Team", href: "/dashboard/team", icon: Users },
-  { name: "Roles", href: "/dashboard/roles", icon: Shield },
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false },
+  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false },
+  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true },
 ];
 
 interface SidebarProps {
   collapsed?: boolean;
   pinned?: boolean;
   onTogglePin?: () => void;
+  isAdmin?: boolean;
 }
 
 export function Sidebar({
   collapsed = false,
   pinned = false,
   onTogglePin,
+  isAdmin = false,
 }: SidebarProps) {
   const pathname = usePathname();
 
@@ -101,7 +99,7 @@ export function Sidebar({
 
       {/* Nav */}
       <nav className="flex-1 py-1.5 px-2 overflow-y-auto">
-        {navigation.map((item) => {
+        {navigation.filter((item) => !item.adminOnly || isAdmin).map((item) => {
           const active = isActive(item.href);
           const linkContent = (
             <Link

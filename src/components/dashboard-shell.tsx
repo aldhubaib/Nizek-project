@@ -6,7 +6,7 @@ import { Menu } from "lucide-react";
 
 const DESKTOP_BREAKPOINT = 1024;
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+export function DashboardShell({ children, isAdmin = false }: { children: React.ReactNode; isAdmin?: boolean }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -47,6 +47,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             collapsed={!expanded}
             pinned={pinned}
             onTogglePin={() => setPinned(!pinned)}
+            isAdmin={isAdmin}
           />
         </div>
       )}
@@ -88,7 +89,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             drawerOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <Sidebar />
+          <Sidebar isAdmin={isAdmin} />
         </div>
       )}
 
