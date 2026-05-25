@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus, Pencil, Trash2, Loader2, X, Check, FolderKanban,
-  ChevronDown, ChevronRight, Users, Shield, UserPlus, Crown,
+  ChevronDown, ChevronRight, Users, Shield, UserPlus, Crown, Clock, Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,13 @@ interface Team {
   members: TeamMemberData[];
 }
 
+interface PendingInvite {
+  id: string;
+  email: string;
+  systemRole: string;
+  createdAt: Date;
+}
+
 interface AvailableUser {
   id: string;
   name: string | null;
@@ -36,7 +43,7 @@ interface AvailableUser {
   imageUrl: string | null;
 }
 
-export function TeamsManager({ teams }: { teams: Team[] }) {
+export function TeamsManager({ teams, pendingInvites = [] }: { teams: Team[]; pendingInvites?: PendingInvite[] }) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -376,6 +383,37 @@ export function TeamsManager({ teams }: { teams: Team[] }) {
                         <UserPlus className="w-3 h-3 mr-1" />
                         Add Member
                       </Button>
+                    )}
+
+                    {team.isDefault && pendingInvites.length > 0 && (
+                      <div className="pt-2 mt-2 border-t border-border/50">
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Clock className="w-3 h-3 text-muted-foreground/50" />
+                          <span className="text-[10px] font-medium text-muted-foreground/70">
+                            Pending Platform Invites ({pendingInvites.length})
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          {pendingInvites.map((inv) => (
+                            <div key={inv.id} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md bg-muted/30">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-6 h-6 rounded-full bg-muted/50 flex items-center justify-center shrink-0">
+                                  <Mail className="w-3 h-3 text-muted-foreground" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-[12px] text-muted-foreground truncate">{inv.email}</p>
+                                </div>
+                              </div>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-semibold shrink-0">
+                                {inv.systemRole.replace("_", " ")}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground/50 mt-1.5">
+                          These users will be auto-added to this team when they sign in.
+                        </p>
+                      </div>
                     )}
                   </div>
                 )}
