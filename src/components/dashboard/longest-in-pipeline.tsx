@@ -94,7 +94,7 @@ function CompactRow({ task, maxMs }: { task: PipelineTask; maxMs: number }) {
   const TypeIcon = typeInfo?.icon ?? Sparkles;
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors">
+    <Link href={`/dashboard/projects/${task.project.id}?task=${task.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors group">
       <Tooltip text={typeInfo?.label ?? task.taskType}>
         <div className={cn("w-6 h-6 rounded flex items-center justify-center border shrink-0", typeInfo?.color ?? "text-muted-foreground bg-muted border-border")}>
           <TypeIcon className="w-3 h-3" />
@@ -102,7 +102,7 @@ function CompactRow({ task, maxMs }: { task: PipelineTask; maxMs: number }) {
       </Tooltip>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[12px] font-medium truncate">
+          <p className="text-[12px] font-medium truncate group-hover:text-primary transition-colors">
             <span className="text-muted-foreground/50 font-mono mr-1">#{task.taskNumber}</span>
             {task.title}
           </p>
@@ -119,7 +119,7 @@ function CompactRow({ task, maxMs }: { task: PipelineTask; maxMs: number }) {
           </span>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
 

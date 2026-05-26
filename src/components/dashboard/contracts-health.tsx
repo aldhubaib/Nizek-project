@@ -72,7 +72,7 @@ function CompactRow({ item, maxDays }: { item: ContractHealthItem; maxDays: numb
   const TypeIcon = typeInfo?.icon ?? FileText;
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors">
+    <Link href={`/dashboard/projects/${item.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors group">
       {item.logoUrl ? (
         <img src={item.logoUrl} alt="" className="w-6 h-6 rounded-md object-cover border border-border shrink-0" />
       ) : (
@@ -95,7 +95,7 @@ function CompactRow({ item, maxDays }: { item: ContractHealthItem; maxDays: numb
                 </div>
               </Tooltip>
             )}
-            <p className="text-[12px] font-medium truncate">{item.name}</p>
+            <p className="text-[12px] font-medium truncate group-hover:text-primary transition-colors">{item.name}</p>
           </div>
           <span className={cn("text-[11px] font-bold tabular-nums shrink-0", colors.text)}>
             {item.daysLeft !== null ? (item.daysLeft <= 0 ? "Expired" : `${item.daysLeft}d`) : "—"}
@@ -105,7 +105,7 @@ function CompactRow({ item, maxDays }: { item: ContractHealthItem; maxDays: numb
           <div className={cn("h-full rounded-full transition-all", colors.bar)} style={{ width: `${barW}%` }} />
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
