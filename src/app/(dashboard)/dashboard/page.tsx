@@ -16,12 +16,14 @@ export default async function DashboardPage() {
         <h1 className="text-sm font-semibold">Dashboard</h1>
       </div>
 
-      <div className="px-6 py-6 space-y-6 max-w-5xl">
-        <p className="text-[13px] text-muted-foreground">
+      <div className="px-6 py-6">
+        <p className="text-[13px] text-muted-foreground mb-6">
           Welcome back, {user.name || "there"}.
         </p>
-        <ContractsHealth data={contractsHealth} />
-        <LongestInPipeline data={pipelineTasks} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ContractsHealth data={contractsHealth} />
+          <LongestInPipeline data={pipelineTasks} />
+        </div>
       </div>
     </div>
   );
