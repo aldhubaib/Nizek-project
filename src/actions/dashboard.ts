@@ -359,9 +359,12 @@ export async function getLongestInPipeline() {
 
   const stageLogMap = new Map(currentStageLogs.map((l) => [l.taskId, l]));
 
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
   return tasks
     .map((t) => {
       const pipelineMs = now.getTime() - new Date(t.startedAt!).getTime();
+      if (pipelineMs < ONE_DAY_MS) return null;
       const log = stageLogMap.get(t.id);
       const stageMs = log ? now.getTime() - new Date(log.enteredAt).getTime() : 0;
 
@@ -379,6 +382,7 @@ export async function getLongestInPipeline() {
         stageMs,
       };
     })
+    .filter((t): t is NonNullable<typeof t> => t !== null)
     .sort((a, b) => b.pipelineMs - a.pipelineMs);
 }
 
