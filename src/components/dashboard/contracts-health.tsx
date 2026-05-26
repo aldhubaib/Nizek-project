@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { ArrowRight, FileText, AlertTriangle, X, ExternalLink } from "lucide-react";
+import { ArrowRight, FileText, AlertTriangle, X, ExternalLink, Users, UserMinus, Wrench, Rocket, Briefcase, ArrowRightLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
@@ -44,11 +44,32 @@ function getBarWidth(days: number | null, maxDays: number) {
   return Math.min(100, Math.max(4, (days / maxDays) * 100));
 }
 
+const CONTRACT_TYPE_ICONS: Record<string, { icon: typeof Users; color: string }> = {
+  FULL_TEAM: { icon: Users, color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+  PART_TEAM: { icon: UserMinus, color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" },
+  FIXED: { icon: Briefcase, color: "text-purple-400 bg-purple-500/10 border-purple-500/20" },
+  MAINTENANCE: { icon: Wrench, color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+  STARTUP: { icon: Rocket, color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
+};
+
+function Tooltip({ children, text }: { children: React.ReactNode; text: string }) {
+  return (
+    <div className="relative group/tip">
+      {children}
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-popover border border-border text-[10px] text-popover-foreground whitespace-nowrap opacity-0 pointer-events-none group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">
+        {text}
+      </div>
+    </div>
+  );
+}
+
 const PREVIEW_COUNT = 5;
 
 function CompactRow({ item, maxDays }: { item: ContractHealthItem; maxDays: number }) {
   const colors = getDaysColor(item.daysLeft);
   const barW = getBarWidth(item.daysLeft, maxDays);
+  const typeInfo = item.currentType ? CONTRACT_TYPE_ICONS[item.currentType] : null;
+  const TypeIcon = typeInfo?.icon ?? FileText;
 
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors">
@@ -61,7 +82,21 @@ function CompactRow({ item, maxDays }: { item: ContractHealthItem; maxDays: numb
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[12px] font-medium truncate">{item.name}</p>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Tooltip text={CONTRACT_TYPE_LABELS[item.currentType ?? ""] ?? "Unknown"}>
+              <div className={cn("w-5 h-5 rounded flex items-center justify-center border shrink-0", typeInfo?.color ?? "text-muted-foreground bg-muted border-border")}>
+                <TypeIcon className="w-3 h-3" />
+              </div>
+            </Tooltip>
+            {item.typeTransition && (
+              <Tooltip text={`Switching: ${CONTRACT_TYPE_LABELS[item.typeTransition.from]} → ${CONTRACT_TYPE_LABELS[item.typeTransition.to]}`}>
+                <div className="w-5 h-5 rounded flex items-center justify-center border shrink-0 text-amber-400 bg-amber-500/10 border-amber-500/20 animate-pulse">
+                  <ArrowRightLeft className="w-3 h-3" />
+                </div>
+              </Tooltip>
+            )}
+            <p className="text-[12px] font-medium truncate">{item.name}</p>
+          </div>
           <span className={cn("text-[11px] font-bold tabular-nums shrink-0", colors.text)}>
             {item.daysLeft !== null ? (item.daysLeft <= 0 ? "Expired" : `${item.daysLeft}d`) : "—"}
           </span>
@@ -76,6 +111,8 @@ function CompactRow({ item, maxDays }: { item: ContractHealthItem; maxDays: numb
 
 function FullRow({ item }: { item: ContractHealthItem }) {
   const colors = getDaysColor(item.daysLeft);
+  const typeInfo = item.currentType ? CONTRACT_TYPE_ICONS[item.currentType] : null;
+  const TypeIcon = typeInfo?.icon ?? FileText;
 
   return (
     <Link
@@ -89,6 +126,18 @@ function FullRow({ item }: { item: ContractHealthItem }) {
           <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-[11px] font-bold text-primary shrink-0">
             {item.name.charAt(0).toUpperCase()}
           </div>
+        )}
+        <Tooltip text={CONTRACT_TYPE_LABELS[item.currentType ?? ""] ?? "Unknown"}>
+          <div className={cn("w-6 h-6 rounded flex items-center justify-center border shrink-0", typeInfo?.color ?? "text-muted-foreground bg-muted border-border")}>
+            <TypeIcon className="w-3.5 h-3.5" />
+          </div>
+        </Tooltip>
+        {item.typeTransition && (
+          <Tooltip text={`Switching: ${CONTRACT_TYPE_LABELS[item.typeTransition.from]} → ${CONTRACT_TYPE_LABELS[item.typeTransition.to]}`}>
+            <div className="w-6 h-6 rounded flex items-center justify-center border shrink-0 text-amber-400 bg-amber-500/10 border-amber-500/20">
+              <ArrowRightLeft className="w-3.5 h-3.5" />
+            </div>
+          </Tooltip>
         )}
         <div className="min-w-0">
           <p className="text-[13px] font-medium truncate group-hover:text-primary transition-colors">{item.name}</p>
