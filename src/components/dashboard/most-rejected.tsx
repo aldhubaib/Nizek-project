@@ -85,10 +85,13 @@ function CompactRow({ item, maxCount }: { item: RejectedTask; maxCount: number }
       </Tooltip>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[12px] font-medium truncate group-hover:text-primary transition-colors">
-            <span className="text-muted-foreground/50 font-mono mr-1">#{item.task.taskNumber}</span>
-            {item.task.title}
-          </p>
+          <div className="min-w-0">
+            <p className="text-[12px] font-medium truncate group-hover:text-primary transition-colors">
+              <span className="text-muted-foreground/50 font-mono mr-1">#{item.task.taskNumber}</span>
+              {item.task.title}
+            </p>
+            <p className="text-[10px] text-muted-foreground/50 truncate">{item.task.project.name}</p>
+          </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {item.internalCount > 0 && (
               <Tooltip text={`${item.internalCount} internal rejection${item.internalCount !== 1 ? "s" : ""}`}>
