@@ -58,6 +58,7 @@ export function ProjectSettingsOverlay({
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [name, setName] = useState(project.name);
   const [logo, setLogo] = useState<string | null>(project.logoUrl);
   const [description, setDescription] = useState(project.description || "");
   const [teamId, setTeamId] = useState(project.team?.id || "");
@@ -110,6 +111,7 @@ export function ProjectSettingsOverlay({
     try {
       await updateProject({
         projectId: project.id,
+        name: name.trim(),
         description,
         ...(teamId && { teamId }),
       });
@@ -146,7 +148,7 @@ export function ProjectSettingsOverlay({
             Close
           </button>
           <span className="text-border">|</span>
-          <span className="text-[13px] font-semibold">{project.name} — Settings</span>
+          <span className="text-[13px] font-semibold">{name || project.name} — Settings</span>
         </div>
         <Button size="sm" onClick={handleSave} disabled={saving}>
           {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
@@ -156,6 +158,18 @@ export function ProjectSettingsOverlay({
 
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto py-10 px-6 space-y-10">
+
+          {/* Name */}
+          <div className="space-y-2">
+            <Label htmlFor="proj-name" className="text-[13px] font-semibold">Project Name</Label>
+            <Input
+              id="proj-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Project name"
+              className="text-[13px]"
+            />
+          </div>
 
           {/* Logo */}
           <div className="space-y-3">
