@@ -292,6 +292,96 @@ export async function getDashboardData(projectId: string) {
   };
 }
 
+const STAGE_LABELS: Record<string, string> = {
+  NEW_REQUEST: "New Request",
+  CLARIFICATION: "Clarification",
+  READY_FOR_DEV: "Ready for Dev",
+  IN_DEVELOPMENT: "In Development",
+  INTERNAL_REVIEW: "Internal Review",
+  CLIENT_REVIEW: "Client Review",
+  READY_FOR_RELEASE: "Ready for Release",
+  DONE: "Done",
+};
+
+export async function getLongestInPipeline() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  const now = new Date();
+
+  const activeStages = [
+    "READY_FOR_DEV",
+    "IN_DEVELOPMENT",
+    "INTERNAL_REVIEW",
+    "CLIENT_REVIEW",
+    "READY_FOR_RELEASE",
+  ];
+
+  const whereClause = user.systemRole === "ADMIN"
+    ? {}
+    : user.systemRole === "PM" || user.systemRole === "TECH_LEAD"
+      ? {
+          OR: [
+            { members: { some: { userId: user.id } } },
+            { team: { members: { some: { userId: user.id } } } },
+          ],
+        }
+      : { members: { some: { userId: user.id } } };
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      stage: { in: activeStages as any },
+      startedAt: { not: null },
+      project: whereClause,
+    },
+    select: {
+      id: true,
+      title: true,
+      taskNumber: true,
+      taskType: true,
+      stage: true,
+      priority: true,
+      startedAt: true,
+      assignee: { select: { id: true, name: true, imageUrl: true } },
+      project: { select: { id: true, name: true } },
+    },
+  });
+
+  if (tasks.length === 0) return [];
+
+  const currentStageLogs = await prisma.stageLog.findMany({
+    where: {
+      taskId: { in: tasks.map((t) => t.id) },
+      exitedAt: null,
+    },
+    select: { taskId: true, stage: true, enteredAt: true },
+  });
+
+  const stageLogMap = new Map(currentStageLogs.map((l) => [l.taskId, l]));
+
+  return tasks
+    .map((t) => {
+      const pipelineMs = now.getTime() - new Date(t.startedAt!).getTime();
+      const log = stageLogMap.get(t.id);
+      const stageMs = log ? now.getTime() - new Date(log.enteredAt).getTime() : 0;
+
+      return {
+        id: t.id,
+        title: t.title,
+        taskNumber: t.taskNumber,
+        taskType: t.taskType,
+        stage: t.stage,
+        stageLabel: STAGE_LABELS[t.stage] ?? t.stage,
+        priority: t.priority,
+        assignee: t.assignee,
+        project: t.project,
+        pipelineMs,
+        stageMs,
+      };
+    })
+    .sort((a, b) => b.pipelineMs - a.pipelineMs);
+}
+
 export async function markMentionRead(mentionId: string) {
   await prisma.taskCommentMention.update({
     where: { id: mentionId },

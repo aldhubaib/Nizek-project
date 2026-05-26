@@ -1,10 +1,14 @@
 import { requireUser } from "@/lib/auth";
-import { getContractsHealth } from "@/actions/dashboard";
+import { getContractsHealth, getLongestInPipeline } from "@/actions/dashboard";
 import { ContractsHealth } from "@/components/dashboard/contracts-health";
+import { LongestInPipeline } from "@/components/dashboard/longest-in-pipeline";
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const contractsHealth = await getContractsHealth();
+  const [contractsHealth, pipelineTasks] = await Promise.all([
+    getContractsHealth(),
+    getLongestInPipeline(),
+  ]);
 
   return (
     <div>
@@ -17,6 +21,7 @@ export default async function DashboardPage() {
           Welcome back, {user.name || "there"}.
         </p>
         <ContractsHealth data={contractsHealth} />
+        <LongestInPipeline data={pipelineTasks} />
       </div>
     </div>
   );
