@@ -1,13 +1,15 @@
 import { requireUser } from "@/lib/auth";
-import { getContractsHealth, getLongestInPipeline } from "@/actions/dashboard";
+import { getContractsHealth, getLongestInPipeline, getMostRejectedTasks } from "@/actions/dashboard";
 import { ContractsHealth } from "@/components/dashboard/contracts-health";
 import { LongestInPipeline } from "@/components/dashboard/longest-in-pipeline";
+import { MostRejected } from "@/components/dashboard/most-rejected";
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const [contractsHealth, pipelineTasks] = await Promise.all([
+  const [contractsHealth, pipelineTasks, rejectedTasks] = await Promise.all([
     getContractsHealth(),
     getLongestInPipeline(),
+    getMostRejectedTasks(),
   ]);
 
   return (
@@ -23,6 +25,7 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <ContractsHealth data={contractsHealth} />
           <LongestInPipeline data={pipelineTasks} />
+          <MostRejected data={rejectedTasks} />
         </div>
       </div>
     </div>

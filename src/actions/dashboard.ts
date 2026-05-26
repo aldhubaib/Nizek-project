@@ -386,6 +386,80 @@ export async function getLongestInPipeline() {
     .sort((a, b) => b.pipelineMs - a.pipelineMs);
 }
 
+export async function getMostRejectedTasks() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  const whereClause = user.systemRole === "ADMIN"
+    ? {}
+    : user.systemRole === "PM" || user.systemRole === "TECH_LEAD"
+      ? {
+          OR: [
+            { members: { some: { userId: user.id } } },
+            { team: { members: { some: { userId: user.id } } } },
+          ],
+        }
+      : { members: { some: { userId: user.id } } };
+
+  const declineActivities = await prisma.taskActivity.findMany({
+    where: {
+      action: "declined",
+      task: { project: whereClause },
+    },
+    select: {
+      id: true,
+      oldValue: true,
+      createdAt: true,
+      user: { select: { id: true, name: true, imageUrl: true } },
+      task: {
+        select: {
+          id: true,
+          title: true,
+          taskNumber: true,
+          taskType: true,
+          stage: true,
+          projectId: true,
+          project: { select: { id: true, name: true } },
+          assignee: { select: { id: true, name: true, imageUrl: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (declineActivities.length === 0) return [];
+
+  const byTask: Record<string, {
+    task: typeof declineActivities[0]["task"];
+    internalCount: number;
+    clientCount: number;
+    totalCount: number;
+    lastRejectedAt: string;
+    lastRejectedBy: { id: string; name: string | null; imageUrl: string | null };
+  }> = {};
+
+  for (const d of declineActivities) {
+    const key = d.task.id;
+    const isClient = d.oldValue === "CLIENT_REVIEW";
+    if (!byTask[key]) {
+      byTask[key] = {
+        task: d.task,
+        internalCount: 0,
+        clientCount: 0,
+        totalCount: 0,
+        lastRejectedAt: d.createdAt.toISOString(),
+        lastRejectedBy: d.user,
+      };
+    }
+    const entry = byTask[key];
+    if (isClient) entry.clientCount++;
+    else entry.internalCount++;
+    entry.totalCount++;
+  }
+
+  return Object.values(byTask).sort((a, b) => b.totalCount - a.totalCount);
+}
+
 export async function markMentionRead(mentionId: string) {
   await prisma.taskCommentMention.update({
     where: { id: mentionId },
