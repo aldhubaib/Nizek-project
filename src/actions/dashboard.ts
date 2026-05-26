@@ -386,6 +386,65 @@ export async function getLongestInPipeline() {
     .sort((a, b) => b.pipelineMs - a.pipelineMs);
 }
 
+export async function getShippedSummary() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  const whereClause = user.systemRole === "ADMIN"
+    ? {}
+    : user.systemRole === "PM" || user.systemRole === "TECH_LEAD"
+      ? {
+          OR: [
+            { members: { some: { userId: user.id } } },
+            { team: { members: { some: { userId: user.id } } } },
+          ],
+        }
+      : { members: { some: { userId: user.id } } };
+
+  const doneTasks = await prisma.task.findMany({
+    where: {
+      stage: "DONE",
+      project: whereClause,
+    },
+    select: {
+      id: true,
+      title: true,
+      taskNumber: true,
+      taskType: true,
+      updatedAt: true,
+      project: { select: { id: true, name: true } },
+      assignee: { select: { id: true, name: true, imageUrl: true } },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  const byType: Record<string, number> = {};
+  const byProject: Record<string, { name: string; count: number }> = {};
+
+  for (const t of doneTasks) {
+    byType[t.taskType] = (byType[t.taskType] ?? 0) + 1;
+    if (!byProject[t.project.id]) {
+      byProject[t.project.id] = { name: t.project.name, count: 0 };
+    }
+    byProject[t.project.id].count++;
+  }
+
+  const typeBreakdown = Object.entries(byType)
+    .map(([type, count]) => ({ type, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const projectBreakdown = Object.entries(byProject)
+    .map(([id, data]) => ({ id, ...data }))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    total: doneTasks.length,
+    typeBreakdown,
+    projectBreakdown,
+    recentShipped: doneTasks.slice(0, 50),
+  };
+}
+
 export async function getMostRejectedTasks() {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
