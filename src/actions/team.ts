@@ -522,12 +522,7 @@ export async function getAvailableUsersForTeam(teamId: string) {
   return users.filter((u) => !memberIds.has(u.id));
 }
 
-export async function getPendingInvitesForTeam() {
-  await requireAdmin();
-  return prisma.pendingTeamInvite.findMany({
-    orderBy: { createdAt: "desc" },
-  });
-}
+export { getPendingTeamInvites as getPendingInvitesForTeam };
 
 export async function assignUserToDefaultTeam(userId: string, isClient: boolean = false) {
   const teamName = isClient ? "Clients" : "Nizek";
