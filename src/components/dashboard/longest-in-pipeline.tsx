@@ -44,9 +44,9 @@ function formatDuration(ms: number) {
 
 function getDurationColor(ms: number) {
   const days = ms / (1000 * 60 * 60 * 24);
-  if (days >= 14) return "text-red-400";
-  if (days >= 7) return "text-amber-400";
-  if (days >= 3) return "text-yellow-400";
+  if (days >= 7) return "text-red-400";
+  if (days >= 3) return "text-amber-400";
+  if (days >= 1) return "text-yellow-400";
   return "text-muted-foreground";
 }
 
