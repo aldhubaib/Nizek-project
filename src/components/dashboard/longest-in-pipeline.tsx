@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { Clock, Timer, AlertTriangle, X, ExternalLink } from "lucide-react";
+import { Clock, Timer, AlertTriangle, X, ExternalLink, Sparkles, Zap, Bug, AlertCircle, Palette } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PipelineTask {
@@ -44,6 +44,25 @@ const TASK_TYPE_COLORS: Record<string, string> = {
   DESIGN: "text-purple-400",
 };
 
+const TASK_TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string; label: string }> = {
+  FEATURE: { icon: Sparkles, color: "text-blue-400 bg-blue-500/10 border-blue-500/20", label: "Feature" },
+  ENHANCEMENT: { icon: Zap, color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20", label: "Enhancement" },
+  BUG: { icon: Bug, color: "text-red-400 bg-red-500/10 border-red-500/20", label: "Bug" },
+  REPORTED_BUG: { icon: AlertCircle, color: "text-orange-400 bg-orange-500/10 border-orange-500/20", label: "Reported Bug" },
+  DESIGN: { icon: Palette, color: "text-purple-400 bg-purple-500/10 border-purple-500/20", label: "Design" },
+};
+
+function Tooltip({ children, text }: { children: React.ReactNode; text: string }) {
+  return (
+    <div className="relative group/tip">
+      {children}
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-popover border border-border text-[10px] text-popover-foreground whitespace-nowrap opacity-0 pointer-events-none group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">
+        {text}
+      </div>
+    </div>
+  );
+}
+
 function formatDuration(ms: number) {
   const hours = Math.floor(ms / (1000 * 60 * 60));
   if (hours < 24) return `${hours}h`;
@@ -71,16 +90,16 @@ function CompactRow({ task, maxMs }: { task: PipelineTask; maxMs: number }) {
   const color = getDurationColor(task.pipelineMs);
   const barW = getBarWidth(task.pipelineMs, maxMs);
   const barColor = STAGE_BAR_COLORS[task.stage] ?? "bg-muted-foreground";
+  const typeInfo = TASK_TYPE_ICONS[task.taskType];
+  const TypeIcon = typeInfo?.icon ?? Sparkles;
 
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors">
-      {task.assignee?.imageUrl ? (
-        <img src={task.assignee.imageUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
-      ) : (
-        <div className="w-6 h-6 rounded-full bg-muted border border-dashed border-border flex items-center justify-center text-[9px] font-bold text-muted-foreground shrink-0">
-          {task.assignee ? (task.assignee.name ?? "?")[0].toUpperCase() : "?"}
+      <Tooltip text={typeInfo?.label ?? task.taskType}>
+        <div className={cn("w-6 h-6 rounded flex items-center justify-center border shrink-0", typeInfo?.color ?? "text-muted-foreground bg-muted border-border")}>
+          <TypeIcon className="w-3 h-3" />
         </div>
-      )}
+      </Tooltip>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <p className="text-[12px] font-medium truncate">
@@ -107,6 +126,8 @@ function CompactRow({ task, maxMs }: { task: PipelineTask; maxMs: number }) {
 function FullRow({ task }: { task: PipelineTask }) {
   const pipelineColor = getDurationColor(task.pipelineMs);
   const stageColor = getDurationColor(task.stageMs);
+  const typeInfo = TASK_TYPE_ICONS[task.taskType];
+  const TypeIcon = typeInfo?.icon ?? Sparkles;
 
   return (
     <Link
@@ -114,21 +135,17 @@ function FullRow({ task }: { task: PipelineTask }) {
       className="grid grid-cols-[1fr_110px_120px_80px_80px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
     >
       <div className="flex items-center gap-3 min-w-0">
-        {task.assignee?.imageUrl ? (
-          <img src={task.assignee.imageUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
-        ) : task.assignee ? (
-          <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[9px] font-bold text-primary shrink-0">
-            {(task.assignee.name ?? "?")[0].toUpperCase()}
+        <Tooltip text={typeInfo?.label ?? task.taskType}>
+          <div className={cn("w-6 h-6 rounded flex items-center justify-center border shrink-0", typeInfo?.color ?? "text-muted-foreground bg-muted border-border")}>
+            <TypeIcon className="w-3.5 h-3.5" />
           </div>
-        ) : (
-          <div className="w-6 h-6 rounded-full bg-muted border border-dashed border-border shrink-0" />
-        )}
+        </Tooltip>
         <div className="min-w-0">
           <p className="text-[13px] font-medium truncate group-hover:text-primary transition-colors">{task.title}</p>
           <p className="text-[10px] text-muted-foreground/50">
             <span className={cn("font-mono", TASK_TYPE_COLORS[task.taskType] ?? "text-muted-foreground")}>#{task.taskNumber}</span>
             <span className="mx-1">·</span>
-            {task.taskType.replace("_", " ")}
+            {typeInfo?.label ?? task.taskType.replace("_", " ")}
           </p>
         </div>
       </div>
