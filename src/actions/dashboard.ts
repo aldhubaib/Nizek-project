@@ -299,6 +299,93 @@ export async function markMentionRead(mentionId: string) {
   });
 }
 
+export async function getContractsHealth() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  const now = new Date();
+
+  const whereClause = user.systemRole === "ADMIN"
+    ? {}
+    : user.systemRole === "PM" || user.systemRole === "TECH_LEAD"
+      ? {
+          OR: [
+            { members: { some: { userId: user.id } } },
+            { team: { members: { some: { userId: user.id } } } },
+          ],
+        }
+      : { members: { some: { userId: user.id } } };
+
+  const projects = await prisma.project.findMany({
+    where: {
+      ...whereClause,
+      contracts: {
+        some: {
+          endDate: { gte: now },
+          latePayment: false,
+        },
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      logoUrl: true,
+      contracts: {
+        where: { endDate: { not: null }, startDate: { not: null } },
+        select: {
+          id: true,
+          contractType: true,
+          startDate: true,
+          endDate: true,
+          code: true,
+          label: true,
+        },
+        orderBy: { endDate: "asc" },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  return projects.map((p) => {
+    const contracts = p.contracts;
+    const lastContract = contracts[contracts.length - 1];
+    const lastEndDate = lastContract?.endDate ? new Date(lastContract.endDate) : null;
+    const daysLeft = lastEndDate
+      ? Math.ceil((lastEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    const activeContract = contracts.find(
+      (c) => c.startDate && c.endDate && new Date(c.startDate) <= now && new Date(c.endDate) >= now
+    );
+
+    const nextContract = activeContract
+      ? contracts.find(
+          (c) =>
+            c.id !== activeContract.id &&
+            c.startDate &&
+            new Date(c.startDate) > now
+        )
+      : null;
+
+    const typeTransition =
+      activeContract && nextContract && activeContract.contractType !== nextContract.contractType
+        ? { from: activeContract.contractType, to: nextContract.contractType }
+        : null;
+
+    return {
+      id: p.id,
+      name: p.name,
+      logoUrl: p.logoUrl,
+      daysLeft,
+      endDate: lastEndDate?.toISOString() ?? null,
+      currentType: activeContract?.contractType ?? lastContract?.contractType ?? null,
+      contractCode: activeContract?.code ?? lastContract?.code ?? null,
+      typeTransition,
+      contractCount: contracts.length,
+    };
+  }).sort((a, b) => (a.daysLeft ?? 9999) - (b.daysLeft ?? 9999));
+}
+
 export async function markAllMentionsRead(projectId: string, userId: string) {
   const taskIds = await prisma.task.findMany({
     where: { projectId },

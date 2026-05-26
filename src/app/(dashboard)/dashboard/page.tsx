@@ -1,7 +1,10 @@
 import { requireUser } from "@/lib/auth";
+import { getContractsHealth } from "@/actions/dashboard";
+import { ContractsHealth } from "@/components/dashboard/contracts-health";
 
 export default async function DashboardPage() {
   const user = await requireUser();
+  const contractsHealth = await getContractsHealth();
 
   return (
     <div>
@@ -9,10 +12,11 @@ export default async function DashboardPage() {
         <h1 className="text-sm font-semibold">Dashboard</h1>
       </div>
 
-      <div className="flex flex-col items-center justify-center text-center gap-3 min-h-[calc(100vh-48px)]">
+      <div className="px-6 py-6 space-y-6 max-w-5xl">
         <p className="text-[13px] text-muted-foreground">
           Welcome back, {user.name || "there"}.
         </p>
+        <ContractsHealth data={contractsHealth} />
       </div>
     </div>
   );
