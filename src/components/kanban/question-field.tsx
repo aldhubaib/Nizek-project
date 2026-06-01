@@ -3,7 +3,7 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
 import { Textarea } from "@/components/ui/textarea";
-import { Paperclip, X, Link, UserRound, Check, Download, Eye, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Paperclip, X, Link, UserRound, Check, Download, Eye, ChevronLeft, ChevronRight, Loader2, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -174,6 +174,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
 
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const fileEntries = value
     ? value.split("|||").filter(Boolean).map((entry) => {
@@ -188,9 +189,11 @@ export function QuestionField({ question, index, value, onChange, compact, reado
     if (!files?.length) return;
 
     setUploading(true);
+    setUploadError(null);
     setUploadProgress({ current: 0, total: files.length });
 
     const uploaded: { name: string; dataUrl: string }[] = [];
+    const failed: string[] = [];
 
     for (let i = 0; i < files.length; i++) {
       setUploadProgress({ current: i + 1, total: files.length });
@@ -199,10 +202,14 @@ export function QuestionField({ question, index, value, onChange, compact, reado
       form.append("file", file);
       try {
         const res = await fetch("/api/upload", { method: "POST", body: form });
-        if (!res.ok) throw new Error("Upload failed");
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error || `Upload failed (${res.status})`);
+        }
         const { url } = await res.json();
         uploaded.push({ name: file.name, dataUrl: url });
       } catch (err) {
+        failed.push(file.name);
         console.error(`Failed to upload ${file.name}:`, err);
       }
     }
@@ -210,6 +217,14 @@ export function QuestionField({ question, index, value, onChange, compact, reado
     if (uploaded.length > 0) {
       const combined = [...fileEntries, ...uploaded];
       onChange(combined.map((f) => `${f.name}::${f.dataUrl}`).join("|||"));
+    }
+
+    if (failed.length > 0) {
+      setUploadError(
+        failed.length === 1
+          ? `Failed to upload ${failed[0]}`
+          : `Failed to upload ${failed.length} files: ${failed.join(", ")}`
+      );
     }
 
     setUploading(false);
@@ -403,53 +418,91 @@ export function QuestionField({ question, index, value, onChange, compact, reado
             {uploading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" strokeWidth={1.5} />
-                Uploading {uploadProgress ? `${uploadProgress.current}/${uploadProgress.total}` : "..."}
+                Uploading {uploadProgress ? `${uploadProgress.current} of ${uploadProgress.total}` : "..."}
               </>
             ) : (
               <>
                 <Paperclip className="w-4 h-4" strokeWidth={1.5} />
-                Click to attach files
+                {fileEntries.length > 0 ? "Attach more files" : "Click to attach files"}
               </>
             )}
           </button>
+
+          {uploadError && (
+            <div className="mt-2 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] text-destructive">{uploadError}</p>
+              </div>
+              <button type="button" onClick={() => setUploadError(null)} className="text-destructive/60 hover:text-destructive shrink-0">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
           {fileEntries.length > 0 && (
-            <div className="mt-2 space-y-1">
+            <div className="mt-2 space-y-1.5">
               {fileEntries.map((entry, idx) => (
                 <div
                   key={`${entry.name}-${idx}`}
-                  className="flex items-center gap-2 rounded-md bg-muted/50 border border-border px-3 py-1.5 text-[12px]"
+                  className="flex items-center gap-2 rounded-lg bg-muted/50 border border-border overflow-hidden"
                 >
-                  <Paperclip className="w-3 h-3 text-muted-foreground shrink-0" strokeWidth={1.5} />
-                  <span className="flex-1 truncate">{entry.name}</span>
-                  {isImageFile(entry.name) && (
+                  {isImageFile(entry.name) && entry.dataUrl ? (
                     <button
                       type="button"
                       onClick={() => {
-                        if (!entry.dataUrl) return;
-                        const idx = imageEntries.findIndex((e) => e.name === entry.name);
-                        if (idx > -1) setPreviewIndex(idx);
+                        const i = imageEntries.findIndex((e) => e.name === entry.name);
+                        if (i > -1) setPreviewIndex(i);
                       }}
-                      className={cn("p-0.5 transition-colors", entry.dataUrl ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/30 cursor-not-allowed")}
-                      title="Preview"
+                      className="w-10 h-10 shrink-0 bg-muted overflow-hidden"
                     >
-                      <Eye className="w-3 h-3" />
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={entry.dataUrl} alt={entry.name} className="w-full h-full object-cover" />
                     </button>
+                  ) : (
+                    <div className="w-10 h-10 shrink-0 bg-muted flex items-center justify-center">
+                      <Paperclip className="w-3.5 h-3.5 text-muted-foreground/50" strokeWidth={1.5} />
+                    </div>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => entry.dataUrl && downloadFile(entry)}
-                    className={cn("p-0.5 transition-colors", entry.dataUrl ? "text-muted-foreground hover:text-foreground" : "text-muted-foreground/30 cursor-not-allowed")}
-                    title="Download"
-                  >
-                    <Download className="w-3 h-3" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeFile(entry.name)}
-                    className="text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
+                  <div className="flex-1 min-w-0 py-1.5">
+                    <p className="text-[12px] font-medium truncate">{entry.name}</p>
+                    <p className="text-[10px] text-emerald-400 flex items-center gap-1">
+                      <Check className="w-2.5 h-2.5" strokeWidth={2.5} />
+                      Uploaded
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-0.5 pr-2 shrink-0">
+                    {isImageFile(entry.name) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!entry.dataUrl) return;
+                          const i = imageEntries.findIndex((e) => e.name === entry.name);
+                          if (i > -1) setPreviewIndex(i);
+                        }}
+                        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+                        title="Preview"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => entry.dataUrl && downloadFile(entry)}
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+                      title="Download"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeFile(entry.name)}
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      title="Remove"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
