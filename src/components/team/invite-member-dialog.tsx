@@ -297,7 +297,12 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
                           onValueChange={(val) => val && setRoleForUser(entry.userId, val)}
                         >
                           <SelectTrigger className="h-6 w-auto min-w-[90px] text-[10px] border-border px-2 gap-1">
-                            <SelectValue />
+                            <SelectValue>
+                              <span className="flex items-center gap-1">
+                                <Shield className="w-2.5 h-2.5 text-muted-foreground" strokeWidth={1.5} />
+                                {roles.find((r) => r.id === entry.roleId)?.name ?? "Role"}
+                              </span>
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {roles.map((r) => (
