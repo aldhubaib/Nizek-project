@@ -10,10 +10,12 @@ export default async function ProjectsPage() {
     getContractPrefixes(),
   ]);
 
+  const nonDefaultTeams = teams.filter((t: any) => !t.isDefault);
+
   return (
     <ProjectsPageClient
       projects={JSON.parse(JSON.stringify(projects))}
-      teams={JSON.parse(JSON.stringify(teams))}
+      teams={JSON.parse(JSON.stringify(nonDefaultTeams))}
       contractPrefixes={JSON.parse(JSON.stringify(contractPrefixes))}
     />
   );

@@ -83,7 +83,7 @@ export default async function ProjectDetailPage({ params }: Props) {
       allowedTaskTypes={allowedTaskTypes}
       activeContractType={activeContract?.contractType ?? null}
       contractPrefixes={contractPrefixes}
-      teams={teams}
+      teams={teams.filter((t: any) => !t.isDefault)}
     />
   );
 }
