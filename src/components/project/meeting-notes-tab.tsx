@@ -243,7 +243,7 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [dueDate, setDueDate] = useState("");
+  const [dueDate, setDueDate] = useState(new Date().toISOString().split("T")[0]);
   const [noteType, setNoteType] = useState<NoteType | null>(null);
   const [saving, setSaving] = useState(false);
   const [typeError, setTypeError] = useState(false);
