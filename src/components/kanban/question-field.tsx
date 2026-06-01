@@ -3,7 +3,7 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
 import { Textarea } from "@/components/ui/textarea";
-import { Paperclip, X, Link, UserRound, Check, Download, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import { Paperclip, X, Link, UserRound, Check, Download, Eye, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -172,6 +172,9 @@ export function QuestionField({ question, index, value, onChange, compact, reado
     autoResize();
   }, [value, autoResize]);
 
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
+
   const fileEntries = value
     ? value.split("|||").filter(Boolean).map((entry) => {
         const sep = entry.indexOf("::");
@@ -180,24 +183,37 @@ export function QuestionField({ question, index, value, onChange, compact, reado
       })
     : [];
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files?.length) return;
 
-    const readers = Array.from(files).map(
-      (file) =>
-        new Promise<{ name: string; dataUrl: string }>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve({ name: file.name, dataUrl: reader.result as string });
-          reader.readAsDataURL(file);
-        })
-    );
+    setUploading(true);
+    setUploadProgress({ current: 0, total: files.length });
 
-    Promise.all(readers).then((results) => {
-      const combined = [...fileEntries, ...results];
+    const uploaded: { name: string; dataUrl: string }[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      setUploadProgress({ current: i + 1, total: files.length });
+      const file = files[i];
+      const form = new FormData();
+      form.append("file", file);
+      try {
+        const res = await fetch("/api/upload", { method: "POST", body: form });
+        if (!res.ok) throw new Error("Upload failed");
+        const { url } = await res.json();
+        uploaded.push({ name: file.name, dataUrl: url });
+      } catch (err) {
+        console.error(`Failed to upload ${file.name}:`, err);
+      }
+    }
+
+    if (uploaded.length > 0) {
+      const combined = [...fileEntries, ...uploaded];
       onChange(combined.map((f) => `${f.name}::${f.dataUrl}`).join("|||"));
-    });
+    }
 
+    setUploading(false);
+    setUploadProgress(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -205,15 +221,24 @@ export function QuestionField({ question, index, value, onChange, compact, reado
     onChange(fileEntries.filter((f) => f.name !== name).map((f) => `${f.name}::${f.dataUrl}`).join("|||"));
   }
 
-  function downloadFile(entry: { name: string; dataUrl: string }) {
-    const a = document.createElement("a");
-    a.href = entry.dataUrl;
-    a.download = entry.name;
-    a.click();
+  async function downloadFile(entry: { name: string; dataUrl: string }) {
+    try {
+      const res = await fetch(entry.dataUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = entry.name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      window.open(entry.dataUrl, "_blank");
+    }
   }
 
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
-  const imageEntries = fileEntries.filter((e) => e.dataUrl && /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(e.name));
+  const isImageFile = (name: string) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(name);
+  const imageEntries = fileEntries.filter((e) => e.dataUrl && isImageFile(e.name));
 
   function renderReadonly() {
     if (question.type === "client") {
@@ -242,14 +267,13 @@ export function QuestionField({ question, index, value, onChange, compact, reado
     }
     if (question.type === "file") {
       if (fileEntries.length === 0) return <p className="text-[13px] text-muted-foreground/50">No files attached</p>;
-      const isImage = (name: string) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(name);
       return (
         <div className="space-y-1.5">
           {fileEntries.map((entry, idx) => (
             <div key={`${entry.name}-${idx}`} className="flex items-center gap-2 rounded-md bg-muted/50 border border-border px-3 py-1.5 text-[12px]">
               <Paperclip className="w-3 h-3 text-muted-foreground shrink-0" strokeWidth={1.5} />
               <span className="flex-1 truncate text-foreground/80">{entry.name}</span>
-              {isImage(entry.name) && (
+              {isImageFile(entry.name) && (
                 <button
                   onClick={() => {
                     if (!entry.dataUrl) return;
@@ -369,11 +393,24 @@ export function QuestionField({ question, index, value, onChange, compact, reado
           />
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 w-full text-[13px] text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground transition-colors"
+            onClick={() => !uploading && fileInputRef.current?.click()}
+            disabled={uploading}
+            className={cn(
+              "flex items-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 w-full text-[13px] text-muted-foreground transition-colors",
+              uploading ? "opacity-60 cursor-not-allowed" : "hover:border-muted-foreground/40 hover:text-foreground"
+            )}
           >
-            <Paperclip className="w-4 h-4" strokeWidth={1.5} />
-            Click to attach files
+            {uploading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" strokeWidth={1.5} />
+                Uploading {uploadProgress ? `${uploadProgress.current}/${uploadProgress.total}` : "..."}
+              </>
+            ) : (
+              <>
+                <Paperclip className="w-4 h-4" strokeWidth={1.5} />
+                Click to attach files
+              </>
+            )}
           </button>
           {fileEntries.length > 0 && (
             <div className="mt-2 space-y-1">
@@ -384,7 +421,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
                 >
                   <Paperclip className="w-3 h-3 text-muted-foreground shrink-0" strokeWidth={1.5} />
                   <span className="flex-1 truncate">{entry.name}</span>
-                  {/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(entry.name) && (
+                  {isImageFile(entry.name) && (
                     <button
                       type="button"
                       onClick={() => {

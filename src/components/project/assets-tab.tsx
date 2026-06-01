@@ -44,28 +44,25 @@ export function AssetsTab({ assets, projectId, canEdit }: Props) {
 
     setUploading(true);
     try {
-      // For v1, we store files as base64 data URLs.
-      // In production, use S3/R2/Supabase Storage.
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const dataUrl = reader.result as string;
-        await createAsset({
-          projectId,
-          filename: file.name,
-          url: dataUrl,
-          fileSize: file.size,
-          mimeType: file.type,
-        });
-        setUploading(false);
-      };
-      reader.readAsDataURL(file);
+      const form = new FormData();
+      form.append("file", file);
+
+      const res = await fetch("/api/upload", { method: "POST", body: form });
+      if (!res.ok) throw new Error("Upload failed");
+      const { url } = await res.json();
+
+      await createAsset({
+        projectId,
+        filename: file.name,
+        url,
+        fileSize: file.size,
+        mimeType: file.type,
+      });
     } catch (err) {
       console.error(err);
+    } finally {
       setUploading(false);
-    }
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 

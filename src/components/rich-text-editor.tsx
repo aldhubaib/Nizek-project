@@ -50,7 +50,7 @@ export function RichTextEditor({
         heading: { levels: [1, 2, 3] },
       }),
       Placeholder.configure({ placeholder }),
-      Image.configure({ inline: false, allowBase64: true }),
+      Image.configure({ inline: false }),
     ],
     content,
     onUpdate: ({ editor }) => {
@@ -123,14 +123,18 @@ export function RichTextEditor({
     },
   });
 
-  function insertImageFile(file: File) {
+  async function insertImageFile(file: File) {
     if (!editor) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      editor.chain().focus().setImage({ src: base64 }).run();
-    };
-    reader.readAsDataURL(file);
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const res = await fetch("/api/upload", { method: "POST", body: form });
+      if (!res.ok) throw new Error("Upload failed");
+      const { url } = await res.json();
+      editor.chain().focus().setImage({ src: url }).run();
+    } catch (err) {
+      console.error("Image upload failed:", err);
+    }
   }
 
   function checkSlashCommand(ed: Editor) {
