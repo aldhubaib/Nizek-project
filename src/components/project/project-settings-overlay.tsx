@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, Trash2, Loader2, X as XIcon, ScrollText, AlertTriangle } from "lucide-react";
+import { Upload, Trash2, Loader2, X as XIcon, ScrollText, AlertTriangle, Archive, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { deleteProject, updateProject, deleteContract, toggleLatePayment } from "@/actions/project";
+import { getArchivedTasks, restoreTask, permanentlyDeleteTask } from "@/actions/task";
 import { ContractBadge } from "@/components/project/contract-badge";
 import { AddContractDialog } from "@/components/project/add-contract-dialog";
 import { EditContractDialog } from "@/components/project/edit-contract-dialog";
+import { cn } from "@/lib/utils";
 
 interface Team {
   id: string;
@@ -65,6 +67,8 @@ export function ProjectSettingsOverlay({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<"general" | "archive">("general");
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -149,14 +153,35 @@ export function ProjectSettingsOverlay({
           </button>
           <span className="text-border">|</span>
           <span className="text-[13px] font-semibold">{name || project.name} — Settings</span>
+          <span className="text-border">|</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setActiveTab("general")}
+              className={cn("px-3 py-1 rounded-md text-[12px] font-medium transition-colors", activeTab === "general" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
+            >
+              General
+            </button>
+            <button
+              onClick={() => setActiveTab("archive")}
+              className={cn("px-3 py-1 rounded-md text-[12px] font-medium transition-colors flex items-center gap-1.5", activeTab === "archive" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
+            >
+              <Archive className="w-3.5 h-3.5" />
+              Archive
+            </button>
+          </div>
         </div>
-        <Button size="sm" onClick={handleSave} disabled={saving}>
-          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
-          {saved ? "Saved!" : saving ? "Saving..." : "Save Changes"}
-        </Button>
+        {activeTab === "general" && (
+          <Button size="sm" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+            {saved ? "Saved!" : saving ? "Saving..." : "Save Changes"}
+          </Button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        {activeTab === "archive" ? (
+          <ArchiveTab projectId={project.id} isAdmin={isAdmin} />
+        ) : (
         <div className="max-w-2xl mx-auto py-10 px-6 space-y-10">
 
           {/* Name */}
@@ -296,6 +321,7 @@ export function ProjectSettingsOverlay({
           </div>
 
         </div>
+        )}
       </div>
     </div>
   );
@@ -400,5 +426,189 @@ function ContractList({ contracts, isAdmin, projectId }: { contracts: Contract[]
         />
       )}
     </>
+  );
+}
+
+/* ─── Archive Tab ─── */
+
+const TASK_TYPE_META: Record<string, { prefix: string; color: string }> = {
+  FEATURE: { prefix: "F", color: "text-primary" },
+  ENHANCEMENT: { prefix: "E", color: "text-violet-400" },
+  BUG: { prefix: "B", color: "text-amber-400" },
+  REPORTED_BUG: { prefix: "RB", color: "text-destructive" },
+  DESIGN: { prefix: "D", color: "text-cyan-400" },
+};
+
+const STAGE_LABELS: Record<string, string> = {
+  NEW_REQUEST: "New Request",
+  CLARIFICATION: "Clarification",
+  READY_FOR_DEV: "Ready for Dev",
+  IN_DEVELOPMENT: "In Development",
+  INTERNAL_REVIEW: "Internal Review",
+  CLIENT_REVIEW: "Client Review",
+  READY_FOR_RELEASE: "Ready for Release",
+  DONE: "Done",
+};
+
+interface ArchivedTask {
+  id: string;
+  taskNumber: number;
+  title: string;
+  taskType: string;
+  stage: string;
+  priority: number | null;
+  archivedAt: Date | null;
+  createdBy: { id: string; name: string | null; imageUrl: string | null };
+  assignee: { id: string; name: string | null; imageUrl: string | null } | null;
+}
+
+function ArchiveTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolean }) {
+  const [tasks, setTasks] = useState<ArchivedTask[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionId, setActionId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    getArchivedTasks(projectId)
+      .then((data) => setTasks(data as ArchivedTask[]))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [projectId]);
+
+  async function handleRestore(taskId: string) {
+    setActionId(taskId);
+    try {
+      await restoreTask(taskId);
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      router.refresh();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function handlePermanentDelete(taskId: string) {
+    setActionId(taskId);
+    try {
+      await permanentlyDeleteTask(taskId);
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setConfirmDeleteId(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto py-10 px-6">
+      <div className="mb-6">
+        <h2 className="text-[15px] font-semibold flex items-center gap-2">
+          <Archive className="w-4 h-4 text-muted-foreground" />
+          Archived Tasks
+        </h2>
+        <p className="text-[12px] text-muted-foreground mt-1">
+          Deleted tasks are moved here. {isAdmin ? "Admins can restore or permanently delete them." : "Ask an admin to restore or permanently delete them."}
+        </p>
+      </div>
+
+      {tasks.length === 0 ? (
+        <div className="flex flex-col items-center justify-center text-center gap-3 py-16 rounded-lg border border-dashed border-border">
+          <Archive className="w-10 h-10 text-muted-foreground opacity-30" strokeWidth={1.5} />
+          <p className="text-[13px] text-muted-foreground">No archived tasks</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {tasks.map((task) => {
+            const meta = TASK_TYPE_META[task.taskType] ?? { prefix: "?", color: "text-muted-foreground" };
+            return (
+              <div
+                key={task.id}
+                className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 group"
+              >
+                <span className={cn("text-[12px] font-mono font-bold shrink-0", meta.color)}>
+                  {meta.prefix}-{String(task.taskNumber).padStart(3, "0")}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium truncate">{task.title}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[10px] text-muted-foreground">
+                      {STAGE_LABELS[task.stage] ?? task.stage}
+                    </span>
+                    {task.priority && (
+                      <span className="text-[10px] text-muted-foreground">
+                        P{task.priority}
+                      </span>
+                    )}
+                    {task.archivedAt && (
+                      <span className="text-[10px] text-muted-foreground/50">
+                        Archived {new Date(task.archivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {isAdmin && (
+                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {confirmDeleteId === task.id ? (
+                      <>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handlePermanentDelete(task.id)}
+                          disabled={actionId === task.id}
+                          className="text-[11px] h-7"
+                        >
+                          {actionId === task.id ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Trash2 className="w-3 h-3 mr-1" />}
+                          Confirm
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="text-[11px] h-7"
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleRestore(task.id)}
+                          disabled={actionId === task.id}
+                          className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+                          title="Restore task"
+                        >
+                          {actionId === task.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Undo2 className="w-3 h-3" />}
+                          Restore
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(task.id)}
+                          className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          title="Delete permanently"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

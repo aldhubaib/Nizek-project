@@ -50,7 +50,7 @@ export async function createTask(data: {
 
   const [maxOrder, maxTaskNumber] = await Promise.all([
     prisma.task.aggregate({
-      where: { projectId: data.projectId, stage: "NEW_REQUEST" },
+      where: { projectId: data.projectId, stage: "NEW_REQUEST", archivedAt: null },
       _max: { order: true },
     }),
     prisma.task.aggregate({
@@ -403,7 +403,7 @@ export async function declineTask(data: {
 export async function deleteTask(taskId: string) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    include: { project: true, answers: true },
+    include: { project: true },
   });
   if (!task) throw new Error("Task not found");
 
@@ -413,6 +413,84 @@ export async function deleteTask(taskId: string) {
     if (!perms.isAdmin && !perms.canDeleteTask) {
       throw new Error("You do not have permission to delete tasks");
     }
+  }
+
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { archivedAt: new Date() },
+  });
+
+  await logTaskActivity({
+    taskId: task.id,
+    userId: user.id,
+    action: "archived",
+    field: "stage",
+    oldValue: task.stage,
+  });
+
+  revalidatePath(`/dashboard/projects/${task.projectId}`);
+  broadcastTaskEvent(task.projectId, { type: "task-deleted", taskId, userId: user.id });
+}
+
+export async function getArchivedTasks(projectId: string) {
+  await requireProjectMember(projectId);
+
+  return prisma.task.findMany({
+    where: { projectId, archivedAt: { not: null } },
+    include: {
+      createdBy: { select: { id: true, name: true, imageUrl: true } },
+      assignee: { select: { id: true, name: true, imageUrl: true } },
+      answers: true,
+    },
+    orderBy: { archivedAt: "desc" },
+  });
+}
+
+export async function restoreTask(taskId: string) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { project: true },
+  });
+  if (!task) throw new Error("Task not found");
+
+  const { user } = await requireProjectMember(task.projectId);
+  if (user.systemRole !== "ADMIN") {
+    throw new Error("Only admins can restore archived tasks");
+  }
+
+  const maxOrder = await prisma.task.aggregate({
+    where: { projectId: task.projectId, stage: task.stage, archivedAt: null },
+    _max: { order: true },
+  });
+
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { archivedAt: null, order: (maxOrder._max.order ?? 0) + 1 },
+  });
+
+  await logTaskActivity({
+    taskId: task.id,
+    userId: user.id,
+    action: "restored",
+    field: "stage",
+    newValue: task.stage,
+  });
+
+  revalidatePath(`/dashboard/projects/${task.projectId}`);
+  broadcastTaskEvent(task.projectId, { type: "task-created", taskId, userId: user.id });
+}
+
+export async function permanentlyDeleteTask(taskId: string) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { project: true, answers: true },
+  });
+  if (!task) throw new Error("Task not found");
+  if (!task.archivedAt) throw new Error("Task must be archived before permanent deletion");
+
+  const { user } = await requireProjectMember(task.projectId);
+  if (user.systemRole !== "ADMIN") {
+    throw new Error("Only admins can permanently delete tasks");
   }
 
   const { extractR2Key, deleteManyFromR2 } = await import("@/lib/r2");
@@ -435,14 +513,13 @@ export async function deleteTask(taskId: string) {
   }
 
   revalidatePath(`/dashboard/projects/${task.projectId}`);
-  broadcastTaskEvent(task.projectId, { type: "task-deleted", taskId, userId: user.id });
 }
 
 export async function getTasksByProject(projectId: string) {
   await requireProjectMember(projectId);
 
   const tasks = await prisma.task.findMany({
-    where: { projectId },
+    where: { projectId, archivedAt: null },
     include: {
       assignee: { select: { id: true, name: true, imageUrl: true } },
       createdBy: { select: { id: true, name: true, imageUrl: true } },
@@ -517,7 +594,7 @@ export async function pollTaskUpdates(projectId: string) {
   await requireProjectMember(projectId);
 
   const tasks = await prisma.task.findMany({
-    where: { projectId },
+    where: { projectId, archivedAt: null },
     select: {
       id: true,
       stage: true,

@@ -236,9 +236,10 @@ model Task {
   createdById String
   createdBy   User    @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Cascade)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  startedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  startedAt  DateTime?
+  archivedAt DateTime?
 
   answers    TaskAnswer[]
   activities TaskActivity[]
@@ -249,6 +250,7 @@ model Task {
   @@unique([projectId, taskNumber])
   @@index([projectId, stage])
   @@index([projectId, order])
+  @@index([projectId, archivedAt])
   @@index([assigneeId])
   @@index([createdById])
 }
