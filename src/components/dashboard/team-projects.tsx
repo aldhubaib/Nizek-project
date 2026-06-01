@@ -26,7 +26,6 @@ interface ProjectItem {
 interface TeamData {
   id: string;
   name: string;
-  isDefault: boolean;
   projectCount: number;
   activeCount: number;
   projects: ProjectItem[];
@@ -92,12 +91,7 @@ export function TeamProjects({ data }: { data: TeamData[] }) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[12px] font-medium truncate">{team.name}</span>
-                        {team.isDefault && (
-                          <span className="text-[9px] font-semibold text-primary bg-primary/10 border border-primary/20 rounded px-1 py-px shrink-0">
-                            DEFAULT
-                          </span>
-                        )}
+                        <span className={cn("text-[12px] font-medium truncate", team.id === "__none__" && "text-muted-foreground italic")}>{team.name}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-[11px] font-bold tabular-nums text-foreground">

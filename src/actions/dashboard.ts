@@ -741,30 +741,46 @@ export async function getTeamProjects() {
 
   const now = new Date();
 
-  const teams = await prisma.team.findMany({
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      isDefault: true,
-      projects: {
-        select: {
-          id: true,
-          name: true,
-          logoUrl: true,
-          _count: { select: { tasks: true, members: true } },
-          contracts: {
-            where: { startDate: { not: null }, endDate: { not: null } },
-            select: { startDate: true, endDate: true, latePayment: true, contractType: true },
-            orderBy: { endDate: "desc" },
+  const [teams, unassignedProjects] = await Promise.all([
+    prisma.team.findMany({
+      where: { isDefault: false },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        projects: {
+          select: {
+            id: true,
+            name: true,
+            logoUrl: true,
+            _count: { select: { tasks: true, members: true } },
+            contracts: {
+              where: { startDate: { not: null }, endDate: { not: null } },
+              select: { startDate: true, endDate: true, latePayment: true, contractType: true },
+              orderBy: { endDate: "desc" },
+            },
           },
         },
       },
-    },
-  });
+    }),
+    prisma.project.findMany({
+      where: { teamId: null },
+      select: {
+        id: true,
+        name: true,
+        logoUrl: true,
+        _count: { select: { tasks: true, members: true } },
+        contracts: {
+          where: { startDate: { not: null }, endDate: { not: null } },
+          select: { startDate: true, endDate: true, latePayment: true, contractType: true },
+          orderBy: { endDate: "desc" },
+        },
+      },
+    }),
+  ]);
 
-  return teams.map((team) => {
-    const projects = team.projects.map((p) => {
+  function mapProjects(raw: typeof unassignedProjects) {
+    return raw.map((p) => {
       const activeContract = p.contracts.find(
         (c) => c.startDate && c.endDate && new Date(c.startDate) <= now && new Date(c.endDate) >= now && !c.latePayment
       );
@@ -778,16 +794,31 @@ export async function getTeamProjects() {
         contractType: activeContract?.contractType ?? null,
       };
     });
+  }
 
+  const result = teams.map((team) => {
+    const projects = mapProjects(team.projects);
     return {
       id: team.id,
       name: team.name,
-      isDefault: team.isDefault,
       projectCount: projects.length,
       activeCount: projects.filter((p) => p.isActive).length,
       projects,
     };
   });
+
+  if (unassignedProjects.length > 0) {
+    const projects = mapProjects(unassignedProjects);
+    result.push({
+      id: "__none__",
+      name: "No Team",
+      projectCount: projects.length,
+      activeCount: projects.filter((p) => p.isActive).length,
+      projects,
+    });
+  }
+
+  return result;
 }
 
 export async function markAllMentionsRead(projectId: string, userId: string) {
