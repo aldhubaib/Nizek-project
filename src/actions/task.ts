@@ -15,9 +15,9 @@ import { broadcastTaskEvent } from "@/lib/pusher";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 
 // ─── Stage → Role Track ─────────────────────────────────
-export type RoleTrack = "pm" | "developer" | "client";
+type RoleTrack = "pm" | "developer" | "client";
 
-export const STAGE_ROLE_MAP: Record<string, RoleTrack> = {
+const STAGE_ROLE_MAP: Record<string, RoleTrack> = {
   NEW_REQUEST: "pm",
   CLARIFICATION: "pm",
   READY_FOR_DEV: "developer",
@@ -32,7 +32,7 @@ const PM_ROLES = ["ADMIN", "PM", "TECH_LEAD"];
 const DEV_ROLES = ["DEVELOPER", "DESIGNER", "TECH_LEAD", "ADMIN"];
 const CLIENT_ROLES = ["CLIENT"];
 
-export const ALLOWED_ROLES_BY_TRACK: Record<RoleTrack, string[]> = {
+const ALLOWED_ROLES_BY_TRACK: Record<RoleTrack, string[]> = {
   pm: PM_ROLES,
   developer: DEV_ROLES,
   client: CLIENT_ROLES,
