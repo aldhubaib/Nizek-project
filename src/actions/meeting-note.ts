@@ -9,11 +9,16 @@ export async function createMeetingNote(data: {
   title: string;
   content: string;
   date: string;
-  noteType?: "MEETING_NOTE" | "DECISION" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+  noteType?: "MEETING_NOTE" | "DECISION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+  dueDate?: string;
   taskId?: string;
 }) {
   const { user, member } = await requireProjectMember(data.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot create notes");
+
+  if (data.noteType === "DEADLINE" && !data.dueDate) {
+    throw new Error("Due date is required for deadlines");
+  }
 
   const note = await prisma.meetingNote.create({
     data: {
@@ -23,12 +28,28 @@ export async function createMeetingNote(data: {
       noteType: data.noteType ?? "MEETING_NOTE",
       projectId: data.projectId,
       authorId: user.id,
+      ...(data.dueDate && { dueDate: new Date(data.dueDate) }),
       ...(data.taskId && { taskId: data.taskId }),
     },
   });
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
   return note;
+}
+
+export async function toggleDeadlineComplete(noteId: string) {
+  const note = await prisma.meetingNote.findUnique({ where: { id: noteId } });
+  if (!note) throw new Error("Note not found");
+  if (note.noteType !== "DEADLINE") throw new Error("Not a deadline");
+
+  await requireProjectMember(note.projectId);
+
+  await prisma.meetingNote.update({
+    where: { id: noteId },
+    data: { completedAt: note.completedAt ? null : new Date() },
+  });
+
+  revalidatePath(`/dashboard/projects/${note.projectId}`);
 }
 
 export async function updateMeetingNote(data: {

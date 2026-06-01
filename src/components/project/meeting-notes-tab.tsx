@@ -4,22 +4,36 @@ import { useState, useMemo } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, FileText, Trash2, Gavel, ArrowLeft, Clock, History, User, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink } from "lucide-react";
-import { createMeetingNote, updateMeetingNote, deleteMeetingNote } from "@/actions/meeting-note";
+import { Plus, FileText, Trash2, Gavel, ArrowLeft, Clock, History, User, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle } from "lucide-react";
+import { createMeetingNote, updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete } from "@/actions/meeting-note";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { cn } from "@/lib/utils";
 
-type NoteType = "MEETING_NOTE" | "DECISION" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+type NoteType = "MEETING_NOTE" | "DECISION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
 
 const NOTE_TYPE_CONFIG: Record<NoteType, { label: string; color: string; bgColor: string; icon: typeof FileText }> = {
   MEETING_NOTE: { label: "Meeting Note", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: FileText },
   DECISION: { label: "Decision", color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/20", icon: Gavel },
+  DEADLINE: { label: "Deadline", color: "text-rose-400", bgColor: "bg-rose-500/10 border-rose-500/20", icon: CalendarClock },
   FEATURE: { label: "Feature", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: Sparkles },
   ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bgColor: "bg-violet-500/10 border-violet-500/20", icon: Wrench },
   BUG: { label: "Bug", color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/20", icon: Bug },
   REPORTED_BUG: { label: "Reported Bug", color: "text-destructive", bgColor: "bg-destructive/10 border-destructive/20", icon: AlertCircle },
   DESIGN: { label: "Design", color: "text-cyan-400", bgColor: "bg-cyan-500/10 border-cyan-500/20", icon: Palette },
 };
+
+function getDeadlineStatus(dueDate: Date | string, completedAt: Date | string | null) {
+  if (completedAt) return { label: "Completed", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" };
+  const now = new Date();
+  const due = new Date(dueDate);
+  const diffMs = due.getTime() - now.getTime();
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (days < 0) return { label: `${Math.abs(days)}d overdue`, color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" };
+  if (days === 0) return { label: "Due today", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" };
+  if (days === 1) return { label: "Due tomorrow", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" };
+  if (days <= 7) return { label: `${days}d left`, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" };
+  return { label: `${days}d left`, color: "text-muted-foreground", bg: "bg-muted border-border" };
+}
 
 interface NoteHistoryEntry {
   id: string;
@@ -36,6 +50,8 @@ interface MeetingNote {
   content: string;
   date: Date;
   noteType: string;
+  dueDate?: Date | string | null;
+  completedAt?: Date | string | null;
   createdAt: Date;
   updatedAt: Date;
   author: { id: string; name: string | null; imageUrl: string | null };
@@ -49,8 +65,8 @@ interface Props {
   canEdit: boolean;
 }
 
-const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
-const STANDALONE_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION"];
+const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "DEADLINE", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
+const STANDALONE_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "DEADLINE"];
 
 export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
   const [filter, setFilter] = useState<NoteType | "ALL">("ALL");
@@ -140,42 +156,79 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
       ) : (
         <div className="space-y-2">
           {filtered.map((note) => {
-            const config = NOTE_TYPE_CONFIG[(note.noteType as NoteType) ?? "MEETING_NOTE"];
-            const Icon = config?.icon ?? FileText;
+            const cfg = NOTE_TYPE_CONFIG[(note.noteType as NoteType) ?? "MEETING_NOTE"];
+            const Icon = cfg?.icon ?? FileText;
+            const isDeadline = note.noteType === "DEADLINE" && note.dueDate;
+            const deadlineStatus = isDeadline ? getDeadlineStatus(note.dueDate!, note.completedAt ?? null) : null;
+
             return (
-              <button
+              <div
                 key={note.id}
-                onClick={() => openNote(note)}
-                className="w-full text-left rounded-lg border border-border/60 bg-card p-4 hover:border-border transition-colors"
+                className={cn(
+                  "w-full text-left rounded-lg border border-border/60 bg-card p-4 hover:border-border transition-colors",
+                  note.completedAt && "opacity-60"
+                )}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {config && (
-                      <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${config.bgColor} ${config.color}`}>
-                        <Icon className="w-2.5 h-2.5" />
-                        {config.label}
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    {isDeadline && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await toggleDeadlineComplete(note.id);
+                        }}
+                        className="shrink-0"
+                        title={note.completedAt ? "Mark incomplete" : "Mark complete"}
+                      >
+                        {note.completedAt ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                        ) : (
+                          <Circle className="w-5 h-5 text-muted-foreground/40 hover:text-primary transition-colors" />
+                        )}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => openNote(note)}
+                      className="flex items-center gap-2 min-w-0 flex-1 text-left"
+                    >
+                      {cfg && (
+                        <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold shrink-0 ${cfg.bgColor} ${cfg.color}`}>
+                          <Icon className="w-2.5 h-2.5" />
+                          {cfg.label}
+                        </span>
+                      )}
+                      <h3 className={cn("text-sm font-medium truncate", note.completedAt && "line-through")}>{note.title}</h3>
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                    {deadlineStatus && (
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${deadlineStatus.bg} ${deadlineStatus.color}`}>
+                        {deadlineStatus.label}
                       </span>
                     )}
-                    <h3 className="text-sm font-medium">{note.title}</h3>
+                    <span className="text-xs text-muted-foreground">
+                      {isDeadline
+                        ? format(new Date(note.dueDate!), "MMM d, yyyy")
+                        : format(new Date(note.date), "MMM d, yyyy")}
+                    </span>
                   </div>
-                  <span className="text-xs text-muted-foreground shrink-0 ml-2">
-                    {format(new Date(note.date), "MMM d, yyyy")}
-                  </span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  by {note.author.name ?? "Unknown"}
-                  {note.task && (
-                    <span className="ml-2 text-muted-foreground/50">
-                      · linked to {note.task.taskType === "BUG" ? "B" : note.task.taskType === "REPORTED_BUG" ? "RB" : note.task.taskType === "ENHANCEMENT" ? "E" : note.task.taskType === "DESIGN" ? "D" : "F"}-{String(note.task.taskNumber).padStart(3, "0")}
-                    </span>
-                  )}
-                  {(note.history?.length ?? 0) > 0 && (
-                    <span className="ml-2 text-muted-foreground/50">
-                      · edited {note.history!.length} time{note.history!.length > 1 ? "s" : ""}
-                    </span>
-                  )}
-                </p>
-              </button>
+                <button onClick={() => openNote(note)} className="w-full text-left">
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    by {note.author.name ?? "Unknown"}
+                    {note.task && (
+                      <span className="ml-2 text-muted-foreground/50">
+                        · linked to {note.task.taskType === "BUG" ? "B" : note.task.taskType === "REPORTED_BUG" ? "RB" : note.task.taskType === "ENHANCEMENT" ? "E" : note.task.taskType === "DESIGN" ? "D" : "F"}-{String(note.task.taskNumber).padStart(3, "0")}
+                      </span>
+                    )}
+                    {(note.history?.length ?? 0) > 0 && (
+                      <span className="ml-2 text-muted-foreground/50">
+                        · edited {note.history!.length} time{note.history!.length > 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </p>
+                </button>
+              </div>
             );
           })}
         </div>
@@ -190,17 +243,30 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [dueDate, setDueDate] = useState("");
   const [noteType, setNoteType] = useState<NoteType | null>(null);
   const [saving, setSaving] = useState(false);
   const [typeError, setTypeError] = useState(false);
+  const [dueDateError, setDueDateError] = useState(false);
+
+  const isDeadline = noteType === "DEADLINE";
 
   async function handleSave() {
     if (!noteType) { setTypeError(true); return; }
     if (!title.trim()) return;
+    if (isDeadline && !dueDate) { setDueDateError(true); return; }
     setTypeError(false);
+    setDueDateError(false);
     setSaving(true);
     try {
-      await createMeetingNote({ projectId, title: title.trim(), content, date, noteType });
+      await createMeetingNote({
+        projectId,
+        title: title.trim(),
+        content,
+        date,
+        noteType,
+        ...(isDeadline && dueDate ? { dueDate } : {}),
+      });
       onBack();
     } catch (err) {
       console.error(err);
@@ -208,6 +274,18 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
       setSaving(false);
     }
   }
+
+  const placeholders: Record<string, string> = {
+    DECISION: "What was decided?",
+    DEADLINE: "Deadline title...",
+    MEETING_NOTE: "Meeting title...",
+  };
+
+  const editorPlaceholders: Record<string, string> = {
+    DECISION: "Describe the context, options considered, and rationale... (type / for commands)",
+    DEADLINE: "Notes about this deadline... (type / for commands)",
+    MEETING_NOTE: "Write your meeting notes here... (type / for commands)",
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
@@ -228,7 +306,7 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
         <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
           {/* Type picker */}
           <div className="mb-6">
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {STANDALONE_NOTE_TYPES.map((id) => {
                 const cfg = NOTE_TYPE_CONFIG[id];
                 const Icon = cfg.icon;
@@ -236,7 +314,7 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
                 return (
                   <button
                     key={id}
-                    onClick={() => { setNoteType(id); setTypeError(false); }}
+                    onClick={() => { setNoteType(id); setTypeError(false); setDueDateError(false); }}
                     className={cn(
                       "flex items-center gap-2 rounded-lg border px-4 py-2 text-[13px] font-medium transition-colors",
                       isActive ? `${cfg.bgColor} ${cfg.color}` : "border-border text-muted-foreground hover:border-muted-foreground/40",
@@ -255,24 +333,39 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={noteType === "DECISION" ? "What was decided?" : "Meeting title..."}
+            placeholder={placeholders[noteType ?? "MEETING_NOTE"] ?? "Title..."}
             className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-4"
             autoFocus
           />
 
           <div className="flex items-center gap-3 mb-8 pb-6 border-b border-border/50">
-            <Input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-auto text-[13px] h-8"
-            />
+            {isDeadline ? (
+              <div className="flex items-center gap-3">
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Due Date *</label>
+                  <Input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => { setDueDate(e.target.value); setDueDateError(false); }}
+                    className={cn("w-auto text-[13px] h-8", dueDateError && "border-destructive")}
+                  />
+                  {dueDateError && <p className="text-[10px] text-destructive mt-0.5">Required</p>}
+                </div>
+              </div>
+            ) : (
+              <Input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-auto text-[13px] h-8"
+              />
+            )}
           </div>
 
           <RichTextEditor
             content={content}
             onChange={setContent}
-            placeholder={noteType === "DECISION" ? "Describe the context, options considered, and rationale... (type / for commands)" : "Write your meeting notes here... (type / for commands)"}
+            placeholder={editorPlaceholders[noteType ?? "MEETING_NOTE"] ?? "Write here... (type / for commands)"}
             borderless
           />
         </div>
@@ -303,6 +396,8 @@ function NoteFullScreenDetail({
 
   const config = NOTE_TYPE_CONFIG[(note.noteType as NoteType) ?? "MEETING_NOTE"];
   const Icon = config?.icon ?? FileText;
+  const isDeadline = note.noteType === "DEADLINE" && note.dueDate;
+  const deadlineStatus = isDeadline ? getDeadlineStatus(note.dueDate!, note.completedAt ?? null) : null;
 
   async function handleSave() {
     setSaving(true);
@@ -382,10 +477,35 @@ function NoteFullScreenDetail({
                   {config.label}
                 </span>
               )}
+              {deadlineStatus && (
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${deadlineStatus.bg} ${deadlineStatus.color}`}>
+                  {deadlineStatus.label}
+                </span>
+              )}
               <span className="text-[13px] text-muted-foreground">
-                {format(new Date(note.date), "MMMM d, yyyy")}
+                {isDeadline
+                  ? `Due ${format(new Date(note.dueDate!), "MMMM d, yyyy")}`
+                  : format(new Date(note.date), "MMMM d, yyyy")}
               </span>
             </div>
+
+            {isDeadline && (
+              <button
+                onClick={async () => { await toggleDeadlineComplete(note.id); }}
+                className={cn(
+                  "mb-4 inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors",
+                  note.completedAt
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                    : "border-border text-muted-foreground hover:border-primary/40 hover:text-primary"
+                )}
+              >
+                {note.completedAt ? (
+                  <><CheckCircle2 className="w-4 h-4" /> Completed</>
+                ) : (
+                  <><Circle className="w-4 h-4" /> Mark as complete</>
+                )}
+              </button>
+            )}
 
             {/* Created by + timestamps + linked task */}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-6 text-[12px] text-muted-foreground/70">

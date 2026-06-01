@@ -148,9 +148,9 @@ model Project {
   meetingNotes MeetingNote[]
   assets       Asset[]
   invitations  Invitation[]
-
   @@index([teamId])
 }
+
 
 model ProjectMember {
   id   String @id @default(cuid())
@@ -328,6 +328,7 @@ model TaskActivity {
 enum NoteType {
   MEETING_NOTE
   DECISION
+  DEADLINE
   FEATURE
   ENHANCEMENT
   BUG
@@ -341,6 +342,9 @@ model MeetingNote {
   content  String
   date     DateTime
   noteType NoteType @default(MEETING_NOTE)
+
+  dueDate     DateTime?
+  completedAt DateTime?
 
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
