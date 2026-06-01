@@ -34,6 +34,7 @@ interface Contract {
   id: string;
   label: string | null;
   code: string | null;
+  prefixId?: string | null;
   contractType: string;
   startDate: Date | null;
   endDate: Date | null;

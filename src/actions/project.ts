@@ -212,6 +212,8 @@ export async function updateContract(data: {
   contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE" | "STARTUP";
   startDate?: string;
   endDate?: string;
+  prefixId?: string;
+  contractNumber?: string;
 }): Promise<{ error?: string }> {
   const contract = await prisma.contract.findUnique({
     where: { id: data.contractId },
@@ -235,6 +237,11 @@ export async function updateContract(data: {
     if (dateError) return { error: dateError };
   }
 
+  let codeData: { code?: string; prefixId?: string } = {};
+  if (data.prefixId) {
+    codeData = await buildContractCode(data.prefixId, data.contractNumber);
+  }
+
   await prisma.contract.update({
     where: { id: data.contractId },
     data: {
@@ -242,6 +249,8 @@ export async function updateContract(data: {
       ...(data.contractType && { contractType: data.contractType }),
       startDate,
       endDate,
+      ...(codeData.code !== undefined && { code: codeData.code }),
+      ...(codeData.prefixId !== undefined && { prefixId: codeData.prefixId }),
     },
   });
 

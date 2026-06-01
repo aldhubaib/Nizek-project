@@ -23,6 +23,7 @@ interface Contract {
   id: string;
   label: string | null;
   code: string | null;
+  prefixId?: string | null;
   contractType: string;
   startDate: Date | string | null;
   endDate: Date | string | null;
@@ -313,7 +314,7 @@ export function ProjectSettingsOverlay({
                 <p className="text-[12px] text-muted-foreground">No contracts added yet.</p>
               </div>
             ) : (
-              <ContractList contracts={project.contracts} isAdmin={isAdmin} projectId={project.id} />
+              <ContractList contracts={project.contracts} isAdmin={isAdmin} projectId={project.id} contractPrefixes={contractPrefixes} />
             )}
           </div>
 
@@ -363,7 +364,7 @@ export function ProjectSettingsOverlay({
   );
 }
 
-function ContractList({ contracts, isAdmin, projectId }: { contracts: Contract[]; isAdmin: boolean; projectId: string }) {
+function ContractList({ contracts, isAdmin, projectId, contractPrefixes = [] }: { contracts: Contract[]; isAdmin: boolean; projectId: string; contractPrefixes?: ContractPrefixOption[] }) {
   const [editingContract, setEditingContract] = useState<Contract | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -457,6 +458,7 @@ function ContractList({ contracts, isAdmin, projectId }: { contracts: Contract[]
       {editingContract && (
         <EditContractDialog
           contract={editingContract}
+          contractPrefixes={contractPrefixes}
           open={!!editingContract}
           onClose={() => setEditingContract(null)}
         />
