@@ -202,7 +202,6 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
             {task.assignee && (
               <UserAvatar name={task.assignee.name} imageUrl={task.assignee.imageUrl} />
             )}
-            <UserAvatar name={task.createdBy.name} imageUrl={task.createdBy.imageUrl} size={4} />
           </div>
         </div>
 
