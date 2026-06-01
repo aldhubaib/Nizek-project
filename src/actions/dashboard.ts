@@ -463,7 +463,7 @@ export async function getMostRejectedTasks() {
   const declineActivities = await prisma.taskActivity.findMany({
     where: {
       action: "declined",
-      task: { project: whereClause },
+      task: { stage: { not: "DONE" }, project: whereClause },
     },
     select: {
       id: true,
@@ -611,6 +611,183 @@ export async function getContractsHealth() {
       contractCount: contracts.length,
     };
   }).sort((a, b) => (a.daysLeft ?? 9999) - (b.daysLeft ?? 9999));
+}
+
+export async function getUnreadMentions() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  const mentions = await prisma.taskCommentMention.findMany({
+    where: {
+      userId: user.id,
+      readAt: null,
+    },
+    include: {
+      comment: {
+        include: {
+          task: {
+            select: {
+              id: true,
+              title: true,
+              taskNumber: true,
+              taskType: true,
+              projectId: true,
+              project: { select: { id: true, name: true } },
+            },
+          },
+          user: { select: { id: true, name: true, imageUrl: true } },
+        },
+      },
+    },
+    orderBy: { comment: { createdAt: "desc" } },
+  });
+
+  return mentions.map((m) => ({
+    id: m.id,
+    taskId: m.comment.task.id,
+    taskTitle: m.comment.task.title,
+    taskNumber: m.comment.task.taskNumber,
+    taskType: m.comment.task.taskType,
+    projectId: m.comment.task.projectId,
+    projectName: m.comment.task.project.name,
+    comment: m.comment.content,
+    commentedBy: m.comment.user,
+    commentedAt: m.comment.createdAt.toISOString(),
+  }));
+}
+
+export async function markMentionsReadBulk(mentionIds: string[]) {
+  await prisma.taskCommentMention.updateMany({
+    where: { id: { in: mentionIds } },
+    data: { readAt: new Date() },
+  });
+}
+
+export async function getClientDependencies() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  const whereClause = user.systemRole === "ADMIN"
+    ? {}
+    : user.systemRole === "PM" || user.systemRole === "TECH_LEAD"
+      ? {
+          OR: [
+            { members: { some: { userId: user.id } } },
+            { team: { members: { some: { userId: user.id } } } },
+          ],
+        }
+      : { members: { some: { userId: user.id } } };
+
+  const clientAnswers = await prisma.taskAnswer.findMany({
+    where: {
+      question: { type: "client" },
+      task: {
+        stage: { not: "DONE" },
+        project: whereClause,
+      },
+    },
+    select: {
+      answer: true,
+      task: {
+        select: {
+          id: true,
+          title: true,
+          taskNumber: true,
+          taskType: true,
+          stage: true,
+          priority: true,
+          projectId: true,
+          project: { select: { id: true, name: true } },
+          assignee: { select: { id: true, name: true, imageUrl: true } },
+        },
+      },
+    },
+  });
+
+  const pending = clientAnswers
+    .map((a) => {
+      try {
+        const parsed = JSON.parse(a.answer);
+        if (parsed.needed && !parsed.completed) {
+          return {
+            task: a.task,
+            note: (parsed.note as string) ?? "",
+          };
+        }
+      } catch {}
+      return null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  const byProject: Record<string, {
+    project: { id: string; name: string };
+    tasks: typeof pending;
+  }> = {};
+
+  for (const item of pending) {
+    const pid = item.task.project.id;
+    if (!byProject[pid]) {
+      byProject[pid] = { project: item.task.project, tasks: [] };
+    }
+    byProject[pid].tasks.push(item);
+  }
+
+  return Object.values(byProject).sort((a, b) => b.tasks.length - a.tasks.length);
+}
+
+export async function getTeamProjects() {
+  const { requireUser } = await import("@/lib/auth");
+  await requireUser();
+
+  const now = new Date();
+
+  const teams = await prisma.team.findMany({
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      isDefault: true,
+      projects: {
+        select: {
+          id: true,
+          name: true,
+          logoUrl: true,
+          _count: { select: { tasks: true, members: true } },
+          contracts: {
+            where: { startDate: { not: null }, endDate: { not: null } },
+            select: { startDate: true, endDate: true, latePayment: true, contractType: true },
+            orderBy: { endDate: "desc" },
+          },
+        },
+      },
+    },
+  });
+
+  return teams.map((team) => {
+    const projects = team.projects.map((p) => {
+      const activeContract = p.contracts.find(
+        (c) => c.startDate && c.endDate && new Date(c.startDate) <= now && new Date(c.endDate) >= now && !c.latePayment
+      );
+      return {
+        id: p.id,
+        name: p.name,
+        logoUrl: p.logoUrl,
+        taskCount: p._count.tasks,
+        memberCount: p._count.members,
+        isActive: !!activeContract,
+        contractType: activeContract?.contractType ?? null,
+      };
+    });
+
+    return {
+      id: team.id,
+      name: team.name,
+      isDefault: team.isDefault,
+      projectCount: projects.length,
+      activeCount: projects.filter((p) => p.isActive).length,
+      projects,
+    };
+  });
 }
 
 export async function markAllMentionsRead(projectId: string, userId: string) {

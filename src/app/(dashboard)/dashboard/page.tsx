@@ -1,17 +1,23 @@
 import { requireUser } from "@/lib/auth";
-import { getContractsHealth, getLongestInPipeline, getMostRejectedTasks, getShippedSummary } from "@/actions/dashboard";
+import { getContractsHealth, getLongestInPipeline, getMostRejectedTasks, getShippedSummary, getClientDependencies, getUnreadMentions, getTeamProjects } from "@/actions/dashboard";
 import { ContractsHealth } from "@/components/dashboard/contracts-health";
 import { LongestInPipeline } from "@/components/dashboard/longest-in-pipeline";
 import { MostRejected } from "@/components/dashboard/most-rejected";
 import { ShippedSummary } from "@/components/dashboard/shipped-summary";
+import { ClientDependencies } from "@/components/dashboard/client-dependencies";
+import { UnreadMentions } from "@/components/dashboard/unread-mentions";
+import { TeamProjects } from "@/components/dashboard/team-projects";
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const [contractsHealth, pipelineTasks, rejectedTasks, shippedData] = await Promise.all([
+  const [contractsHealth, pipelineTasks, rejectedTasks, shippedData, clientDeps, unreadMentions, teamProjects] = await Promise.all([
     getContractsHealth(),
     getLongestInPipeline(),
     getMostRejectedTasks(),
     getShippedSummary(),
+    getClientDependencies(),
+    getUnreadMentions(),
+    getTeamProjects(),
   ]);
 
   return (
@@ -25,9 +31,12 @@ export default async function DashboardPage() {
           Welcome back, {user.name || "there"}.
         </p>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <UnreadMentions data={unreadMentions} />
           <ContractsHealth data={contractsHealth} />
+          <TeamProjects data={JSON.parse(JSON.stringify(teamProjects))} />
           <LongestInPipeline data={pipelineTasks} />
           <MostRejected data={rejectedTasks} />
+          <ClientDependencies data={clientDeps} />
           <ShippedSummary data={shippedData} />
         </div>
       </div>
