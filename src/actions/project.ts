@@ -115,7 +115,7 @@ export async function getProject(projectId: string) {
     where: { id: projectId },
     include: {
       contracts: { orderBy: { startDate: "desc" } },
-      members: { include: { user: { select: { id: true, name: true, imageUrl: true, email: true } }, projectRole: true } },
+      members: { include: { user: { select: { id: true, name: true, imageUrl: true, email: true, systemRole: true } }, projectRole: true } },
       _count: { select: { tasks: true, meetingNotes: true, assets: true } },
     },
   });
@@ -131,6 +131,7 @@ export async function updateProject(data: {
   description?: string;
   logoUrl?: string | null;
   teamId?: string;
+  defaultClientReviewerId?: string | null;
 }) {
   await requireProjectRole(data.projectId, ["ADMIN", "PROJECT_MANAGER"]);
 
@@ -141,6 +142,7 @@ export async function updateProject(data: {
       ...(data.description !== undefined && { description: data.description }),
       ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
       ...(data.teamId && { teamId: data.teamId }),
+      ...(data.defaultClientReviewerId !== undefined && { defaultClientReviewerId: data.defaultClientReviewerId }),
     },
   });
 

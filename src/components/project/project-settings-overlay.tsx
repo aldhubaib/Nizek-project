@@ -35,6 +35,12 @@ interface ContractPrefixOption {
   name: string;
 }
 
+interface ClientMember {
+  id: string;
+  name: string | null;
+  imageUrl: string | null;
+}
+
 interface ProjectSettingsProps {
   project: {
     id: string;
@@ -43,9 +49,11 @@ interface ProjectSettingsProps {
     logoUrl: string | null;
     team?: Team | null;
     contracts: Contract[];
+    defaultClientReviewerId?: string | null;
   };
   teams?: Team[];
   contractPrefixes?: ContractPrefixOption[];
+  clientMembers?: ClientMember[];
   isAdmin?: boolean;
   onClose: () => void;
 }
@@ -54,6 +62,7 @@ export function ProjectSettingsOverlay({
   project,
   teams = [],
   contractPrefixes = [],
+  clientMembers = [],
   isAdmin = false,
   onClose,
 }: ProjectSettingsProps) {
@@ -64,6 +73,7 @@ export function ProjectSettingsOverlay({
   const [logo, setLogo] = useState<string | null>(project.logoUrl);
   const [description, setDescription] = useState(project.description || "");
   const [teamId, setTeamId] = useState(project.team?.id || "");
+  const [clientReviewerId, setClientReviewerId] = useState(project.defaultClientReviewerId || "");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -118,6 +128,7 @@ export function ProjectSettingsOverlay({
         name: name.trim(),
         description,
         ...(teamId && { teamId }),
+        defaultClientReviewerId: clientReviewerId || null,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -260,6 +271,31 @@ export function ProjectSettingsOverlay({
                 <option value="">No team</option>
                 {teams.map((t) => (
                   <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Default Client Reviewer */}
+          <div className="space-y-2">
+            <Label htmlFor="proj-client" className="text-[13px] font-semibold">Default Client Reviewer</Label>
+            <p className="text-[11px] text-muted-foreground">
+              Tasks in Client Review will be auto-assigned to this person.
+            </p>
+            {clientMembers.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">
+                No client members in this project yet.
+              </p>
+            ) : (
+              <select
+                id="proj-client"
+                value={clientReviewerId}
+                onChange={(e) => setClientReviewerId(e.target.value)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Auto (first client member)</option>
+                {clientMembers.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name ?? c.id}</option>
                 ))}
               </select>
             )}

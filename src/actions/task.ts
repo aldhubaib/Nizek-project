@@ -14,6 +14,60 @@ import {
 import { broadcastTaskEvent } from "@/lib/pusher";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 
+// ─── Stage → Role Track ─────────────────────────────────
+export type RoleTrack = "pm" | "developer" | "client";
+
+export const STAGE_ROLE_MAP: Record<string, RoleTrack> = {
+  NEW_REQUEST: "pm",
+  CLARIFICATION: "pm",
+  READY_FOR_DEV: "developer",
+  IN_DEVELOPMENT: "developer",
+  INTERNAL_REVIEW: "pm",
+  CLIENT_REVIEW: "client",
+  READY_FOR_RELEASE: "developer",
+  DONE: "developer",
+};
+
+const PM_ROLES = ["ADMIN", "PM", "TECH_LEAD"];
+const DEV_ROLES = ["DEVELOPER", "DESIGNER", "TECH_LEAD", "ADMIN"];
+const CLIENT_ROLES = ["CLIENT"];
+
+export const ALLOWED_ROLES_BY_TRACK: Record<RoleTrack, string[]> = {
+  pm: PM_ROLES,
+  developer: DEV_ROLES,
+  client: CLIENT_ROLES,
+};
+
+async function resolveAutoAssignee(
+  stage: string,
+  task: { createdById: string; developerId: string | null; clientReviewerId: string | null },
+  actingUserId: string,
+  projectId: string,
+): Promise<string | null> {
+  const track = STAGE_ROLE_MAP[stage];
+  if (!track) return null;
+
+  switch (track) {
+    case "pm":
+      return task.createdById;
+    case "developer":
+      return task.developerId ?? actingUserId;
+    case "client": {
+      if (task.clientReviewerId) return task.clientReviewerId;
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { defaultClientReviewerId: true },
+      });
+      if (project?.defaultClientReviewerId) return project.defaultClientReviewerId;
+      const clientMember = await prisma.projectMember.findFirst({
+        where: { projectId, role: "CLIENT" },
+        select: { userId: true },
+      });
+      return clientMember?.userId ?? null;
+    }
+  }
+}
+
 export async function createTask(data: {
   projectId: string;
   title: string;
@@ -91,7 +145,7 @@ export async function createTask(data: {
       order: (maxOrder._max.order ?? 0) + 1,
       projectId: data.projectId,
       createdById: user.id,
-      assigneeId: data.assigneeId,
+      assigneeId: data.assigneeId ?? user.id,
       ...(data.answers?.length && {
         answers: {
           create: data.answers
@@ -152,12 +206,27 @@ export async function updateTask(data: {
       field: "priority", oldValue: String(task.priority), newValue: String(data.priority),
     }));
   }
+  const stickyUpdates: Record<string, string | null> = {};
   if (data.assigneeId !== undefined && data.assigneeId !== task.assigneeId) {
     if (data.assigneeId) {
-      const newAssignee = await prisma.user.findUnique({ where: { id: data.assigneeId } });
+      const newAssignee = await prisma.user.findUnique({ where: { id: data.assigneeId }, select: { id: true, name: true, systemRole: true } });
+      if (!newAssignee) throw new Error("User not found");
+
+      if (user.systemRole !== "ADMIN") {
+        const track = STAGE_ROLE_MAP[task.stage];
+        const allowedRoles = track ? ALLOWED_ROLES_BY_TRACK[track] : [];
+        if (allowedRoles.length > 0 && !allowedRoles.includes(newAssignee.systemRole)) {
+          throw new Error(`Cannot assign a ${newAssignee.systemRole} in ${task.stage.replaceAll("_", " ")} stage`);
+        }
+      }
+
+      const track = STAGE_ROLE_MAP[task.stage];
+      if (track === "developer") stickyUpdates.developerId = data.assigneeId;
+      if (track === "client") stickyUpdates.clientReviewerId = data.assigneeId;
+
       activities.push(logTaskActivity({
         taskId: task.id, userId: user.id, action: "assigned",
-        field: "assignee", oldValue: task.assignee?.name, newValue: newAssignee?.name,
+        field: "assignee", oldValue: task.assignee?.name, newValue: newAssignee.name,
       }));
     } else {
       activities.push(logTaskActivity({
@@ -174,6 +243,7 @@ export async function updateTask(data: {
       ...(data.description !== undefined && { description: data.description }),
       ...(data.priority !== undefined && { priority: data.priority != null ? Math.min(10, Math.max(1, data.priority)) : null }),
       ...(data.assigneeId !== undefined && { assigneeId: data.assigneeId }),
+      ...stickyUpdates,
     },
   });
 
@@ -286,6 +356,26 @@ export async function moveTask(data: {
     else estimateAccuracy = "WAY_UNDER";
   }
 
+  // Auto-assignment based on stage role track
+  let autoAssigneeId: string | null | undefined;
+  const stickyUpdates: Record<string, string> = {};
+  if (oldStage !== targetStage) {
+    autoAssigneeId = await resolveAutoAssignee(
+      targetStage,
+      { createdById: task.createdById, developerId: task.developerId, clientReviewerId: task.clientReviewerId },
+      user.id,
+      task.projectId,
+    );
+
+    const track = STAGE_ROLE_MAP[targetStage];
+    if (track === "developer" && !task.developerId && autoAssigneeId) {
+      stickyUpdates.developerId = autoAssigneeId;
+    }
+    if (track === "client" && !task.clientReviewerId && autoAssigneeId) {
+      stickyUpdates.clientReviewerId = autoAssigneeId;
+    }
+  }
+
   const updated = await prisma.task.update({
     where: { id: data.taskId },
     data: {
@@ -294,6 +384,8 @@ export async function moveTask(data: {
       ...(isEnteringDev && !task.startedAt && { startedAt: new Date() }),
       ...(isEnteringDev && data.estimatedMinutes && { estimatedMinutes: data.estimatedMinutes }),
       ...(estimateAccuracy && { estimateAccuracy }),
+      ...(autoAssigneeId !== undefined && { assigneeId: autoAssigneeId }),
+      ...stickyUpdates,
     },
   });
 
@@ -633,6 +725,28 @@ export async function pollTaskUpdates(projectId: string) {
     assignee: t.assignee,
     createdBy: t.createdBy,
   }));
+}
+
+export async function getEligibleAssignees(projectId: string, stage: string) {
+  await requireProjectMember(projectId);
+
+  const track = STAGE_ROLE_MAP[stage];
+  if (!track) return [];
+
+  const allowedSystemRoles = ALLOWED_ROLES_BY_TRACK[track];
+
+  const members = await prisma.projectMember.findMany({
+    where: {
+      projectId,
+      user: { systemRole: { in: allowedSystemRoles as any } },
+    },
+    select: {
+      userId: true,
+      user: { select: { id: true, name: true, imageUrl: true, systemRole: true } },
+    },
+  });
+
+  return members.map((m) => m.user);
 }
 
 export async function getTaskStageLogs(taskId: string) {

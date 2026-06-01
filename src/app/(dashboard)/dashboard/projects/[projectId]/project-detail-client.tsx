@@ -73,6 +73,7 @@ interface Member {
     name: string | null;
     email: string;
     imageUrl: string | null;
+    systemRole?: string;
   };
 }
 
@@ -84,6 +85,7 @@ interface Project {
   team?: { id: string; name: string } | null;
   contracts: Contract[];
   _count: { tasks: number; meetingNotes: number; assets: number };
+  defaultClientReviewerId?: string | null;
 }
 
 interface NoteHistoryEntry {
@@ -320,6 +322,9 @@ export function ProjectDetailClient({
           project={project}
           teams={teams}
           contractPrefixes={contractPrefixes}
+          clientMembers={members
+            .filter((m) => m.user.systemRole === "CLIENT")
+            .map((m) => ({ id: m.user.id, name: m.user.name, imageUrl: m.user.imageUrl }))}
           isAdmin={isAdmin}
           onClose={() => { setSettingsOpen(false); router.refresh(); }}
         />,
