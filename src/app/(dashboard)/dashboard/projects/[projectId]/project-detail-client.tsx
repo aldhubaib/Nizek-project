@@ -196,7 +196,7 @@ export function ProjectDetailClient({
 
   return (
     <div>
-      <div className="h-12 flex items-center justify-between px-6 border-b border-border shrink-0">
+      <div className="h-12 flex items-center justify-between px-6 pr-14 border-b border-border shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
           {project.logoUrl ? (
             <img

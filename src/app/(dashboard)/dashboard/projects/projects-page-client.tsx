@@ -97,7 +97,7 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
 
   return (
     <div>
-      <div className="h-12 flex items-center justify-between px-6 border-b border-border shrink-0">
+      <div className="h-12 flex items-center justify-between px-6 pr-14 border-b border-border shrink-0">
         <h1 className="text-sm font-semibold">Projects</h1>
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-muted-foreground font-mono">

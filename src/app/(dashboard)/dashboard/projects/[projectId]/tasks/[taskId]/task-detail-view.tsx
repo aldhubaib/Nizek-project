@@ -288,7 +288,7 @@ export function TaskDetailPage({
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <div className="h-12 flex items-center gap-3 px-6 border-b border-border shrink-0 sticky top-0 bg-background z-10">
+      <div className="h-12 flex items-center gap-3 px-6 pr-14 border-b border-border shrink-0 sticky top-0 bg-background z-10">
         <button
           onClick={() => router.back()}
           className="text-muted-foreground hover:text-foreground transition-colors"

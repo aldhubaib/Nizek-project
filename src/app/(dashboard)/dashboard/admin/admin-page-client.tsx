@@ -50,7 +50,7 @@ export function AdminPageClient({
 
   return (
     <div>
-      <div className="h-12 flex items-center gap-6 px-6 border-b border-border shrink-0 overflow-x-auto">
+      <div className="h-12 flex items-center gap-6 px-6 pr-14 border-b border-border shrink-0 overflow-x-auto">
         {TABS.map((tab) => (
           <button
             key={tab.id}
