@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus } from "lucide-react";
 import { addContract } from "@/actions/project";
-import { ContractTypePicker, type ContractType } from "./create-project-dialog";
+import { ContractTypePicker, type ContractType } from "@/components/project/create-project-dialog";
 
 interface ContractPrefixOption {
   id: string;
@@ -31,6 +31,7 @@ export function AddContractDialog({ projectId, contractPrefixes = [] }: Props) {
   const [loading, setLoading] = useState(false);
   const [contractType, setContractType] = useState<ContractType>("FULL_TEAM");
   const [prefixId, setPrefixId] = useState("");
+  const [contractNumber, setContractNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -44,6 +45,7 @@ export function AddContractDialog({ projectId, contractPrefixes = [] }: Props) {
         projectId,
         label: (formData.get("label") as string) || undefined,
         prefixId: prefixId || undefined,
+        contractNumber: contractNumber || undefined,
         contractType,
         startDate: formData.get("startDate") as string,
         endDate: formData.get("endDate") as string,
@@ -76,19 +78,28 @@ export function AddContractDialog({ projectId, contractPrefixes = [] }: Props) {
           {contractPrefixes.length > 0 && (
             <div className="space-y-2">
               <Label>Contract Code</Label>
-              <select
-                value={prefixId}
-                onChange={(e) => setPrefixId(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">No prefix (optional)</option>
-                {contractPrefixes.map((p) => (
-                  <option key={p.id} value={p.id}>{p.prefix} — {p.name}</option>
-                ))}
-              </select>
-              {prefixId && (
+              <div className="flex items-center gap-0">
+                <select
+                  value={prefixId}
+                  onChange={(e) => setPrefixId(e.target.value)}
+                  className="rounded-l-md rounded-r-none border border-r-0 border-border bg-muted/50 px-3 py-2 text-[13px] text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-ring shrink-0"
+                >
+                  <option value="">Prefix</option>
+                  {contractPrefixes.map((p) => (
+                    <option key={p.id} value={p.id}>{p.prefix}-</option>
+                  ))}
+                </select>
+                <Input
+                  value={contractNumber}
+                  onChange={(e) => setContractNumber(e.target.value)}
+                  placeholder="001"
+                  disabled={!prefixId}
+                  className="rounded-l-none text-[13px] font-mono"
+                />
+              </div>
+              {prefixId && contractNumber && (
                 <p className="text-[10px] text-muted-foreground font-mono">
-                  Code will be auto-generated (e.g. {contractPrefixes.find((p) => p.id === prefixId)?.prefix}-001)
+                  Code: {contractPrefixes.find((p) => p.id === prefixId)?.prefix}-{contractNumber}
                 </p>
               )}
             </div>

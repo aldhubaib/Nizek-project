@@ -26,13 +26,13 @@ async function requireMemberManagement(projectId: string) {
   return { user, member, canInviteMembers, canInviteClients };
 }
 
-async function generateContractCode(prefixId: string): Promise<{ code: string; prefixId: string }> {
-  const prefix = await prisma.contractPrefix.update({
-    where: { id: prefixId },
-    data: { nextNumber: { increment: 1 } },
-  });
-  const num = prefix.nextNumber - 1;
-  return { code: `${prefix.prefix}-${String(num).padStart(3, "0")}`, prefixId };
+async function buildContractCode(prefixId: string, manualNumber?: string): Promise<{ code: string; prefixId: string }> {
+  const prefix = await prisma.contractPrefix.findUniqueOrThrow({ where: { id: prefixId } });
+  const num = manualNumber?.trim() || String(prefix.nextNumber).padStart(3, "0");
+  if (!manualNumber?.trim()) {
+    await prisma.contractPrefix.update({ where: { id: prefixId }, data: { nextNumber: { increment: 1 } } });
+  }
+  return { code: `${prefix.prefix}-${num}`, prefixId };
 }
 
 export async function createProject(data: {
@@ -42,6 +42,7 @@ export async function createProject(data: {
   contract: {
     label?: string;
     prefixId?: string;
+    contractNumber?: string;
     contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE" | "STARTUP";
     startDate?: string;
     endDate?: string;
@@ -59,7 +60,7 @@ export async function createProject(data: {
 
   let codeData: { code?: string; prefixId?: string } = {};
   if (data.contract.prefixId) {
-    codeData = await generateContractCode(data.contract.prefixId);
+    codeData = await buildContractCode(data.contract.prefixId, data.contract.contractNumber);
   }
 
   const project = await prisma.project.create({
@@ -152,6 +153,7 @@ export async function addContract(data: {
   projectId: string;
   label?: string;
   prefixId?: string;
+  contractNumber?: string;
   contractType?: "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE" | "STARTUP";
   startDate?: string;
   endDate?: string;
@@ -171,7 +173,7 @@ export async function addContract(data: {
 
   let codeData: { code?: string; prefixId?: string } = {};
   if (data.prefixId) {
-    codeData = await generateContractCode(data.prefixId);
+    codeData = await buildContractCode(data.prefixId, data.contractNumber);
   }
 
   await prisma.contract.create({
