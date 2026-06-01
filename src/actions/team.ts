@@ -425,7 +425,61 @@ export async function resendTeamInvite(inviteId: string) {
   revalidatePath("/dashboard/team");
 }
 
-export async function toggleBlockUser(userId: string) {
+export async function getUserTaskSummary(userId: string) {
+  await requireAdmin();
+
+  const projects = await prisma.project.findMany({
+    where: {
+      tasks: {
+        some: {
+          archivedAt: null,
+          OR: [
+            { assigneeId: userId },
+            { createdById: userId },
+            { developerId: userId },
+            { clientReviewerId: userId },
+          ],
+        },
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      _count: {
+        select: {
+          tasks: {
+            where: {
+              archivedAt: null,
+              OR: [
+                { assigneeId: userId },
+                { createdById: userId },
+                { developerId: userId },
+                { clientReviewerId: userId },
+              ],
+            },
+          },
+        },
+      },
+      members: {
+        where: { userId: { not: userId } },
+        select: { user: { select: { id: true, name: true, imageUrl: true, systemRole: true } } },
+        take: 50,
+      },
+    },
+  });
+
+  return projects.map((p) => ({
+    id: p.id,
+    name: p.name,
+    taskCount: p._count.tasks,
+    eligibleTransferTargets: p.members.map((m) => m.user),
+  }));
+}
+
+export async function toggleBlockUser(
+  userId: string,
+  transfers?: { projectId: string; transferToUserId: string }[],
+) {
   const currentUser = await requireUser();
   if (currentUser.systemRole !== "ADMIN") {
     throw new Error("Only admins can block/unblock users");
@@ -438,6 +492,51 @@ export async function toggleBlockUser(userId: string) {
   if (!target) throw new Error("User not found");
 
   const newBlocked = !target.blocked;
+
+  if (newBlocked) {
+    const taskCount = await prisma.task.count({
+      where: {
+        archivedAt: null,
+        OR: [
+          { assigneeId: userId },
+          { createdById: userId },
+          { developerId: userId },
+          { clientReviewerId: userId },
+        ],
+      },
+    });
+
+    if (taskCount > 0 && (!transfers || transfers.length === 0)) {
+      throw new Error("TRANSFER_REQUIRED");
+    }
+
+    if (transfers && transfers.length > 0) {
+      for (const t of transfers) {
+        await prisma.$transaction([
+          prisma.task.updateMany({
+            where: { projectId: t.projectId, assigneeId: userId, archivedAt: null },
+            data: { assigneeId: t.transferToUserId },
+          }),
+          prisma.task.updateMany({
+            where: { projectId: t.projectId, createdById: userId },
+            data: { createdById: t.transferToUserId },
+          }),
+          prisma.task.updateMany({
+            where: { projectId: t.projectId, developerId: userId, archivedAt: null },
+            data: { developerId: t.transferToUserId },
+          }),
+          prisma.task.updateMany({
+            where: { projectId: t.projectId, clientReviewerId: userId, archivedAt: null },
+            data: { clientReviewerId: t.transferToUserId },
+          }),
+          prisma.project.updateMany({
+            where: { id: t.projectId, defaultClientReviewerId: userId },
+            data: { defaultClientReviewerId: t.transferToUserId },
+          }),
+        ]);
+      }
+    }
+  }
 
   await prisma.user.update({
     where: { id: userId },

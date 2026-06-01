@@ -353,15 +353,39 @@ export async function inviteMember(data: {
   return invitation;
 }
 
+export async function getMemberTaskCount(projectId: string, memberId: string) {
+  await requireMemberManagement(projectId);
+
+  const member = await prisma.projectMember.findUnique({
+    where: { id: memberId },
+    select: { userId: true },
+  });
+  if (!member) return 0;
+
+  return prisma.task.count({
+    where: {
+      projectId,
+      archivedAt: null,
+      OR: [
+        { assigneeId: member.userId },
+        { createdById: member.userId },
+        { developerId: member.userId },
+        { clientReviewerId: member.userId },
+      ],
+    },
+  });
+}
+
 export async function removeMember(data: {
   projectId: string;
   memberId: string;
+  transferToUserId?: string;
 }) {
   const { canInviteMembers, canInviteClients } = await requireMemberManagement(data.projectId);
 
   const member = await prisma.projectMember.findUnique({
     where: { id: data.memberId },
-    include: { user: { select: { systemRole: true } } },
+    include: { user: { select: { id: true, systemRole: true } } },
   });
   if (!member) throw new Error("Member not found");
 
@@ -369,19 +393,54 @@ export async function removeMember(data: {
   if (targetIsClient && !canInviteClients) throw new Error("You don't have permission to manage clients");
   if (!targetIsClient && !canInviteMembers) throw new Error("You don't have permission to manage team members");
 
-  const hasData = await prisma.task.findFirst({
+  const taskCount = await prisma.task.count({
     where: {
       projectId: data.projectId,
+      archivedAt: null,
       OR: [
-        { createdById: member.userId },
         { assigneeId: member.userId },
+        { createdById: member.userId },
+        { developerId: member.userId },
+        { clientReviewerId: member.userId },
       ],
     },
-    select: { id: true },
   });
 
-  if (hasData) {
-    throw new Error("Cannot remove this member — they have tasks in this project. Block them instead to preserve history.");
+  if (taskCount > 0 && !data.transferToUserId) {
+    throw new Error(`TRANSFER_REQUIRED:${taskCount}`);
+  }
+
+  if (taskCount > 0 && data.transferToUserId) {
+    const targetMember = await prisma.projectMember.findFirst({
+      where: { projectId: data.projectId, userId: data.transferToUserId },
+    });
+    if (!targetMember) throw new Error("Transfer target is not a member of this project");
+
+    await prisma.$transaction([
+      prisma.task.updateMany({
+        where: { projectId: data.projectId, assigneeId: member.userId, archivedAt: null },
+        data: { assigneeId: data.transferToUserId },
+      }),
+      prisma.task.updateMany({
+        where: { projectId: data.projectId, createdById: member.userId },
+        data: { createdById: data.transferToUserId },
+      }),
+      prisma.task.updateMany({
+        where: { projectId: data.projectId, developerId: member.userId, archivedAt: null },
+        data: { developerId: data.transferToUserId },
+      }),
+      prisma.task.updateMany({
+        where: { projectId: data.projectId, clientReviewerId: member.userId, archivedAt: null },
+        data: { clientReviewerId: data.transferToUserId },
+      }),
+    ]);
+  }
+
+  if (data.projectId) {
+    await prisma.project.updateMany({
+      where: { id: data.projectId, defaultClientReviewerId: member.userId },
+      data: { defaultClientReviewerId: data.transferToUserId ?? null },
+    });
   }
 
   await prisma.projectMember.delete({

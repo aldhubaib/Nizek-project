@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Trash2, Shield, RefreshCw, X, Clock, Mail, UserPlus, Users } from "lucide-react";
+import { Trash2, Shield, RefreshCw, X, Clock, Mail, UserPlus, Users, AlertTriangle, ArrowRightLeft } from "lucide-react";
 import { removeMember, updateMemberRole, resendInvitation, cancelInvitation, updateMemberInvitePerms } from "@/actions/project";
 
 interface WorkspaceRole {
@@ -57,6 +57,13 @@ interface Props {
   canManageMembers?: boolean;
 }
 
+interface TransferState {
+  memberId: string;
+  memberName: string;
+  taskCount: number;
+  transferToUserId: string;
+}
+
 export function MemberList({
   members,
   projectId,
@@ -68,6 +75,8 @@ export function MemberList({
 }: Props) {
   const isAdmin = currentUserRole === "ADMIN" || canManageMembers;
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [transferState, setTransferState] = useState<TransferState | null>(null);
+  const [removing, setRemoving] = useState(false);
 
   async function handleRoleChange(memberId: string, roleId: string) {
     try {
@@ -78,11 +87,44 @@ export function MemberList({
   }
 
   async function handleRemove(memberId: string) {
-    if (!confirm("Remove this member from the project?")) return;
+    const member = members.find((m) => m.id === memberId);
+    if (!member) return;
+
+    setRemoving(true);
     try {
       await removeMember({ projectId, memberId });
     } catch (err) {
-      alert((err as Error).message || "Failed to remove member");
+      const msg = (err as Error).message || "";
+      const match = msg.match(/^TRANSFER_REQUIRED:(\d+)$/);
+      if (match) {
+        setTransferState({
+          memberId,
+          memberName: member.user.name ?? member.user.email,
+          taskCount: parseInt(match[1], 10),
+          transferToUserId: "",
+        });
+      } else {
+        alert(msg || "Failed to remove member");
+      }
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  async function handleTransferAndRemove() {
+    if (!transferState || !transferState.transferToUserId) return;
+    setRemoving(true);
+    try {
+      await removeMember({
+        projectId,
+        memberId: transferState.memberId,
+        transferToUserId: transferState.transferToUserId,
+      });
+      setTransferState(null);
+    } catch (err) {
+      alert((err as Error).message || "Failed to transfer tasks");
+    } finally {
+      setRemoving(false);
     }
   }
 
@@ -115,8 +157,74 @@ export function MemberList({
 
   const isExpired = (inv: Invitation) => new Date(inv.expiresAt) < new Date();
 
+  const transferCandidates = transferState
+    ? members.filter((m) => m.id !== transferState.memberId)
+    : [];
+
   return (
     <div className="space-y-6">
+      {transferState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-[14px] font-semibold text-foreground">Transfer Tasks Required</h3>
+                <p className="text-[12px] text-muted-foreground mt-0.5">
+                  <strong>{transferState.memberName}</strong> has{" "}
+                  <strong>{transferState.taskCount}</strong> task{transferState.taskCount !== 1 ? "s" : ""} in this project.
+                  Select a member to transfer them to before removal.
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">Transfer tasks to</label>
+              <Select
+                value={transferState.transferToUserId}
+                onValueChange={(val) => setTransferState((s) => s ? { ...s, transferToUserId: val ?? "" } : s)}
+              >
+                <SelectTrigger className="h-9 text-[13px]">
+                  <SelectValue placeholder="Select a member..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {transferCandidates.map((m) => (
+                    <SelectItem key={m.id} value={m.user.id}>
+                      <span className="flex items-center gap-2">
+                        <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />
+                        {m.user.name ?? m.user.email}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2 justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setTransferState(null)}
+                disabled={removing}
+                className="text-[12px]"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleTransferAndRemove}
+                disabled={!transferState.transferToUserId || removing}
+                className="text-[12px] bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              >
+                {removing ? "Transferring..." : "Transfer & Remove"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {members.map((member) => {
           const initials =

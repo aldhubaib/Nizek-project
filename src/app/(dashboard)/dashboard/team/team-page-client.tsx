@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, Trash2, ShieldCheck, Shield } from "lucide-react";
+import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, Trash2, ShieldCheck, Shield, AlertTriangle, ArrowRightLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { updateUserAdmin, inviteToTeam, toggleBlockUser, cancelTeamInvite, resendTeamInvite } from "@/actions/team";
+import { updateUserAdmin, inviteToTeam, toggleBlockUser, cancelTeamInvite, resendTeamInvite, getUserTaskSummary } from "@/actions/team";
 
 interface MemberProject {
   id: string;
@@ -97,15 +97,89 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  interface ProjectTransfer {
+    id: string;
+    name: string;
+    taskCount: number;
+    eligibleTransferTargets: { id: string; name: string | null; imageUrl: string | null; systemRole: string }[];
+    transferToUserId: string;
+  }
+
+  const [blockTransfer, setBlockTransfer] = useState<{
+    userId: string;
+    userName: string;
+    projects: ProjectTransfer[];
+  } | null>(null);
+  const [blockLoading, setBlockLoading] = useState(false);
+
   async function handleBlock(userId: string) {
-    if (!confirm("Are you sure you want to block/unblock this user?")) return;
+    const member = members.find((m) => m.id === userId);
+    if (!member) return;
+
+    if (member.blocked) {
+      if (!confirm("Unblock this user?")) return;
+      setActionLoading(userId);
+      try {
+        await toggleBlockUser(userId);
+      } catch (err) {
+        alert((err as Error).message);
+      } finally {
+        setActionLoading(null);
+      }
+      return;
+    }
+
     setActionLoading(userId);
     try {
       await toggleBlockUser(userId);
     } catch (err) {
-      alert((err as Error).message);
+      const msg = (err as Error).message || "";
+      if (msg === "TRANSFER_REQUIRED") {
+        try {
+          const summary = await getUserTaskSummary(userId);
+          if (summary.length > 0) {
+            setBlockTransfer({
+              userId,
+              userName: member.name ?? member.email,
+              projects: summary.map((p) => ({
+                ...p,
+                transferToUserId: "",
+              })),
+            });
+          }
+        } catch (fetchErr) {
+          alert((fetchErr as Error).message || "Failed to load task summary");
+        }
+      } else {
+        alert(msg);
+      }
     } finally {
       setActionLoading(null);
+    }
+  }
+
+  async function handleBlockWithTransfer() {
+    if (!blockTransfer) return;
+    const allSelected = blockTransfer.projects.every((p) => p.transferToUserId);
+    if (!allSelected) {
+      alert("Please select a transfer target for every project.");
+      return;
+    }
+
+    setBlockLoading(true);
+    try {
+      await toggleBlockUser(
+        blockTransfer.userId,
+        blockTransfer.projects.map((p) => ({
+          projectId: p.id,
+          transferToUserId: p.transferToUserId,
+        })),
+      );
+      setBlockTransfer(null);
+    } catch (err) {
+      alert((err as Error).message || "Failed to block user");
+    } finally {
+      setBlockLoading(false);
     }
   }
 
@@ -245,6 +319,78 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Block Transfer Dialog */}
+      {blockTransfer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-[14px] font-semibold text-foreground">Transfer Tasks Before Blocking</h3>
+                <p className="text-[12px] text-muted-foreground mt-0.5">
+                  <strong>{blockTransfer.userName}</strong> has tasks across {blockTransfer.projects.length} project{blockTransfer.projects.length !== 1 ? "s" : ""}.
+                  Select who should take over in each project.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              {blockTransfer.projects.map((proj) => (
+                <div key={proj.id} className="rounded-lg bg-muted/30 border border-border p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[13px] font-medium text-foreground">{proj.name}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {proj.taskCount} task{proj.taskCount !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <select
+                    value={proj.transferToUserId}
+                    onChange={(e) => {
+                      setBlockTransfer((s) => {
+                        if (!s) return s;
+                        return {
+                          ...s,
+                          projects: s.projects.map((p) =>
+                            p.id === proj.id ? { ...p, transferToUserId: e.target.value } : p
+                          ),
+                        };
+                      });
+                    }}
+                    className="w-full h-8 px-2 rounded-md border border-border bg-card text-[12px] text-foreground"
+                  >
+                    <option value="">Select transfer target...</option>
+                    {proj.eligibleTransferTargets.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name ?? t.id} ({t.systemRole})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 justify-end">
+              <button
+                onClick={() => setBlockTransfer(null)}
+                disabled={blockLoading}
+                className="px-3 py-1.5 rounded-lg text-[13px] text-muted-foreground hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBlockWithTransfer}
+                disabled={blockLoading || blockTransfer.projects.some((p) => !p.transferToUserId)}
+                className="px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-[13px] font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50"
+              >
+                {blockLoading ? "Processing..." : "Transfer & Block"}
+              </button>
+            </div>
           </div>
         </div>
       )}
