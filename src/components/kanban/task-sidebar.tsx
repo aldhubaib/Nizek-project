@@ -303,7 +303,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const [movingStage, setMovingStage] = useState(false);
   const [moveError, setMoveError] = useState<string[] | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [questionsOpen, setQuestionsOpen] = useState(true);
+  const [questionsOpen, setQuestionsOpen] = useState(false);
   const [showDecline, setShowDecline] = useState(false);
   const [declineComment, setDeclineComment] = useState("");
   const [deleting, setDeleting] = useState(false);
