@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/sidebar";
+import { NotificationBell } from "@/components/notification-bell";
 import { Menu } from "lucide-react";
 
 const DESKTOP_BREAKPOINT = 1024;
@@ -69,7 +70,7 @@ export function DashboardShell({ children, isAdmin = false }: { children: React.
               Nizek Project
             </span>
           </div>
-          <div className="w-8" />
+          <NotificationBell />
         </div>
       )}
 
@@ -99,6 +100,11 @@ export function DashboardShell({ children, isAdmin = false }: { children: React.
           isDesktop ? "rounded-l-2xl" : "pt-12"
         }`}
       >
+        {isDesktop && (
+          <div className="fixed top-3 right-4 z-[100]">
+            <NotificationBell />
+          </div>
+        )}
         {children}
       </main>
     </div>

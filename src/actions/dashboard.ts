@@ -656,6 +656,15 @@ export async function getUnreadMentions() {
   }));
 }
 
+export async function getUnreadMentionCount() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  return prisma.taskCommentMention.count({
+    where: { userId: user.id, readAt: null },
+  });
+}
+
 export async function markMentionsReadBulk(mentionIds: string[]) {
   await prisma.taskCommentMention.updateMany({
     where: { id: { in: mentionIds } },
