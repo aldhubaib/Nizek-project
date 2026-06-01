@@ -403,7 +403,7 @@ export async function declineTask(data: {
 export async function deleteTask(taskId: string) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
-    include: { project: true },
+    include: { project: true, answers: true },
   });
   if (!task) throw new Error("Task not found");
 
@@ -415,7 +415,25 @@ export async function deleteTask(taskId: string) {
     }
   }
 
+  const { extractR2Key, deleteManyFromR2 } = await import("@/lib/r2");
+  const r2Keys: string[] = [];
+  for (const answer of task.answers) {
+    if (!answer.answer) continue;
+    for (const entry of answer.answer.split("|||")) {
+      const sep = entry.indexOf("::");
+      if (sep === -1) continue;
+      const url = entry.slice(sep + 2);
+      const key = extractR2Key(url);
+      if (key) r2Keys.push(key);
+    }
+  }
+
   await prisma.task.delete({ where: { id: taskId } });
+
+  if (r2Keys.length > 0) {
+    deleteManyFromR2(r2Keys).catch((err) => console.error("R2 cleanup failed:", err));
+  }
+
   revalidatePath(`/dashboard/projects/${task.projectId}`);
   broadcastTaskEvent(task.projectId, { type: "task-deleted", taskId, userId: user.id });
 }

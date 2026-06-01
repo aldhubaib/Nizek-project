@@ -38,7 +38,15 @@ export async function deleteAsset(assetId: string) {
 
   await requireProjectRole(asset.projectId, ["ADMIN", "PROJECT_MANAGER"]);
 
+  const { extractR2Key, deleteFromR2 } = await import("@/lib/r2");
+  const key = extractR2Key(asset.url);
+
   await prisma.asset.delete({ where: { id: assetId } });
+
+  if (key) {
+    deleteFromR2(key).catch((err) => console.error("R2 cleanup failed:", err));
+  }
+
   revalidatePath(`/dashboard/projects/${asset.projectId}`);
 }
 

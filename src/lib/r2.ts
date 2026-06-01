@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 
 const R2 = new S3Client({
   region: "auto",
@@ -24,4 +24,29 @@ export async function uploadToR2(
   );
 
   return `${process.env.R2_PUBLIC_URL}/${key}`;
+}
+
+export function extractR2Key(url: string): string | null {
+  const publicUrl = process.env.R2_PUBLIC_URL;
+  if (!publicUrl || !url.startsWith(publicUrl)) return null;
+  return url.slice(publicUrl.length + 1);
+}
+
+export async function deleteFromR2(key: string): Promise<void> {
+  await R2.send(
+    new DeleteObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME!,
+      Key: key,
+    }),
+  );
+}
+
+export async function deleteManyFromR2(keys: string[]): Promise<void> {
+  if (keys.length === 0) return;
+  await R2.send(
+    new DeleteObjectsCommand({
+      Bucket: process.env.R2_BUCKET_NAME!,
+      Delete: { Objects: keys.map((Key) => ({ Key })) },
+    }),
+  );
 }
