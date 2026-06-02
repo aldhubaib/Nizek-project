@@ -304,356 +304,361 @@ export function TaskDetailPage({
         </div>
       </div>
 
-      {/* Two-column layout */}
-      <div className="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Title */}
-          <div>
-            {editingTitle && !isPostClarification ? (
-              <input
-                ref={titleInputRef}
-                value={titleValue}
-                onChange={(e) => setTitleValue(e.target.value)}
-                onBlur={handleTitleSave}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleTitleSave();
-                  if (e.key === "Escape") { setTitleValue(initialTask.title); setEditingTitle(false); }
-                }}
-                className="text-2xl font-bold bg-transparent border-b border-primary outline-none w-full"
-              />
-            ) : (
-              <h1
-                className={cn("text-2xl font-bold", !isPostClarification && "cursor-text hover:text-primary/80 transition-colors")}
-                onClick={() => !isPostClarification && setEditingTitle(true)}
-              >
-                {titleValue}
-              </h1>
-            )}
-          </div>
-
+      {/* Single-column layout */}
+      <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
+        {/* Title */}
+        <div>
+          {editingTitle && !isPostClarification ? (
+            <input
+              ref={titleInputRef}
+              value={titleValue}
+              onChange={(e) => setTitleValue(e.target.value)}
+              onBlur={handleTitleSave}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleTitleSave();
+                if (e.key === "Escape") { setTitleValue(initialTask.title); setEditingTitle(false); }
+              }}
+              className="text-2xl font-bold bg-transparent border-b border-primary outline-none w-full"
+            />
+          ) : (
+            <h1
+              className={cn("text-2xl font-bold", !isPostClarification && "cursor-text hover:text-primary/80 transition-colors")}
+              onClick={() => !isPostClarification && setEditingTitle(true)}
+            >
+              {titleValue}
+            </h1>
+          )}
           {initialTask.description && (
-            <p className="text-[13px] text-muted-foreground leading-relaxed">
+            <p className="text-[13px] text-muted-foreground leading-relaxed mt-2">
               {initialTask.description}
             </p>
           )}
+        </div>
 
-          {/* Change Status */}
-          <div className="rounded-lg border border-border p-4">
-            <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
-              Status
-            </label>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-primary/15 border-primary/20 text-primary">
-                <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
-                {STAGES[currentStageIndex]?.label}
-              </span>
-              {nextStage && (
-                <>
-                  <ChevronRight className="w-3 h-3 text-muted-foreground/50" />
-                  <button
-                    onClick={handleMoveToNext}
-                    disabled={movingStage}
-                    className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-muted border-border text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30 transition-colors disabled:opacity-50"
-                  >
-                    {movingStage ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <>
-                        <span className={cn("w-2 h-2 rounded-full", nextStage.color)} />
-                        {nextStage.label}
-                      </>
-                    )}
-                  </button>
-                </>
-              )}
+        {/* Type, Priority, Assigned To, Created By */}
+        <div className="rounded-xl bg-card border border-border p-5 space-y-5">
+          <div className="grid grid-cols-2 gap-5">
+            <div>
+              <label className="text-[13px] font-semibold text-foreground mb-2 block">Type</label>
+              <span className={cn("inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium", taskTypeMeta.color,
+                taskTypeMeta.color === "text-primary" ? "bg-primary/15 border-primary/20"
+                : taskTypeMeta.color === "text-violet-400" ? "bg-violet-500/15 border-violet-500/20"
+                : taskTypeMeta.color === "text-amber-400" ? "bg-amber-500/15 border-amber-500/20"
+                : taskTypeMeta.color === "text-destructive" ? "bg-destructive/15 border-destructive/20"
+                : "bg-cyan-500/15 border-cyan-500/20"
+              )}>{taskTypeMeta.label}</span>
             </div>
-            {canDecline && (
-              <div className="mt-3">
-                {!showDecline ? (
-                  <button
-                    onClick={() => setShowDecline(true)}
-                    className="inline-flex items-center gap-1.5 text-[11px] font-medium text-destructive/70 hover:text-destructive transition-colors"
-                  >
-                    <Undo2 className="w-3 h-3" />
-                    Decline &amp; return to {declineTargetLabel}
-                  </button>
+
+            <div>
+              <label className="text-[13px] font-semibold text-foreground mb-2 block">Created By</label>
+              <div className="flex items-center gap-2">
+                {initialTask.createdBy.imageUrl ? (
+                  <img src={initialTask.createdBy.imageUrl} alt="" className="w-6 h-6 rounded-full" />
                 ) : (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2.5 mt-2">
-                    <p className="text-[11px] font-medium text-destructive">Why is this being declined?</p>
-                    <textarea
-                      value={declineComment}
-                      onChange={(e) => setDeclineComment(e.target.value)}
-                      placeholder="Explain what needs to be fixed..."
-                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-destructive/50 resize-none"
-                      rows={3}
-                      autoFocus
-                    />
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" variant="destructive" onClick={handleDecline} disabled={!declineComment.trim() || declining} className="h-7 text-[11px]">
-                        {declining ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Undo2 className="w-3 h-3 mr-1" />}
-                        Decline
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => { setShowDecline(false); setDeclineComment(""); }} className="h-7 text-[11px]">
-                        Cancel
-                      </Button>
-                    </div>
+                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground">
+                    {(initialTask.createdBy.name ?? "?")[0]}
                   </div>
                 )}
+                <span className="text-[13px] text-foreground">{initialTask.createdBy.name ?? "Unknown"}</span>
               </div>
-            )}
-            {moveError && (
-              <div className="mt-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
-                <p className="text-[11px] font-medium text-destructive mb-1">Answer these required questions first:</p>
-                <ul className="space-y-0.5">
-                  {moveError.map((q, i) => (
-                    <li key={i} className="text-[11px] text-destructive/80">• {q}</li>
-                  ))}
-                </ul>
+            </div>
+          </div>
+
+          {initialTask.assignee && (
+            <div>
+              <label className="text-[13px] font-semibold text-foreground mb-2 block">Assigned To</label>
+              <div className="flex items-center gap-2">
+                {initialTask.assignee.imageUrl ? (
+                  <img src={initialTask.assignee.imageUrl} alt="" className="w-6 h-6 rounded-full" />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground">
+                    {(initialTask.assignee.name ?? "?")[0]}
+                  </div>
+                )}
+                <span className="text-[13px] text-foreground">{initialTask.assignee.name ?? "Unknown"}</span>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="text-[13px] font-semibold text-foreground mb-2 block">Priority</label>
+            {isPostClarification ? (
+              priorityValue != null ? (
+                <span className={cn(
+                  "inline-flex items-center rounded-md border px-2.5 py-1 text-[12px] font-semibold",
+                  priorityValue >= 9 ? "bg-destructive/20 border-destructive/40 text-destructive"
+                    : priorityValue >= 7 ? "bg-orange-500/20 border-orange-500/40 text-orange-400"
+                    : priorityValue >= 4 ? "bg-primary/20 border-primary/40 text-primary"
+                    : "bg-muted border-border text-foreground"
+                )}>P{priorityValue}</span>
+              ) : <span className="text-[12px] text-muted-foreground/50">No priority</span>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                <button type="button" onClick={() => handlePrioritySave(null)}
+                  className={cn("h-8 rounded-md border px-3 text-[12px] font-medium transition-colors",
+                    priorityValue == null ? "bg-amber-500/20 border-amber-500/40 text-amber-400" : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
+                  )}>None</button>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                  <button key={n} type="button" onClick={() => handlePrioritySave(n)}
+                    className={cn("h-8 w-8 rounded-md border text-[12px] font-medium transition-colors",
+                      priorityValue === n
+                        ? n >= 9 ? "bg-destructive/20 border-destructive/40 text-destructive"
+                          : n >= 7 ? "bg-orange-500/20 border-orange-500/40 text-orange-400"
+                          : n >= 4 ? "bg-primary/20 border-primary/40 text-primary"
+                          : "bg-muted border-primary/40 text-foreground"
+                        : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
+                    )}>{n}</button>
+                ))}
               </div>
             )}
           </div>
+        </div>
 
-          {/* Questions */}
-          {questions.length > 0 && (
-            <div className="rounded-lg border border-border p-4">
-              <button onClick={() => setQuestionsOpen((v) => !v)} className="flex items-center gap-2 w-full text-left mb-2">
-                <MessageCircleQuestion className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-                <h3 className="text-[13px] font-semibold flex-1">Questions</h3>
-                <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", questionsOpen && "rotate-180")} />
-              </button>
-              {questionsOpen && (
-                <div className="space-y-5 mt-3">
-                  {questions.map((q, i) => {
-                    const currentVal = answers[q.id] ?? "";
-                    const hasAnswer = !!currentVal.trim();
-                    const explicitlyEditing = editingAnswers[q.id] ?? false;
-                    const isEditing = explicitlyEditing || !hasAnswer;
-                    const saveState = savingAnswers[q.id];
-                    return (
-                      <div key={q.id} className="relative group">
-                        <QuestionField
-                          question={q}
-                          index={i}
-                          value={answers[q.id] ?? ""}
-                          readonly={isPostClarification || !isEditing}
-                          showRequiredAs="transition"
-                          onChange={(val) => handleAnswerChange(q.id, val)}
-                        />
-                        {!isPostClarification && (
-                          <div className="absolute top-0 right-0 flex items-center gap-1">
-                            {saveState === "saving" && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
-                            {saveState === "saved" && <Check className="w-3 h-3 text-emerald-400" />}
-                            {hasAnswer && !isEditing && (
-                              <button
-                                onClick={() => setEditingAnswers((prev) => ({ ...prev, [q.id]: true }))}
-                                className="p-1 rounded-md text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-accent transition-all"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+        {/* Status */}
+        <div className="rounded-xl bg-card border border-border p-5">
+          <label className="text-[13px] font-semibold text-foreground mb-3 block">Status</label>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-primary/15 border-primary/20 text-primary">
+              <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
+              {STAGES[currentStageIndex]?.label}
+            </span>
+            {nextStage && (
+              <>
+                <ChevronRight className="w-3 h-3 text-muted-foreground/50" />
+                <button
+                  onClick={handleMoveToNext}
+                  disabled={movingStage}
+                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-muted border-border text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30 transition-colors disabled:opacity-50"
+                >
+                  {movingStage ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <>
+                      <span className={cn("w-2 h-2 rounded-full", nextStage.color)} />
+                      {nextStage.label}
+                    </>
+                  )}
+                </button>
+              </>
+            )}
+          </div>
+          {canDecline && (
+            <div className="mt-3">
+              {!showDecline ? (
+                <button
+                  onClick={() => setShowDecline(true)}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-medium text-destructive/70 hover:text-destructive transition-colors"
+                >
+                  <Undo2 className="w-3 h-3" />
+                  Decline &amp; return to {declineTargetLabel}
+                </button>
+              ) : (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2.5 mt-2">
+                  <p className="text-[11px] font-medium text-destructive">Why is this being declined?</p>
+                  <textarea
+                    value={declineComment}
+                    onChange={(e) => setDeclineComment(e.target.value)}
+                    placeholder="Explain what needs to be fixed..."
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-destructive/50 resize-none"
+                    rows={3}
+                    autoFocus
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="destructive" onClick={handleDecline} disabled={!declineComment.trim() || declining} className="h-7 text-[11px]">
+                      {declining ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Undo2 className="w-3 h-3 mr-1" />}
+                      Decline
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setShowDecline(false); setDeclineComment(""); }} className="h-7 text-[11px]">
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
           )}
-
-          {/* Notes */}
-          <div className="rounded-lg border border-border p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-                <h3 className="text-[13px] font-semibold">Notes</h3>
-                {notes.length > 0 && (
-                  <span className="text-[10px] font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
-                    {notes.length}
-                  </span>
-                )}
-              </div>
-              <Button size="sm" variant="ghost" onClick={() => setNoteEditorOpen(true)} className="h-7 text-xs">
-                <Plus className="w-3 h-3 mr-1" />
-                New
-              </Button>
+          {moveError && (
+            <div className="mt-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
+              <p className="text-[11px] font-medium text-destructive mb-1">Answer these required questions first:</p>
+              <ul className="space-y-0.5">
+                {moveError.map((q, i) => (
+                  <li key={i} className="text-[11px] text-destructive/80">• {q}</li>
+                ))}
+              </ul>
             </div>
-            {notes.length === 0 ? (
-              <p className="text-[12px] text-muted-foreground/60 py-2">No notes attached</p>
-            ) : (
-              <div className="rounded-lg border border-border overflow-hidden">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/30">
-                      <th className="text-[11px] font-medium text-muted-foreground px-3 py-1.5">Title</th>
-                      <th className="text-[11px] font-medium text-muted-foreground px-3 py-1.5 w-28 text-right">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {notes.map((note) => (
-                      <tr
-                        key={note.id}
-                        onClick={() => router.push(`/dashboard/projects/${projectId}?tab=notes&noteId=${note.id}`)}
-                        className="border-b border-border/30 last:border-0 hover:bg-accent/50 cursor-pointer transition-colors"
-                      >
-                        <td className="px-3 py-2">
-                          <p className="text-[12px] font-medium text-primary truncate">{note.title}</p>
-                          <p className="text-[10px] text-muted-foreground">by {note.author.name ?? "Unknown"}</p>
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                            {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          )}
+        </div>
+
+        {/* Questions */}
+        {questions.length > 0 && (
+          <div className="rounded-xl bg-card border border-border p-5">
+            <button onClick={() => setQuestionsOpen((v) => !v)} className="flex items-center gap-2 w-full text-left">
+              <MessageCircleQuestion className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+              <h3 className="text-[13px] font-semibold flex-1">Questions</h3>
+              <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", questionsOpen && "rotate-180")} />
+            </button>
+            {questionsOpen && (
+              <div className="space-y-5 mt-4">
+                {questions.map((q, i) => {
+                  const currentVal = answers[q.id] ?? "";
+                  const hasAnswer = !!currentVal.trim();
+                  const explicitlyEditing = editingAnswers[q.id] ?? false;
+                  const isEditing = explicitlyEditing || !hasAnswer;
+                  const saveState = savingAnswers[q.id];
+                  return (
+                    <div key={q.id} className="relative group">
+                      <QuestionField
+                        question={q}
+                        index={i}
+                        value={answers[q.id] ?? ""}
+                        readonly={isPostClarification || !isEditing}
+                        showRequiredAs="transition"
+                        onChange={(val) => handleAnswerChange(q.id, val)}
+                      />
+                      {!isPostClarification && (
+                        <div className="absolute top-0 right-0 flex items-center gap-1">
+                          {saveState === "saving" && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+                          {saveState === "saved" && <Check className="w-3 h-3 text-emerald-400" />}
+                          {hasAnswer && !isEditing && (
+                            <button
+                              onClick={() => setEditingAnswers((prev) => ({ ...prev, [q.id]: true }))}
+                              className="p-1 rounded-md text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-accent transition-all"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
+        )}
 
-          {/* Comments */}
-          <div className="rounded-lg border border-border p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <MessageSquare className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-              <h3 className="text-[13px] font-semibold">Comments</h3>
-            </div>
-            <CommentSection taskId={initialTask.id} projectId={projectId} />
-          </div>
-
-          {/* Activity */}
-          <div className="rounded-lg border border-border p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <History className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-              <h3 className="text-[13px] font-semibold">Activity</h3>
-            </div>
-            <ActivityTimeline taskId={initialTask.id} refreshKey={activityKey} />
-          </div>
-        </div>
-
-        {/* Sidebar (right panel) */}
-        <div className="space-y-4">
-          {/* Meta card */}
-          <div className="rounded-lg border border-border p-4 space-y-4">
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">Type</label>
-              <span className={cn("text-[12px] font-semibold", taskTypeMeta.color)}>{taskTypeMeta.label}</span>
-            </div>
-
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">Priority</label>
-              {isPostClarification ? (
-                priorityValue != null ? (
-                  <span className={cn(
-                    "inline-flex items-center rounded-md border px-2.5 py-1 text-[12px] font-semibold",
-                    priorityValue >= 9 ? "bg-destructive/20 border-destructive/40 text-destructive"
-                      : priorityValue >= 7 ? "bg-orange-500/20 border-orange-500/40 text-orange-400"
-                      : priorityValue >= 4 ? "bg-primary/20 border-primary/40 text-primary"
-                      : "bg-muted border-border text-foreground"
-                  )}>P{priorityValue}</span>
-                ) : <span className="text-[12px] text-muted-foreground/50">No priority</span>
+        {/* Time Tracking */}
+        <div className="rounded-xl bg-card border border-border p-5">
+          <button onClick={() => setTimeTrackingOpen(!timeTrackingOpen)} className="flex items-center gap-2 w-full text-left">
+            <Clock className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+            <h3 className="text-[13px] font-semibold flex-1">Time Tracking</h3>
+            <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", timeTrackingOpen && "rotate-180")} />
+          </button>
+          {timeTrackingOpen && (
+            <div className="mt-4 space-y-3">
+              {startedAt && stageLogs.length > 0 ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" /> Total time
+                    </span>
+                    <span className="text-[14px] font-semibold font-mono tabular-nums">
+                      {formatDuration(new Date(startedAt), new Date())}
+                    </span>
+                  </div>
+                  <div className="border-t border-border/30 pt-3 space-y-2">
+                    {stageLogs
+                      .filter((l) => l.stage !== "NEW_REQUEST" && l.stage !== "CLARIFICATION")
+                      .map((log, i) => {
+                        const entered = new Date(log.enteredAt);
+                        const exited = log.exitedAt ? new Date(log.exitedAt) : new Date();
+                        const stageInfo = STAGES.find((s) => s.id === log.stage);
+                        return (
+                          <div key={i} className="flex items-center justify-between">
+                            <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                              <span className={cn("w-2 h-2 rounded-full", stageInfo?.color ?? "bg-zinc-500")} />
+                              {stageInfo?.label ?? log.stage}
+                              {!log.exitedAt && <span className="text-[10px] text-primary ml-1">(current)</span>}
+                            </span>
+                            <span className="text-[12px] font-mono tabular-nums text-muted-foreground">
+                              {formatDuration(entered, exited)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </>
               ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  <button type="button" onClick={() => handlePrioritySave(null)}
-                    className={cn("h-7 rounded-md border px-2 text-[12px] font-medium transition-colors",
-                      priorityValue == null ? "bg-amber-500/20 border-amber-500/40 text-amber-400" : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
-                    )}>None</button>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                    <button key={n} type="button" onClick={() => handlePrioritySave(n)}
-                      className={cn("h-7 w-7 rounded-md border text-[12px] font-medium transition-colors",
-                        priorityValue === n
-                          ? n >= 9 ? "bg-destructive/20 border-destructive/40 text-destructive"
-                            : n >= 7 ? "bg-orange-500/20 border-orange-500/40 text-orange-400"
-                            : n >= 4 ? "bg-primary/20 border-primary/40 text-primary"
-                            : "bg-muted border-primary/40 text-foreground"
-                          : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
-                      )}>{n}</button>
-                  ))}
+                <div className="flex flex-col items-center justify-center py-4 text-center">
+                  <Clock className="w-6 h-6 text-muted-foreground/30 mb-1" />
+                  <p className="text-[11px] text-muted-foreground/60">Tracking starts at Ready for Dev</p>
+                </div>
+              )}
+              {(initialTask.estimatedMinutes || initialTask.estimateAccuracy) && (
+                <div className="border-t border-border/30 pt-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {initialTask.estimatedMinutes && (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-1 text-[12px] font-semibold text-foreground">
+                        <Timer className="w-3 h-3 text-muted-foreground" /> Est: {formatEstimate(initialTask.estimatedMinutes)}
+                      </span>
+                    )}
+                    {initialTask.estimateAccuracy && ACCURACY_CONFIG[initialTask.estimateAccuracy] && (
+                      <span className={cn("inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[12px] font-semibold", ACCURACY_CONFIG[initialTask.estimateAccuracy].bg, ACCURACY_CONFIG[initialTask.estimateAccuracy].color)}>
+                        <Gauge className="w-3 h-3" /> {ACCURACY_CONFIG[initialTask.estimateAccuracy].label}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
+          )}
+        </div>
 
-            {initialTask.assignee && (
-              <div>
-                <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">Assigned To</label>
-                <span className="text-[13px] text-foreground">{initialTask.assignee.name ?? "Unknown"}</span>
-              </div>
-            )}
-
-            <div>
-              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">Created By</label>
-              <span className="text-[13px] text-muted-foreground">{initialTask.createdBy.name ?? "Unknown"}</span>
+        {/* Notes */}
+        <div className="rounded-xl bg-card border border-border p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+              <h3 className="text-[13px] font-semibold">Notes</h3>
+              {notes.length > 0 && (
+                <span className="text-[10px] font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
+                  {notes.length}
+                </span>
+              )}
             </div>
+            <Button size="sm" variant="ghost" onClick={() => setNoteEditorOpen(true)} className="h-7 text-xs">
+              <Plus className="w-3 h-3 mr-1" />
+              New
+            </Button>
           </div>
+          {notes.length === 0 ? (
+            <p className="text-[12px] text-muted-foreground/60 py-2">No notes attached</p>
+          ) : (
+            <div className="space-y-2">
+              {notes.map((note) => (
+                <button
+                  key={note.id}
+                  onClick={() => router.push(`/dashboard/projects/${projectId}?tab=notes&noteId=${note.id}`)}
+                  className="w-full text-left rounded-lg border border-border/60 bg-background p-3 hover:border-border transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-[12px] font-medium text-primary truncate">{note.title}</p>
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">
+                      {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">by {note.author.name ?? "Unknown"}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
-          {/* Time Tracking card */}
-          <div className="rounded-lg border border-border p-4">
-            <button onClick={() => setTimeTrackingOpen(!timeTrackingOpen)} className="flex items-center gap-2 w-full text-left">
-              <Clock className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-              <h3 className="text-[13px] font-semibold flex-1">Time Tracking</h3>
-              <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", timeTrackingOpen && "rotate-180")} />
-            </button>
-            {timeTrackingOpen && (
-              <div className="mt-3 space-y-3">
-                {startedAt && stageLogs.length > 0 ? (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5" /> Total time
-                      </span>
-                      <span className="text-[14px] font-semibold font-mono tabular-nums">
-                        {formatDuration(new Date(startedAt), new Date())}
-                      </span>
-                    </div>
-                    <div className="border-t border-border/30 pt-3 space-y-2">
-                      {stageLogs
-                        .filter((l) => l.stage !== "NEW_REQUEST" && l.stage !== "CLARIFICATION")
-                        .map((log, i) => {
-                          const entered = new Date(log.enteredAt);
-                          const exited = log.exitedAt ? new Date(log.exitedAt) : new Date();
-                          const stageInfo = STAGES.find((s) => s.id === log.stage);
-                          return (
-                            <div key={i} className="flex items-center justify-between">
-                              <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
-                                <span className={cn("w-2 h-2 rounded-full", stageInfo?.color ?? "bg-zinc-500")} />
-                                {stageInfo?.label ?? log.stage}
-                                {!log.exitedAt && <span className="text-[10px] text-primary ml-1">(current)</span>}
-                              </span>
-                              <span className="text-[12px] font-mono tabular-nums text-muted-foreground">
-                                {formatDuration(entered, exited)}
-                              </span>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-4 text-center">
-                    <Clock className="w-6 h-6 text-muted-foreground/30 mb-1" />
-                    <p className="text-[11px] text-muted-foreground/60">Tracking starts at Ready for Dev</p>
-                  </div>
-                )}
-                {(initialTask.estimatedMinutes || initialTask.estimateAccuracy) && (
-                  <div className="border-t border-border/30 pt-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {initialTask.estimatedMinutes && (
-                        <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-1 text-[12px] font-semibold text-foreground">
-                          <Timer className="w-3 h-3 text-muted-foreground" /> Est: {formatEstimate(initialTask.estimatedMinutes)}
-                        </span>
-                      )}
-                      {initialTask.estimateAccuracy && ACCURACY_CONFIG[initialTask.estimateAccuracy] && (
-                        <span className={cn("inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[12px] font-semibold", ACCURACY_CONFIG[initialTask.estimateAccuracy].bg, ACCURACY_CONFIG[initialTask.estimateAccuracy].color)}>
-                          <Gauge className="w-3 h-3" /> {ACCURACY_CONFIG[initialTask.estimateAccuracy].label}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+        {/* Comments */}
+        <div className="rounded-xl bg-card border border-border p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <MessageSquare className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+            <h3 className="text-[13px] font-semibold">Comments</h3>
           </div>
+          <CommentSection taskId={initialTask.id} projectId={projectId} />
+        </div>
+
+        {/* Activity */}
+        <div className="rounded-xl bg-card border border-border p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <History className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+            <h3 className="text-[13px] font-semibold">Activity</h3>
+          </div>
+          <ActivityTimeline taskId={initialTask.id} refreshKey={activityKey} />
         </div>
       </div>
 
