@@ -14,7 +14,7 @@ const globalForPrisma = globalThis as unknown as {
 function createClient() {
   const pool = new Pool({
     connectionString,
-    max: 20,
+    max: 5,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
   });
