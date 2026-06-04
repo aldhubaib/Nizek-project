@@ -30,13 +30,21 @@ interface Props {
 }
 
 const STAGE_COLORS: Record<string, string> = {
+  CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/20",
   READY_FOR_DEV: "bg-blue-500/10 text-blue-400 border-blue-500/20",
   IN_DEVELOPMENT: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
 };
 
 const STAGE_DOT: Record<string, string> = {
+  CLARIFICATION: "bg-violet-400",
   READY_FOR_DEV: "bg-blue-400",
   IN_DEVELOPMENT: "bg-indigo-400",
+};
+
+const STAGE_SHORT: Record<string, string> = {
+  CLARIFICATION: "Clarification",
+  READY_FOR_DEV: "Ready",
+  IN_DEVELOPMENT: "In Dev",
 };
 
 const TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string }> = {
@@ -190,7 +198,7 @@ function TaskRow({ task, showProject = false }: { task: Task; showProject?: bool
           <span className={cn("text-[10px] font-semibold tabular-nums", priorityColor)}>P{task.priority}</span>
         )}
         <span className={cn("text-[9px] font-semibold px-1.5 py-0.5 rounded-full border", stageColor)}>
-          {task.stage === "READY_FOR_DEV" ? "Ready" : "In Dev"}
+          {STAGE_SHORT[task.stage] ?? task.stage}
         </span>
         <ExternalLink className="w-3 h-3 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />
       </div>

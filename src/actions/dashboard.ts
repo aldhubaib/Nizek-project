@@ -898,7 +898,7 @@ export async function getDevQueue() {
     where: {
       projectId: { in: projectIds },
       archivedAt: null,
-      stage: { in: ["READY_FOR_DEV", "IN_DEVELOPMENT"] },
+      stage: { in: ["CLARIFICATION", "READY_FOR_DEV", "IN_DEVELOPMENT"] },
     },
     select: {
       id: true,
@@ -922,7 +922,7 @@ export async function getDevQueue() {
     byStage[t.stage].push(t);
   }
 
-  const stageOrder = ["READY_FOR_DEV", "IN_DEVELOPMENT"];
+  const stageOrder = ["CLARIFICATION", "READY_FOR_DEV", "IN_DEVELOPMENT"];
   const stages = stageOrder
     .filter((s) => byStage[s]?.length)
     .map((s) => ({ stage: s, label: STAGE_LABELS[s] ?? s, tasks: byStage[s] }));
