@@ -894,11 +894,11 @@ export async function getDevQueue() {
   const projectIds = memberProjectIds.map((m) => m.projectId);
   if (projectIds.length === 0) return { total: 0, stages: [] };
 
-  const tasks = await prisma.task.findMany({
+  const devTasks = await prisma.task.findMany({
     where: {
       projectId: { in: projectIds },
       archivedAt: null,
-      stage: { in: ["CLARIFICATION", "READY_FOR_DEV", "IN_DEVELOPMENT"] },
+      stage: { in: ["READY_FOR_DEV", "IN_DEVELOPMENT"] },
     },
     select: {
       id: true,
@@ -916,8 +916,48 @@ export async function getDevQueue() {
     take: 100,
   });
 
-  const byStage: Record<string, typeof tasks> = {};
-  for (const t of tasks) {
+  const clarTasks = await prisma.task.findMany({
+    where: {
+      projectId: { in: projectIds },
+      archivedAt: null,
+      stage: "CLARIFICATION",
+      priority: { not: null },
+    },
+    select: {
+      id: true,
+      title: true,
+      taskNumber: true,
+      taskType: true,
+      stage: true,
+      priority: true,
+      projectId: true,
+      updatedAt: true,
+      assignee: { select: { id: true, name: true, imageUrl: true } },
+      project: { select: { id: true, name: true } },
+      answers: { select: { questionId: true, answer: true } },
+    },
+    orderBy: [{ priority: { sort: "desc", nulls: "last" } }, { updatedAt: "asc" }],
+  });
+
+  const mandatoryQuestions = await prisma.defaultQuestion.findMany({
+    where: { mandatory: true },
+    select: { id: true, taskType: true },
+  });
+
+  const readyClarTasks = clarTasks.filter((t) => {
+    const reqIds = mandatoryQuestions
+      .filter((q) => q.taskType === t.taskType)
+      .map((q) => q.id);
+    const answeredIds = new Set(
+      t.answers.filter((a) => a.answer && a.answer.trim()).map((a) => a.questionId)
+    );
+    return reqIds.every((id) => answeredIds.has(id));
+  }).map(({ answers, ...rest }) => rest);
+
+  const allTasks = [...readyClarTasks, ...devTasks];
+
+  const byStage: Record<string, typeof devTasks> = {};
+  for (const t of allTasks) {
     if (!byStage[t.stage]) byStage[t.stage] = [];
     byStage[t.stage].push(t);
   }
@@ -925,9 +965,13 @@ export async function getDevQueue() {
   const stageOrder = ["CLARIFICATION", "READY_FOR_DEV", "IN_DEVELOPMENT"];
   const stages = stageOrder
     .filter((s) => byStage[s]?.length)
-    .map((s) => ({ stage: s, label: STAGE_LABELS[s] ?? s, tasks: byStage[s] }));
+    .map((s) => ({
+      stage: s,
+      label: s === "CLARIFICATION" ? "Ready for Dev" : STAGE_LABELS[s] ?? s,
+      tasks: byStage[s],
+    }));
 
-  return { total: tasks.length, stages };
+  return { total: allTasks.length, stages };
 }
 
 export async function getPmQueue() {
