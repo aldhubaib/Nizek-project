@@ -41,7 +41,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
 
   const isClarification = stage.id === "CLARIFICATION";
 
-  const MAX_UP_NEXT = 2;
+  const MAX_UP_NEXT = 1;
 
   const { upNextTasks, readyTasks, needsInputTasks } = useMemo(() => {
     if (!isClarification) return { upNextTasks: [], readyTasks: tasks, needsInputTasks: [] };
