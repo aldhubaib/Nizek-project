@@ -883,6 +883,94 @@ export async function getMyTasks() {
   return { total: tasks.length, stages };
 }
 
+export async function getDevQueue() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  const memberProjectIds = await prisma.projectMember.findMany({
+    where: { userId: user.id },
+    select: { projectId: true },
+  });
+  const projectIds = memberProjectIds.map((m) => m.projectId);
+  if (projectIds.length === 0) return { total: 0, stages: [] };
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      projectId: { in: projectIds },
+      archivedAt: null,
+      stage: { in: ["READY_FOR_DEV", "IN_DEVELOPMENT"] },
+    },
+    select: {
+      id: true,
+      title: true,
+      taskNumber: true,
+      taskType: true,
+      stage: true,
+      priority: true,
+      projectId: true,
+      updatedAt: true,
+      assignee: { select: { id: true, name: true, imageUrl: true } },
+      project: { select: { id: true, name: true } },
+    },
+    orderBy: [{ priority: { sort: "desc", nulls: "last" } }, { updatedAt: "asc" }],
+    take: 100,
+  });
+
+  const byStage: Record<string, typeof tasks> = {};
+  for (const t of tasks) {
+    if (!byStage[t.stage]) byStage[t.stage] = [];
+    byStage[t.stage].push(t);
+  }
+
+  const stageOrder = ["READY_FOR_DEV", "IN_DEVELOPMENT"];
+  const stages = stageOrder
+    .filter((s) => byStage[s]?.length)
+    .map((s) => ({ stage: s, label: STAGE_LABELS[s] ?? s, tasks: byStage[s] }));
+
+  return { total: tasks.length, stages };
+}
+
+export async function getPmQueue() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  const memberProjectIds = await prisma.projectMember.findMany({
+    where: { userId: user.id },
+    select: { projectId: true },
+  });
+  const projectIds = memberProjectIds.map((m) => m.projectId);
+  if (projectIds.length === 0) return { total: 0, stages: [] };
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      projectId: { in: projectIds },
+      archivedAt: null,
+      stage: "INTERNAL_REVIEW",
+    },
+    select: {
+      id: true,
+      title: true,
+      taskNumber: true,
+      taskType: true,
+      stage: true,
+      priority: true,
+      projectId: true,
+      updatedAt: true,
+      assignee: { select: { id: true, name: true, imageUrl: true } },
+      project: { select: { id: true, name: true } },
+    },
+    orderBy: [{ priority: { sort: "desc", nulls: "last" } }, { updatedAt: "asc" }],
+    take: 100,
+  });
+
+  return {
+    total: tasks.length,
+    stages: tasks.length > 0
+      ? [{ stage: "INTERNAL_REVIEW", label: STAGE_LABELS["INTERNAL_REVIEW"] ?? "Internal Review", tasks }]
+      : [],
+  };
+}
+
 export async function markAllMentionsRead(projectId: string, userId: string) {
   const taskIds = await prisma.task.findMany({
     where: { projectId },
