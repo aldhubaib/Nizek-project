@@ -136,8 +136,7 @@ export function KanbanBoard({
       };
     }
 
-    // Fallback: poll every 5s if Pusher is not configured
-    const interval = setInterval(refetchTasks, 5000);
+    const interval = setInterval(refetchTasks, 30_000);
     return () => clearInterval(interval);
   }, [projectId, isProjectActive, currentUserId, refetchTasks]);
 
