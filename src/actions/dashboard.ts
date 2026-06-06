@@ -894,55 +894,56 @@ export async function getDevQueue() {
   const projectIds = memberProjectIds.map((m) => m.projectId);
   if (projectIds.length === 0) return { total: 0, stages: [] };
 
-  const devTasks = await prisma.task.findMany({
-    where: {
-      projectId: { in: projectIds },
-      archivedAt: null,
-      stage: { in: ["READY_FOR_DEV", "IN_DEVELOPMENT"] },
-    },
-    select: {
-      id: true,
-      title: true,
-      taskNumber: true,
-      taskType: true,
-      stage: true,
-      priority: true,
-      projectId: true,
-      updatedAt: true,
-      assignee: { select: { id: true, name: true, imageUrl: true } },
-      project: { select: { id: true, name: true } },
-    },
-    orderBy: [{ priority: { sort: "desc", nulls: "last" } }, { updatedAt: "asc" }],
-    take: 100,
-  });
-
-  const clarTasks = await prisma.task.findMany({
-    where: {
-      projectId: { in: projectIds },
-      archivedAt: null,
-      stage: "CLARIFICATION",
-      priority: { not: null },
-    },
-    select: {
-      id: true,
-      title: true,
-      taskNumber: true,
-      taskType: true,
-      stage: true,
-      priority: true,
-      projectId: true,
-      updatedAt: true,
-      assignee: { select: { id: true, name: true, imageUrl: true } },
-      project: { select: { id: true, name: true } },
-      answers: { select: { questionId: true, answer: true } },
-    },
-    orderBy: [{ priority: { sort: "desc", nulls: "last" } }, { updatedAt: "asc" }],
-  });
-
-  const mandatoryQuestions = await prisma.defaultQuestion.findMany({
-    where: { mandatory: true },
-    select: { id: true, taskType: true },
-  });
+  const [devTasks, clarTasks, mandatoryQuestions] = await Promise.all([
+    prisma.task.findMany({
+      where: {
+        projectId: { in: projectIds },
+        archivedAt: null,
+        stage: { in: ["READY_FOR_DEV", "IN_DEVELOPMENT"] },
+      },
+      select: {
+        id: true,
+        title: true,
+        taskNumber: true,
+        taskType: true,
+        stage: true,
+        priority: true,
+        projectId: true,
+        updatedAt: true,
+        assignee: { select: { id: true, name: true, imageUrl: true } },
+        project: { select: { id: true, name: true } },
+      },
+      orderBy: [{ priority: { sort: "desc", nulls: "last" } }, { updatedAt: "asc" }],
+      take: 100,
+    }),
+    prisma.task.findMany({
+      where: {
+        projectId: { in: projectIds },
+        archivedAt: null,
+        stage: "CLARIFICATION",
+        priority: { not: null },
+      },
+      select: {
+        id: true,
+        title: true,
+        taskNumber: true,
+        taskType: true,
+        stage: true,
+        priority: true,
+        projectId: true,
+        updatedAt: true,
+        assignee: { select: { id: true, name: true, imageUrl: true } },
+        project: { select: { id: true, name: true } },
+        answers: { select: { questionId: true, answer: true } },
+      },
+      orderBy: [{ priority: { sort: "desc", nulls: "last" } }, { updatedAt: "asc" }],
+      take: 100,
+    }),
+    prisma.defaultQuestion.findMany({
+      where: { mandatory: true },
+      select: { id: true, taskType: true },
+    }),
+  ]);
 
   const readyClarTasks = clarTasks.filter((t) => {
     const reqIds = mandatoryQuestions
