@@ -111,9 +111,9 @@ export function PmQueue({ data }: Props) {
             previewCount += tasksToShow.length;
             return (
               <div key={pid}>
-                <div className="flex items-center gap-2 px-4 py-1.5 bg-muted/30 border-b border-border">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{group.name}</span>
-                  <span className="text-[10px] text-muted-foreground/50">{group.tasks.length}</span>
+                <div className="flex items-center gap-2 px-4 py-1.5 bg-muted border-b border-border">
+                  <span className="text-[10px] font-semibold text-foreground uppercase tracking-wider">{group.name}</span>
+                  <span className="text-[10px] text-muted-foreground">{group.tasks.length}</span>
                 </div>
                 <div className="divide-y divide-border">
                   {tasksToShow.map((task) => (
@@ -142,9 +142,9 @@ export function PmQueue({ data }: Props) {
             <div className="overflow-y-auto flex-1">
               {sortedProjects.map(([pid, group]) => (
                 <div key={pid}>
-                  <div className="flex items-center gap-2 px-5 py-2.5 bg-muted/30 border-b border-border sticky top-0">
-                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{group.name}</span>
-                    <span className="text-[10px] text-muted-foreground/60 font-medium">{group.tasks.length}</span>
+                  <div className="flex items-center gap-2 px-5 py-2.5 bg-muted border-b border-border sticky top-0">
+                    <span className="text-[11px] font-semibold text-foreground uppercase tracking-wider">{group.name}</span>
+                    <span className="text-[10px] text-muted-foreground font-medium">{group.tasks.length}</span>
                   </div>
                   <div className="divide-y divide-border">
                     {group.tasks.map((task) => (
