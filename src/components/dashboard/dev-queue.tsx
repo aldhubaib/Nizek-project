@@ -119,7 +119,7 @@ export function DevQueue({ data }: Props) {
         </div>
         <div className="divide-y divide-border">
           {previewTasks.map((task) => (
-            <TaskRow key={task.id} task={task} />
+            <TaskRow key={task.id} task={task} showProject />
           ))}
         </div>
       </div>
