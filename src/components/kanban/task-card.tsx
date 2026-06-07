@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Expand, Sparkles, Wrench, Bug, Clock, Timer, Undo2, AlertCircle, Palette, Gauge } from "lucide-react";
+import { Expand, ExternalLink, Sparkles, Wrench, Bug, Clock, Timer, Undo2, AlertCircle, Palette, Gauge } from "lucide-react";
 import { useState, useEffect, memo } from "react";
 import type { KanbanTask, TaskType, EstimateAccuracy } from "@/store/kanban";
 import { cn } from "@/lib/utils";
@@ -80,9 +80,10 @@ interface TaskCardProps {
   disabled?: boolean;
   locked?: boolean;
   onExpand?: () => void;
+  projectId?: string;
 }
 
-export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, locked, onExpand }: TaskCardProps) {
+export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, locked, onExpand, projectId }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -117,18 +118,35 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
         disabled ? "opacity-70" : locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
       )}
     >
-      {onExpand && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onExpand();
-          }}
-          onPointerDown={(e) => e.stopPropagation()}
-          className="absolute top-2 right-2 rounded-md p-1 text-muted-foreground/40 hover:text-foreground hover:bg-accent opacity-0 group-hover:opacity-100 transition-all z-10"
-          title="Open details"
-        >
-          <Expand className="w-3.5 h-3.5" strokeWidth={1.5} />
-        </button>
+      {(onExpand || projectId) && (
+        <div className="absolute top-2 right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all z-10">
+          {projectId && (
+            <a
+              href={`/dashboard/projects/${projectId}/tasks/${task.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="rounded-md p-1 text-muted-foreground/40 hover:text-foreground hover:bg-accent transition-all"
+              title="Open in new tab"
+            >
+              <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.5} />
+            </a>
+          )}
+          {onExpand && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onExpand();
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="rounded-md p-1 text-muted-foreground/40 hover:text-foreground hover:bg-accent transition-all"
+              title="Open sidebar"
+            >
+              <Expand className="w-3.5 h-3.5" strokeWidth={1.5} />
+            </button>
+          )}
+        </div>
       )}
 
       <div className="min-w-0">

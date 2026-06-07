@@ -125,6 +125,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
                         disabled={disabled}
                         locked={i > 0}
                         onExpand={() => handleExpand(task.id)}
+                        projectId={projectId}
                       />
                     ))}
                   </div>
@@ -151,6 +152,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
                         disabled={disabled}
                         locked
                         onExpand={() => setSelectedTaskId(task.id)}
+                        projectId={projectId}
                       />
                     ))}
                   </div>
@@ -177,6 +179,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
                         disabled={disabled}
                         locked
                         onExpand={() => setSelectedTaskId(task.id)}
+                        projectId={projectId}
                       />
                     ))}
                   </div>
@@ -191,6 +194,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
                   task={task}
                   disabled={disabled}
                   onExpand={() => setSelectedTaskId(task.id)}
+                  projectId={projectId}
                 />
               ))}
             </div>
