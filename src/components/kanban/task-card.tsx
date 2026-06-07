@@ -23,7 +23,7 @@ const ACCURACY_CONFIG: Record<EstimateAccuracy, { label: string; color: string; 
 };
 
 const TYPE_CONFIG: Record<TaskType, { icon: typeof Sparkles; color: string; bg: string; tooltip: string }> = {
-  FEATURE: { icon: Sparkles, color: "text-primary", bg: "bg-primary/10 border-primary/20", tooltip: "Feature" },
+  FEATURE: { icon: Sparkles, color: "text-primary", bg: "bg-primary/10 border-primary/20", tooltip: "Business Case" },
   ENHANCEMENT: { icon: Wrench, color: "text-violet-400", bg: "bg-violet-500/10 border-violet-500/20", tooltip: "Enhancement" },
   BUG: { icon: Bug, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20", tooltip: "Internal Bug" },
   REPORTED_BUG: { icon: AlertCircle, color: "text-destructive", bg: "bg-destructive/10 border-destructive/20", tooltip: "Reported Bug (Client)" },

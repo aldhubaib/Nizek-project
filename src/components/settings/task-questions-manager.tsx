@@ -31,7 +31,7 @@ interface Props {
 }
 
 const TABS: { id: TaskType; label: string; icon: typeof Sparkles; color: string; activeColor: string }[] = [
-  { id: "FEATURE", label: "Feature", icon: Sparkles, color: "text-muted-foreground", activeColor: "bg-primary/15 border-primary/40 text-primary" },
+  { id: "FEATURE", label: "Business Case", icon: Sparkles, color: "text-muted-foreground", activeColor: "bg-primary/15 border-primary/40 text-primary" },
   { id: "ENHANCEMENT", label: "Enhancement", icon: Wrench, color: "text-muted-foreground", activeColor: "bg-violet-500/15 border-violet-500/40 text-violet-400" },
   { id: "BUG", label: "Internal Bug", icon: Bug, color: "text-muted-foreground", activeColor: "bg-amber-500/15 border-amber-500/40 text-amber-400" },
   { id: "REPORTED_BUG", label: "Reported Bug", icon: AlertCircle, color: "text-muted-foreground", activeColor: "bg-destructive/15 border-destructive/40 text-destructive" },

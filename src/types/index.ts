@@ -81,7 +81,7 @@ export const STAGE_LABELS: Record<Stage, string> = {
 };
 
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {
-  FEATURE: "Feature",
+  FEATURE: "Business Case",
   ENHANCEMENT: "Enhancement",
   BUG: "Bug",
   REPORTED_BUG: "Reported Bug",
@@ -89,7 +89,7 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
 };
 
 export const TASK_TYPE_CONFIG: Record<TaskType, { label: string; color: string; bg: string }> = {
-  FEATURE: { label: "Feature", color: "text-primary", bg: "bg-primary/15 border-primary/20" },
+  FEATURE: { label: "Business Case", color: "text-primary", bg: "bg-primary/15 border-primary/20" },
   ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bg: "bg-violet-500/15 border-violet-500/20" },
   BUG: { label: "Bug", color: "text-destructive", bg: "bg-destructive/15 border-destructive/20" },
   REPORTED_BUG: { label: "Reported Bug", color: "text-amber-400", bg: "bg-amber-500/15 border-amber-500/20" },

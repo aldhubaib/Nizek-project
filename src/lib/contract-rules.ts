@@ -24,11 +24,12 @@ export interface ActiveContract {
 }
 
 export function getActiveContract(
-  contracts: { id: string; contractType: ContractType; label: string | null; startDate: Date | null; endDate: Date | null }[]
+  contracts: { id: string; contractType: ContractType; label: string | null; startDate: Date | null; endDate: Date | null; latePayment?: boolean }[]
 ): ActiveContract | null {
   const now = new Date();
   return contracts.find((c) => {
     if (!c.startDate || !c.endDate) return false;
+    if (c.latePayment) return false;
     return new Date(c.startDate) <= now && new Date(c.endDate) >= now;
   }) ?? null;
 }

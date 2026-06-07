@@ -34,7 +34,7 @@ function formatEstimate(minutes: number): string {
 }
 
 const TASK_TYPE_META: Record<string, { prefix: string; label: string; color: string }> = {
-  FEATURE: { prefix: "F", label: "Feature", color: "text-primary" },
+  FEATURE: { prefix: "F", label: "Business Case", color: "text-primary" },
   ENHANCEMENT: { prefix: "E", label: "Enhancement", color: "text-violet-400" },
   BUG: { prefix: "B", label: "Internal Bug", color: "text-amber-400" },
   REPORTED_BUG: { prefix: "RB", label: "Reported Bug", color: "text-destructive" },

@@ -93,8 +93,17 @@ export function MyTasks({ data }: Props) {
     );
   }
 
-  const previewTasks = data.stages.flatMap((s) => s.tasks).slice(0, PREVIEW);
+  const allTasks = data.stages.flatMap((s) => s.tasks);
   const hasMore = data.total > PREVIEW;
+
+  const projectGroups: Record<string, { name: string; tasks: Task[] }> = {};
+  for (const t of allTasks) {
+    if (!projectGroups[t.project.id]) projectGroups[t.project.id] = { name: t.project.name, tasks: [] };
+    projectGroups[t.project.id].tasks.push(t);
+  }
+  const sortedProjects = Object.entries(projectGroups).sort((a, b) => b[1].tasks.length - a[1].tasks.length);
+
+  let previewCount = 0;
 
   return (
     <>
@@ -117,10 +126,26 @@ export function MyTasks({ data }: Props) {
           )}
         </div>
 
-        <div className="divide-y divide-border">
-          {previewTasks.map((task) => (
-            <TaskRow key={task.id} task={task} showProject />
-          ))}
+        <div>
+          {sortedProjects.map(([pid, group]) => {
+            if (previewCount >= PREVIEW) return null;
+            const remaining = PREVIEW - previewCount;
+            const tasksToShow = group.tasks.slice(0, remaining);
+            previewCount += tasksToShow.length;
+            return (
+              <div key={pid}>
+                <div className="flex items-center gap-2 px-4 py-1.5 bg-muted/30 border-b border-border">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{group.name}</span>
+                  <span className="text-[10px] text-muted-foreground/50">{group.tasks.length}</span>
+                </div>
+                <div className="divide-y divide-border">
+                  {tasksToShow.map((task) => (
+                    <TaskRow key={task.id} task={task} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -147,20 +172,15 @@ export function MyTasks({ data }: Props) {
             </div>
 
             <div className="overflow-y-auto flex-1">
-              {data.stages.map((group) => (
-                <div key={group.stage}>
+              {sortedProjects.map(([pid, group]) => (
+                <div key={pid}>
                   <div className="flex items-center gap-2 px-5 py-2.5 bg-muted/30 border-b border-border sticky top-0">
-                    <div className={cn("w-2 h-2 rounded-full", STAGE_DOT[group.stage] ?? "bg-muted-foreground")} />
-                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                      {group.label}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground/60 font-medium">
-                      {group.tasks.length}
-                    </span>
+                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{group.name}</span>
+                    <span className="text-[10px] text-muted-foreground/60 font-medium">{group.tasks.length}</span>
                   </div>
                   <div className="divide-y divide-border">
                     {group.tasks.map((task) => (
-                      <TaskRow key={task.id} task={task} showProject />
+                      <TaskRow key={task.id} task={task} />
                     ))}
                   </div>
                 </div>

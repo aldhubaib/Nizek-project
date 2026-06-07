@@ -15,7 +15,7 @@ const NOTE_TYPE_CONFIG: Record<NoteType, { label: string; color: string; bgColor
   MEETING_NOTE: { label: "Meeting Note", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: FileText },
   DECISION: { label: "Decision", color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/20", icon: Gavel },
   DEADLINE: { label: "Deadline", color: "text-rose-400", bgColor: "bg-rose-500/10 border-rose-500/20", icon: CalendarClock },
-  FEATURE: { label: "Feature", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: Sparkles },
+  FEATURE: { label: "Business Case", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: Sparkles },
   ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bgColor: "bg-violet-500/10 border-violet-500/20", icon: Wrench },
   BUG: { label: "Bug", color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/20", icon: Bug },
   REPORTED_BUG: { label: "Reported Bug", color: "text-destructive", bgColor: "bg-destructive/10 border-destructive/20", icon: AlertCircle },

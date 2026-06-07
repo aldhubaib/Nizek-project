@@ -3,6 +3,19 @@
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
 
+function notLatePaymentFilter() {
+  const now = new Date();
+  return {
+    contracts: {
+      none: {
+        latePayment: true,
+        startDate: { lte: now },
+        endDate: { gte: now },
+      },
+    },
+  };
+}
+
 export async function getDashboardData(projectId: string) {
   const { user, member } = await requireProjectMember(projectId);
 
@@ -332,7 +345,7 @@ export async function getLongestInPipeline() {
     where: {
       stage: { in: activeStages as any },
       startedAt: { not: null },
-      project: whereClause,
+      project: { ...whereClause, ...notLatePaymentFilter() },
     },
     select: {
       id: true,
@@ -404,7 +417,7 @@ export async function getShippedSummary() {
   const doneTasks = await prisma.task.findMany({
     where: {
       stage: "DONE",
-      project: whereClause,
+      project: { ...whereClause, ...notLatePaymentFilter() },
     },
     select: {
       id: true,
@@ -463,7 +476,7 @@ export async function getMostRejectedTasks() {
   const declineActivities = await prisma.taskActivity.findMany({
     where: {
       action: "declined",
-      task: { stage: { not: "DONE" }, project: whereClause },
+      task: { stage: { not: "DONE" }, project: { ...whereClause, ...notLatePaymentFilter() } },
     },
     select: {
       id: true,
@@ -692,7 +705,7 @@ export async function getClientDependencies() {
       question: { type: "client" },
       task: {
         stage: { not: "DONE" },
-        project: whereClause,
+        project: { ...whereClause, ...notLatePaymentFilter() },
       },
     },
     select: {
@@ -839,6 +852,7 @@ export async function getMyTasks() {
       assigneeId: user.id,
       archivedAt: null,
       stage: { not: "DONE" },
+      project: notLatePaymentFilter(),
     },
     select: {
       id: true,
@@ -887,11 +901,14 @@ export async function getDevQueue() {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
 
-  const memberProjectIds = await prisma.projectMember.findMany({
-    where: { userId: user.id },
-    select: { projectId: true },
+  const activeProjects = await prisma.project.findMany({
+    where: {
+      members: { some: { userId: user.id } },
+      ...notLatePaymentFilter(),
+    },
+    select: { id: true },
   });
-  const projectIds = memberProjectIds.map((m) => m.projectId);
+  const projectIds = activeProjects.map((p) => p.id);
   if (projectIds.length === 0) return { total: 0, stages: [] };
 
   const [devTasks, clarTasks, mandatoryQuestions] = await Promise.all([
@@ -979,11 +996,14 @@ export async function getPmQueue() {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
 
-  const memberProjectIds = await prisma.projectMember.findMany({
-    where: { userId: user.id },
-    select: { projectId: true },
+  const activeProjects = await prisma.project.findMany({
+    where: {
+      members: { some: { userId: user.id } },
+      ...notLatePaymentFilter(),
+    },
+    select: { id: true },
   });
-  const projectIds = memberProjectIds.map((m) => m.projectId);
+  const projectIds = activeProjects.map((p) => p.id);
   if (projectIds.length === 0) return { total: 0, stages: [] };
 
   const tasks = await prisma.task.findMany({

@@ -23,7 +23,7 @@ interface ShippedData {
 }
 
 const TYPE_CONFIG: Record<string, { icon: typeof Sparkles; color: string; bg: string; label: string }> = {
-  FEATURE: { icon: Sparkles, color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", label: "Features" },
+  FEATURE: { icon: Sparkles, color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", label: "Business Cases" },
   ENHANCEMENT: { icon: Zap, color: "text-cyan-400", bg: "bg-cyan-500/10 border-cyan-500/20", label: "Enhancements" },
   BUG: { icon: Bug, color: "text-red-400", bg: "bg-red-500/10 border-red-500/20", label: "Bugs Fixed" },
   REPORTED_BUG: { icon: AlertCircle, color: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20", label: "Reported Bugs" },
