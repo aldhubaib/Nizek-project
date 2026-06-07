@@ -148,6 +148,8 @@ export function TaskDetailPage({
   const [showDecline, setShowDecline] = useState(false);
   const [declineComment, setDeclineComment] = useState("");
   const [declining, setDeclining] = useState(false);
+  const [showAdminStages, setShowAdminStages] = useState(false);
+  const adminStagesRef = useRef<HTMLDivElement>(null);
 
   // Sections
   const [questionsOpen, setQuestionsOpen] = useState(true);
@@ -174,6 +176,33 @@ export function TaskDetailPage({
   useEffect(() => {
     if (editingTitle) titleInputRef.current?.focus();
   }, [editingTitle]);
+
+  useEffect(() => {
+    if (!showAdminStages) return;
+    function handleClick(e: MouseEvent) {
+      if (adminStagesRef.current && !adminStagesRef.current.contains(e.target as Node)) {
+        setShowAdminStages(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showAdminStages]);
+
+  async function handleAdminStageChange(stage: Stage) {
+    if (stage === taskStage || movingStage) return;
+    setShowAdminStages(false);
+    setMovingStage(true);
+    setMoveError(null);
+    try {
+      await moveTaskAction({ taskId: initialTask.id, stage, order: initialTask.order });
+      setTaskStage(stage);
+      setActivityKey((k) => k + 1);
+    } catch (err: any) {
+      setMoveError([err?.message ?? "Failed to change stage"]);
+    } finally {
+      setMovingStage(false);
+    }
+  }
 
   async function handleTitleSave() {
     setEditingTitle(false);
@@ -418,10 +447,51 @@ export function TaskDetailPage({
         <div className="rounded-xl bg-card border border-border p-5">
           <label className="text-[13px] font-semibold text-foreground mb-3 block">Status</label>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-primary/15 border-primary/20 text-primary">
-              <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
-              {STAGES[currentStageIndex]?.label}
-            </span>
+            {isAdmin ? (
+              <div className="relative" ref={adminStagesRef}>
+                <button
+                  onClick={() => setShowAdminStages(!showAdminStages)}
+                  disabled={movingStage}
+                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-primary/15 border-primary/20 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50"
+                >
+                  {movingStage ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <>
+                      <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
+                      {STAGES[currentStageIndex]?.label}
+                      <ChevronDown className="w-3 h-3 ml-0.5" />
+                    </>
+                  )}
+                </button>
+                {showAdminStages && (
+                  <div className="absolute top-full left-0 mt-1.5 z-50 rounded-lg border border-border bg-card shadow-xl py-1 min-w-[180px]">
+                    {STAGES.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => handleAdminStageChange(s.id)}
+                        disabled={s.id === taskStage}
+                        className={cn(
+                          "w-full flex items-center gap-2 px-3 py-1.5 text-[12px] font-medium transition-colors text-left",
+                          s.id === taskStage
+                            ? "text-primary bg-primary/10"
+                            : "text-foreground hover:bg-accent"
+                        )}
+                      >
+                        <span className={cn("w-2 h-2 rounded-full shrink-0", s.color)} />
+                        {s.label}
+                        {s.id === taskStage && <Check className="w-3 h-3 ml-auto text-primary" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-primary/15 border-primary/20 text-primary">
+                <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
+                {STAGES[currentStageIndex]?.label}
+              </span>
+            )}
             {nextStage && (
               <>
                 <ChevronRight className="w-3 h-3 text-muted-foreground/50" />

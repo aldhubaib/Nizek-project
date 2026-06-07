@@ -266,12 +266,13 @@ export async function moveTask(data: {
   });
   if (!task) throw new Error("Task not found");
 
-  const activeContract = getActiveContract(task.project.contracts);
-  if (!activeContract) throw new Error("No active contract — this project is read-only");
-
   const { user, member } = await requireProjectMember(task.projectId);
+  const isAdmin = user.systemRole === "ADMIN";
 
-  if (user.systemRole !== "ADMIN" && task.stage !== data.stage) {
+  const activeContract = getActiveContract(task.project.contracts);
+  if (!activeContract && !isAdmin) throw new Error("No active contract — this project is read-only");
+
+  if (!isAdmin && task.stage !== data.stage) {
     const perms = getPermissionsFromRole(member.projectRole);
     if (!canTransition(perms, task.stage, data.stage)) {
       throw new Error(`Your role cannot move tasks from ${task.stage.replaceAll("_", " ")} to ${data.stage.replaceAll("_", " ")}`);
@@ -280,7 +281,7 @@ export async function moveTask(data: {
 
   const oldStage = task.stage;
 
-  if (oldStage === "CLARIFICATION" && data.stage !== "CLARIFICATION" && data.stage !== "NEW_REQUEST") {
+  if (!isAdmin && oldStage === "CLARIFICATION" && data.stage !== "CLARIFICATION" && data.stage !== "NEW_REQUEST") {
     const errors: string[] = [];
 
     if (task.priority == null) {
@@ -334,13 +335,13 @@ export async function moveTask(data: {
   }
 
   let targetStage = data.stage;
-  if (task.taskType === "BUG" && targetStage === "CLIENT_REVIEW") {
+  if (!isAdmin && task.taskType === "BUG" && targetStage === "CLIENT_REVIEW") {
     targetStage = "READY_FOR_RELEASE";
   }
 
   const isEnteringDev = oldStage !== "READY_FOR_DEV" && targetStage === "READY_FOR_DEV";
 
-  if (isEnteringDev && !task.estimatedMinutes && !data.estimatedMinutes) {
+  if (!isAdmin && isEnteringDev && !task.estimatedMinutes && !data.estimatedMinutes) {
     throw new Error("ESTIMATE_REQUIRED");
   }
 
