@@ -901,14 +901,11 @@ export async function getDevQueue() {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
 
-  const activeProjects = await prisma.project.findMany({
-    where: {
-      members: { some: { userId: user.id } },
-      ...notLatePaymentFilter(),
-    },
-    select: { id: true },
+  const memberProjectIds = await prisma.projectMember.findMany({
+    where: { userId: user.id },
+    select: { projectId: true },
   });
-  const projectIds = activeProjects.map((p) => p.id);
+  const projectIds = memberProjectIds.map((m) => m.projectId);
   if (projectIds.length === 0) return { total: 0, stages: [] };
 
   const [devTasks, clarTasks, mandatoryQuestions] = await Promise.all([
@@ -917,6 +914,7 @@ export async function getDevQueue() {
         projectId: { in: projectIds },
         archivedAt: null,
         stage: { in: ["READY_FOR_DEV", "IN_DEVELOPMENT"] },
+        project: notLatePaymentFilter(),
       },
       select: {
         id: true,
@@ -939,6 +937,7 @@ export async function getDevQueue() {
         archivedAt: null,
         stage: "CLARIFICATION",
         priority: { not: null },
+        project: notLatePaymentFilter(),
       },
       select: {
         id: true,
@@ -996,14 +995,11 @@ export async function getPmQueue() {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
 
-  const activeProjects = await prisma.project.findMany({
-    where: {
-      members: { some: { userId: user.id } },
-      ...notLatePaymentFilter(),
-    },
-    select: { id: true },
+  const memberProjectIds = await prisma.projectMember.findMany({
+    where: { userId: user.id },
+    select: { projectId: true },
   });
-  const projectIds = activeProjects.map((p) => p.id);
+  const projectIds = memberProjectIds.map((m) => m.projectId);
   if (projectIds.length === 0) return { total: 0, stages: [] };
 
   const tasks = await prisma.task.findMany({
@@ -1011,6 +1007,7 @@ export async function getPmQueue() {
       projectId: { in: projectIds },
       archivedAt: null,
       stage: "INTERNAL_REVIEW",
+      project: notLatePaymentFilter(),
     },
     select: {
       id: true,
