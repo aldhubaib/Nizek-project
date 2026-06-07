@@ -384,6 +384,7 @@ export function KanbanBoard({
                 disabled
                 projectId={projectId}
                 questions={questions}
+                isAdmin={userPermissions.isAdmin}
               />
             );
           })}
@@ -413,6 +414,7 @@ export function KanbanBoard({
               canCreateTask={userPermissions.isAdmin || (userPermissions.createStages ?? []).includes(stage.id)}
               dragFromStage={dragFromStage}
               dragTaskType={dragTaskType}
+              isAdmin={userPermissions.isAdmin}
             />
           );
         })}

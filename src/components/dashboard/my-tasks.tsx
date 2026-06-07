@@ -205,6 +205,7 @@ function TaskRow({ task, showProject = false }: { task: Task; showProject?: bool
   return (
     <Link
       href={`/dashboard/projects/${task.projectId}/tasks/${task.id}`}
+      target="_blank"
       className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors group"
     >
       <div className={cn("w-5 h-5 rounded-full flex items-center justify-center shrink-0", typeConf.color.replace("text-", "bg-").replace("400", "500/10"))}>

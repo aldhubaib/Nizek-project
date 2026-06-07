@@ -257,6 +257,7 @@ export function ProjectDashboard({ projectId, userRole, userId, tasks: kanbanTas
           onClose={() => setSelectedTaskId(null)}
           questions={questions}
           projectId={projectId}
+          isAdmin={isAdmin}
         />
       )}
     </div>

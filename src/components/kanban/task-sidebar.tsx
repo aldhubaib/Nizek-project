@@ -82,6 +82,7 @@ interface Props {
   onClose: () => void;
   questions: QuestionWithType[];
   projectId: string;
+  isAdmin?: boolean;
 }
 
 function AttachedNotesSection({
@@ -285,7 +286,7 @@ function NoteFullScreenViewer({
   );
 }
 
-export function TaskSidebar({ task, open, onClose, questions: allQuestions, projectId }: Props) {
+export function TaskSidebar({ task, open, onClose, questions: allQuestions, projectId, isAdmin }: Props) {
   const questions = allQuestions.filter((q) => q.taskType === task.taskType);
   const router = useRouter();
 
@@ -307,6 +308,8 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const [showDecline, setShowDecline] = useState(false);
   const [declineComment, setDeclineComment] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [showAdminStages, setShowAdminStages] = useState(false);
+  const adminStagesRef = useRef<HTMLDivElement>(null);
 
   const taskTypeMeta = TASK_TYPE_META[task.taskType] ?? TASK_TYPE_META.FEATURE;
   const [declining, setDeclining] = useState(false);
@@ -379,6 +382,33 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
       priorityRef.current = oldPriority;
       updateStoreTask(task.id, { priority: oldPriority });
       recalcReadiness(undefined, oldPriority);
+    }
+  }
+
+  useEffect(() => {
+    if (!showAdminStages) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (adminStagesRef.current && !adminStagesRef.current.contains(e.target as Node)) {
+        setShowAdminStages(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showAdminStages]);
+
+  async function handleAdminStageChange(targetStage: Stage) {
+    setShowAdminStages(false);
+    if (targetStage === task.stage) return;
+    setMovingStage(true);
+    setMoveError(null);
+    try {
+      await moveTaskAction({ taskId: task.id, stage: targetStage, order: task.order });
+      updateStoreTask(task.id, { stage: targetStage });
+      setActivityKey((k) => k + 1);
+    } catch (err) {
+      setMoveError([(err as Error).message || "Failed to move task"]);
+    } finally {
+      setMovingStage(false);
     }
   }
 
@@ -721,31 +751,68 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
             <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
               Change Status
             </label>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-primary/15 border-primary/20 text-primary">
-                <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
-                {STAGES[currentStageIndex]?.label}
-              </span>
-              {nextStage && (
-                <>
-                  <ChevronRight className="w-3 h-3 text-muted-foreground/50" />
-                  <button
-                    onClick={handleMoveToNext}
-                    disabled={movingStage}
-                    className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-muted border-border text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30 transition-colors disabled:opacity-50"
-                  >
-                    {movingStage ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <>
-                        <span className={cn("w-2 h-2 rounded-full", nextStage.color)} />
-                        {nextStage.label}
-                      </>
-                    )}
-                  </button>
-                </>
-              )}
-            </div>
+            {isAdmin ? (
+              <div className="relative" ref={adminStagesRef}>
+                <button
+                  onClick={() => setShowAdminStages((v) => !v)}
+                  disabled={movingStage}
+                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-primary/15 border-primary/20 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50"
+                >
+                  {movingStage ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <>
+                      <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
+                      {STAGES[currentStageIndex]?.label}
+                      <ChevronDown className={cn("w-3 h-3 ml-0.5 transition-transform", showAdminStages && "rotate-180")} />
+                    </>
+                  )}
+                </button>
+                {showAdminStages && (
+                  <div className="absolute top-full left-0 mt-1 w-48 rounded-lg border border-border bg-popover shadow-xl overflow-hidden z-50">
+                    {STAGES.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => handleAdminStageChange(s.id)}
+                        className={cn(
+                          "flex items-center gap-2 w-full px-3 py-2 text-[12px] hover:bg-accent/50 transition-colors text-left",
+                          s.id === task.stage && "bg-primary/10 font-semibold"
+                        )}
+                      >
+                        <span className={cn("w-2 h-2 rounded-full shrink-0", s.color)} />
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-primary/15 border-primary/20 text-primary">
+                  <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
+                  {STAGES[currentStageIndex]?.label}
+                </span>
+                {nextStage && (
+                  <>
+                    <ChevronRight className="w-3 h-3 text-muted-foreground/50" />
+                    <button
+                      onClick={handleMoveToNext}
+                      disabled={movingStage}
+                      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-muted border-border text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30 transition-colors disabled:opacity-50"
+                    >
+                      {movingStage ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <>
+                          <span className={cn("w-2 h-2 rounded-full", nextStage.color)} />
+                          {nextStage.label}
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
             {canDecline && (
               <div className="mt-2">
                 {!showDecline ? (

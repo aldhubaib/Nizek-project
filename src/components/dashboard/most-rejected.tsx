@@ -76,6 +76,7 @@ function CompactRow({ item, maxCount }: { item: RejectedTask; maxCount: number }
   return (
     <Link
       href={`/dashboard/projects/${item.task.project.id}?task=${item.task.id}`}
+      target="_blank"
       className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors group"
     >
       <Tooltip text={typeInfo?.label ?? item.task.taskType}>
@@ -129,6 +130,7 @@ function FullRow({ item }: { item: RejectedTask }) {
   return (
     <Link
       href={`/dashboard/projects/${item.task.project.id}?task=${item.task.id}`}
+      target="_blank"
       className="grid grid-cols-[1fr_100px_70px_70px_70px_100px] gap-3 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
     >
       <div className="flex items-center gap-3 min-w-0">
