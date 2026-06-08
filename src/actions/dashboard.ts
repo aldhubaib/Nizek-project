@@ -1049,31 +1049,102 @@ export async function markAllMentionsRead(projectId: string, userId: string) {
   });
 }
 
+const FUNNEL_STAGES = [
+  "NEW_REQUEST", "SPEC_READY", "NEEDS_INPUT", "READY_FOR_DEV",
+  "IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW", "READY_FOR_RELEASE", "DONE",
+];
+
+function funnelProjectFilter(systemRole: string, userId: string) {
+  const wh = systemRole === "ADMIN"
+    ? {}
+    : systemRole === "PM" || systemRole === "TECH_LEAD"
+      ? { OR: [{ members: { some: { userId } } }, { team: { members: { some: { userId } } } }] }
+      : { members: { some: { userId } } };
+  return { ...wh, ...notLatePaymentFilter() };
+}
+
+function buildRequiredByType(questions: { id: string; taskType: string }[]) {
+  const m = new Map<string, string[]>();
+  for (const q of questions) {
+    const list = m.get(q.taskType) ?? [];
+    list.push(q.id);
+    m.set(q.taskType, list);
+  }
+  return m;
+}
+
+function computeBucket(
+  stage: string,
+  taskType: string,
+  priority: number | null,
+  answers: { questionId: string; answer: string }[],
+  requiredByType: Map<string, string[]>,
+) {
+  if (stage !== "CLARIFICATION") return stage;
+  const reqIds = requiredByType.get(taskType) ?? [];
+  const answeredIds = new Set(answers.filter((a) => a.answer?.trim()).map((a) => a.questionId));
+  return reqIds.every((id) => answeredIds.has(id)) && priority != null ? "SPEC_READY" : "NEEDS_INPUT";
+}
+
 export async function getStageFunnel() {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
 
-  const whereClause =
-    user.systemRole === "ADMIN"
-      ? {}
-      : user.systemRole === "PM" || user.systemRole === "TECH_LEAD"
-        ? { OR: [{ members: { some: { userId: user.id } } }, { team: { members: { some: { userId: user.id } } } }] }
-        : { members: { some: { userId: user.id } } };
-
-  const projectFilter = { ...whereClause, ...notLatePaymentFilter() };
-
   const [tasks, requiredQuestions] = await Promise.all([
     prisma.task.findMany({
-      where: { archivedAt: null, project: projectFilter },
+      where: { archivedAt: null, project: funnelProjectFilter(user.systemRole, user.id) },
       select: {
-        id: true,
-        title: true,
-        taskNumber: true,
         stage: true,
         taskType: true,
         priority: true,
         projectId: true,
-        updatedAt: true,
+        project: { select: { id: true, name: true } },
+        answers: { select: { questionId: true, answer: true } },
+      },
+    }),
+    prisma.defaultQuestion.findMany({
+      where: { required: true, type: { not: "client" } },
+      select: { id: true, taskType: true },
+    }),
+  ]);
+
+  const requiredByType = buildRequiredByType(requiredQuestions);
+
+  const projectMap: Record<string, string> = {};
+  const byProject: Record<string, Record<string, number>> = {};
+  const totals: Record<string, number> = {};
+  for (const s of FUNNEL_STAGES) totals[s] = 0;
+
+  for (const t of tasks) {
+    const bucket = computeBucket(t.stage, t.taskType, t.priority, t.answers, requiredByType);
+    totals[bucket] = (totals[bucket] ?? 0) + 1;
+    if (!byProject[t.projectId]) {
+      byProject[t.projectId] = {};
+      for (const s of FUNNEL_STAGES) byProject[t.projectId][s] = 0;
+    }
+    byProject[t.projectId][bucket]++;
+    projectMap[t.projectId] = t.project.name;
+  }
+
+  return {
+    stages: FUNNEL_STAGES,
+    totals,
+    byProject,
+    projects: Object.entries(projectMap).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
+    totalTasks: tasks.length,
+  };
+}
+
+export async function getFunnelTasks() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  const [tasks, requiredQuestions] = await Promise.all([
+    prisma.task.findMany({
+      where: { archivedAt: null, project: funnelProjectFilter(user.systemRole, user.id) },
+      select: {
+        id: true, title: true, taskNumber: true, stage: true, taskType: true,
+        priority: true, projectId: true, updatedAt: true,
         project: { select: { id: true, name: true } },
         assignee: { select: { id: true, name: true, imageUrl: true } },
         answers: { select: { questionId: true, answer: true } },
@@ -1085,90 +1156,12 @@ export async function getStageFunnel() {
     }),
   ]);
 
-  const requiredByType = new Map<string, string[]>();
-  for (const q of requiredQuestions) {
-    const list = requiredByType.get(q.taskType) ?? [];
-    list.push(q.id);
-    requiredByType.set(q.taskType, list);
-  }
+  const requiredByType = buildRequiredByType(requiredQuestions);
 
-  const stages = [
-    "NEW_REQUEST",
-    "SPEC_READY",
-    "NEEDS_INPUT",
-    "READY_FOR_DEV",
-    "IN_DEVELOPMENT",
-    "INTERNAL_REVIEW",
-    "CLIENT_REVIEW",
-    "READY_FOR_RELEASE",
-    "DONE",
-  ];
-
-  const projectMap: Record<string, string> = {};
-  const byProject: Record<string, Record<string, number>> = {};
-  const totals: Record<string, number> = {};
-
-  for (const s of stages) totals[s] = 0;
-
-  const taskList: {
-    id: string;
-    title: string;
-    taskNumber: number;
-    taskType: string;
-    stage: string;
-    bucket: string;
-    priority: number | null;
-    projectId: string;
-    updatedAt: string;
-    project: { id: string; name: string };
-    assignee: { id: string; name: string | null; imageUrl: string | null } | null;
-  }[] = [];
-
-  for (const t of tasks) {
-    let bucket = t.stage as string;
-
-    if (t.stage === "CLARIFICATION") {
-      const reqIds = requiredByType.get(t.taskType) ?? [];
-      const answeredIds = new Set(
-        t.answers.filter((a) => a.answer && a.answer.trim()).map((a) => a.questionId)
-      );
-      const isReady = reqIds.every((id) => answeredIds.has(id)) && t.priority != null;
-      bucket = isReady ? "SPEC_READY" : "NEEDS_INPUT";
-    }
-
-    totals[bucket] = (totals[bucket] ?? 0) + 1;
-    if (!byProject[t.projectId]) {
-      byProject[t.projectId] = {};
-      for (const s of stages) byProject[t.projectId][s] = 0;
-    }
-    byProject[t.projectId][bucket]++;
-    projectMap[t.projectId] = t.project.name;
-
-    taskList.push({
-      id: t.id,
-      title: t.title,
-      taskNumber: t.taskNumber,
-      taskType: t.taskType,
-      stage: t.stage,
-      bucket,
-      priority: t.priority,
-      projectId: t.projectId,
-      updatedAt: t.updatedAt.toISOString(),
-      project: t.project,
-      assignee: t.assignee,
-    });
-  }
-
-  const projects = Object.entries(projectMap)
-    .map(([id, name]) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  return {
-    stages,
-    totals,
-    byProject,
-    projects,
-    totalTasks: tasks.length,
-    tasks: taskList,
-  };
+  return tasks.map((t) => ({
+    id: t.id, title: t.title, taskNumber: t.taskNumber, taskType: t.taskType,
+    stage: t.stage, bucket: computeBucket(t.stage, t.taskType, t.priority, t.answers, requiredByType),
+    priority: t.priority, projectId: t.projectId, updatedAt: t.updatedAt.toISOString(),
+    project: t.project, assignee: t.assignee,
+  }));
 }
