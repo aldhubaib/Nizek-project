@@ -16,7 +16,8 @@ interface Props {
 
 const STAGE_META: Record<string, { label: string; color: string; bg: string }> = {
   NEW_REQUEST:       { label: "New Request",       color: "bg-zinc-500",    bg: "bg-zinc-500/15" },
-  CLARIFICATION:     { label: "Clarification",     color: "bg-violet-500",  bg: "bg-violet-500/15" },
+  SPEC_READY:        { label: "Spec Ready",        color: "bg-violet-400",  bg: "bg-violet-400/15" },
+  NEEDS_INPUT:       { label: "Needs Input",       color: "bg-rose-500",    bg: "bg-rose-500/15" },
   READY_FOR_DEV:     { label: "Ready for Dev",     color: "bg-blue-500",    bg: "bg-blue-500/15" },
   IN_DEVELOPMENT:    { label: "In Development",    color: "bg-sky-500",     bg: "bg-sky-500/15" },
   INTERNAL_REVIEW:   { label: "Internal Review",   color: "bg-amber-500",   bg: "bg-amber-500/15" },

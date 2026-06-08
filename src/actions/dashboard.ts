@@ -1060,22 +1060,38 @@ export async function getStageFunnel() {
         ? { OR: [{ members: { some: { userId: user.id } } }, { team: { members: { some: { userId: user.id } } } }] }
         : { members: { some: { userId: user.id } } };
 
-  const tasks = await prisma.task.findMany({
-    where: {
-      archivedAt: null,
-      project: { ...whereClause, ...notLatePaymentFilter() },
-    },
-    select: {
-      stage: true,
-      taskType: true,
-      projectId: true,
-      project: { select: { id: true, name: true } },
-    },
-  });
+  const projectFilter = { ...whereClause, ...notLatePaymentFilter() };
+
+  const [tasks, requiredQuestions] = await Promise.all([
+    prisma.task.findMany({
+      where: { archivedAt: null, project: projectFilter },
+      select: {
+        id: true,
+        stage: true,
+        taskType: true,
+        priority: true,
+        projectId: true,
+        project: { select: { id: true, name: true } },
+        answers: { select: { questionId: true, answer: true } },
+      },
+    }),
+    prisma.defaultQuestion.findMany({
+      where: { required: true, type: { not: "client" } },
+      select: { id: true, taskType: true },
+    }),
+  ]);
+
+  const requiredByType = new Map<string, string[]>();
+  for (const q of requiredQuestions) {
+    const list = requiredByType.get(q.taskType) ?? [];
+    list.push(q.id);
+    requiredByType.set(q.taskType, list);
+  }
 
   const stages = [
     "NEW_REQUEST",
-    "CLARIFICATION",
+    "SPEC_READY",
+    "NEEDS_INPUT",
     "READY_FOR_DEV",
     "IN_DEVELOPMENT",
     "INTERNAL_REVIEW",
@@ -1091,12 +1107,23 @@ export async function getStageFunnel() {
   for (const s of stages) totals[s] = 0;
 
   for (const t of tasks) {
-    totals[t.stage] = (totals[t.stage] ?? 0) + 1;
+    let bucket = t.stage as string;
+
+    if (t.stage === "CLARIFICATION") {
+      const reqIds = requiredByType.get(t.taskType) ?? [];
+      const answeredIds = new Set(
+        t.answers.filter((a) => a.answer && a.answer.trim()).map((a) => a.questionId)
+      );
+      const isReady = reqIds.every((id) => answeredIds.has(id)) && t.priority != null;
+      bucket = isReady ? "SPEC_READY" : "NEEDS_INPUT";
+    }
+
+    totals[bucket] = (totals[bucket] ?? 0) + 1;
     if (!byProject[t.projectId]) {
       byProject[t.projectId] = {};
       for (const s of stages) byProject[t.projectId][s] = 0;
     }
-    byProject[t.projectId][t.stage]++;
+    byProject[t.projectId][bucket]++;
     projectMap[t.projectId] = t.project.name;
   }
 
