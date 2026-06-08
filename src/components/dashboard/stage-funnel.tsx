@@ -211,7 +211,11 @@ export function StageFunnel({ data }: Props) {
               <button
                 key={stage}
                 onClick={() => count > 0 && setDetailStage(stage)}
-                className={cn("w-full group", count > 0 ? "cursor-pointer" : "cursor-default")}
+                disabled={count === 0}
+                className={cn(
+                  "w-full group rounded-md px-1 py-0.5 -mx-1 transition-colors",
+                  count > 0 ? "cursor-pointer hover:bg-accent/30" : "cursor-default opacity-60"
+                )}
               >
                 <div className="flex items-center gap-3">
                   <div className="w-[120px] shrink-0 flex items-center gap-2">
@@ -236,6 +240,12 @@ export function StageFunnel({ data }: Props) {
                   <span className="w-10 text-right text-[12px] font-semibold tabular-nums text-foreground shrink-0">
                     {count}
                   </span>
+                  {count > 0 && (
+                    <span className="text-[10px] text-primary opacity-0 group-hover:opacity-100 transition-opacity shrink-0 w-12 text-right">
+                      View →
+                    </span>
+                  )}
+                  {count === 0 && <span className="w-12 shrink-0" />}
                 </div>
               </button>
             );
@@ -254,10 +264,8 @@ export function StageFunnel({ data }: Props) {
               </>
             )}
           </span>
-          <span className="text-[10px] text-muted-foreground/50">
-            {selectedProjects.length === 0
-              ? `${data.projects.length} projects`
-              : `${selectedProjects.length} of ${data.projects.length} projects`}
+          <span className="text-[10px] text-muted-foreground/40 italic">
+            Click any bar to view tasks
           </span>
         </div>
       </div>
