@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { BarChart3, ChevronDown, Filter, X, ExternalLink, Sparkles, Zap, Bug, AlertCircle, Palette, Clock } from "lucide-react";
+import { BarChart3, ChevronDown, Filter, X, ExternalLink, Sparkles, Zap, Bug, AlertCircle, Palette, Clock, List } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface FunnelTask {
@@ -84,7 +84,7 @@ function getPriorityStyle(priority: number | null) {
 export function StageFunnel({ data }: Props) {
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [detailStage, setDetailStage] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
 
   const counts = data.stages.map((stage) => {
     if (selectedProjects.length === 0) return data.totals[stage] ?? 0;
@@ -100,22 +100,16 @@ export function StageFunnel({ data }: Props) {
     );
   }
 
-  const detailTasks = detailStage
-    ? data.tasks.filter((t) => {
-        if (t.bucket !== detailStage) return false;
-        if (selectedProjects.length > 0 && !selectedProjects.includes(t.projectId)) return false;
-        return true;
-      })
-    : [];
+  const filteredTasks = data.tasks.filter((t) => {
+    if (selectedProjects.length > 0 && !selectedProjects.includes(t.projectId)) return false;
+    return true;
+  });
 
-  const detailByProject: Record<string, { name: string; tasks: FunnelTask[] }> = {};
-  for (const t of detailTasks) {
-    if (!detailByProject[t.projectId]) detailByProject[t.projectId] = { name: t.project.name, tasks: [] };
-    detailByProject[t.projectId].tasks.push(t);
+  const tasksByStage: Record<string, FunnelTask[]> = {};
+  for (const t of filteredTasks) {
+    if (!tasksByStage[t.bucket]) tasksByStage[t.bucket] = [];
+    tasksByStage[t.bucket].push(t);
   }
-  const detailProjects = Object.entries(detailByProject).sort((a, b) => b[1].tasks.length - a[1].tasks.length);
-
-  const detailMeta = detailStage ? STAGE_META[detailStage] : null;
 
   return (
     <>
@@ -128,6 +122,16 @@ export function StageFunnel({ data }: Props) {
               {total}
             </span>
           </div>
+          <div className="flex items-center gap-2">
+            {total > 0 && (
+              <button
+                onClick={() => setShowDetails(true)}
+                className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md border border-border text-primary hover:bg-primary/10 hover:border-primary/40 transition-colors"
+              >
+                <List className="w-3 h-3" />
+                View Details
+              </button>
+            )}
           <div className="relative">
             <button
               onClick={() => setFilterOpen((v) => !v)}
@@ -183,6 +187,7 @@ export function StageFunnel({ data }: Props) {
               </div>
             )}
           </div>
+          </div>
         </div>
 
         {selectedProjects.length > 0 && (
@@ -208,46 +213,25 @@ export function StageFunnel({ data }: Props) {
             const pct = max > 0 ? (count / max) * 100 : 0;
 
             return (
-              <button
-                key={stage}
-                onClick={() => count > 0 && setDetailStage(stage)}
-                disabled={count === 0}
-                className={cn(
-                  "w-full group rounded-md px-1 py-0.5 -mx-1 transition-colors",
-                  count > 0 ? "cursor-pointer hover:bg-accent/30" : "cursor-default opacity-60"
-                )}
-              >
+              <div key={stage} className={cn(count === 0 && "opacity-50")}>
                 <div className="flex items-center gap-3">
                   <div className="w-[120px] shrink-0 flex items-center gap-2">
                     <span className={cn("w-2 h-2 rounded-full shrink-0", meta.color)} />
-                    <span className={cn(
-                      "text-[11px] font-medium truncate transition-colors",
-                      count > 0 ? "text-muted-foreground group-hover:text-foreground" : "text-muted-foreground/50"
-                    )}>
+                    <span className="text-[11px] font-medium text-muted-foreground truncate">
                       {meta.label}
                     </span>
                   </div>
                   <div className="flex-1 h-7 rounded-md overflow-hidden bg-muted/30 relative">
                     <div
-                      className={cn(
-                        "h-full rounded-md transition-all duration-500 ease-out",
-                        meta.color,
-                        count > 0 ? "opacity-80 group-hover:opacity-100" : "opacity-80"
-                      )}
+                      className={cn("h-full rounded-md transition-all duration-500 ease-out opacity-80", meta.color)}
                       style={{ width: `${Math.max(pct, count > 0 ? 2 : 0)}%` }}
                     />
                   </div>
                   <span className="w-10 text-right text-[12px] font-semibold tabular-nums text-foreground shrink-0">
                     {count}
                   </span>
-                  {count > 0 && (
-                    <span className="text-[10px] text-primary opacity-0 group-hover:opacity-100 transition-opacity shrink-0 w-12 text-right">
-                      View →
-                    </span>
-                  )}
-                  {count === 0 && <span className="w-12 shrink-0" />}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -264,41 +248,67 @@ export function StageFunnel({ data }: Props) {
               </>
             )}
           </span>
-          <span className="text-[10px] text-muted-foreground/40 italic">
-            Click any bar to view tasks
+          <span className="text-[10px] text-muted-foreground/50">
+            {selectedProjects.length === 0
+              ? `${data.projects.length} projects`
+              : `${selectedProjects.length} of ${data.projects.length} projects`}
           </span>
         </div>
       </div>
 
-      {detailStage && detailMeta && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setDetailStage(null)}>
-          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      {showDetails && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowDetails(false)}>
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
               <div className="flex items-center gap-2">
-                <span className={cn("w-2.5 h-2.5 rounded-full", detailMeta.dot)} />
-                <h2 className="text-[14px] font-semibold text-foreground">{detailMeta.label}</h2>
+                <BarChart3 className="w-4 h-4 text-primary" />
+                <h2 className="text-[14px] font-semibold text-foreground">All Tasks by Stage</h2>
                 <span className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">
-                  {detailTasks.length}
+                  {filteredTasks.length}
                 </span>
               </div>
-              <button onClick={() => setDetailStage(null)} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-accent transition-colors text-muted-foreground">
+              <button onClick={() => setShowDetails(false)} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-accent transition-colors text-muted-foreground">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="overflow-y-auto flex-1">
-              {detailProjects.map(([pid, group]) => (
-                <div key={pid}>
-                  <div className="flex items-center gap-2 px-5 py-2.5 bg-muted border-b border-border sticky top-0 z-10">
-                    <span className="text-[11px] font-semibold text-foreground uppercase tracking-wider">{group.name}</span>
-                    <span className="text-[10px] text-muted-foreground font-medium">{group.tasks.length}</span>
-                  </div>
-                  <div className="divide-y divide-border">
-                    {group.tasks.map((task) => (
-                      <TaskRow key={task.id} task={task} />
+              {data.stages.map((stage) => {
+                const stageTasks = tasksByStage[stage];
+                if (!stageTasks || stageTasks.length === 0) return null;
+                const meta = STAGE_META[stage];
+
+                const byProj: Record<string, { name: string; tasks: FunnelTask[] }> = {};
+                for (const t of stageTasks) {
+                  if (!byProj[t.projectId]) byProj[t.projectId] = { name: t.project.name, tasks: [] };
+                  byProj[t.projectId].tasks.push(t);
+                }
+                const sortedProjs = Object.entries(byProj).sort((a, b) => b[1].tasks.length - a[1].tasks.length);
+
+                return (
+                  <div key={stage}>
+                    <div className="flex items-center gap-2 px-5 py-3 bg-muted/60 border-b border-border sticky top-0 z-20">
+                      <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", meta?.dot)} />
+                      <span className="text-[12px] font-semibold text-foreground">{meta?.label ?? stage}</span>
+                      <span className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">
+                        {stageTasks.length}
+                      </span>
+                    </div>
+                    {sortedProjs.map(([pid, group]) => (
+                      <div key={pid}>
+                        <div className="flex items-center gap-2 px-5 py-1.5 bg-muted/30 border-b border-border/50 sticky top-[44px] z-10">
+                          <span className="text-[10px] font-semibold text-foreground uppercase tracking-wider">{group.name}</span>
+                          <span className="text-[10px] text-muted-foreground">{group.tasks.length}</span>
+                        </div>
+                        <div className="divide-y divide-border/50">
+                          {group.tasks.map((task) => (
+                            <TaskRow key={task.id} task={task} />
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>,
