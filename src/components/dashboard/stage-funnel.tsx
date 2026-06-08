@@ -1,8 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, ChevronDown, Filter, X } from "lucide-react";
+import Link from "next/link";
+import { createPortal } from "react-dom";
+import { BarChart3, ChevronDown, Filter, X, ExternalLink, Sparkles, Zap, Bug, AlertCircle, Palette, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+interface FunnelTask {
+  id: string;
+  title: string;
+  taskNumber: number;
+  taskType: string;
+  stage: string;
+  bucket: string;
+  priority: number | null;
+  projectId: string;
+  updatedAt: string;
+  project: { id: string; name: string };
+  assignee: { id: string; name: string | null; imageUrl: string | null } | null;
+}
 
 interface Props {
   data: {
@@ -11,24 +27,64 @@ interface Props {
     byProject: Record<string, Record<string, number>>;
     projects: { id: string; name: string }[];
     totalTasks: number;
+    tasks: FunnelTask[];
   };
 }
 
-const STAGE_META: Record<string, { label: string; color: string; bg: string }> = {
-  NEW_REQUEST:       { label: "New Request",       color: "bg-zinc-500",    bg: "bg-zinc-500/15" },
-  SPEC_READY:        { label: "Spec Ready",        color: "bg-violet-400",  bg: "bg-violet-400/15" },
-  NEEDS_INPUT:       { label: "Needs Input",       color: "bg-rose-500",    bg: "bg-rose-500/15" },
-  READY_FOR_DEV:     { label: "Ready for Dev",     color: "bg-blue-500",    bg: "bg-blue-500/15" },
-  IN_DEVELOPMENT:    { label: "In Development",    color: "bg-sky-500",     bg: "bg-sky-500/15" },
-  INTERNAL_REVIEW:   { label: "Internal Review",   color: "bg-amber-500",   bg: "bg-amber-500/15" },
-  CLIENT_REVIEW:     { label: "Client Review",     color: "bg-orange-500",  bg: "bg-orange-500/15" },
-  READY_FOR_RELEASE: { label: "Ready for Release", color: "bg-teal-500",    bg: "bg-teal-500/15" },
-  DONE:              { label: "Done",              color: "bg-emerald-500", bg: "bg-emerald-500/15" },
+const STAGE_META: Record<string, { label: string; color: string; bg: string; dot: string }> = {
+  NEW_REQUEST:       { label: "New Request",       color: "bg-zinc-500",    bg: "bg-zinc-500/15",    dot: "bg-zinc-500" },
+  SPEC_READY:        { label: "Spec Ready",        color: "bg-violet-400",  bg: "bg-violet-400/15",  dot: "bg-violet-400" },
+  NEEDS_INPUT:       { label: "Needs Input",       color: "bg-rose-500",    bg: "bg-rose-500/15",    dot: "bg-rose-500" },
+  READY_FOR_DEV:     { label: "Ready for Dev",     color: "bg-blue-500",    bg: "bg-blue-500/15",    dot: "bg-blue-500" },
+  IN_DEVELOPMENT:    { label: "In Development",    color: "bg-sky-500",     bg: "bg-sky-500/15",     dot: "bg-sky-500" },
+  INTERNAL_REVIEW:   { label: "Internal Review",   color: "bg-amber-500",   bg: "bg-amber-500/15",   dot: "bg-amber-500" },
+  CLIENT_REVIEW:     { label: "Client Review",     color: "bg-orange-500",  bg: "bg-orange-500/15",  dot: "bg-orange-500" },
+  READY_FOR_RELEASE: { label: "Ready for Release", color: "bg-teal-500",    bg: "bg-teal-500/15",    dot: "bg-teal-500" },
+  DONE:              { label: "Done",              color: "bg-emerald-500", bg: "bg-emerald-500/15", dot: "bg-emerald-500" },
 };
+
+const STAGE_PILL: Record<string, string> = {
+  NEW_REQUEST: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
+  SPEC_READY: "bg-violet-400/10 text-violet-400 border-violet-400/20",
+  NEEDS_INPUT: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+  CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/20",
+  READY_FOR_DEV: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  IN_DEVELOPMENT: "bg-sky-500/10 text-sky-400 border-sky-500/20",
+  INTERNAL_REVIEW: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  CLIENT_REVIEW: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+  READY_FOR_RELEASE: "bg-teal-500/10 text-teal-400 border-teal-500/20",
+  DONE: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+};
+
+const TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string }> = {
+  FEATURE: { icon: Sparkles, color: "text-blue-400" },
+  ENHANCEMENT: { icon: Zap, color: "text-cyan-400" },
+  BUG: { icon: Bug, color: "text-red-400" },
+  REPORTED_BUG: { icon: AlertCircle, color: "text-orange-400" },
+  DESIGN: { icon: Palette, color: "text-purple-400" },
+};
+
+function formatTimeInStage(date: string) {
+  const ms = Date.now() - new Date(date).getTime();
+  const hours = Math.floor(ms / (1000 * 60 * 60));
+  if (hours < 1) return "< 1h";
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+}
+
+function getPriorityStyle(priority: number | null) {
+  if (priority == null) return null;
+  if (priority >= 9) return "text-red-400";
+  if (priority >= 7) return "text-orange-400";
+  if (priority >= 4) return "text-primary";
+  return "text-muted-foreground";
+}
 
 export function StageFunnel({ data }: Props) {
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [detailStage, setDetailStage] = useState<string | null>(null);
 
   const counts = data.stages.map((stage) => {
     if (selectedProjects.length === 0) return data.totals[stage] ?? 0;
@@ -44,137 +100,249 @@ export function StageFunnel({ data }: Props) {
     );
   }
 
-  return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-primary" />
-          <h2 className="text-[13px] font-semibold text-foreground">Project Funnel</h2>
-          <span className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">
-            {total}
-          </span>
-        </div>
-        <div className="relative">
-          <button
-            onClick={() => setFilterOpen((v) => !v)}
-            className={cn(
-              "flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md border transition-colors",
-              selectedProjects.length > 0
-                ? "border-primary/40 bg-primary/10 text-primary"
-                : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40"
-            )}
-          >
-            <Filter className="w-3 h-3" />
-            {selectedProjects.length > 0
-              ? `${selectedProjects.length} project${selectedProjects.length > 1 ? "s" : ""}`
-              : "All projects"}
-            <ChevronDown className={cn("w-3 h-3 transition-transform", filterOpen && "rotate-180")} />
-          </button>
-          {filterOpen && (
-            <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-border bg-popover shadow-xl z-50 overflow-hidden">
-              <div className="px-3 py-2 border-b border-border flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-foreground">Filter by project</span>
-                {selectedProjects.length > 0 && (
-                  <button
-                    onClick={() => setSelectedProjects([])}
-                    className="text-[10px] text-primary hover:text-primary/80 font-medium"
-                  >
-                    Clear all
-                  </button>
-                )}
-              </div>
-              <div className="max-h-[240px] overflow-y-auto py-1">
-                {data.projects.map((p) => {
-                  const active = selectedProjects.includes(p.id);
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => toggleProject(p.id)}
-                      className={cn(
-                        "flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left transition-colors",
-                        active ? "bg-primary/10 text-primary" : "text-foreground hover:bg-accent/30"
-                      )}
-                    >
-                      <div className={cn(
-                        "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
-                        active ? "bg-primary border-primary" : "border-border"
-                      )}>
-                        {active && <span className="text-[8px] text-primary-foreground font-bold">✓</span>}
-                      </div>
-                      <span className="truncate">{p.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+  const detailTasks = detailStage
+    ? data.tasks.filter((t) => {
+        if (t.bucket !== detailStage) return false;
+        if (selectedProjects.length > 0 && !selectedProjects.includes(t.projectId)) return false;
+        return true;
+      })
+    : [];
 
-      {selectedProjects.length > 0 && (
-        <div className="flex items-center gap-1.5 px-4 py-2 border-b border-border/50 bg-muted/30 flex-wrap">
-          {selectedProjects.map((pid) => {
-            const proj = data.projects.find((p) => p.id === pid);
+  const detailByProject: Record<string, { name: string; tasks: FunnelTask[] }> = {};
+  for (const t of detailTasks) {
+    if (!detailByProject[t.projectId]) detailByProject[t.projectId] = { name: t.project.name, tasks: [] };
+    detailByProject[t.projectId].tasks.push(t);
+  }
+  const detailProjects = Object.entries(detailByProject).sort((a, b) => b[1].tasks.length - a[1].tasks.length);
+
+  const detailMeta = detailStage ? STAGE_META[detailStage] : null;
+
+  return (
+    <>
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-primary" />
+            <h2 className="text-[13px] font-semibold text-foreground">Project Funnel</h2>
+            <span className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">
+              {total}
+            </span>
+          </div>
+          <div className="relative">
+            <button
+              onClick={() => setFilterOpen((v) => !v)}
+              className={cn(
+                "flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md border transition-colors",
+                selectedProjects.length > 0
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40"
+              )}
+            >
+              <Filter className="w-3 h-3" />
+              {selectedProjects.length > 0
+                ? `${selectedProjects.length} project${selectedProjects.length > 1 ? "s" : ""}`
+                : "All projects"}
+              <ChevronDown className={cn("w-3 h-3 transition-transform", filterOpen && "rotate-180")} />
+            </button>
+            {filterOpen && (
+              <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-border bg-popover shadow-xl z-50 overflow-hidden">
+                <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-foreground">Filter by project</span>
+                  {selectedProjects.length > 0 && (
+                    <button
+                      onClick={() => setSelectedProjects([])}
+                      className="text-[10px] text-primary hover:text-primary/80 font-medium"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-[240px] overflow-y-auto py-1">
+                  {data.projects.map((p) => {
+                    const active = selectedProjects.includes(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => toggleProject(p.id)}
+                        className={cn(
+                          "flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left transition-colors",
+                          active ? "bg-primary/10 text-primary" : "text-foreground hover:bg-accent/30"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
+                          active ? "bg-primary border-primary" : "border-border"
+                        )}>
+                          {active && <span className="text-[8px] text-primary-foreground font-bold">✓</span>}
+                        </div>
+                        <span className="truncate">{p.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {selectedProjects.length > 0 && (
+          <div className="flex items-center gap-1.5 px-4 py-2 border-b border-border/50 bg-muted/30 flex-wrap">
+            {selectedProjects.map((pid) => {
+              const proj = data.projects.find((p) => p.id === pid);
+              return (
+                <span key={pid} className="inline-flex items-center gap-1 text-[10px] font-medium bg-primary/10 text-primary rounded-full px-2 py-0.5 border border-primary/20">
+                  {proj?.name ?? pid}
+                  <button onClick={() => toggleProject(pid)} className="hover:text-primary/60">
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="px-4 py-4 space-y-2.5">
+          {data.stages.map((stage, i) => {
+            const count = counts[i];
+            const meta = STAGE_META[stage] ?? { label: stage, color: "bg-muted", bg: "bg-muted/15", dot: "bg-muted" };
+            const pct = max > 0 ? (count / max) * 100 : 0;
+
             return (
-              <span key={pid} className="inline-flex items-center gap-1 text-[10px] font-medium bg-primary/10 text-primary rounded-full px-2 py-0.5 border border-primary/20">
-                {proj?.name ?? pid}
-                <button onClick={() => toggleProject(pid)} className="hover:text-primary/60">
-                  <X className="w-2.5 h-2.5" />
-                </button>
-              </span>
+              <button
+                key={stage}
+                onClick={() => count > 0 && setDetailStage(stage)}
+                className={cn("w-full group", count > 0 ? "cursor-pointer" : "cursor-default")}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-[120px] shrink-0 flex items-center gap-2">
+                    <span className={cn("w-2 h-2 rounded-full shrink-0", meta.color)} />
+                    <span className={cn(
+                      "text-[11px] font-medium truncate transition-colors",
+                      count > 0 ? "text-muted-foreground group-hover:text-foreground" : "text-muted-foreground/50"
+                    )}>
+                      {meta.label}
+                    </span>
+                  </div>
+                  <div className="flex-1 h-7 rounded-md overflow-hidden bg-muted/30 relative">
+                    <div
+                      className={cn(
+                        "h-full rounded-md transition-all duration-500 ease-out",
+                        meta.color,
+                        count > 0 ? "opacity-80 group-hover:opacity-100" : "opacity-80"
+                      )}
+                      style={{ width: `${Math.max(pct, count > 0 ? 2 : 0)}%` }}
+                    />
+                  </div>
+                  <span className="w-10 text-right text-[12px] font-semibold tabular-nums text-foreground shrink-0">
+                    {count}
+                  </span>
+                </div>
+              </button>
             );
           })}
         </div>
-      )}
 
-      <div className="px-4 py-4 space-y-2.5">
-        {data.stages.map((stage, i) => {
-          const count = counts[i];
-          const meta = STAGE_META[stage] ?? { label: stage, color: "bg-muted", bg: "bg-muted/15" };
-          const pct = max > 0 ? (count / max) * 100 : 0;
+        <div className="px-4 py-3 border-t border-border/50 flex items-center justify-between">
+          <span className="text-[11px] text-muted-foreground">
+            {total > 0 && (
+              <>
+                <span className="font-semibold text-emerald-400">{counts[counts.length - 1]}</span>
+                <span className="text-muted-foreground/60"> / {total} done</span>
+                <span className="text-muted-foreground/40 ml-1.5">
+                  ({total > 0 ? Math.round((counts[counts.length - 1] / total) * 100) : 0}%)
+                </span>
+              </>
+            )}
+          </span>
+          <span className="text-[10px] text-muted-foreground/50">
+            {selectedProjects.length === 0
+              ? `${data.projects.length} projects`
+              : `${selectedProjects.length} of ${data.projects.length} projects`}
+          </span>
+        </div>
+      </div>
 
-          return (
-            <div key={stage} className="group">
-              <div className="flex items-center gap-3">
-                <div className="w-[120px] shrink-0 flex items-center gap-2">
-                  <span className={cn("w-2 h-2 rounded-full shrink-0", meta.color)} />
-                  <span className="text-[11px] font-medium text-muted-foreground truncate">
-                    {meta.label}
-                  </span>
-                </div>
-                <div className="flex-1 h-7 rounded-md overflow-hidden bg-muted/30 relative">
-                  <div
-                    className={cn("h-full rounded-md transition-all duration-500 ease-out", meta.color, "opacity-80")}
-                    style={{ width: `${Math.max(pct, count > 0 ? 2 : 0)}%` }}
-                  />
-                </div>
-                <span className="w-10 text-right text-[12px] font-semibold tabular-nums text-foreground shrink-0">
-                  {count}
+      {detailStage && detailMeta && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setDetailStage(null)}>
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+              <div className="flex items-center gap-2">
+                <span className={cn("w-2.5 h-2.5 rounded-full", detailMeta.dot)} />
+                <h2 className="text-[14px] font-semibold text-foreground">{detailMeta.label}</h2>
+                <span className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">
+                  {detailTasks.length}
                 </span>
               </div>
+              <button onClick={() => setDetailStage(null)} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-accent transition-colors text-muted-foreground">
+                <X className="w-4 h-4" />
+              </button>
             </div>
-          );
-        })}
-      </div>
+            <div className="overflow-y-auto flex-1">
+              {detailProjects.map(([pid, group]) => (
+                <div key={pid}>
+                  <div className="flex items-center gap-2 px-5 py-2.5 bg-muted border-b border-border sticky top-0 z-10">
+                    <span className="text-[11px] font-semibold text-foreground uppercase tracking-wider">{group.name}</span>
+                    <span className="text-[10px] text-muted-foreground font-medium">{group.tasks.length}</span>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {group.tasks.map((task) => (
+                      <TaskRow key={task.id} task={task} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
 
-      <div className="px-4 py-3 border-t border-border/50 flex items-center justify-between">
-        <span className="text-[11px] text-muted-foreground">
-          {total > 0 && (
-            <>
-              <span className="font-semibold text-emerald-400">{counts[counts.length - 1]}</span>
-              <span className="text-muted-foreground/60"> / {total} done</span>
-              <span className="text-muted-foreground/40 ml-1.5">
-                ({total > 0 ? Math.round((counts[counts.length - 1] / total) * 100) : 0}%)
-              </span>
-            </>
-          )}
-        </span>
-        <span className="text-[10px] text-muted-foreground/50">
-          {selectedProjects.length === 0
-            ? `${data.projects.length} projects`
-            : `${selectedProjects.length} of ${data.projects.length} projects`}
-        </span>
+function TaskRow({ task }: { task: FunnelTask }) {
+  const typeConf = TYPE_ICONS[task.taskType] ?? TYPE_ICONS.FEATURE;
+  const TypeIcon = typeConf.icon;
+  const priorityColor = getPriorityStyle(task.priority);
+  const timeInStage = formatTimeInStage(task.updatedAt);
+  const bucketPill = STAGE_PILL[task.bucket] ?? STAGE_PILL[task.stage] ?? "bg-muted text-muted-foreground border-border";
+  const bucketLabel = STAGE_META[task.bucket]?.label ?? STAGE_META[task.stage]?.label ?? task.stage;
+  const prefix = task.taskType === "BUG" ? "B" : task.taskType === "REPORTED_BUG" ? "RB" : task.taskType === "ENHANCEMENT" ? "E" : task.taskType === "DESIGN" ? "D" : "F";
+
+  return (
+    <Link
+      href={`/dashboard/projects/${task.projectId}/tasks/${task.id}`}
+      target="_blank"
+      className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors group"
+    >
+      <div className={cn("w-5 h-5 rounded-full flex items-center justify-center shrink-0", typeConf.color.replace("text-", "bg-").replace("400", "500/10"))}>
+        <TypeIcon className={cn("w-3 h-3", typeConf.color)} />
       </div>
-    </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] font-mono text-muted-foreground/60">{prefix}-{String(task.taskNumber).padStart(3, "0")}</span>
+          <span className="text-[12px] font-medium text-foreground truncate">{task.title}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {task.assignee && (
+            <span className="text-[10px] text-muted-foreground/50">{task.assignee.name}</span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {timeInStage && (
+          <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground/60 font-mono">
+            <Clock className="w-2.5 h-2.5" />{timeInStage}
+          </span>
+        )}
+        {task.priority != null && (
+          <span className={cn("text-[10px] font-semibold tabular-nums", priorityColor)}>P{task.priority}</span>
+        )}
+        <span className={cn("text-[9px] font-semibold px-1.5 py-0.5 rounded-full border", bucketPill)}>
+          {bucketLabel}
+        </span>
+        <ExternalLink className="w-3 h-3 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />
+      </div>
+    </Link>
   );
 }

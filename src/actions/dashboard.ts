@@ -1067,11 +1067,15 @@ export async function getStageFunnel() {
       where: { archivedAt: null, project: projectFilter },
       select: {
         id: true,
+        title: true,
+        taskNumber: true,
         stage: true,
         taskType: true,
         priority: true,
         projectId: true,
+        updatedAt: true,
         project: { select: { id: true, name: true } },
+        assignee: { select: { id: true, name: true, imageUrl: true } },
         answers: { select: { questionId: true, answer: true } },
       },
     }),
@@ -1106,6 +1110,20 @@ export async function getStageFunnel() {
 
   for (const s of stages) totals[s] = 0;
 
+  const taskList: {
+    id: string;
+    title: string;
+    taskNumber: number;
+    taskType: string;
+    stage: string;
+    bucket: string;
+    priority: number | null;
+    projectId: string;
+    updatedAt: string;
+    project: { id: string; name: string };
+    assignee: { id: string; name: string | null; imageUrl: string | null } | null;
+  }[] = [];
+
   for (const t of tasks) {
     let bucket = t.stage as string;
 
@@ -1125,6 +1143,20 @@ export async function getStageFunnel() {
     }
     byProject[t.projectId][bucket]++;
     projectMap[t.projectId] = t.project.name;
+
+    taskList.push({
+      id: t.id,
+      title: t.title,
+      taskNumber: t.taskNumber,
+      taskType: t.taskType,
+      stage: t.stage,
+      bucket,
+      priority: t.priority,
+      projectId: t.projectId,
+      updatedAt: t.updatedAt.toISOString(),
+      project: t.project,
+      assignee: t.assignee,
+    });
   }
 
   const projects = Object.entries(projectMap)
@@ -1137,5 +1169,6 @@ export async function getStageFunnel() {
     byProject,
     projects,
     totalTasks: tasks.length,
+    tasks: taskList,
   };
 }

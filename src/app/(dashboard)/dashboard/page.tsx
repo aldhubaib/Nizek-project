@@ -52,7 +52,7 @@ export default async function DashboardPage() {
           }
           management={
             <>
-              <StageFunnel data={funnelData} />
+              <StageFunnel data={JSON.parse(JSON.stringify(funnelData))} />
               <ContractsHealth data={contractsHealth} />
               <TeamProjects data={JSON.parse(JSON.stringify(teamProjects))} />
               <LongestInPipeline data={pipelineTasks} />
