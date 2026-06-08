@@ -1048,3 +1048,67 @@ export async function markAllMentionsRead(projectId: string, userId: string) {
     data: { readAt: new Date() },
   });
 }
+
+export async function getStageFunnel() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  const whereClause =
+    user.systemRole === "ADMIN"
+      ? {}
+      : user.systemRole === "PM" || user.systemRole === "TECH_LEAD"
+        ? { OR: [{ members: { some: { userId: user.id } } }, { team: { members: { some: { userId: user.id } } } }] }
+        : { members: { some: { userId: user.id } } };
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      archivedAt: null,
+      project: { ...whereClause, ...notLatePaymentFilter() },
+    },
+    select: {
+      stage: true,
+      taskType: true,
+      projectId: true,
+      project: { select: { id: true, name: true } },
+    },
+  });
+
+  const stages = [
+    "NEW_REQUEST",
+    "CLARIFICATION",
+    "READY_FOR_DEV",
+    "IN_DEVELOPMENT",
+    "INTERNAL_REVIEW",
+    "CLIENT_REVIEW",
+    "READY_FOR_RELEASE",
+    "DONE",
+  ];
+
+  const projectMap: Record<string, string> = {};
+  const byProject: Record<string, Record<string, number>> = {};
+  const totals: Record<string, number> = {};
+
+  for (const s of stages) totals[s] = 0;
+
+  for (const t of tasks) {
+    totals[t.stage] = (totals[t.stage] ?? 0) + 1;
+    if (!byProject[t.projectId]) {
+      byProject[t.projectId] = {};
+      for (const s of stages) byProject[t.projectId][s] = 0;
+    }
+    byProject[t.projectId][t.stage]++;
+    projectMap[t.projectId] = t.project.name;
+  }
+
+  const projects = Object.entries(projectMap)
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    stages,
+    totals,
+    byProject,
+    projects,
+    totalTasks: tasks.length,
+  };
+}
