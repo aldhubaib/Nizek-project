@@ -7,7 +7,7 @@ import { Menu } from "lucide-react";
 
 const DESKTOP_BREAKPOINT = 1024;
 
-export function DashboardShell({ children, isAdmin = false }: { children: React.ReactNode; isAdmin?: boolean }) {
+export function DashboardShell({ children, isAdmin = false, currentUserId }: { children: React.ReactNode; isAdmin?: boolean; currentUserId?: string }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -70,7 +70,7 @@ export function DashboardShell({ children, isAdmin = false }: { children: React.
               Nizek Project
             </span>
           </div>
-          <NotificationBell />
+          <NotificationBell currentUserId={currentUserId} />
         </div>
       )}
 
@@ -102,7 +102,7 @@ export function DashboardShell({ children, isAdmin = false }: { children: React.
       >
         {isDesktop && (
           <div className="fixed top-3 right-4 z-[100]">
-            <NotificationBell />
+            <NotificationBell currentUserId={currentUserId} />
           </div>
         )}
         {children}

@@ -611,24 +611,39 @@ export async function permanentlyDeleteTask(taskId: string) {
 export async function getTasksByProject(projectId: string) {
   await requireProjectMember(projectId);
 
-  const tasks = await prisma.task.findMany({
-    where: { projectId, archivedAt: null },
-    include: {
-      assignee: { select: { id: true, name: true, imageUrl: true } },
-      createdBy: { select: { id: true, name: true, imageUrl: true } },
-      answers: { select: { questionId: true, answer: true } },
-      stageLogs: {
-        where: { exitedAt: null },
-        orderBy: { enteredAt: "desc" },
-        take: 1,
-        select: { enteredAt: true },
+  const [tasks, requiredQuestions, declineCounts] = await Promise.all([
+    prisma.task.findMany({
+      where: { projectId, archivedAt: null },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        taskNumber: true,
+        taskType: true,
+        stage: true,
+        order: true,
+        priority: true,
+        startedAt: true,
+        estimatedMinutes: true,
+        estimateAccuracy: true,
+        assigneeId: true,
+        createdById: true,
+        developerId: true,
+        clientReviewerId: true,
+        projectId: true,
+        assignee: { select: { id: true, name: true, imageUrl: true } },
+        createdBy: { select: { id: true, name: true, imageUrl: true } },
+        answers: { select: { questionId: true } },
+        stageLogs: {
+          where: { exitedAt: null },
+          orderBy: { enteredAt: "desc" },
+          take: 1,
+          select: { enteredAt: true },
+        },
+        _count: { select: { notes: true } },
       },
-      _count: { select: { notes: true } },
-    },
-    orderBy: { order: "asc" },
-  });
-
-  const [requiredQuestions, declineCounts] = await Promise.all([
+      orderBy: { order: "asc" },
+    }),
     prisma.defaultQuestion.findMany({
       where: { required: true },
       select: { id: true, taskType: true, type: true },
@@ -636,6 +651,7 @@ export async function getTasksByProject(projectId: string) {
     prisma.taskActivity.findMany({
       where: { action: "declined", task: { projectId } },
       select: { taskId: true, oldValue: true },
+      take: 500,
     }),
   ]);
 
@@ -660,9 +676,7 @@ export async function getTasksByProject(projectId: string) {
 
   return tasks.map((task) => {
     const reqIds = requiredByType.get(task.taskType) ?? [];
-    const answeredIds = new Set(
-      task.answers.filter((a) => a.answer && a.answer.trim()).map((a) => a.questionId)
-    );
+    const answeredIds = new Set(task.answers.map((a) => a.questionId));
     const isReadyForTransition = reqIds.every((id) => answeredIds.has(id)) && task.priority != null;
 
     const currentLog = task.stageLogs[0];
@@ -683,11 +697,16 @@ export async function getTasksByProject(projectId: string) {
   });
 }
 
-export async function pollTaskUpdates(projectId: string) {
+export async function pollTaskUpdates(projectId: string, updatedSince?: string) {
   await requireProjectMember(projectId);
 
+  const where: Record<string, unknown> = { projectId, archivedAt: null };
+  if (updatedSince) {
+    where.updatedAt = { gte: new Date(updatedSince) };
+  }
+
   const tasks = await prisma.task.findMany({
-    where: { projectId, archivedAt: null },
+    where,
     select: {
       id: true,
       stage: true,

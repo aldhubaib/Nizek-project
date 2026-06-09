@@ -46,7 +46,7 @@ export async function getDashboardData(projectId: string) {
     }),
 
     prisma.taskCommentMention.findMany({
-      where: { userId: user.id },
+      where: { userId: user.id, comment: { task: { projectId } } },
       include: {
         comment: {
           include: {
@@ -76,6 +76,8 @@ export async function getDashboardData(projectId: string) {
     prisma.stageLog.findMany({
       where: { task: { projectId }, exitedAt: { not: null } },
       select: { stage: true, enteredAt: true, exitedAt: true },
+      orderBy: { exitedAt: "desc" },
+      take: 500,
     }),
 
     prisma.taskAnswer.findMany({
@@ -90,6 +92,7 @@ export async function getDashboardData(projectId: string) {
           select: { id: true, title: true, taskNumber: true, taskType: true, stage: true, priority: true },
         },
       },
+      take: 200,
     }),
 
     prisma.taskActivity.findMany({
@@ -102,6 +105,7 @@ export async function getDashboardData(projectId: string) {
         task: { select: { id: true, title: true, taskNumber: true, taskType: true, stage: true } },
       },
       orderBy: { createdAt: "desc" },
+      take: 200,
     }),
   ]);
 
@@ -211,9 +215,7 @@ export async function getDashboardData(projectId: string) {
     })
     .filter(Boolean);
 
-  // Mentions
   const mentionsList = mentions
-    .filter((m) => m.comment.task.projectId === projectId)
     .map((m) => ({
       id: m.id,
       readAt: m.readAt?.toISOString() ?? null,
@@ -358,6 +360,8 @@ export async function getLongestInPipeline() {
       assignee: { select: { id: true, name: true, imageUrl: true } },
       project: { select: { id: true, name: true } },
     },
+    orderBy: { startedAt: "asc" },
+    take: 100,
   });
 
   if (tasks.length === 0) return [];
@@ -429,6 +433,7 @@ export async function getShippedSummary() {
       assignee: { select: { id: true, name: true, imageUrl: true } },
     },
     orderBy: { updatedAt: "desc" },
+    take: 200,
   });
 
   const byType: Record<string, number> = {};
@@ -497,6 +502,7 @@ export async function getMostRejectedTasks() {
       },
     },
     orderBy: { createdAt: "desc" },
+    take: 200,
   });
 
   if (declineActivities.length === 0) return [];
@@ -533,8 +539,11 @@ export async function getMostRejectedTasks() {
 }
 
 export async function markMentionRead(mentionId: string) {
-  await prisma.taskCommentMention.update({
-    where: { id: mentionId },
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  await prisma.taskCommentMention.updateMany({
+    where: { id: mentionId, userId: user.id },
     data: { readAt: new Date() },
   });
 }
@@ -653,6 +662,7 @@ export async function getUnreadMentions() {
       },
     },
     orderBy: { comment: { createdAt: "desc" } },
+    take: 50,
   });
 
   return mentions.map((m) => ({
@@ -679,8 +689,11 @@ export async function getUnreadMentionCount() {
 }
 
 export async function markMentionsReadBulk(mentionIds: string[]) {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
   await prisma.taskCommentMention.updateMany({
-    where: { id: { in: mentionIds } },
+    where: { id: { in: mentionIds }, userId: user.id },
     data: { readAt: new Date() },
   });
 }
@@ -724,6 +737,7 @@ export async function getClientDependencies() {
         },
       },
     },
+    take: 200,
   });
 
   const pending = clientAnswers
@@ -1033,7 +1047,10 @@ export async function getPmQueue() {
   };
 }
 
-export async function markAllMentionsRead(projectId: string, userId: string) {
+export async function markAllMentionsRead(projectId: string) {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
   const taskIds = await prisma.task.findMany({
     where: { projectId },
     select: { id: true },
@@ -1041,7 +1058,7 @@ export async function markAllMentionsRead(projectId: string, userId: string) {
 
   await prisma.taskCommentMention.updateMany({
     where: {
-      userId,
+      userId: user.id,
       readAt: null,
       comment: { taskId: { in: taskIds.map((t) => t.id) } },
     },
@@ -1090,15 +1107,19 @@ export async function getStageFunnel() {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
 
-  const [tasks, requiredQuestions] = await Promise.all([
+  const projectFilter = funnelProjectFilter(user.systemRole, user.id);
+
+  const [nonClarTasks, clarTasks, requiredQuestions, projects] = await Promise.all([
     prisma.task.findMany({
-      where: { archivedAt: null, project: funnelProjectFilter(user.systemRole, user.id) },
+      where: { archivedAt: null, stage: { not: "CLARIFICATION" }, project: projectFilter },
+      select: { stage: true, projectId: true },
+    }),
+    prisma.task.findMany({
+      where: { archivedAt: null, stage: "CLARIFICATION", project: projectFilter },
       select: {
-        stage: true,
         taskType: true,
         priority: true,
         projectId: true,
-        project: { select: { id: true, name: true } },
         answers: { select: { questionId: true, answer: true } },
       },
     }),
@@ -1106,24 +1127,38 @@ export async function getStageFunnel() {
       where: { required: true, type: { not: "client" } },
       select: { id: true, taskType: true },
     }),
+    prisma.project.findMany({
+      where: projectFilter,
+      select: { id: true, name: true },
+    }),
   ]);
 
   const requiredByType = buildRequiredByType(requiredQuestions);
 
   const projectMap: Record<string, string> = {};
+  for (const p of projects) projectMap[p.id] = p.name;
+
   const byProject: Record<string, Record<string, number>> = {};
   const totals: Record<string, number> = {};
   for (const s of FUNNEL_STAGES) totals[s] = 0;
 
-  for (const t of tasks) {
-    const bucket = computeBucket(t.stage, t.taskType, t.priority, t.answers, requiredByType);
+  for (const t of nonClarTasks) {
+    totals[t.stage] = (totals[t.stage] ?? 0) + 1;
+    if (!byProject[t.projectId]) {
+      byProject[t.projectId] = {};
+      for (const s of FUNNEL_STAGES) byProject[t.projectId][s] = 0;
+    }
+    byProject[t.projectId][t.stage]++;
+  }
+
+  for (const t of clarTasks) {
+    const bucket = computeBucket("CLARIFICATION", t.taskType, t.priority, t.answers, requiredByType);
     totals[bucket] = (totals[bucket] ?? 0) + 1;
     if (!byProject[t.projectId]) {
       byProject[t.projectId] = {};
       for (const s of FUNNEL_STAGES) byProject[t.projectId][s] = 0;
     }
     byProject[t.projectId][bucket]++;
-    projectMap[t.projectId] = t.project.name;
   }
 
   return {
@@ -1131,7 +1166,7 @@ export async function getStageFunnel() {
     totals,
     byProject,
     projects: Object.entries(projectMap).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
-    totalTasks: tasks.length,
+    totalTasks: nonClarTasks.length + clarTasks.length,
   };
 }
 

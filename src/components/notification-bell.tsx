@@ -6,6 +6,7 @@ import { Bell, Eye, CheckCheck, AtSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getUnreadMentions, getUnreadMentionCount, markMentionRead, markMentionsReadBulk } from "@/actions/dashboard";
 import { formatDistanceToNow } from "date-fns";
+import { getPusherClient, userChannel } from "@/lib/pusher-client";
 
 interface Mention {
   id: string;
@@ -20,9 +21,13 @@ interface Mention {
   commentedAt: string;
 }
 
-const POLL_INTERVAL = 30_000;
+const POLL_FALLBACK_INTERVAL = 120_000;
 
-export function NotificationBell() {
+interface Props {
+  currentUserId?: string;
+}
+
+export function NotificationBell({ currentUserId }: Props) {
   const [count, setCount] = useState(0);
   const [mentions, setMentions] = useState<Mention[]>([]);
   const [open, setOpen] = useState(false);
@@ -36,9 +41,25 @@ export function NotificationBell() {
 
   useEffect(() => {
     fetchCount();
-    const id = setInterval(fetchCount, POLL_INTERVAL);
+
+    if (currentUserId) {
+      const pusher = getPusherClient();
+      if (pusher) {
+        const channel = pusher.subscribe(userChannel(currentUserId));
+        channel.bind("mention", () => {
+          fetchCount();
+          setLoaded(false);
+        });
+        return () => {
+          channel.unbind_all();
+          pusher.unsubscribe(userChannel(currentUserId));
+        };
+      }
+    }
+
+    const id = setInterval(fetchCount, POLL_FALLBACK_INTERVAL);
     return () => clearInterval(id);
-  }, [fetchCount]);
+  }, [fetchCount, currentUserId]);
 
   useEffect(() => {
     if (!open) return;

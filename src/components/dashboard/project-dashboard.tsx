@@ -187,7 +187,7 @@ export function ProjectDashboard({ projectId, userRole, userId, tasks: kanbanTas
                   label: "Mark all read",
                   onClick: () => {
                     startTransition(async () => {
-                      await markAllMentionsRead(projectId, userId);
+                      await markAllMentionsRead(projectId);
                       const fresh = await getDashboardData(projectId);
                       setData(fresh);
                     });

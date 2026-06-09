@@ -93,20 +93,20 @@ export function ProjectSettingsOverlay({
       alert("Logo must be under 512KB");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
-      setUploading(true);
-      try {
-        await updateProject({ projectId: project.id, logoUrl: dataUrl });
-        setLogo(dataUrl);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setUploading(false);
-      }
-    };
-    reader.readAsDataURL(file);
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
+      const { url } = await res.json();
+      await updateProject({ projectId: project.id, logoUrl: url });
+      setLogo(url);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function handleRemoveLogo() {

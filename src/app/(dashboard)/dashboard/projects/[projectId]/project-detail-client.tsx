@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KanbanBoard } from "@/components/kanban/board";
@@ -10,9 +10,15 @@ import { MemberList } from "@/components/team/member-list";
 import { InviteMemberDialog } from "@/components/team/invite-member-dialog";
 import { ProjectSettingsOverlay } from "@/components/project/project-settings-overlay";
 import { createPortal } from "react-dom";
+import { getMeetingNotes } from "@/actions/meeting-note";
+import { getAssets } from "@/actions/asset";
+import { getProjectInvitations } from "@/actions/project";
+import { getRoles } from "@/actions/role";
+import { getContractPrefixes } from "@/actions/contract-prefix";
+import { getTeams } from "@/actions/team";
 
 import type { TaskQuestion } from "@/components/kanban/question-field";
-import { LayoutGrid, FileText, Paperclip, Users, Settings } from "lucide-react";
+import { LayoutGrid, FileText, Paperclip, Users, Settings, Loader2 } from "lucide-react";
 import type { KanbanTask } from "@/store/kanban";
 export interface UserPermissions {
   canCreateTask: boolean;
@@ -132,25 +138,6 @@ interface Team {
   name: string;
 }
 
-interface Props {
-  project: Project;
-  tasks: KanbanTask[];
-  notes: MeetingNote[];
-  assets: Asset[];
-  userRole: string;
-  userPermissions: UserPermissions;
-  isActive: boolean;
-  questions: TaskQuestion[];
-  roles: ProjectRole[];
-  members: Member[];
-  currentUserId: string;
-  invitations: Invitation[];
-  allowedTaskTypes?: string[];
-  activeContractType?: string | null;
-  contractPrefixes?: ContractPrefixOption[];
-  teams?: Team[];
-}
-
 interface Invitation {
   id: string;
   email: string;
@@ -162,23 +149,38 @@ interface Invitation {
   projectRole: { id: string; name: string; isAdmin: boolean } | null;
 }
 
+interface Props {
+  project: Project;
+  tasks: KanbanTask[];
+  userRole: string;
+  userPermissions: UserPermissions;
+  isActive: boolean;
+  questions: TaskQuestion[];
+  members: Member[];
+  currentUserId: string;
+  allowedTaskTypes?: string[];
+  activeContractType?: string | null;
+}
+
+function TabSpinner() {
+  return (
+    <div className="flex items-center justify-center py-16">
+      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
+
 export function ProjectDetailClient({
   project,
   tasks,
-  notes,
-  assets,
   userRole,
   userPermissions,
   isActive,
   questions,
-  roles,
   members,
   currentUserId,
-  invitations,
   allowedTaskTypes,
   activeContractType,
-  contractPrefixes = [],
-  teams = [],
 }: Props) {
   const canEdit = userPermissions.canModifyTask || userPermissions.isAdmin;
   const isAdmin = userPermissions.isAdmin;
@@ -186,6 +188,63 @@ export function ProjectDetailClient({
   const searchParams = useSearchParams();
   const [activeTab, setActiveTabState] = useState(searchParams.get("tab") ?? "board");
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Lazy-loaded tab data
+  const [notes, setNotes] = useState<MeetingNote[] | null>(null);
+  const [assets, setAssets] = useState<Asset[] | null>(null);
+  const [teamData, setTeamData] = useState<{ roles: ProjectRole[]; invitations: Invitation[] } | null>(null);
+  const [settingsData, setSettingsData] = useState<{ teams: Team[]; contractPrefixes: ContractPrefixOption[] } | null>(null);
+
+  const [loadingNotes, startNotesTransition] = useTransition();
+  const [loadingAssets, startAssetsTransition] = useTransition();
+  const [loadingTeam, startTeamTransition] = useTransition();
+  const [loadingSettings, startSettingsTransition] = useTransition();
+
+  useEffect(() => {
+    if (activeTab === "notes" && notes === null) {
+      startNotesTransition(async () => {
+        const data = await getMeetingNotes(project.id);
+        setNotes(data as unknown as MeetingNote[]);
+      });
+    }
+  }, [activeTab, notes, project.id]);
+
+  useEffect(() => {
+    if (activeTab === "assets" && assets === null) {
+      startAssetsTransition(async () => {
+        const data = await getAssets(project.id);
+        setAssets(data as unknown as Asset[]);
+      });
+    }
+  }, [activeTab, assets, project.id]);
+
+  useEffect(() => {
+    if (activeTab === "team" && teamData === null) {
+      startTeamTransition(async () => {
+        const [roles, invitations] = await Promise.all([
+          getRoles(),
+          getProjectInvitations(project.id),
+        ]);
+        setTeamData({ roles, invitations: invitations as unknown as Invitation[] });
+      });
+    }
+  }, [activeTab, teamData, project.id]);
+
+  function handleOpenSettings() {
+    setSettingsOpen(true);
+    if (settingsData === null) {
+      startSettingsTransition(async () => {
+        const [teams, contractPrefixes] = await Promise.all([
+          getTeams(),
+          getContractPrefixes(),
+        ]);
+        setSettingsData({
+          teams: teams.filter((t: any) => !t.isDefault),
+          contractPrefixes,
+        });
+      });
+    }
+  }
 
   function setActiveTab(tab: string) {
     setActiveTabState(tab);
@@ -219,7 +278,7 @@ export function ProjectDetailClient({
           )}
         </div>
         <button
-          onClick={() => setSettingsOpen(true)}
+          onClick={handleOpenSettings}
           className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           title="Project Settings"
         >
@@ -238,14 +297,14 @@ export function ProjectDetailClient({
               <FileText className="h-3.5 w-3.5" />
               Notes
               <span className="ml-1 text-[10px] text-muted-foreground">
-                {notes.length}
+                {notes ? notes.length : project._count.meetingNotes}
               </span>
             </TabsTrigger>
             <TabsTrigger value="assets" className="gap-1.5">
               <Paperclip className="h-3.5 w-3.5" />
               Assets
               <span className="ml-1 text-[10px] text-muted-foreground">
-                {assets.length}
+                {assets ? assets.length : project._count.assets}
               </span>
             </TabsTrigger>
             {(userPermissions.canInviteMembers || userPermissions.canInviteClients) && (
@@ -253,7 +312,7 @@ export function ProjectDetailClient({
                 <Users className="h-3.5 w-3.5" />
                 Team
                 <span className="ml-1 text-[10px] text-muted-foreground">
-                  {members.length + invitations.length}
+                  {members.length + (teamData?.invitations.length ?? 0)}
                 </span>
               </TabsTrigger>
             )}
@@ -274,45 +333,56 @@ export function ProjectDetailClient({
           </TabsContent>
 
           <TabsContent value="notes">
-            <MeetingNotesTab
-              notes={notes as unknown as MeetingNote[]}
-              projectId={project.id}
-              canEdit={canEdit}
-            />
+            {loadingNotes || !notes ? (
+              <TabSpinner />
+            ) : (
+              <MeetingNotesTab
+                notes={notes as unknown as MeetingNote[]}
+                projectId={project.id}
+                canEdit={canEdit}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="assets">
-            <AssetsTab
-              assets={assets as unknown as Asset[]}
-              projectId={project.id}
-              canEdit={canEdit}
-            />
+            {loadingAssets || !assets ? (
+              <TabSpinner />
+            ) : (
+              <AssetsTab
+                assets={assets as unknown as Asset[]}
+                projectId={project.id}
+                canEdit={canEdit}
+              />
+            )}
           </TabsContent>
 
-
           <TabsContent value="team">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-[13px] font-semibold">Team Members</h2>
-                {(userPermissions.canInviteMembers || userPermissions.canInviteClients) && (
-                  <InviteMemberDialog
-                    projectId={project.id}
-                    roles={roles}
-                    canInviteMembers={userPermissions.canInviteMembers}
-                    canInviteClients={userPermissions.canInviteClients}
-                  />
-                )}
+            {loadingTeam || !teamData ? (
+              <TabSpinner />
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-[13px] font-semibold">Team Members</h2>
+                  {(userPermissions.canInviteMembers || userPermissions.canInviteClients) && (
+                    <InviteMemberDialog
+                      projectId={project.id}
+                      roles={teamData.roles}
+                      canInviteMembers={userPermissions.canInviteMembers}
+                      canInviteClients={userPermissions.canInviteClients}
+                    />
+                  )}
+                </div>
+                <MemberList
+                  members={members}
+                  projectId={project.id}
+                  currentUserRole={userRole}
+                  currentUserId={currentUserId}
+                  roles={teamData.roles}
+                  invitations={teamData.invitations}
+                  canManageMembers={userPermissions.canInviteMembers || userPermissions.canInviteClients}
+                />
               </div>
-              <MemberList
-                members={members}
-                projectId={project.id}
-                currentUserRole={userRole}
-                currentUserId={currentUserId}
-                roles={roles}
-                invitations={invitations}
-                canManageMembers={userPermissions.canInviteMembers || userPermissions.canInviteClients}
-              />
-            </div>
+            )}
           </TabsContent>
 
         </Tabs>
@@ -321,8 +391,8 @@ export function ProjectDetailClient({
       {settingsOpen && createPortal(
         <ProjectSettingsOverlay
           project={project}
-          teams={teams}
-          contractPrefixes={contractPrefixes}
+          teams={settingsData?.teams ?? []}
+          contractPrefixes={settingsData?.contractPrefixes ?? []}
           clientMembers={members
             .filter((m) => m.user.systemRole === "CLIENT")
             .map((m) => ({ id: m.user.id, name: m.user.name, imageUrl: m.user.imageUrl }))}
@@ -334,4 +404,3 @@ export function ProjectDetailClient({
     </div>
   );
 }
-

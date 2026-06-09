@@ -36,5 +36,5 @@ export default async function DashboardLayout({
     );
   }
 
-  return <DashboardShell isAdmin={user?.systemRole === "ADMIN"}>{children}</DashboardShell>;
+  return <DashboardShell isAdmin={user?.systemRole === "ADMIN"} currentUserId={user?.id}>{children}</DashboardShell>;
 }

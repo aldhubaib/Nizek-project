@@ -22,3 +22,7 @@ export function getPusherClient(): PusherClient | null {
 export function projectChannel(projectId: string) {
   return `project-${projectId}`;
 }
+
+export function userChannel(userId: string) {
+  return `user-${userId}`;
+}

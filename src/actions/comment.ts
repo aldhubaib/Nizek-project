@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
+import { broadcastMentionEvent } from "@/lib/pusher";
 
 export async function createComment(data: {
   taskId: string;
@@ -32,6 +33,10 @@ export async function createComment(data: {
       mentions: { include: { user: { select: { id: true, name: true } } } },
     },
   });
+
+  if (data.mentionedUserIds?.length) {
+    broadcastMentionEvent(data.mentionedUserIds, user.id);
+  }
 
   return comment;
 }
