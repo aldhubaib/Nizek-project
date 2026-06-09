@@ -1,0 +1,8 @@
+[build]
+buildCommand = "npm run build"
+
+[deploy]
+startCommand = "node .next/standalone/server.js"
+healthcheckPath = "/"
+healthcheckTimeout = 300
+numReplicas = 1
