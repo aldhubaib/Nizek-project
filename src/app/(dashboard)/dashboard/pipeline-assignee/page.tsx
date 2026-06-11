@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Users, AlertTriangle, Clock } from "lucide-react";
+import { ArrowLeft, Users, AlertTriangle, Clock, ChevronRight } from "lucide-react";
 import { getLongestInStageByAssignee } from "@/actions/dashboard";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +49,7 @@ export default async function PipelineAssigneePage({
           <span className="text-border">|</span>
           <h1 className="text-sm font-semibold flex items-center gap-2">
             <Users className="w-4 h-4 text-muted-foreground" />
-            Longest in Stage By Assignee
+            {tab === "product" ? "PM" : tab === "dev" ? "Dev" : ""} Longest in Stage By Assignee
           </h1>
           <span className="text-[11px] text-muted-foreground">({data.length} people)</span>
         </div>
@@ -69,15 +69,17 @@ export default async function PipelineAssigneePage({
           </div>
         ) : (
           <div className="rounded-xl border border-border bg-card divide-y divide-border max-w-2xl">
-            <div className="grid grid-cols-[1fr_100px_100px] gap-4 px-5 py-2.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+            <div className="grid grid-cols-[1fr_100px_100px_24px] gap-4 px-5 py-2.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
               <span>Assignee</span>
               <span className="text-center">Late Tasks</span>
               <span className="text-center">Longest</span>
+              <span />
             </div>
             {data.map((item) => (
-              <div
+              <Link
                 key={item.assignee.id}
-                className="grid grid-cols-[1fr_100px_100px] gap-4 px-5 py-3 items-center"
+                href={`/dashboard/pipeline-assignee/${item.assignee.id}${tab ? `?tab=${tab}` : ""}`}
+                className="grid grid-cols-[1fr_100px_100px_24px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   {item.assignee.imageUrl ? (
@@ -93,7 +95,7 @@ export default async function PipelineAssigneePage({
                       </span>
                     </div>
                   )}
-                  <p className="text-[13px] font-medium truncate">{item.assignee.name ?? "Unassigned"}</p>
+                  <p className="text-[13px] font-medium truncate group-hover:text-primary transition-colors">{item.assignee.name ?? "Unassigned"}</p>
                 </div>
 
                 <div className="flex justify-center">
@@ -106,7 +108,9 @@ export default async function PipelineAssigneePage({
                     {formatDuration(item.longestMs)}
                   </span>
                 </div>
-              </div>
+
+                <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />
+              </Link>
             ))}
           </div>
         )}

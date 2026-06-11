@@ -111,6 +111,7 @@ interface Props {
   stageLogData: StageLogData;
   initialNotes: NoteData[];
   isAdmin: boolean;
+  canSkipClientReview?: boolean;
 }
 
 export function TaskDetailPage({
@@ -122,6 +123,7 @@ export function TaskDetailPage({
   stageLogData,
   initialNotes,
   isAdmin,
+  canSkipClientReview,
 }: Props) {
   const router = useRouter();
   const questions = allQuestions.filter((q) => q.taskType === initialTask.taskType);
@@ -286,6 +288,28 @@ export function TaskDetailPage({
       } else {
         setMoveError([msg || "Failed to move task. Please try again."]);
       }
+    } finally {
+      setMovingStage(false);
+    }
+  }
+
+  const showSkipButton = taskStage === "INTERNAL_REVIEW" && canSkipClientReview && initialTask.taskType !== "BUG";
+  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
+
+  function handleSkipClientReview() {
+    setShowSkipConfirm(true);
+  }
+
+  async function executeSkip() {
+    setMovingStage(true);
+    setMoveError(null);
+    setShowSkipConfirm(false);
+    try {
+      await moveTaskAction({ taskId: initialTask.id, stage: "READY_FOR_RELEASE", order: initialTask.order });
+      setTaskStage("READY_FOR_RELEASE");
+      setActivityKey((k) => k + 1);
+    } catch (err) {
+      setMoveError([(err as Error).message || "Failed to skip. Please try again."]);
     } finally {
       setMovingStage(false);
     }
@@ -528,6 +552,18 @@ export function TaskDetailPage({
               </>
             )}
           </div>
+          {showSkipButton && (
+            <div className="mt-2">
+              <button
+                onClick={handleSkipClientReview}
+                disabled={movingStage}
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-400/80 hover:text-amber-400 transition-colors disabled:opacity-50"
+              >
+                <ChevronRight className="w-3 h-3" />
+                Skip Client Review → Ready for Release
+              </button>
+            </div>
+          )}
           {canDecline && (
             <div className="mt-3">
               {!showDecline ? (
@@ -786,6 +822,17 @@ export function TaskDetailPage({
             checkpoint={checkpoint}
             onConfirm={(estimatedMinutes) => executeMove(estimatedMinutes)}
             onCancel={() => setShowConfirm(false)}
+          />
+        ) : null;
+      })()}
+
+      {showSkipConfirm && (() => {
+        const checkpoint = getCheckpoint("INTERNAL_REVIEW" as Stage, "READY_FOR_RELEASE" as Stage);
+        return checkpoint ? (
+          <StageConfirmDialog
+            checkpoint={checkpoint}
+            onConfirm={() => executeSkip()}
+            onCancel={() => setShowSkipConfirm(false)}
           />
         ) : null;
       })()}

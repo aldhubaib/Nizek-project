@@ -318,7 +318,7 @@ const STAGE_LABELS: Record<string, string> = {
   DONE: "Done",
 };
 
-export async function getLongestInPipeline(stages?: string[]) {
+export async function getLongestInPipeline(stages?: string[], assigneeId?: string) {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
 
@@ -348,6 +348,7 @@ export async function getLongestInPipeline(stages?: string[]) {
       stage: { in: activeStages as any },
       startedAt: { not: null },
       project: { ...whereClause, ...notLatePaymentFilter() },
+      ...(assigneeId ? { assigneeId } : {}),
     },
     select: {
       id: true,

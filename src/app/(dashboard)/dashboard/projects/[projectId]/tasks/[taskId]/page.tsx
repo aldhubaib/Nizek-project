@@ -75,6 +75,11 @@ export default async function TaskDetailPage({ params }: Props) {
       stageLogData={stageLogData}
       initialNotes={notes}
       isAdmin={user.systemRole === "ADMIN"}
+      canSkipClientReview={
+        user.systemRole === "ADMIN" ||
+        (userPermissions.canMoveTask &&
+          (userPermissions.allowedTransitions?.["INTERNAL_REVIEW"] ?? []).includes("READY_FOR_RELEASE"))
+      }
     />
   );
 }

@@ -8,7 +8,7 @@ import { CalendarDays, BarChart3, Package, Code } from "lucide-react";
 const TABS = [
   { id: "daily", label: "Daily", icon: CalendarDays },
   { id: "management", label: "Management", icon: BarChart3 },
-  { id: "product", label: "Product", icon: Package },
+  { id: "product", label: "PM", icon: Package },
   { id: "dev", label: "Dev", icon: Code },
 ] as const;
 

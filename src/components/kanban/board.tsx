@@ -155,6 +155,11 @@ export function KanbanBoard({
     [userPermissions, isProjectActive]
   );
 
+  const canSkipClientReview = userPermissions.isAdmin || (
+    userPermissions.canMoveTask &&
+    (userPermissions.allowedTransitions?.["INTERNAL_REVIEW"] ?? []).includes("READY_FOR_RELEASE")
+  );
+
   function isDeclineMove(fromStage: Stage, toStage: Stage) {
     return (
       (fromStage === "INTERNAL_REVIEW" && toStage === "IN_DEVELOPMENT") ||
@@ -162,11 +167,11 @@ export function KanbanBoard({
     );
   }
 
-  function isValidMove(fromStage: Stage, toStage: Stage, taskType?: string) {
+  function isValidMove(fromStage: Stage, toStage: Stage) {
     const fromIdx = STAGES.findIndex((s) => s.id === fromStage);
     const toIdx = STAGES.findIndex((s) => s.id === toStage);
     if (toIdx === fromIdx + 1) return true;
-    if (taskType === "BUG" && fromStage === "INTERNAL_REVIEW" && toStage === "READY_FOR_RELEASE") return true;
+    if (fromStage === "INTERNAL_REVIEW" && toStage === "READY_FOR_RELEASE") return true;
     if (isDeclineMove(fromStage, toStage)) return true;
     return false;
   }
@@ -216,11 +221,11 @@ export function KanbanBoard({
 
     if (targetStage && targetStage !== activeTaskItem.stage) {
       let effectiveTarget = targetStage;
-      if (activeTaskItem.taskType === "BUG" && fromStage === "INTERNAL_REVIEW" && targetStage === "CLIENT_REVIEW") {
+      if (fromStage === "INTERNAL_REVIEW" && targetStage === "CLIENT_REVIEW" && activeTaskItem.taskType === "BUG") {
         effectiveTarget = "READY_FOR_RELEASE";
       }
       if (!canMoveFromTo(fromStage, effectiveTarget)) return;
-      if (!isValidMove(fromStage, effectiveTarget, activeTaskItem.taskType)) return;
+      if (!isValidMove(fromStage, effectiveTarget)) return;
       if (fromStage === "CLARIFICATION" && !canLeaveClarRef.current) return;
       const tasksInTarget = tasks.filter((t) => t.stage === effectiveTarget);
       moveTask(activeId, effectiveTarget, tasksInTarget.length);
@@ -250,7 +255,7 @@ export function KanbanBoard({
     let targetStage = task.stage;
     if (task.stage === fromStage && dropStage && dropStage !== fromStage) {
       let effectiveDrop = dropStage;
-      if (task.taskType === "BUG" && fromStage === "INTERNAL_REVIEW" && dropStage === "CLIENT_REVIEW") {
+      if (fromStage === "INTERNAL_REVIEW" && dropStage === "CLIENT_REVIEW" && task.taskType === "BUG") {
         effectiveDrop = "READY_FOR_RELEASE";
       }
       if (!canMoveFromTo(fromStage, effectiveDrop)) {
@@ -260,7 +265,7 @@ export function KanbanBoard({
         setPermissionError(`You don't have permission to move tasks from "${fromLabel}" to "${toLabel}".`);
         return;
       }
-      if (!isValidMove(fromStage, effectiveDrop, task.taskType)) { setTasks(snapshotRef.current); return; }
+      if (!isValidMove(fromStage, effectiveDrop)) { setTasks(snapshotRef.current); return; }
       if (fromStage === "CLARIFICATION" && !canLeaveClarRef.current) { setTasks(snapshotRef.current); return; }
       targetStage = effectiveDrop;
       const tasksInTarget = tasks.filter((t) => t.stage === effectiveDrop);
@@ -270,7 +275,7 @@ export function KanbanBoard({
       return;
     }
 
-    if (fromStage !== targetStage && !isValidMove(fromStage, targetStage, task.taskType)) {
+    if (fromStage !== targetStage && !isValidMove(fromStage, targetStage)) {
       setTasks(snapshotRef.current);
       return;
     }
@@ -385,6 +390,7 @@ export function KanbanBoard({
                 projectId={projectId}
                 questions={questions}
                 isAdmin={userPermissions.isAdmin}
+                canSkipClientReview={canSkipClientReview}
               />
             );
           })}
@@ -415,6 +421,7 @@ export function KanbanBoard({
               dragFromStage={dragFromStage}
               dragTaskType={dragTaskType}
               isAdmin={userPermissions.isAdmin}
+              canSkipClientReview={canSkipClientReview}
             />
           );
         })}

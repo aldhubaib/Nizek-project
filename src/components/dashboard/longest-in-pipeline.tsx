@@ -135,7 +135,7 @@ export function LongestInPipeline({ data, tab }: { data: PipelineTask[]; tab?: s
           <div className="flex items-center justify-between mb-2.5">
             <h2 className="text-[14px] font-semibold flex items-center gap-2">
               <Timer className="w-4 h-4 text-muted-foreground" />
-              Longest in Stage By Task
+              {tab === "product" ? "PM" : tab === "dev" ? "Dev" : ""} Longest in Stage By Task
             </h2>
             {overWeek > 0 && (
               <span className="flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-2 py-0.5">

@@ -83,6 +83,7 @@ interface Props {
   questions: QuestionWithType[];
   projectId: string;
   isAdmin?: boolean;
+  canSkipClientReview?: boolean;
 }
 
 function AttachedNotesSection({
@@ -286,7 +287,7 @@ function NoteFullScreenViewer({
   );
 }
 
-export function TaskSidebar({ task, open, onClose, questions: allQuestions, projectId, isAdmin }: Props) {
+export function TaskSidebar({ task, open, onClose, questions: allQuestions, projectId, isAdmin, canSkipClientReview }: Props) {
   const questions = allQuestions.filter((q) => q.taskType === task.taskType);
   const router = useRouter();
 
@@ -525,6 +526,28 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
       } else {
         setMoveError([msg || "Failed to move task. Please try again."]);
       }
+    } finally {
+      setMovingStage(false);
+    }
+  }
+
+  const showSkipButton = task.stage === "INTERNAL_REVIEW" && canSkipClientReview && task.taskType !== "BUG";
+  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
+
+  function handleSkipClientReview() {
+    setShowSkipConfirm(true);
+  }
+
+  async function executeSkip() {
+    setMovingStage(true);
+    setMoveError(null);
+    setShowSkipConfirm(false);
+    try {
+      await moveTaskAction({ taskId: task.id, stage: "READY_FOR_RELEASE", order: task.order });
+      updateStoreTask(task.id, { stage: "READY_FOR_RELEASE" });
+      setActivityKey((k) => k + 1);
+    } catch (err) {
+      setMoveError([(err as Error).message || "Failed to skip. Please try again."]);
     } finally {
       setMovingStage(false);
     }
@@ -827,6 +850,18 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
                     </button>
                   </>
                 )}
+              </div>
+            )}
+            {showSkipButton && (
+              <div className="mt-2">
+                <button
+                  onClick={handleSkipClientReview}
+                  disabled={movingStage}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-400/80 hover:text-amber-400 transition-colors disabled:opacity-50"
+                >
+                  <ChevronRight className="w-3 h-3" />
+                  Skip Client Review → Ready for Release
+                </button>
               </div>
             )}
             {canDecline && (
@@ -1140,6 +1175,17 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
             checkpoint={checkpoint}
             onConfirm={(estimatedMinutes) => executeMove(estimatedMinutes)}
             onCancel={() => setShowConfirm(false)}
+          />
+        ) : null;
+      })()}
+
+      {showSkipConfirm && (() => {
+        const checkpoint = getCheckpoint("INTERNAL_REVIEW" as Stage, "READY_FOR_RELEASE" as Stage);
+        return checkpoint ? (
+          <StageConfirmDialog
+            checkpoint={checkpoint}
+            onConfirm={() => executeSkip()}
+            onCancel={() => setShowSkipConfirm(false)}
           />
         ) : null;
       })()}

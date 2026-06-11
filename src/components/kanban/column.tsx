@@ -28,9 +28,10 @@ interface ColumnProps {
   dragFromStage?: Stage | null;
   dragTaskType?: string | null;
   isAdmin?: boolean;
+  canSkipClientReview?: boolean;
 }
 
-export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled, projectId, questions, canCreateTask, dragFromStage, dragTaskType, isAdmin }: ColumnProps) {
+export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled, projectId, questions, canCreateTask, dragFromStage, dragTaskType, isAdmin, canSkipClientReview }: ColumnProps) {
   const router = useRouter();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
@@ -216,6 +217,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
           questions={questions}
           projectId={projectId}
           isAdmin={isAdmin}
+          canSkipClientReview={canSkipClientReview}
         />
       )}
     </div>

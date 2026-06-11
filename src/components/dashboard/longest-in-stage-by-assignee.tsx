@@ -27,11 +27,12 @@ function getDurationColor(ms: number) {
 
 const PREVIEW_COUNT = 5;
 
-function AssigneeRow({ item }: { item: AssigneeData }) {
+function AssigneeRow({ item, tab }: { item: AssigneeData; tab?: string }) {
   const color = getDurationColor(item.longestMs);
+  const href = `/dashboard/pipeline-assignee/${item.assignee.id}${tab ? `?tab=${tab}` : ""}`;
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 hover:bg-accent/20 transition-colors">
+    <Link href={href} className="flex items-center gap-3 px-4 py-3 hover:bg-accent/20 transition-colors">
       {item.assignee.imageUrl ? (
         <img
           src={item.assignee.imageUrl}
@@ -61,7 +62,7 @@ function AssigneeRow({ item }: { item: AssigneeData }) {
           {item.lateCount === 1 ? "task" : "tasks"}
         </span>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -76,7 +77,7 @@ export function LongestInStageByAssignee({ data, tab }: { data: AssigneeData[]; 
           <div className="flex items-center justify-between mb-2.5">
             <h2 className="text-[14px] font-semibold flex items-center gap-2">
               <Users className="w-4 h-4 text-muted-foreground" />
-              Longest in Stage By Assignee
+              {tab === "product" ? "PM" : tab === "dev" ? "Dev" : ""} Longest in Stage By Assignee
             </h2>
             {totalLate > 0 && (
               <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
@@ -88,7 +89,7 @@ export function LongestInStageByAssignee({ data, tab }: { data: AssigneeData[]; 
           <div className="flex items-center gap-3 text-[11px]">
             {data.length > 0 ? (
               <span className="text-muted-foreground">
-                {data.length} {data.length === 1 ? "person" : "people"} with tasks &gt; 3d in stage
+                {data.length} {data.length === 1 ? "person" : "people"} with tasks &gt; 3d
               </span>
             ) : (
               <span className="text-muted-foreground">All clear</span>
@@ -104,7 +105,7 @@ export function LongestInStageByAssignee({ data, tab }: { data: AssigneeData[]; 
         ) : (
           <div className="divide-y divide-border/50">
             {preview.map((item) => (
-              <AssigneeRow key={item.assignee.id} item={item} />
+              <AssigneeRow key={item.assignee.id} item={item} tab={tab} />
             ))}
           </div>
         )}

@@ -427,7 +427,16 @@ function StagePermissionsTable({
     onChange({ ...stagePerms, modifyStages: toggleInArray(stagePerms.modifyStages, stageId) });
   }
   function toggleForward(fromId: string, toId: string) {
-    onChange({ ...stagePerms, transitions: toggleTransitionTarget(stagePerms.transitions, fromId, toId) });
+    let updated = toggleTransitionTarget(stagePerms.transitions, fromId, toId);
+    if (fromId === "INTERNAL_REVIEW" && toId === "CLIENT_REVIEW") {
+      const enabling = !(stagePerms.transitions[fromId] ?? []).includes(toId);
+      if (enabling) {
+        updated = { ...updated, [fromId]: [...new Set([...(updated[fromId] ?? []), "READY_FOR_RELEASE"])] };
+      } else {
+        updated = { ...updated, [fromId]: (updated[fromId] ?? []).filter((s) => s !== "READY_FOR_RELEASE") };
+      }
+    }
+    onChange({ ...stagePerms, transitions: updated });
     if (!(stagePerms.transitions[fromId] ?? []).includes(toId) && !canMoveTask) {
       onMoveTaskChange(true);
     }

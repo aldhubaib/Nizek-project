@@ -29,10 +29,11 @@ const CHECKPOINTS: Partial<Record<string, CheckpointConfig>> = {
     confirmColor: "bg-amber-600 hover:bg-amber-700",
   },
   "INTERNAL_REVIEW→READY_FOR_RELEASE": {
-    title: "Skip Client Review — Internal Bug",
-    message: "Internal bugs skip client review. By confirming, you verify the fix is tested and ready for release.",
-    confirmLabel: "Confirm & Skip",
-    confirmColor: "bg-teal-600 hover:bg-teal-700",
+    title: "Skip Client Review",
+    message: "You are skipping the client approval for this task. By confirming, you acknowledge that you will be held responsible for this action and verify the task is tested and ready for release.",
+    notice: "This action bypasses the client review process.",
+    confirmLabel: "I Accept Responsibility & Skip",
+    confirmColor: "bg-amber-600 hover:bg-amber-700",
   },
   "CLIENT_REVIEW→READY_FOR_RELEASE": {
     title: "Move to Ready for Release",
