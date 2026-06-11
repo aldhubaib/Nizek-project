@@ -66,7 +66,7 @@ export function LazyManagementTab() {
       <StageFunnel data={JSON.parse(JSON.stringify(data.funnelData))} />
       <ContractsHealth data={data.contractsHealth} />
       <TeamProjects data={JSON.parse(JSON.stringify(data.teamProjects))} />
-      <LongestInPipeline data={data.pipelineTasks} />
+      <LongestInPipeline data={data.pipelineTasks} tab="management" />
       <MostRejected data={data.rejectedTasks} />
     </>
   );

@@ -18,7 +18,7 @@ export function LazyDevTab() {
     startTransition(async () => {
       try {
         const [pipelineTasks] = await Promise.all([
-          getLongestInPipeline(),
+          getLongestInPipeline(["READY_FOR_DEV", "IN_DEVELOPMENT"]),
         ]);
         setData({ pipelineTasks });
       } catch (err) {
@@ -44,7 +44,7 @@ export function LazyDevTab() {
 
   return (
     <>
-      <LongestInPipeline data={data.pipelineTasks} />
+      <LongestInPipeline data={data.pipelineTasks} tab="dev" />
     </>
   );
 }

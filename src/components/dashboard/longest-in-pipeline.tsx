@@ -112,7 +112,7 @@ function CompactRow({ task, maxMs }: { task: PipelineTask; maxMs: number }) {
   );
 }
 
-export function LongestInPipeline({ data }: { data: PipelineTask[] }) {
+export function LongestInPipeline({ data, tab }: { data: PipelineTask[]; tab?: string }) {
 
   const overWeek = data.filter((d) => d.pipelineMs > 7 * 24 * 60 * 60 * 1000).length;
   const over3d = data.filter((d) => {
@@ -176,7 +176,7 @@ export function LongestInPipeline({ data }: { data: PipelineTask[] }) {
         {/* View All */}
         {data.length > PREVIEW_COUNT && (
           <Link
-            href="/dashboard/pipeline"
+            href={`/dashboard/pipeline${tab ? `?tab=${tab}` : ""}`}
             className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
           >
             <ExternalLink className="w-3 h-3" />

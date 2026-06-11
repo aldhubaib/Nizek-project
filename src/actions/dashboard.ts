@@ -318,13 +318,13 @@ const STAGE_LABELS: Record<string, string> = {
   DONE: "Done",
 };
 
-export async function getLongestInPipeline() {
+export async function getLongestInPipeline(stages?: string[]) {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
 
   const now = new Date();
 
-  const activeStages = [
+  const activeStages = stages ?? [
     "READY_FOR_DEV",
     "IN_DEVELOPMENT",
     "INTERNAL_REVIEW",

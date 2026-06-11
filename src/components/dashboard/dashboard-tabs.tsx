@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { type ReactNode, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { CalendarDays, BarChart3, Package, Code } from "lucide-react";
 
@@ -13,6 +14,8 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
+const VALID_TABS = new Set<string>(TABS.map((t) => t.id));
+
 interface Props {
   daily: ReactNode;
   management: ReactNode;
@@ -21,7 +24,25 @@ interface Props {
 }
 
 export function DashboardTabs({ daily, management, product, dev }: Props) {
-  const [active, setActive] = useState<TabId>("daily");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const rawTab = searchParams.get("tab") ?? "daily";
+  const active: TabId = VALID_TABS.has(rawTab) ? (rawTab as TabId) : "daily";
+
+  const setActive = useCallback(
+    (tabId: TabId) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (tabId === "daily") {
+        params.delete("tab");
+      } else {
+        params.set("tab", tabId);
+      }
+      const qs = params.toString();
+      router.replace(`/dashboard${qs ? `?${qs}` : ""}`, { scroll: false });
+    },
+    [searchParams, router],
+  );
 
   const content: Record<TabId, ReactNode> = { daily, management, product, dev };
 
