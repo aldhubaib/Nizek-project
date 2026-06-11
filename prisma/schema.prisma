@@ -286,12 +286,26 @@ model TaskComment {
   userId String
   user   User   @relation("CommentUser", fields: [userId], references: [id], onDelete: Cascade)
 
-  mentions TaskCommentMention[]
+  mentions    TaskCommentMention[]
+  attachments CommentAttachment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([taskId])
+}
+
+model CommentAttachment {
+  id        String @id @default(cuid())
+  commentId String
+  comment   TaskComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  filename  String
+  url       String
+  fileSize  Int?
+  mimeType  String?
+  createdAt DateTime @default(now())
+
+  @@index([commentId])
 }
 
 model TaskCommentMention {

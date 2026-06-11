@@ -18,7 +18,7 @@ import { useKanbanStore, type KanbanTask, type Stage } from "@/store/kanban";
 import { moveTask as moveTaskAction, declineTask, pollTaskUpdates } from "@/actions/task";
 import type { TaskQuestion } from "./question-field";
 import { StageConfirmDialog, getCheckpoint } from "./stage-confirm-dialog";
-import { DeclineDialog } from "./decline-dialog";
+import { DeclineDialog, type DeclineAttachment } from "./decline-dialog";
 import { getPusherClient, projectChannel } from "@/lib/pusher-client";
 import type { TaskEvent } from "@/lib/pusher";
 
@@ -339,10 +339,10 @@ export function KanbanBoard({
     setPendingMove(null);
   }
 
-  async function handleConfirmDecline(comment: string) {
+  async function handleConfirmDecline(comment: string, attachments?: DeclineAttachment[]) {
     if (!pendingDecline) return;
     try {
-      await declineTask({ taskId: pendingDecline.taskId, comment });
+      await declineTask({ taskId: pendingDecline.taskId, comment, attachments });
     } catch (err) {
       console.error(err);
       setTasks(snapshotRef.current);

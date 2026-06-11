@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createComment, getComments, deleteComment, getProjectMembersForMention } from "@/actions/comment";
-import { Loader2, Send, Trash2 } from "lucide-react";
+import { Loader2, Send, Trash2, Paperclip, X, FileText, Download, Image as ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MentionUser {
@@ -11,17 +11,45 @@ interface MentionUser {
   imageUrl: string | null;
 }
 
+interface Attachment {
+  id: string;
+  filename: string;
+  url: string;
+  fileSize: number | null;
+  mimeType: string | null;
+}
+
 interface Comment {
   id: string;
   content: string;
   createdAt: Date;
   user: { id: string; name: string | null; imageUrl: string | null };
   mentions: { user: { id: string; name: string | null } }[];
+  attachments: Attachment[];
+}
+
+interface PendingFile {
+  file: File;
+  preview?: string;
 }
 
 interface Props {
   taskId: string;
   projectId: string;
+}
+
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"];
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB per file
+
+function formatFileSize(bytes: number | null): string {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function isImageType(mimeType: string | null): boolean {
+  return !!mimeType && IMAGE_TYPES.includes(mimeType);
 }
 
 export function CommentSection({ taskId, projectId }: Props) {
@@ -35,8 +63,12 @@ export function CommentSection({ taskId, projectId }: Props) {
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionIndex, setMentionIndex] = useState(0);
   const [cursorPos, setCursorPos] = useState(0);
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mentionListRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getComments(taskId)
@@ -116,27 +148,77 @@ export function CommentSection({ taskId, projectId }: Props) {
     }
   }
 
+  function handleFilesSelected(files: FileList | null) {
+    if (!files) return;
+    const newFiles: PendingFile[] = [];
+    for (const file of Array.from(files)) {
+      if (file.size > MAX_FILE_SIZE) {
+        alert(`${file.name} exceeds 10MB limit`);
+        continue;
+      }
+      const pf: PendingFile = { file };
+      if (isImageType(file.type)) {
+        pf.preview = URL.createObjectURL(file);
+      }
+      newFiles.push(pf);
+    }
+    setPendingFiles((prev) => [...prev, ...newFiles]);
+  }
+
+  function removePendingFile(index: number) {
+    setPendingFiles((prev) => {
+      const removed = prev[index];
+      if (removed.preview) URL.revokeObjectURL(removed.preview);
+      return prev.filter((_, i) => i !== index);
+    });
+  }
+
+  async function uploadFiles(files: PendingFile[]): Promise<{ filename: string; url: string; fileSize: number; mimeType: string }[]> {
+    const results = await Promise.all(
+      files.map(async ({ file }) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch("/api/upload", { method: "POST", body: formData });
+        if (!res.ok) throw new Error(`Upload failed for ${file.name}`);
+        const { url } = await res.json();
+        return { filename: file.name, url, fileSize: file.size, mimeType: file.type };
+      })
+    );
+    return results;
+  }
+
   async function handleSubmit() {
     const trimmed = input.trim();
-    if (!trimmed || submitting) return;
+    if ((!trimmed && pendingFiles.length === 0) || submitting) return;
 
     const mentionedIds = members
       .filter((m) => m.name && trimmed.includes(`@${m.name}`))
       .map((m) => m.id);
 
     setSubmitting(true);
+    setUploading(pendingFiles.length > 0);
     try {
+      let attachments: { filename: string; url: string; fileSize: number; mimeType: string }[] = [];
+      if (pendingFiles.length > 0) {
+        attachments = await uploadFiles(pendingFiles);
+      }
+      setUploading(false);
+
       const comment = await createComment({
         taskId,
-        content: trimmed,
+        content: trimmed || (attachments.length > 0 ? `📎 ${attachments.length} file${attachments.length > 1 ? "s" : ""} attached` : ""),
         mentionedUserIds: mentionedIds.length > 0 ? mentionedIds : undefined,
+        attachments: attachments.length > 0 ? attachments : undefined,
       });
       setComments((prev) => [...prev, comment as Comment]);
       setInput("");
+      pendingFiles.forEach((pf) => { if (pf.preview) URL.revokeObjectURL(pf.preview); });
+      setPendingFiles([]);
     } catch (err) {
       console.error(err);
     } finally {
       setSubmitting(false);
+      setUploading(false);
     }
   }
 
@@ -210,7 +292,6 @@ export function CommentSection({ taskId, projectId }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Comments list */}
       {comments.length === 0 && (
         <p className="text-[11px] text-muted-foreground/60 text-center py-4">
           No comments yet. Be the first to comment.
@@ -253,6 +334,48 @@ export function CommentSection({ taskId, projectId }: Props) {
               <p className="text-[12px] text-foreground/80 leading-relaxed mt-0.5 whitespace-pre-wrap break-words">
                 {renderContent(c.content)}
               </p>
+
+              {c.attachments && c.attachments.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {c.attachments.map((a) =>
+                    isImageType(a.mimeType) ? (
+                      <button
+                        key={a.id}
+                        onClick={() => setLightboxUrl(a.url)}
+                        className="relative group/thumb rounded-md overflow-hidden border border-border hover:border-primary/50 transition-colors"
+                      >
+                        <img
+                          src={a.url}
+                          alt={a.filename}
+                          className="w-20 h-20 object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/30 transition-colors flex items-center justify-center">
+                          <ImageIcon className="w-4 h-4 text-white opacity-0 group-hover/thumb:opacity-100 transition-opacity" />
+                        </div>
+                      </button>
+                    ) : (
+                      <a
+                        key={a.id}
+                        href={a.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1.5 hover:border-primary/50 hover:bg-muted/50 transition-colors"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-[11px] text-foreground/70 truncate max-w-[120px]">
+                          {a.filename}
+                        </span>
+                        {a.fileSize && (
+                          <span className="text-[9px] text-muted-foreground/50 shrink-0">
+                            {formatFileSize(a.fileSize)}
+                          </span>
+                        )}
+                        <Download className="w-3 h-3 text-muted-foreground/40 shrink-0" />
+                      </a>
+                    )
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -287,7 +410,47 @@ export function CommentSection({ taskId, projectId }: Props) {
           </div>
         )}
 
+        {/* Pending files preview */}
+        {pendingFiles.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {pendingFiles.map((pf, i) => (
+              <div key={i} className="relative group/pending">
+                {pf.preview ? (
+                  <div className="w-14 h-14 rounded-md overflow-hidden border border-border">
+                    <img src={pf.preview} alt="" className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 rounded-md border border-border bg-muted/30 px-2 py-1.5">
+                    <FileText className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-[10px] text-foreground/70 truncate max-w-[80px]">{pf.file.name}</span>
+                  </div>
+                )}
+                <button
+                  onClick={() => removePendingFile(i)}
+                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover/pending:opacity-100 transition-opacity"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-end gap-2 border border-border rounded-lg p-2 focus-within:border-primary/50 transition-colors">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-1.5 rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
+            title="Attach files"
+          >
+            <Paperclip className="w-4 h-4" />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => { handleFilesSelected(e.target.files); e.target.value = ""; }}
+          />
           <div className="flex-1 relative min-h-[24px] max-h-[100px]">
             <div
               aria-hidden
@@ -308,7 +471,7 @@ export function CommentSection({ taskId, projectId }: Props) {
           </div>
           <button
             onClick={handleSubmit}
-            disabled={!input.trim() || submitting}
+            disabled={(!input.trim() && pendingFiles.length === 0) || submitting}
             className="p-1.5 rounded-md text-primary hover:bg-primary/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
           >
             {submitting ? (
@@ -319,9 +482,48 @@ export function CommentSection({ taskId, projectId }: Props) {
           </button>
         </div>
         <p className="text-[10px] text-muted-foreground/40 mt-1">
-          Press Enter to send, Shift+Enter for new line
+          {uploading ? "Uploading files..." : "Press Enter to send, Shift+Enter for new line"}
         </p>
       </div>
+
+      {/* Image lightbox */}
+      {lightboxUrl && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[950]"
+            onClick={() => setLightboxUrl(null)}
+          />
+          <div
+            className="fixed inset-4 z-[951] flex items-center justify-center"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <div className="relative max-w-full max-h-full">
+              <img
+                src={lightboxUrl}
+                alt=""
+                className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+              <button
+                onClick={() => setLightboxUrl(null)}
+                className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-card border border-border flex items-center justify-center hover:bg-muted transition-colors shadow-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <a
+                href={lightboxUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="absolute -bottom-3 right-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card border border-border text-[11px] text-foreground/70 hover:bg-muted transition-colors shadow-lg"
+              >
+                <Download className="w-3 h-3" />
+                Open original
+              </a>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

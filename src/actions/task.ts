@@ -428,6 +428,7 @@ const DECLINE_TARGETS: Record<string, "NEW_REQUEST" | "CLARIFICATION" | "READY_F
 export async function declineTask(data: {
   taskId: string;
   comment: string;
+  attachments?: { filename: string; url: string; fileSize?: number; mimeType?: string }[];
 }) {
   if (!data.comment.trim()) {
     throw new Error("A comment explaining the reason is required when declining a task");
@@ -458,6 +459,16 @@ export async function declineTask(data: {
       content: `⚠️ **Declined from ${task.stage.replaceAll("_", " ")}**: ${data.comment}`,
       taskId: task.id,
       userId: user.id,
+      ...(data.attachments?.length && {
+        attachments: {
+          create: data.attachments.map((a) => ({
+            filename: a.filename,
+            url: a.url,
+            fileSize: a.fileSize ?? null,
+            mimeType: a.mimeType ?? null,
+          })),
+        },
+      }),
     },
   });
 

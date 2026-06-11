@@ -8,6 +8,7 @@ export async function createComment(data: {
   taskId: string;
   content: string;
   mentionedUserIds?: string[];
+  attachments?: { filename: string; url: string; fileSize?: number; mimeType?: string }[];
 }) {
   const task = await prisma.task.findUnique({
     where: { id: data.taskId },
@@ -27,10 +28,21 @@ export async function createComment(data: {
           create: data.mentionedUserIds.map((id) => ({ userId: id })),
         },
       }),
+      ...(data.attachments?.length && {
+        attachments: {
+          create: data.attachments.map((a) => ({
+            filename: a.filename,
+            url: a.url,
+            fileSize: a.fileSize ?? null,
+            mimeType: a.mimeType ?? null,
+          })),
+        },
+      }),
     },
     include: {
       user: { select: { id: true, name: true, imageUrl: true } },
       mentions: { include: { user: { select: { id: true, name: true } } } },
+      attachments: { select: { id: true, filename: true, url: true, fileSize: true, mimeType: true } },
     },
   });
 
@@ -55,6 +67,7 @@ export async function getComments(taskId: string) {
     include: {
       user: { select: { id: true, name: true, imageUrl: true } },
       mentions: { include: { user: { select: { id: true, name: true } } } },
+      attachments: { select: { id: true, filename: true, url: true, fileSize: true, mimeType: true } },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -63,7 +76,10 @@ export async function getComments(taskId: string) {
 export async function deleteComment(commentId: string) {
   const comment = await prisma.taskComment.findUnique({
     where: { id: commentId },
-    include: { task: { select: { projectId: true } } },
+    include: {
+      task: { select: { projectId: true } },
+      attachments: { select: { url: true } },
+    },
   });
   if (!comment) throw new Error("Comment not found");
 
@@ -74,6 +90,16 @@ export async function deleteComment(commentId: string) {
   }
 
   await prisma.taskComment.delete({ where: { id: commentId } });
+
+  if (comment.attachments.length > 0) {
+    const { extractR2Key, deleteManyFromR2 } = await import("@/lib/r2");
+    const keys = comment.attachments
+      .map((a) => extractR2Key(a.url))
+      .filter((k): k is string => k !== null);
+    if (keys.length > 0) {
+      deleteManyFromR2(keys).catch(console.error);
+    }
+  }
 }
 
 export async function getProjectMembersForMention(projectId: string) {

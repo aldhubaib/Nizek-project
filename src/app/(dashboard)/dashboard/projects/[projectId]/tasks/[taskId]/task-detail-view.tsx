@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Loader2, MessageCircleQuestion, History, MessageSquare,
   ChevronRight, ChevronDown, Pencil, Check, Clock, Undo2, Gauge, Timer,
-  FileText, Plus,
+  FileText, Plus, Paperclip, X,
 } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, moveTask as moveTaskAction, declineTask } from "@/actions/task";
@@ -147,6 +147,8 @@ export function TaskDetailPage({
   const [showConfirm, setShowConfirm] = useState(false);
   const [showDecline, setShowDecline] = useState(false);
   const [declineComment, setDeclineComment] = useState("");
+  const [declineFiles, setDeclineFiles] = useState<File[]>([]);
+  const declineFileRef = useRef<HTMLInputElement>(null);
   const [declining, setDeclining] = useState(false);
   const [showAdminStages, setShowAdminStages] = useState(false);
   const adminStagesRef = useRef<HTMLDivElement>(null);
@@ -297,11 +299,25 @@ export function TaskDetailPage({
     if (!declineComment.trim() || declining) return;
     setDeclining(true);
     try {
-      await declineTask({ taskId: initialTask.id, comment: declineComment.trim() });
+      let attachments: { filename: string; url: string; fileSize: number; mimeType: string }[] | undefined;
+      if (declineFiles.length > 0) {
+        attachments = await Promise.all(
+          declineFiles.map(async (file) => {
+            const fd = new FormData();
+            fd.append("file", file);
+            const res = await fetch("/api/upload", { method: "POST", body: fd });
+            if (!res.ok) throw new Error(`Upload failed for ${file.name}`);
+            const { url } = await res.json();
+            return { filename: file.name, url, fileSize: file.size, mimeType: file.type };
+          })
+        );
+      }
+      await declineTask({ taskId: initialTask.id, comment: declineComment.trim(), attachments });
       setTaskStage(declineTargetStage as Stage);
       setActivityKey((k) => k + 1);
       setShowDecline(false);
       setDeclineComment("");
+      setDeclineFiles([]);
     } catch (err) {
       console.error(err);
     } finally {
@@ -533,12 +549,42 @@ export function TaskDetailPage({
                     rows={3}
                     autoFocus
                   />
+                  {declineFiles.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {declineFiles.map((f, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 rounded bg-muted/50 px-1.5 py-0.5 text-[10px] text-foreground/70">
+                          <FileText className="w-2.5 h-2.5" />
+                          <span className="truncate max-w-[80px]">{f.name}</span>
+                          <button onClick={() => setDeclineFiles((prev) => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive">
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <Button size="sm" variant="destructive" onClick={handleDecline} disabled={!declineComment.trim() || declining} className="h-7 text-[11px]">
                       {declining ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Undo2 className="w-3 h-3 mr-1" />}
                       Decline
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setShowDecline(false); setDeclineComment(""); }} className="h-7 text-[11px]">
+                    <button
+                      onClick={() => declineFileRef.current?.click()}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                      title="Attach files"
+                    >
+                      <Paperclip className="w-3.5 h-3.5" />
+                    </button>
+                    <input
+                      ref={declineFileRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files) setDeclineFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+                        e.target.value = "";
+                      }}
+                    />
+                    <Button size="sm" variant="ghost" onClick={() => { setShowDecline(false); setDeclineComment(""); setDeclineFiles([]); }} className="h-7 text-[11px]">
                       Cancel
                     </Button>
                   </div>
