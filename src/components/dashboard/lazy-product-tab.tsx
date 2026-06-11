@@ -20,8 +20,8 @@ export function LazyProductTab() {
     startTransition(async () => {
       try {
         const [pipelineTasks, assigneeData] = await Promise.all([
-                getLongestInPipeline(["INTERNAL_REVIEW"]),
-                getLongestInStageByAssignee(["INTERNAL_REVIEW"]),
+                getLongestInPipeline(["INTERNAL_REVIEW", "CLIENT_REVIEW"]),
+                getLongestInStageByAssignee(["INTERNAL_REVIEW", "CLIENT_REVIEW"]),
                ]);
                setData({ pipelineTasks, assigneeData });
       } catch (err) {

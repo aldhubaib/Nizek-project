@@ -4,7 +4,7 @@ import { getLongestInStageByAssignee } from "@/actions/dashboard";
 import { cn } from "@/lib/utils";
 
 const STAGE_FILTERS: Record<string, string[]> = {
-  product: ["INTERNAL_REVIEW"],
+  product: ["INTERNAL_REVIEW", "CLIENT_REVIEW"],
   dev: ["READY_FOR_DEV", "IN_DEVELOPMENT"],
 };
 

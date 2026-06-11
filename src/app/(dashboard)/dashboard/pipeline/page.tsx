@@ -4,7 +4,7 @@ import { getLongestInPipeline } from "@/actions/dashboard";
 import { PipelineFullTable } from "@/components/dashboard/pipeline-full-table";
 
 const STAGE_FILTERS: Record<string, string[]> = {
-  product: ["INTERNAL_REVIEW"],
+  product: ["INTERNAL_REVIEW", "CLIENT_REVIEW"],
   dev: ["READY_FOR_DEV", "IN_DEVELOPMENT"],
 };
 
