@@ -3,13 +3,12 @@
 import { type ReactNode, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { CalendarDays, BarChart3, Package, Code } from "lucide-react";
+import { BarChart3, Package, Code } from "lucide-react";
 
 const TABS = [
-  { id: "daily", label: "Daily", icon: CalendarDays },
-  { id: "management", label: "Management", icon: BarChart3 },
   { id: "product", label: "PM", icon: Package },
   { id: "dev", label: "Dev", icon: Code },
+  { id: "management", label: "Management", icon: BarChart3 },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -17,23 +16,22 @@ type TabId = (typeof TABS)[number]["id"];
 const VALID_TABS = new Set<string>(TABS.map((t) => t.id));
 
 interface Props {
-  daily: ReactNode;
   management: ReactNode;
   product: ReactNode;
   dev: ReactNode;
 }
 
-export function DashboardTabs({ daily, management, product, dev }: Props) {
+export function DashboardTabs({ management, product, dev }: Props) {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const rawTab = searchParams.get("tab") ?? "daily";
-  const active: TabId = VALID_TABS.has(rawTab) ? (rawTab as TabId) : "daily";
+  const rawTab = searchParams.get("tab") ?? "product";
+  const active: TabId = VALID_TABS.has(rawTab) ? (rawTab as TabId) : "product";
 
   const setActive = useCallback(
     (tabId: TabId) => {
       const params = new URLSearchParams(searchParams.toString());
-      if (tabId === "daily") {
+      if (tabId === "product") {
         params.delete("tab");
       } else {
         params.set("tab", tabId);
@@ -44,7 +42,7 @@ export function DashboardTabs({ daily, management, product, dev }: Props) {
     [searchParams, router],
   );
 
-  const content: Record<TabId, ReactNode> = { daily, management, product, dev };
+  const content: Record<TabId, ReactNode> = { management, product, dev };
 
   return (
     <div>
