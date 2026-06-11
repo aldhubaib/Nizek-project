@@ -68,7 +68,7 @@ export default async function WaitingOnClientPage({
             <p className="text-[13px] text-muted-foreground">Nothing waiting on client</p>
           </div>
         ) : (
-          <div className="max-w-4xl space-y-4">
+          <div className="space-y-4">
             {data.map((group) => (
               <div key={group.project.id} className="rounded-xl border border-border bg-card divide-y divide-border">
                 <div className="px-5 py-3 flex items-center justify-between">

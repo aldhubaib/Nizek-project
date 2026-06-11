@@ -68,7 +68,7 @@ export default async function PipelineAssigneePage({
             <p className="text-[13px] text-muted-foreground">No one has stalled tasks</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-border bg-card divide-y divide-border max-w-2xl">
+          <div className="rounded-xl border border-border bg-card divide-y divide-border">
             <div className="grid grid-cols-[1fr_100px_100px_24px] gap-4 px-5 py-2.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
               <span>Assignee</span>
               <span className="text-center">Late Tasks</span>
