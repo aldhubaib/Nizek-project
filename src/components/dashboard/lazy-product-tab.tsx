@@ -20,7 +20,7 @@ export function LazyProductTab() {
     startTransition(async () => {
       try {
         const [assigneeData, clientInputAssignees] = await Promise.all([
-                getLongestInStageByAssignee(["INTERNAL_REVIEW", "CLIENT_REVIEW"]),
+                getLongestInStageByAssignee(["INTERNAL_REVIEW", "CLIENT_REVIEW"], 1),
                 getClientInputByAssignee(),
                ]);
                setData({ assigneeData, clientInputAssignees });
@@ -47,7 +47,7 @@ export function LazyProductTab() {
 
   return (
     <>
-      <LongestInStageByAssignee data={data.assigneeData} tab="product" />
+      <LongestInStageByAssignee data={data.assigneeData} tab="product" thresholdDays={1} />
       <ClientInputByAssignee data={data.clientInputAssignees} tab="product" />
     </>
   );

@@ -66,7 +66,7 @@ function AssigneeRow({ item, tab }: { item: AssigneeData; tab?: string }) {
   );
 }
 
-export function LongestInStageByAssignee({ data, tab }: { data: AssigneeData[]; tab?: string }) {
+export function LongestInStageByAssignee({ data, tab, thresholdDays = 2 }: { data: AssigneeData[]; tab?: string; thresholdDays?: number }) {
   const totalLate = data.reduce((sum, d) => sum + d.lateCount, 0);
   const preview = data.slice(0, PREVIEW_COUNT);
 
@@ -88,7 +88,7 @@ export function LongestInStageByAssignee({ data, tab }: { data: AssigneeData[]; 
         <div className="flex items-center gap-3 text-[11px]">
           {data.length > 0 ? (
             <span className="text-muted-foreground">
-              {data.length} {data.length === 1 ? "person" : "people"} with tasks &gt; 2d
+              {data.length} {data.length === 1 ? "person" : "people"} with tasks &gt; {thresholdDays}d
             </span>
           ) : (
             <span className="text-muted-foreground">All clear</span>

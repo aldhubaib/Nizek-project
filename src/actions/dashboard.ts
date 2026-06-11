@@ -402,7 +402,7 @@ export async function getLongestInPipeline(stages?: string[], assigneeId?: strin
     .sort((a, b) => b.stageMs - a.stageMs);
 }
 
-export async function getLongestInStageByAssignee(stages?: string[]) {
+export async function getLongestInStageByAssignee(stages?: string[], thresholdDays = 2) {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
 
@@ -453,7 +453,7 @@ export async function getLongestInStageByAssignee(stages?: string[]) {
 
   const stageLogMap = new Map(currentStageLogs.map((l) => [l.taskId, l]));
 
-  const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+  const thresholdMs = thresholdDays * 24 * 60 * 60 * 1000;
 
   const byAssignee: Record<string, {
     assignee: { id: string; name: string | null; imageUrl: string | null };
@@ -465,7 +465,7 @@ export async function getLongestInStageByAssignee(stages?: string[]) {
     if (!t.assignee) continue;
     const log = stageLogMap.get(t.id);
     const stageMs = log ? now.getTime() - new Date(log.enteredAt).getTime() : 0;
-    if (stageMs < TWO_DAYS_MS) continue;
+    if (stageMs < thresholdMs) continue;
 
     const uid = t.assignee.id;
     if (!byAssignee[uid]) {
