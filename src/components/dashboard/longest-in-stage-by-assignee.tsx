@@ -71,34 +71,34 @@ export function LongestInStageByAssignee({ data, tab }: { data: AssigneeData[]; 
   const preview = data.slice(0, PREVIEW_COUNT);
 
   return (
-    <>
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="px-4 py-3.5 border-b border-border">
-          <div className="flex items-center justify-between mb-2.5">
-            <h2 className="text-[14px] font-semibold flex items-center gap-2">
-              <Users className="w-4 h-4 text-muted-foreground" />
-              {tab === "product" ? "PM" : tab === "dev" ? "Dev" : ""} Longest in Stage By Assignee
-            </h2>
-            {totalLate > 0 && (
-              <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
-                <AlertTriangle className="w-3 h-3" />
-                {totalLate} late
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-3 text-[11px]">
-            {data.length > 0 ? (
-              <span className="text-muted-foreground">
-                {data.length} {data.length === 1 ? "person" : "people"} with tasks &gt; 2d
-              </span>
-            ) : (
-              <span className="text-muted-foreground">All clear</span>
-            )}
-          </div>
+    <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col">
+      <div className="px-4 py-3.5 border-b border-border">
+        <div className="flex items-center justify-between mb-2.5">
+          <h2 className="text-[14px] font-semibold flex items-center gap-2">
+            <Users className="w-4 h-4 text-muted-foreground" />
+            {tab === "product" ? "PM" : tab === "dev" ? "Dev" : ""} Longest in Stage By Assignee
+          </h2>
+          {totalLate > 0 && (
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
+              <AlertTriangle className="w-3 h-3" />
+              {totalLate} late
+            </span>
+          )}
         </div>
+        <div className="flex items-center gap-3 text-[11px]">
+          {data.length > 0 ? (
+            <span className="text-muted-foreground">
+              {data.length} {data.length === 1 ? "person" : "people"} with tasks &gt; 2d
+            </span>
+          ) : (
+            <span className="text-muted-foreground">All clear</span>
+          )}
+        </div>
+      </div>
 
+      <div className="flex-1 min-h-[260px]">
         {data.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="flex flex-col items-center justify-center h-full text-center">
             <Users className="w-7 h-7 text-muted-foreground/20 mb-2" strokeWidth={1.5} />
             <p className="text-[12px] text-muted-foreground">No one has stalled tasks</p>
           </div>
@@ -109,17 +109,15 @@ export function LongestInStageByAssignee({ data, tab }: { data: AssigneeData[]; 
             ))}
           </div>
         )}
-
-        {data.length > 0 && (
-          <Link
-            href={`/dashboard/pipeline-assignee${tab ? `?tab=${tab}` : ""}`}
-            className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
-          >
-            <ExternalLink className="w-3 h-3" />
-            View All ({data.length})
-          </Link>
-        )}
       </div>
-    </>
+
+      <Link
+        href={`/dashboard/pipeline-assignee${tab ? `?tab=${tab}` : ""}`}
+        className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5 mt-auto"
+      >
+        <ExternalLink className="w-3 h-3" />
+        View All ({data.length})
+      </Link>
+    </div>
   );
 }

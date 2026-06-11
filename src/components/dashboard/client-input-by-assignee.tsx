@@ -72,7 +72,7 @@ export function ClientInputByAssignee({ data, tab }: { data: AssigneeData[]; tab
   const prefix = tab === "product" ? "PM" : tab === "dev" ? "Dev" : "";
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col">
       <div className="px-4 py-3.5 border-b border-border">
         <div className="flex items-center justify-between mb-2.5">
           <h2 className="text-[14px] font-semibold flex items-center gap-2">
@@ -97,28 +97,28 @@ export function ClientInputByAssignee({ data, tab }: { data: AssigneeData[]; tab
         </div>
       </div>
 
-      {data.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-8 text-center">
-          <UserCircle2 className="w-7 h-7 text-muted-foreground/20 mb-2" strokeWidth={1.5} />
-          <p className="text-[12px] text-muted-foreground">No one waiting on client input</p>
-        </div>
-      ) : (
-        <div className="divide-y divide-border/50">
-          {preview.map((item) => (
-            <AssigneeRow key={item.assignee.id} item={item} tab={tab} />
-          ))}
-        </div>
-      )}
+      <div className="flex-1 min-h-[260px]">
+        {data.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <UserCircle2 className="w-7 h-7 text-muted-foreground/20 mb-2" strokeWidth={1.5} />
+            <p className="text-[12px] text-muted-foreground">No one waiting on client input</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/50">
+            {preview.map((item) => (
+              <AssigneeRow key={item.assignee.id} item={item} tab={tab} />
+            ))}
+          </div>
+        )}
+      </div>
 
-      {data.length > 0 && (
-        <Link
-          href={`/dashboard/needs-client-input${tab ? `?tab=${tab}` : ""}`}
-          className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
-        >
-          <ExternalLink className="w-3 h-3" />
-          View All ({data.length})
-        </Link>
-      )}
+      <Link
+        href={`/dashboard/needs-client-input${tab ? `?tab=${tab}` : ""}`}
+        className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5 mt-auto"
+      >
+        <ExternalLink className="w-3 h-3" />
+        View All ({data.length})
+      </Link>
     </div>
   );
 }
