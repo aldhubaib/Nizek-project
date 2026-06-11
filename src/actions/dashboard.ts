@@ -401,6 +401,84 @@ export async function getLongestInPipeline(stages?: string[]) {
     .sort((a, b) => b.stageMs - a.stageMs);
 }
 
+export async function getLongestInStageByAssignee(stages?: string[]) {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  const now = new Date();
+
+  const activeStages = stages ?? [
+    "READY_FOR_DEV",
+    "IN_DEVELOPMENT",
+    "INTERNAL_REVIEW",
+    "CLIENT_REVIEW",
+    "READY_FOR_RELEASE",
+  ];
+
+  const whereClause = user.systemRole === "ADMIN"
+    ? {}
+    : user.systemRole === "PM" || user.systemRole === "TECH_LEAD"
+      ? {
+          OR: [
+            { members: { some: { userId: user.id } } },
+            { team: { members: { some: { userId: user.id } } } },
+          ],
+        }
+      : { members: { some: { userId: user.id } } };
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      stage: { in: activeStages as any },
+      startedAt: { not: null },
+      assigneeId: { not: null },
+      project: { ...whereClause, ...notLatePaymentFilter() },
+    },
+    select: {
+      id: true,
+      stage: true,
+      assignee: { select: { id: true, name: true, imageUrl: true } },
+    },
+  });
+
+  if (tasks.length === 0) return [];
+
+  const currentStageLogs = await prisma.stageLog.findMany({
+    where: {
+      taskId: { in: tasks.map((t) => t.id) },
+      exitedAt: null,
+    },
+    select: { taskId: true, enteredAt: true },
+  });
+
+  const stageLogMap = new Map(currentStageLogs.map((l) => [l.taskId, l]));
+
+  const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+
+  const byAssignee: Record<string, {
+    assignee: { id: string; name: string | null; imageUrl: string | null };
+    lateCount: number;
+    longestMs: number;
+  }> = {};
+
+  for (const t of tasks) {
+    if (!t.assignee) continue;
+    const log = stageLogMap.get(t.id);
+    const stageMs = log ? now.getTime() - new Date(log.enteredAt).getTime() : 0;
+    if (stageMs < THREE_DAYS_MS) continue;
+
+    const uid = t.assignee.id;
+    if (!byAssignee[uid]) {
+      byAssignee[uid] = { assignee: t.assignee, lateCount: 0, longestMs: 0 };
+    }
+    byAssignee[uid].lateCount++;
+    if (stageMs > byAssignee[uid].longestMs) {
+      byAssignee[uid].longestMs = stageMs;
+    }
+  }
+
+  return Object.values(byAssignee).sort((a, b) => b.lateCount - a.lateCount);
+}
+
 export async function getShippedSummary() {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();

@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
-import { getLongestInPipeline } from "@/actions/dashboard";
+import { getLongestInPipeline, getLongestInStageByAssignee } from "@/actions/dashboard";
 import { LongestInPipeline } from "./longest-in-pipeline";
+import { LongestInStageByAssignee } from "./longest-in-stage-by-assignee";
 
 type ProductData = {
   pipelineTasks: Awaited<ReturnType<typeof getLongestInPipeline>>;
+  assigneeData: Awaited<ReturnType<typeof getLongestInStageByAssignee>>;
 };
 
 export function LazyProductTab() {
@@ -17,10 +19,11 @@ export function LazyProductTab() {
   useEffect(() => {
     startTransition(async () => {
       try {
-        const [pipelineTasks] = await Promise.all([
+        const [pipelineTasks, assigneeData] = await Promise.all([
           getLongestInPipeline(["INTERNAL_REVIEW"]),
+          getLongestInStageByAssignee(["INTERNAL_REVIEW"]),
         ]);
-        setData({ pipelineTasks });
+        setData({ pipelineTasks, assigneeData });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load product data");
       }
@@ -45,6 +48,7 @@ export function LazyProductTab() {
   return (
     <>
       <LongestInPipeline data={data.pipelineTasks} tab="product" />
+      <LongestInStageByAssignee data={data.assigneeData} tab="product" />
     </>
   );
 }

@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
-import { getLongestInPipeline } from "@/actions/dashboard";
+import { getLongestInPipeline, getLongestInStageByAssignee } from "@/actions/dashboard";
 import { LongestInPipeline } from "./longest-in-pipeline";
+import { LongestInStageByAssignee } from "./longest-in-stage-by-assignee";
 
 type DevData = {
   pipelineTasks: Awaited<ReturnType<typeof getLongestInPipeline>>;
+  assigneeData: Awaited<ReturnType<typeof getLongestInStageByAssignee>>;
 };
 
 export function LazyDevTab() {
@@ -17,10 +19,11 @@ export function LazyDevTab() {
   useEffect(() => {
     startTransition(async () => {
       try {
-        const [pipelineTasks] = await Promise.all([
+        const [pipelineTasks, assigneeData] = await Promise.all([
           getLongestInPipeline(["READY_FOR_DEV", "IN_DEVELOPMENT"]),
+          getLongestInStageByAssignee(["READY_FOR_DEV", "IN_DEVELOPMENT"]),
         ]);
-        setData({ pipelineTasks });
+        setData({ pipelineTasks, assigneeData });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load dev data");
       }
@@ -45,6 +48,7 @@ export function LazyDevTab() {
   return (
     <>
       <LongestInPipeline data={data.pipelineTasks} tab="dev" />
+      <LongestInStageByAssignee data={data.assigneeData} tab="dev" />
     </>
   );
 }

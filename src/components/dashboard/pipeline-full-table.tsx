@@ -76,7 +76,7 @@ function FullRow({ task }: { task: PipelineTask }) {
     <Link
       href={`/dashboard/projects/${task.project.id}?task=${task.id}`}
       target="_blank"
-      className="grid grid-cols-[1fr_110px_120px_80px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
+      className="grid grid-cols-[1fr_140px_110px_120px_80px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
     >
       <div className="flex items-center gap-3 min-w-0">
         <Tooltip text={typeInfo?.label ?? task.taskType}>
@@ -92,6 +92,23 @@ function FullRow({ task }: { task: PipelineTask }) {
             {typeInfo?.label ?? task.taskType.replace("_", " ")}
           </p>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 min-w-0">
+        {task.assignee ? (
+          <>
+            {task.assignee.imageUrl ? (
+              <img src={task.assignee.imageUrl} alt={task.assignee.name ?? ""} className="w-5 h-5 rounded-full object-cover shrink-0" />
+            ) : (
+              <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center shrink-0">
+                <span className="text-[9px] font-semibold text-muted-foreground">{(task.assignee.name ?? "?").charAt(0).toUpperCase()}</span>
+              </div>
+            )}
+            <span className="text-[11px] text-muted-foreground truncate">{task.assignee.name}</span>
+          </>
+        ) : (
+          <span className="text-[11px] text-muted-foreground/50">Unassigned</span>
+        )}
       </div>
 
       <span className="text-[11px] text-muted-foreground truncate">{task.project.name}</span>
@@ -133,8 +150,9 @@ export function PipelineFullTable({ data }: { data: PipelineTask[] }) {
         </div>
       ) : (
         <div className="rounded-xl border border-border bg-card divide-y divide-border">
-          <div className="grid grid-cols-[1fr_110px_120px_80px] gap-4 px-5 py-2.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+          <div className="grid grid-cols-[1fr_140px_110px_120px_80px] gap-4 px-5 py-2.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
             <span>Task</span>
+            <span>Assignee</span>
             <span>Project</span>
             <span className="text-center">Stage</span>
             <span className="text-center">In Stage</span>

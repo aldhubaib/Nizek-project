@@ -91,11 +91,17 @@ function CompactRow({ task, maxMs }: { task: PipelineTask; maxMs: number }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <p className="text-[12px] font-medium truncate group-hover:text-primary transition-colors">
-            <span className="text-muted-foreground/50 font-mono mr-1">#{task.taskNumber}</span>
             {task.title}
           </p>
           <span className={cn("text-[11px] font-bold tabular-nums shrink-0", color)}>
             {formatDuration(task.stageMs)}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-[10px] text-muted-foreground truncate">
+            {task.project.name}
+            <span className="mx-1">·</span>
+            <span className="font-mono">{task.id.slice(0, 8)}</span>
           </span>
         </div>
         <div className="flex items-center gap-2 mt-1">
