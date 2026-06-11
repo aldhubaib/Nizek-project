@@ -2,11 +2,13 @@
 
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { CalendarDays, BarChart3 } from "lucide-react";
+import { CalendarDays, BarChart3, Package, Code } from "lucide-react";
 
 const TABS = [
   { id: "daily", label: "Daily", icon: CalendarDays },
   { id: "management", label: "Management", icon: BarChart3 },
+  { id: "product", label: "Product", icon: Package },
+  { id: "dev", label: "Dev", icon: Code },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -14,10 +16,14 @@ type TabId = (typeof TABS)[number]["id"];
 interface Props {
   daily: ReactNode;
   management: ReactNode;
+  product: ReactNode;
+  dev: ReactNode;
 }
 
-export function DashboardTabs({ daily, management }: Props) {
+export function DashboardTabs({ daily, management, product, dev }: Props) {
   const [active, setActive] = useState<TabId>("daily");
+
+  const content: Record<TabId, ReactNode> = { daily, management, product, dev };
 
   return (
     <div>
@@ -43,7 +49,7 @@ export function DashboardTabs({ daily, management }: Props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {active === "daily" ? daily : management}
+        {content[active]}
       </div>
     </div>
   );
