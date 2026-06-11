@@ -72,7 +72,7 @@ export function ClientInputByAssignee({ data, tab }: { data: AssigneeData[]; tab
   const prefix = tab === "product" ? "PM" : tab === "dev" ? "Dev" : "";
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col">
+    <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col h-full">
       <div className="px-4 py-3.5 border-b border-border">
         <div className="flex items-center justify-between mb-2.5">
           <h2 className="text-[14px] font-semibold flex items-center gap-2">

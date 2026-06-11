@@ -130,7 +130,7 @@ export function LongestInPipeline({ data, tab }: { data: PipelineTask[]; tab?: s
   const preview = data.slice(0, PREVIEW_COUNT);
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col">
+    <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col h-full">
       {/* Header */}
       <div className="px-4 py-3.5 border-b border-border">
         <div className="flex items-center justify-between mb-2.5">
