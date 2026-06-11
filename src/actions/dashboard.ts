@@ -1279,3 +1279,92 @@ export async function getFunnelTasks() {
     project: t.project, assignee: t.assignee,
   }));
 }
+
+const STAGE_LABELS_MAP: Record<string, string> = {
+  NEW_REQUEST: "New Request",
+  CLARIFICATION: "Clarification",
+  READY_FOR_DEV: "Ready for Dev",
+  IN_DEVELOPMENT: "In Development",
+  INTERNAL_REVIEW: "Internal Review",
+  CLIENT_REVIEW: "Client Review",
+  READY_FOR_RELEASE: "Ready for Release",
+  DONE: "Done",
+};
+
+export async function getTasksNeedingClientInput() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+  const now = new Date();
+
+  const whereClause = user.systemRole === "ADMIN"
+    ? {}
+    : user.systemRole === "PM" || user.systemRole === "TECH_LEAD"
+      ? {
+          OR: [
+            { members: { some: { userId: user.id } } },
+            { team: { members: { some: { userId: user.id } } } },
+          ],
+        }
+      : { members: { some: { userId: user.id } } };
+
+  const answers = await prisma.taskAnswer.findMany({
+    where: {
+      question: { type: "client" },
+      task: {
+        stage: { in: ["NEW_REQUEST", "CLARIFICATION"] },
+        archivedAt: null,
+        project: { ...whereClause, ...notLatePaymentFilter() },
+      },
+    },
+    select: {
+      answer: true,
+      task: {
+        select: {
+          id: true,
+          title: true,
+          taskNumber: true,
+          taskType: true,
+          stage: true,
+          priority: true,
+          project: { select: { id: true, name: true } },
+          assignee: { select: { id: true, name: true, imageUrl: true } },
+          stageLogs: {
+            where: { exitedAt: null },
+            orderBy: { enteredAt: "desc" as const },
+            take: 1,
+            select: { enteredAt: true },
+          },
+        },
+      },
+    },
+  });
+
+  const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+
+  return answers
+    .map((a) => {
+      try {
+        const parsed = JSON.parse(a.answer);
+        if (!parsed.needed || parsed.completed) return null;
+        const stageLog = a.task.stageLogs[0];
+        const waitingMs = stageLog
+          ? now.getTime() - new Date(stageLog.enteredAt).getTime()
+          : 0;
+        return {
+          id: a.task.id,
+          title: a.task.title,
+          taskNumber: a.task.taskNumber,
+          taskType: a.task.taskType,
+          stage: a.task.stage,
+          stageLabel: STAGE_LABELS_MAP[a.task.stage] ?? a.task.stage,
+          priority: a.task.priority,
+          assignee: a.task.assignee,
+          project: a.task.project,
+          note: (parsed.note as string) ?? "",
+          waitingMs,
+        };
+      } catch { return null; }
+    })
+    .filter((t): t is NonNullable<typeof t> => t !== null && t.waitingMs >= TWO_DAYS_MS)
+    .sort((a, b) => b.waitingMs - a.waitingMs);
+}
