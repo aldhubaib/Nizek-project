@@ -74,9 +74,8 @@ function formatDuration(ms: number) {
 function getDurationColor(ms: number) {
   const days = ms / (1000 * 60 * 60 * 24);
   if (days >= 7) return "text-red-400";
-  if (days >= 3) return "text-amber-400";
-  if (days >= 1) return "text-yellow-400";
-  return "text-muted-foreground";
+  if (days >= 5) return "text-amber-400";
+  return "text-yellow-400";
 }
 
 function getBarWidth(ms: number, maxMs: number) {
@@ -183,10 +182,6 @@ export function LongestInPipeline({ data }: { data: PipelineTask[] }) {
     const days = d.pipelineMs / (1000 * 60 * 60 * 24);
     return days >= 3 && days < 7;
   }).length;
-  const over1d = data.filter((d) => {
-    const days = d.pipelineMs / (1000 * 60 * 60 * 24);
-    return days >= 1 && days < 3;
-  }).length;
   const maxMs = data.length > 0 ? Math.max(...data.map((d) => d.pipelineMs)) : 0;
   const preview = data.slice(0, PREVIEW_COUNT);
 
@@ -209,12 +204,6 @@ export function LongestInPipeline({ data }: { data: PipelineTask[] }) {
           </div>
           {/* Summary */}
           <div className="flex items-center gap-3 text-[11px]">
-            {over1d > 0 && (
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full bg-yellow-500" />
-                <span className="text-muted-foreground">{over1d} &gt; 1d</span>
-              </div>
-            )}
             {over3d > 0 && (
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full bg-amber-500" />
