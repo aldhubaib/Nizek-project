@@ -3,18 +3,15 @@
 import { useEffect, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import {
-  getStageFunnel,
   getContractsHealth,
   getTeamProjects,
   getMostRejectedTasks,
 } from "@/actions/dashboard";
-import { StageFunnel } from "./stage-funnel";
 import { ContractsHealth } from "./contracts-health";
 import { TeamProjects } from "./team-projects";
 import { MostRejected } from "./most-rejected";
 
 type ManagementData = {
-  funnelData: Awaited<ReturnType<typeof getStageFunnel>>;
   contractsHealth: Awaited<ReturnType<typeof getContractsHealth>>;
   teamProjects: Awaited<ReturnType<typeof getTeamProjects>>;
   rejectedTasks: Awaited<ReturnType<typeof getMostRejectedTasks>>;
@@ -28,14 +25,13 @@ export function LazyManagementTab() {
   useEffect(() => {
     startTransition(async () => {
       try {
-        const [funnelData, contractsHealth, teamProjects, rejectedTasks] =
+        const [contractsHealth, teamProjects, rejectedTasks] =
           await Promise.all([
-            getStageFunnel(),
             getContractsHealth(),
             getTeamProjects(),
             getMostRejectedTasks(),
           ]);
-        setData({ funnelData, contractsHealth, teamProjects, rejectedTasks });
+        setData({ contractsHealth, teamProjects, rejectedTasks });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load management data");
       }
@@ -59,7 +55,6 @@ export function LazyManagementTab() {
 
   return (
     <>
-      <StageFunnel data={JSON.parse(JSON.stringify(data.funnelData))} />
       <ContractsHealth data={data.contractsHealth} />
       <TeamProjects data={JSON.parse(JSON.stringify(data.teamProjects))} />
       <MostRejected data={data.rejectedTasks} />
