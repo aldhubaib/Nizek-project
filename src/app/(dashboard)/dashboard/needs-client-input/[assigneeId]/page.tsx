@@ -49,8 +49,8 @@ export default async function ClientInputAssigneeDetailPage({
   });
 
   const backHref = tab
-    ? `/dashboard/needs-client-input?tab=${tab}`
-    : "/dashboard/needs-client-input";
+    ? `/dashboard?tab=${tab}`
+    : "/dashboard";
   const prefix = tab === "product" ? "PM" : tab === "dev" ? "Dev" : "";
 
   return (
