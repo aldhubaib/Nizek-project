@@ -2,15 +2,15 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
-import { getLongestInPipeline, getLongestInStageByAssignee, getTasksNeedingClientInput } from "@/actions/dashboard";
+import { getLongestInPipeline, getLongestInStageByAssignee, getClientInputByAssignee } from "@/actions/dashboard";
 import { LongestInPipeline } from "./longest-in-pipeline";
 import { LongestInStageByAssignee } from "./longest-in-stage-by-assignee";
-import { NeedsClientInput } from "./needs-client-input";
+import { ClientInputByAssignee } from "./client-input-by-assignee";
 
 type ProductData = {
   pipelineTasks: Awaited<ReturnType<typeof getLongestInPipeline>>;
   assigneeData: Awaited<ReturnType<typeof getLongestInStageByAssignee>>;
-  clientInputTasks: Awaited<ReturnType<typeof getTasksNeedingClientInput>>;
+  clientInputAssignees: Awaited<ReturnType<typeof getClientInputByAssignee>>;
 };
 
 export function LazyProductTab() {
@@ -21,12 +21,12 @@ export function LazyProductTab() {
   useEffect(() => {
     startTransition(async () => {
       try {
-        const [pipelineTasks, assigneeData, clientInputTasks] = await Promise.all([
+        const [pipelineTasks, assigneeData, clientInputAssignees] = await Promise.all([
                 getLongestInPipeline(["INTERNAL_REVIEW", "CLIENT_REVIEW"]),
                 getLongestInStageByAssignee(["INTERNAL_REVIEW", "CLIENT_REVIEW"]),
-                getTasksNeedingClientInput(),
+                getClientInputByAssignee(),
                ]);
-               setData({ pipelineTasks, assigneeData, clientInputTasks });
+               setData({ pipelineTasks, assigneeData, clientInputAssignees });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load product data");
       }
@@ -52,7 +52,7 @@ export function LazyProductTab() {
     <>
       <LongestInPipeline data={data.pipelineTasks} tab="product" />
       <LongestInStageByAssignee data={data.assigneeData} tab="product" />
-      <NeedsClientInput data={data.clientInputTasks} tab="product" />
+      <ClientInputByAssignee data={data.clientInputAssignees} tab="product" />
     </>
   );
 }

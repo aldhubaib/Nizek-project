@@ -1368,3 +1368,27 @@ export async function getTasksNeedingClientInput() {
     .filter((t): t is NonNullable<typeof t> => t !== null && t.waitingMs >= TWO_DAYS_MS)
     .sort((a, b) => b.waitingMs - a.waitingMs);
 }
+
+export async function getClientInputByAssignee() {
+  const tasks = await getTasksNeedingClientInput();
+
+  const byAssignee: Record<string, {
+    assignee: { id: string; name: string | null; imageUrl: string | null };
+    taskCount: number;
+    longestMs: number;
+  }> = {};
+
+  for (const t of tasks) {
+    if (!t.assignee) continue;
+    const uid = t.assignee.id;
+    if (!byAssignee[uid]) {
+      byAssignee[uid] = { assignee: t.assignee, taskCount: 0, longestMs: 0 };
+    }
+    byAssignee[uid].taskCount += 1;
+    if (t.waitingMs > byAssignee[uid].longestMs) {
+      byAssignee[uid].longestMs = t.waitingMs;
+    }
+  }
+
+  return Object.values(byAssignee).sort((a, b) => b.taskCount - a.taskCount);
+}
