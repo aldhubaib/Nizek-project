@@ -99,6 +99,8 @@ function CompactRow({ task, maxMs }: { task: PipelineTask; maxMs: number }) {
         </div>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[10px] text-muted-foreground truncate">
+            {task.assignee?.name ?? "Unassigned"}
+            <span className="mx-1">·</span>
             {task.project.name}
             <span className="mx-1">·</span>
             <span className="font-mono">{task.id.slice(0, 8)}</span>
