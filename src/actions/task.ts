@@ -308,6 +308,23 @@ export async function moveTask(data: {
       errors.push(...unanswered.map((q) => q.question));
     }
 
+    const clientAnswers = await prisma.taskAnswer.findMany({
+      where: {
+        taskId: task.id,
+        question: { type: "client" },
+      },
+      select: { answer: true },
+    });
+    for (const ca of clientAnswers) {
+      try {
+        const parsed = JSON.parse(ca.answer);
+        if (parsed.needed === true && !parsed.completed) {
+          errors.push("Waiting on client — cannot move until client dependency is resolved");
+          break;
+        }
+      } catch {}
+    }
+
     if (errors.length > 0) {
       throw new Error(`REQUIRED_QUESTIONS:${JSON.stringify(errors)}`);
     }
@@ -644,7 +661,7 @@ export async function getTasksByProject(projectId: string) {
         projectId: true,
         assignee: { select: { id: true, name: true, imageUrl: true } },
         createdBy: { select: { id: true, name: true, imageUrl: true } },
-        answers: { select: { questionId: true } },
+        answers: { select: { questionId: true, answer: true, question: { select: { type: true } } } },
         stageLogs: {
           where: { exitedAt: null },
           orderBy: { enteredAt: "desc" },
@@ -688,7 +705,17 @@ export async function getTasksByProject(projectId: string) {
   return tasks.map((task) => {
     const reqIds = requiredByType.get(task.taskType) ?? [];
     const answeredIds = new Set(task.answers.map((a) => a.questionId));
-    const isReadyForTransition = reqIds.every((id) => answeredIds.has(id)) && task.priority != null;
+    const hasAllRequired = reqIds.every((id) => answeredIds.has(id)) && task.priority != null;
+
+    const waitingOnClient = task.answers.some((a) => {
+      if (a.question.type !== "client") return false;
+      try {
+        const parsed = JSON.parse(a.answer);
+        return parsed.needed === true && !parsed.completed;
+      } catch { return false; }
+    });
+
+    const isReadyForTransition = hasAllRequired && !waitingOnClient;
 
     const currentLog = task.stageLogs[0];
     return {

@@ -347,7 +347,16 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
       const answer = a[q.id];
       return answer && answer.trim();
     });
-    const isReady = allAnswered && p != null;
+    const waitingOnClient = questions.some((q) => {
+      if (q.type !== "client") return false;
+      const answer = a[q.id];
+      if (!answer) return false;
+      try {
+        const parsed = JSON.parse(answer);
+        return parsed.needed === true && !parsed.completed;
+      } catch { return false; }
+    });
+    const isReady = allAnswered && p != null && !waitingOnClient;
     updateStoreTask(task.id, { isReadyForTransition: isReady });
   }
 
@@ -452,33 +461,56 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
     debouncedSaveAnswer(questionId, value);
   }
 
+  const pendingSaves = useRef<Record<string, { questionId: string; value: string }>>({});
+
   function debouncedSaveAnswer(questionId: string, value: string) {
+    pendingSaves.current[questionId] = { questionId, value };
     if (saveTimers.current[questionId]) clearTimeout(saveTimers.current[questionId]);
-    saveTimers.current[questionId] = setTimeout(async () => {
-      setSavingAnswers((prev) => ({ ...prev, [questionId]: "saving" }));
-      try {
-        await saveTaskAnswers({
-          taskId: task.id,
-          answers: [{ questionId, answer: value }],
-        });
-        setSavingAnswers((prev) => ({ ...prev, [questionId]: "saved" }));
-        setMoveError(null);
-        setActivityKey((k) => k + 1);
-        setTimeout(() => setSavingAnswers((prev) => {
-          const next = { ...prev };
-          delete next[questionId];
-          return next;
-        }), 1500);
-      } catch (err) {
-        console.error(err);
-        setSavingAnswers((prev) => {
-          const next = { ...prev };
-          delete next[questionId];
-          return next;
-        });
-      }
+    saveTimers.current[questionId] = setTimeout(() => {
+      flushSave(questionId);
     }, 800);
   }
+
+  function flushSave(questionId: string) {
+    const pending = pendingSaves.current[questionId];
+    if (!pending) return;
+    delete pendingSaves.current[questionId];
+    if (saveTimers.current[questionId]) {
+      clearTimeout(saveTimers.current[questionId]);
+      delete saveTimers.current[questionId];
+    }
+    setSavingAnswers((prev) => ({ ...prev, [questionId]: "saving" }));
+    saveTaskAnswers({
+      taskId: task.id,
+      answers: [{ questionId: pending.questionId, answer: pending.value }],
+    }).then(() => {
+      setSavingAnswers((prev) => ({ ...prev, [questionId]: "saved" }));
+      setMoveError(null);
+      setActivityKey((k) => k + 1);
+      setTimeout(() => setSavingAnswers((prev) => {
+        const next = { ...prev };
+        delete next[questionId];
+        return next;
+      }), 1500);
+    }).catch((err) => {
+      console.error(err);
+      setSavingAnswers((prev) => {
+        const next = { ...prev };
+        delete next[questionId];
+        return next;
+      });
+    });
+  }
+
+  function flushAllPendingSaves() {
+    for (const qid of Object.keys(pendingSaves.current)) {
+      flushSave(qid);
+    }
+  }
+
+  useEffect(() => {
+    return () => { flushAllPendingSaves(); };
+  }, []);
 
   const currentStageIndex = STAGES.findIndex((s) => s.id === task.stage);
   const nextStage = currentStageIndex < STAGES.length - 1 ? STAGES[currentStageIndex + 1] : null;
@@ -607,7 +639,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
       {open && (
         <div
           className="fixed inset-0 bg-black/40 z-40 transition-opacity"
-          onClick={onClose}
+          onClick={() => { flushAllPendingSaves(); onClose(); }}
         />
       )}
 
@@ -673,7 +705,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
               <Maximize2 className="w-4 h-4" />
             </button>
             <button
-              onClick={onClose}
+              onClick={() => { flushAllPendingSaves(); onClose(); }}
               className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             >
               <X className="w-4 h-4" />
