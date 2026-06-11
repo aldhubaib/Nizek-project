@@ -29,7 +29,7 @@ const PREVIEW_COUNT = 5;
 
 function AssigneeRow({ item, tab }: { item: AssigneeData; tab?: string }) {
   const color = getDurationColor(item.longestMs);
-  const href = `/dashboard/needs-client-input${tab ? `?tab=${tab}` : ""}`;
+  const href = `/dashboard/needs-client-input/${item.assignee.id}${tab ? `?tab=${tab}` : ""}`;
 
   return (
     <Link href={href} className="flex items-center gap-3 px-4 py-3 hover:bg-accent/20 transition-colors">
@@ -110,7 +110,7 @@ export function ClientInputByAssignee({ data, tab }: { data: AssigneeData[]; tab
         </div>
       )}
 
-      {data.length > PREVIEW_COUNT && (
+      {data.length > 0 && (
         <Link
           href={`/dashboard/needs-client-input${tab ? `?tab=${tab}` : ""}`}
           className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"

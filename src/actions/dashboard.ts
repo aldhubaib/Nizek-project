@@ -1291,7 +1291,7 @@ const STAGE_LABELS_MAP: Record<string, string> = {
   DONE: "Done",
 };
 
-export async function getTasksNeedingClientInput() {
+export async function getTasksNeedingClientInput(assigneeId?: string) {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
   const now = new Date();
@@ -1314,6 +1314,7 @@ export async function getTasksNeedingClientInput() {
         stage: { in: ["NEW_REQUEST", "CLARIFICATION"] },
         archivedAt: null,
         project: { ...whereClause, ...notLatePaymentFilter() },
+        ...(assigneeId ? { assigneeId } : {}),
       },
     },
     select: {

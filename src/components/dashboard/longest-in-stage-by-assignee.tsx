@@ -110,7 +110,7 @@ export function LongestInStageByAssignee({ data, tab }: { data: AssigneeData[]; 
           </div>
         )}
 
-        {data.length > PREVIEW_COUNT && (
+        {data.length > 0 && (
           <Link
             href={`/dashboard/pipeline-assignee${tab ? `?tab=${tab}` : ""}`}
             className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
