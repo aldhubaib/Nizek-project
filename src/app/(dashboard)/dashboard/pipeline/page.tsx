@@ -30,7 +30,7 @@ export default async function PipelinePage({
           Dashboard
         </Link>
         <span className="text-border">|</span>
-        <h1 className="text-sm font-semibold">Longest in Pipeline By Task</h1>
+        <h1 className="text-sm font-semibold">Longest in Stage By Task</h1>
         <span className="text-[11px] text-muted-foreground">({data.length} tasks)</span>
       </div>
 

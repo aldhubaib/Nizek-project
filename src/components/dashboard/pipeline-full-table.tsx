@@ -14,7 +14,6 @@ interface PipelineTask {
   priority: number | null;
   assignee: { id: string; name: string | null; imageUrl: string | null } | null;
   project: { id: string; name: string };
-  pipelineMs: number;
   stageMs: number;
 }
 
@@ -69,7 +68,6 @@ function getDurationColor(ms: number) {
 }
 
 function FullRow({ task }: { task: PipelineTask }) {
-  const pipelineColor = getDurationColor(task.pipelineMs);
   const stageColor = getDurationColor(task.stageMs);
   const typeInfo = TASK_TYPE_ICONS[task.taskType];
   const TypeIcon = typeInfo?.icon ?? Sparkles;
@@ -78,7 +76,7 @@ function FullRow({ task }: { task: PipelineTask }) {
     <Link
       href={`/dashboard/projects/${task.project.id}?task=${task.id}`}
       target="_blank"
-      className="grid grid-cols-[1fr_110px_120px_80px_80px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
+      className="grid grid-cols-[1fr_110px_120px_80px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
     >
       <div className="flex items-center gap-3 min-w-0">
         <Tooltip text={typeInfo?.label ?? task.taskType}>
@@ -110,18 +108,12 @@ function FullRow({ task }: { task: PipelineTask }) {
           {formatDuration(task.stageMs)}
         </span>
       </div>
-
-      <div className="flex justify-center">
-        <span className={cn("text-[12px] font-mono font-bold tabular-nums", pipelineColor)}>
-          {formatDuration(task.pipelineMs)}
-        </span>
-      </div>
     </Link>
   );
 }
 
 export function PipelineFullTable({ data }: { data: PipelineTask[] }) {
-  const overWeek = data.filter((d) => d.pipelineMs > 7 * 24 * 60 * 60 * 1000).length;
+  const overWeek = data.filter((d) => d.stageMs > 7 * 24 * 60 * 60 * 1000).length;
 
   return (
     <div>
@@ -141,12 +133,11 @@ export function PipelineFullTable({ data }: { data: PipelineTask[] }) {
         </div>
       ) : (
         <div className="rounded-xl border border-border bg-card divide-y divide-border">
-          <div className="grid grid-cols-[1fr_110px_120px_80px_80px] gap-4 px-5 py-2.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+          <div className="grid grid-cols-[1fr_110px_120px_80px] gap-4 px-5 py-2.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
             <span>Task</span>
             <span>Project</span>
             <span className="text-center">Stage</span>
             <span className="text-center">In Stage</span>
-            <span className="text-center">Total</span>
           </div>
           {data.map((task) => (
             <FullRow key={task.id} task={task} />

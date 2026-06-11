@@ -380,10 +380,9 @@ export async function getLongestInPipeline(stages?: string[]) {
 
   return tasks
     .map((t) => {
-      const pipelineMs = now.getTime() - new Date(t.startedAt!).getTime();
-      if (pipelineMs < THREE_DAYS_MS) return null;
       const log = stageLogMap.get(t.id);
       const stageMs = log ? now.getTime() - new Date(log.enteredAt).getTime() : 0;
+      if (stageMs < THREE_DAYS_MS) return null;
 
       return {
         id: t.id,
@@ -395,12 +394,11 @@ export async function getLongestInPipeline(stages?: string[]) {
         priority: t.priority,
         assignee: t.assignee,
         project: t.project,
-        pipelineMs,
         stageMs,
       };
     })
     .filter((t): t is NonNullable<typeof t> => t !== null)
-    .sort((a, b) => b.pipelineMs - a.pipelineMs);
+    .sort((a, b) => b.stageMs - a.stageMs);
 }
 
 export async function getShippedSummary() {

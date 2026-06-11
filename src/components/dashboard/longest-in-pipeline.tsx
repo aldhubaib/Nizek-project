@@ -14,7 +14,6 @@ interface PipelineTask {
   priority: number | null;
   assignee: { id: string; name: string | null; imageUrl: string | null } | null;
   project: { id: string; name: string };
-  pipelineMs: number;
   stageMs: number;
 }
 
@@ -76,8 +75,8 @@ function getBarWidth(ms: number, maxMs: number) {
 const PREVIEW_COUNT = 5;
 
 function CompactRow({ task, maxMs }: { task: PipelineTask; maxMs: number }) {
-  const color = getDurationColor(task.pipelineMs);
-  const barW = getBarWidth(task.pipelineMs, maxMs);
+  const color = getDurationColor(task.stageMs);
+  const barW = getBarWidth(task.stageMs, maxMs);
   const barColor = STAGE_BAR_COLORS[task.stage] ?? "bg-muted-foreground";
   const typeInfo = TASK_TYPE_ICONS[task.taskType];
   const TypeIcon = typeInfo?.icon ?? Sparkles;
@@ -96,7 +95,7 @@ function CompactRow({ task, maxMs }: { task: PipelineTask; maxMs: number }) {
             {task.title}
           </p>
           <span className={cn("text-[11px] font-bold tabular-nums shrink-0", color)}>
-            {formatDuration(task.pipelineMs)}
+            {formatDuration(task.stageMs)}
           </span>
         </div>
         <div className="flex items-center gap-2 mt-1">
@@ -114,12 +113,12 @@ function CompactRow({ task, maxMs }: { task: PipelineTask; maxMs: number }) {
 
 export function LongestInPipeline({ data, tab }: { data: PipelineTask[]; tab?: string }) {
 
-  const overWeek = data.filter((d) => d.pipelineMs > 7 * 24 * 60 * 60 * 1000).length;
+  const overWeek = data.filter((d) => d.stageMs > 7 * 24 * 60 * 60 * 1000).length;
   const over3d = data.filter((d) => {
-    const days = d.pipelineMs / (1000 * 60 * 60 * 24);
+    const days = d.stageMs / (1000 * 60 * 60 * 24);
     return days >= 3 && days < 7;
   }).length;
-  const maxMs = data.length > 0 ? Math.max(...data.map((d) => d.pipelineMs)) : 0;
+  const maxMs = data.length > 0 ? Math.max(...data.map((d) => d.stageMs)) : 0;
   const preview = data.slice(0, PREVIEW_COUNT);
 
   return (
@@ -130,7 +129,7 @@ export function LongestInPipeline({ data, tab }: { data: PipelineTask[]; tab?: s
           <div className="flex items-center justify-between mb-2.5">
             <h2 className="text-[14px] font-semibold flex items-center gap-2">
               <Timer className="w-4 h-4 text-muted-foreground" />
-              Longest in Pipeline By Task
+              Longest in Stage By Task
             </h2>
             {overWeek > 0 && (
               <span className="flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-2 py-0.5">
