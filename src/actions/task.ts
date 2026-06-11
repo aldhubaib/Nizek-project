@@ -697,16 +697,11 @@ export async function getTasksByProject(projectId: string) {
   });
 }
 
-export async function pollTaskUpdates(projectId: string, updatedSince?: string) {
+export async function pollTaskUpdates(projectId: string) {
   await requireProjectMember(projectId);
 
-  const where: Record<string, unknown> = { projectId, archivedAt: null };
-  if (updatedSince) {
-    where.updatedAt = { gte: new Date(updatedSince) };
-  }
-
   const tasks = await prisma.task.findMany({
-    where,
+    where: { projectId, archivedAt: null },
     select: {
       id: true,
       stage: true,

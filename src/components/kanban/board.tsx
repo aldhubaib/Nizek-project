@@ -69,19 +69,16 @@ export function KanbanBoard({
 
   const isDragging = useRef(false);
   const snapshotRef = useRef<KanbanTask[]>(initialTasks);
-  const lastPollRef = useRef<string>(new Date().toISOString());
 
   useEffect(() => {
     setTasks(initialTasks);
     snapshotRef.current = initialTasks;
-    lastPollRef.current = new Date().toISOString();
   }, [initialTasks, setTasks]);
 
   const refetchTasks = useCallback(async () => {
     if (isDragging.current || document.hidden) return;
     try {
-      const updates = await pollTaskUpdates(projectId, lastPollRef.current);
-      lastPollRef.current = new Date().toISOString();
+      const updates = await pollTaskUpdates(projectId);
       setTasks((prev: KanbanTask[]) => {
         const updateMap = new Map(updates.map((u) => [u.id, u]));
         const currentIds = new Set(prev.map((t) => t.id));
