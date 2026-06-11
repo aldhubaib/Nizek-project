@@ -1,9 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { createPortal } from "react-dom";
-import { Clock, Timer, AlertTriangle, X, ExternalLink, Sparkles, Zap, Bug, AlertCircle, Palette } from "lucide-react";
+import { Timer, AlertTriangle, ExternalLink, Sparkles, Zap, Bug, AlertCircle, Palette } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PipelineTask {
@@ -34,14 +32,6 @@ const STAGE_BAR_COLORS: Record<string, string> = {
   INTERNAL_REVIEW: "bg-amber-500",
   CLIENT_REVIEW: "bg-cyan-500",
   READY_FOR_RELEASE: "bg-emerald-500",
-};
-
-const TASK_TYPE_COLORS: Record<string, string> = {
-  FEATURE: "text-blue-400",
-  ENHANCEMENT: "text-cyan-400",
-  BUG: "text-red-400",
-  REPORTED_BUG: "text-orange-400",
-  DESIGN: "text-purple-400",
 };
 
 const TASK_TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string; label: string }> = {
@@ -122,60 +112,7 @@ function CompactRow({ task, maxMs }: { task: PipelineTask; maxMs: number }) {
   );
 }
 
-function FullRow({ task }: { task: PipelineTask }) {
-  const pipelineColor = getDurationColor(task.pipelineMs);
-  const stageColor = getDurationColor(task.stageMs);
-  const typeInfo = TASK_TYPE_ICONS[task.taskType];
-  const TypeIcon = typeInfo?.icon ?? Sparkles;
-
-  return (
-    <Link
-      href={`/dashboard/projects/${task.project.id}?task=${task.id}`}
-      target="_blank"
-      className="grid grid-cols-[1fr_110px_120px_80px_80px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
-    >
-      <div className="flex items-center gap-3 min-w-0">
-        <Tooltip text={typeInfo?.label ?? task.taskType}>
-          <div className={cn("w-6 h-6 rounded flex items-center justify-center border shrink-0", typeInfo?.color ?? "text-muted-foreground bg-muted border-border")}>
-            <TypeIcon className="w-3.5 h-3.5" />
-          </div>
-        </Tooltip>
-        <div className="min-w-0">
-          <p className="text-[13px] font-medium truncate group-hover:text-primary transition-colors">{task.title}</p>
-          <p className="text-[10px] text-muted-foreground/50">
-            <span className={cn("font-mono", TASK_TYPE_COLORS[task.taskType] ?? "text-muted-foreground")}>#{task.taskNumber}</span>
-            <span className="mx-1">·</span>
-            {typeInfo?.label ?? task.taskType.replace("_", " ")}
-          </p>
-        </div>
-      </div>
-
-      <span className="text-[11px] text-muted-foreground truncate">{task.project.name}</span>
-
-      <div className="flex justify-center">
-        <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border truncate", STAGE_COLORS[task.stage] ?? "bg-muted text-muted-foreground border-border")}>
-          {task.stageLabel}
-        </span>
-      </div>
-
-      <div className="flex justify-center">
-        <span className={cn("text-[12px] font-mono font-bold tabular-nums flex items-center gap-1", stageColor)}>
-          <Clock className="w-3 h-3" />
-          {formatDuration(task.stageMs)}
-        </span>
-      </div>
-
-      <div className="flex justify-center">
-        <span className={cn("text-[12px] font-mono font-bold tabular-nums", pipelineColor)}>
-          {formatDuration(task.pipelineMs)}
-        </span>
-      </div>
-    </Link>
-  );
-}
-
 export function LongestInPipeline({ data }: { data: PipelineTask[] }) {
-  const [showAll, setShowAll] = useState(false);
 
   const overWeek = data.filter((d) => d.pipelineMs > 7 * 24 * 60 * 60 * 1000).length;
   const over3d = data.filter((d) => {
@@ -193,7 +130,7 @@ export function LongestInPipeline({ data }: { data: PipelineTask[] }) {
           <div className="flex items-center justify-between mb-2.5">
             <h2 className="text-[14px] font-semibold flex items-center gap-2">
               <Timer className="w-4 h-4 text-muted-foreground" />
-              Longest in Pipeline
+              Longest in Pipeline By Task
             </h2>
             {overWeek > 0 && (
               <span className="flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-2 py-0.5">
@@ -238,58 +175,15 @@ export function LongestInPipeline({ data }: { data: PipelineTask[] }) {
 
         {/* View All */}
         {data.length > PREVIEW_COUNT && (
-          <button
-            onClick={() => setShowAll(true)}
+          <Link
+            href="/dashboard/pipeline"
             className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
           >
             <ExternalLink className="w-3 h-3" />
             View All ({data.length})
-          </button>
+          </Link>
         )}
       </div>
-
-      {/* Full overlay */}
-      {showAll && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[9999] bg-background/95 backdrop-blur-sm flex flex-col">
-          <div className="h-12 flex items-center justify-between px-6 border-b border-border shrink-0">
-            <div className="flex items-center gap-3">
-              <button onClick={() => setShowAll(false)} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-[13px]">
-                <X className="w-4 h-4" />
-                Close
-              </button>
-              <span className="text-border">|</span>
-              <h2 className="text-[13px] font-semibold flex items-center gap-2">
-                <Timer className="w-4 h-4 text-muted-foreground" />
-                Longest in Pipeline
-                <span className="text-[11px] font-normal text-muted-foreground">({data.length} tasks)</span>
-              </h2>
-            </div>
-            {overWeek > 0 && (
-              <span className="flex items-center gap-1 text-[11px] font-semibold text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-2.5 py-0.5">
-                <AlertTriangle className="w-3 h-3" />
-                {overWeek} over a week
-              </span>
-            )}
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            <div className="max-w-4xl mx-auto py-4">
-              <div className="rounded-xl border border-border bg-card divide-y divide-border">
-                <div className="grid grid-cols-[1fr_110px_120px_80px_80px] gap-4 px-5 py-2.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
-                  <span>Task</span>
-                  <span>Project</span>
-                  <span className="text-center">Stage</span>
-                  <span className="text-center">In Stage</span>
-                  <span className="text-center">Total</span>
-                </div>
-                {data.map((task) => (
-                  <FullRow key={task.id} task={task} />
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
     </>
   );
 }
