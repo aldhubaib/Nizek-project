@@ -89,7 +89,7 @@ export function LongestInStageByAssignee({ data, tab }: { data: AssigneeData[]; 
           <div className="flex items-center gap-3 text-[11px]">
             {data.length > 0 ? (
               <span className="text-muted-foreground">
-                {data.length} {data.length === 1 ? "person" : "people"} with tasks &gt; 3d
+                {data.length} {data.length === 1 ? "person" : "people"} with tasks &gt; 2d
               </span>
             ) : (
               <span className="text-muted-foreground">All clear</span>

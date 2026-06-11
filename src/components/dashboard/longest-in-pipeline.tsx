@@ -122,9 +122,9 @@ function CompactRow({ task, maxMs }: { task: PipelineTask; maxMs: number }) {
 export function LongestInPipeline({ data, tab }: { data: PipelineTask[]; tab?: string }) {
 
   const overWeek = data.filter((d) => d.stageMs > 7 * 24 * 60 * 60 * 1000).length;
-  const over3d = data.filter((d) => {
+  const over2d = data.filter((d) => {
     const days = d.stageMs / (1000 * 60 * 60 * 24);
-    return days >= 3 && days < 7;
+    return days >= 2 && days < 7;
   }).length;
   const maxMs = data.length > 0 ? Math.max(...data.map((d) => d.stageMs)) : 0;
   const preview = data.slice(0, PREVIEW_COUNT);
@@ -148,10 +148,10 @@ export function LongestInPipeline({ data, tab }: { data: PipelineTask[]; tab?: s
           </div>
           {/* Summary */}
           <div className="flex items-center gap-3 text-[11px]">
-            {over3d > 0 && (
+            {over2d > 0 && (
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full bg-amber-500" />
-                <span className="text-muted-foreground">{over3d} &gt; 3d</span>
+                <span className="text-muted-foreground">{over2d} &gt; 2d</span>
               </div>
             )}
             {overWeek > 0 && (

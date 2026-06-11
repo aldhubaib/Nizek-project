@@ -59,7 +59,7 @@ export default async function AssigneeDetailPage({
             {assignee?.name ?? "Unknown User"}
           </h1>
           <span className="text-[11px] text-muted-foreground">
-            ({data.length} {data.length === 1 ? "task" : "tasks"} &gt; 3d in stage)
+            ({data.length} {data.length === 1 ? "task" : "tasks"} &gt; 2d in stage)
           </span>
         </div>
       </div>
