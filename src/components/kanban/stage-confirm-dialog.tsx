@@ -60,34 +60,21 @@ const PRESETS = [
   { label: "4h", minutes: 240 },
   { label: "1d", minutes: 480 },
   { label: "2d", minutes: 960 },
-  { label: "3d", minutes: 1440 },
-  { label: "1w", minutes: 2400 },
 ];
 
 export function StageConfirmDialog({ checkpoint, onConfirm, onCancel }: Props) {
   const [confirming, setConfirming] = useState(false);
-  const [hours, setHours] = useState("");
-  const [minutes, setMinutes] = useState("");
+  const [selectedMinutes, setSelectedMinutes] = useState(0);
   const [estimateError, setEstimateError] = useState(false);
-
-  const totalMinutes = (parseInt(hours || "0", 10) * 60) + parseInt(minutes || "0", 10);
-
-  function applyPreset(presetMinutes: number) {
-    const h = Math.floor(presetMinutes / 60);
-    const m = presetMinutes % 60;
-    setHours(h > 0 ? String(h) : "");
-    setMinutes(m > 0 ? String(m) : "");
-    setEstimateError(false);
-  }
 
   function handleConfirm() {
     if (checkpoint.requiresEstimate) {
-      if (totalMinutes <= 0) {
+      if (selectedMinutes <= 0) {
         setEstimateError(true);
         return;
       }
       setConfirming(true);
-      onConfirm(totalMinutes);
+      onConfirm(selectedMinutes);
     } else {
       setConfirming(true);
       onConfirm();
@@ -110,14 +97,14 @@ export function StageConfirmDialog({ checkpoint, onConfirm, onCancel }: Props) {
             <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
               Estimated Time
             </label>
-            <div className="flex flex-wrap gap-1.5 mb-3">
+            <div className="flex flex-wrap gap-1.5">
               {PRESETS.map((p) => (
                 <button
                   key={p.label}
                   type="button"
-                  onClick={() => applyPreset(p.minutes)}
+                  onClick={() => { setSelectedMinutes(p.minutes); setEstimateError(false); }}
                   className={`h-7 rounded-md border px-2.5 text-[12px] font-medium transition-colors ${
-                    totalMinutes === p.minutes
+                    selectedMinutes === p.minutes
                       ? "bg-blue-600/20 border-blue-500/40 text-blue-400"
                       : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
                   }`}
@@ -126,39 +113,9 @@ export function StageConfirmDialog({ checkpoint, onConfirm, onCancel }: Props) {
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  min="0"
-                  value={hours}
-                  onChange={(e) => { setHours(e.target.value); setEstimateError(false); }}
-                  placeholder="0"
-                  className="w-16 rounded-md border border-border bg-background px-2.5 py-1.5 text-[13px] text-foreground text-center focus:outline-none focus:ring-1 focus:ring-blue-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-                <span className="text-[12px] text-muted-foreground">h</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  min="0"
-                  max="59"
-                  value={minutes}
-                  onChange={(e) => { setMinutes(e.target.value); setEstimateError(false); }}
-                  placeholder="0"
-                  className="w-16 rounded-md border border-border bg-background px-2.5 py-1.5 text-[13px] text-foreground text-center focus:outline-none focus:ring-1 focus:ring-blue-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-                <span className="text-[12px] text-muted-foreground">m</span>
-              </div>
-            </div>
-            {totalMinutes > 0 && (
-              <p className="text-[11px] text-muted-foreground mt-1.5">
-                Total: {Math.floor(totalMinutes / 60) > 0 ? `${Math.floor(totalMinutes / 60)}h ` : ""}{totalMinutes % 60 > 0 ? `${totalMinutes % 60}m` : ""}
-              </p>
-            )}
             {estimateError && (
               <p className="text-[11px] text-destructive mt-1.5 font-medium">
-                Please provide an estimated time before proceeding.
+                Please select an estimated time before proceeding.
               </p>
             )}
           </div>
