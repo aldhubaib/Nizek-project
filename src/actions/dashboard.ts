@@ -535,7 +535,9 @@ export async function getMostRejectedTasks() {
     entry.totalCount++;
   }
 
-  return Object.values(byTask).sort((a, b) => b.totalCount - a.totalCount);
+  return Object.values(byTask)
+    .filter((t) => t.totalCount > 2)
+    .sort((a, b) => b.totalCount - a.totalCount);
 }
 
 export async function markMentionRead(mentionId: string) {
