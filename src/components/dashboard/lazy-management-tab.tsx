@@ -6,20 +6,17 @@ import {
   getStageFunnel,
   getContractsHealth,
   getTeamProjects,
-  getLongestInPipeline,
   getMostRejectedTasks,
 } from "@/actions/dashboard";
 import { StageFunnel } from "./stage-funnel";
 import { ContractsHealth } from "./contracts-health";
 import { TeamProjects } from "./team-projects";
-import { LongestInPipeline } from "./longest-in-pipeline";
 import { MostRejected } from "./most-rejected";
 
 type ManagementData = {
   funnelData: Awaited<ReturnType<typeof getStageFunnel>>;
   contractsHealth: Awaited<ReturnType<typeof getContractsHealth>>;
   teamProjects: Awaited<ReturnType<typeof getTeamProjects>>;
-  pipelineTasks: Awaited<ReturnType<typeof getLongestInPipeline>>;
   rejectedTasks: Awaited<ReturnType<typeof getMostRejectedTasks>>;
 };
 
@@ -31,15 +28,14 @@ export function LazyManagementTab() {
   useEffect(() => {
     startTransition(async () => {
       try {
-        const [funnelData, contractsHealth, teamProjects, pipelineTasks, rejectedTasks] =
+        const [funnelData, contractsHealth, teamProjects, rejectedTasks] =
           await Promise.all([
             getStageFunnel(),
             getContractsHealth(),
             getTeamProjects(),
-            getLongestInPipeline(),
             getMostRejectedTasks(),
           ]);
-        setData({ funnelData, contractsHealth, teamProjects, pipelineTasks, rejectedTasks });
+        setData({ funnelData, contractsHealth, teamProjects, rejectedTasks });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load management data");
       }
@@ -66,7 +62,6 @@ export function LazyManagementTab() {
       <StageFunnel data={JSON.parse(JSON.stringify(data.funnelData))} />
       <ContractsHealth data={data.contractsHealth} />
       <TeamProjects data={JSON.parse(JSON.stringify(data.teamProjects))} />
-      <LongestInPipeline data={data.pipelineTasks} tab="management" />
       <MostRejected data={data.rejectedTasks} />
     </>
   );
