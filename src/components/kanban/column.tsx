@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 import { TaskCard } from "./task-card";
 import { TaskSidebar } from "./task-sidebar";
 import { useMemo, useState, useCallback, memo } from "react";
-import type { KanbanTask, Stage } from "@/store/kanban";
+import { useKanbanStore, type KanbanTask, type Stage } from "@/store/kanban";
 import type { TaskQuestion } from "./question-field";
 import { cn } from "@/lib/utils";
 
@@ -36,9 +36,11 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
 
-  const selectedTask = useMemo(
-    () => (selectedTaskId ? tasks.find((t) => t.id === selectedTaskId) ?? null : null),
-    [tasks, selectedTaskId]
+  const selectedTask = useKanbanStore(
+    useCallback(
+      (s: { tasks: KanbanTask[] }) => (selectedTaskId ? s.tasks.find((t) => t.id === selectedTaskId) ?? null : null),
+      [selectedTaskId]
+    )
   );
 
   const isClarification = stage.id === "CLARIFICATION";

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useCallback, useState, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
 import {
   DndContext,
   DragOverlay,
@@ -62,7 +61,6 @@ export function KanbanBoard({
   allowedTaskTypes,
   activeContractType,
 }: BoardProps) {
-  const router = useRouter();
   const { tasks, setTasks, moveTask } = useKanbanStore();
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
   const [pendingMove, setPendingMove] = useState<{ taskId: string; fromStage: Stage; toStage: Stage; order: number } | null>(null);
@@ -70,7 +68,12 @@ export function KanbanBoard({
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const isDragging = useRef(false);
+  const pendingDeclineRef = useRef(false);
   const snapshotRef = useRef<KanbanTask[]>(initialTasks);
+
+  useEffect(() => {
+    pendingDeclineRef.current = pendingDecline !== null;
+  }, [pendingDecline]);
 
   useEffect(() => {
     setTasks(initialTasks);
@@ -78,7 +81,7 @@ export function KanbanBoard({
   }, [initialTasks, setTasks]);
 
   const refetchTasks = useCallback(async () => {
-    if (isDragging.current || document.hidden) return;
+    if (isDragging.current || pendingDeclineRef.current || document.hidden) return;
     try {
       const updates = await pollTaskUpdates(projectId);
       setTasks((prev: KanbanTask[]) => {
@@ -348,19 +351,21 @@ export function KanbanBoard({
 
   async function handleConfirmDecline(comment: string, attachments?: DeclineAttachment[]) {
     if (!pendingDecline) return;
-    // #region agent log
-    fetch('http://127.0.0.1:7547/ingest/49803be2-d45d-4aca-b2e3-00a055ccacf8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fc8f02'},body:JSON.stringify({sessionId:'fc8f02',location:'board.tsx:handleConfirmDecline',message:'BOARD decline START',data:{taskId:pendingDecline.taskId,fromStage:pendingDecline.fromStage,commentLen:comment.length,attachCount:attachments?.length??0},timestamp:Date.now(),hypothesisId:'H1,H2'})}).catch(()=>{});
-    // #endregion
+    const DECLINE_TARGETS: Record<string, Stage> = {
+      INTERNAL_REVIEW: "IN_DEVELOPMENT",
+      CLIENT_REVIEW: "INTERNAL_REVIEW",
+    };
+    const targetStage = DECLINE_TARGETS[pendingDecline.fromStage];
     try {
       await declineTask({ taskId: pendingDecline.taskId, comment, attachments });
-      // #region agent log
-      fetch('http://127.0.0.1:7547/ingest/49803be2-d45d-4aca-b2e3-00a055ccacf8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fc8f02'},body:JSON.stringify({sessionId:'fc8f02',location:'board.tsx:handleConfirmDecline',message:'BOARD decline SUCCESS, calling router.refresh',data:{taskId:pendingDecline.taskId},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
-      router.refresh();
+      if (targetStage) {
+        const targetOrder = tasks.filter((t) => t.stage === targetStage && t.id !== pendingDecline!.taskId).length;
+        moveTask(pendingDecline.taskId, targetStage, targetOrder);
+        snapshotRef.current = snapshotRef.current.map((t) =>
+          t.id === pendingDecline!.taskId ? { ...t, stage: targetStage, order: targetOrder } : t
+        );
+      }
     } catch (err) {
-      // #region agent log
-      fetch('http://127.0.0.1:7547/ingest/49803be2-d45d-4aca-b2e3-00a055ccacf8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fc8f02'},body:JSON.stringify({sessionId:'fc8f02',location:'board.tsx:handleConfirmDecline',message:'BOARD decline ERROR',data:{error:String(err)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-      // #endregion
       console.error(err);
       setTasks(snapshotRef.current);
     }
