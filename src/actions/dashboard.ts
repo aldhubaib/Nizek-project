@@ -124,7 +124,9 @@ export async function getDashboardData(projectId: string) {
   const activeContract = project?.contracts.find(
     (c) => {
       if (!c.startDate || !c.endDate) return false;
-      return new Date(c.startDate) <= now && new Date(c.endDate) >= now;
+      const end = new Date(c.endDate);
+      end.setHours(23, 59, 59, 999);
+      return new Date(c.startDate) <= now && end >= now;
     }
   );
   const daysLeft = activeContract?.endDate
@@ -683,7 +685,12 @@ export async function getContractsHealth() {
       : null;
 
     const activeContract = contracts.find(
-      (c) => c.startDate && c.endDate && new Date(c.startDate) <= now && new Date(c.endDate) >= now
+      (c) => {
+        if (!c.startDate || !c.endDate) return false;
+        const end = new Date(c.endDate);
+        end.setHours(23, 59, 59, 999);
+        return new Date(c.startDate) <= now && end >= now;
+      }
     );
 
     const nextContract = activeContract
@@ -897,7 +904,12 @@ export async function getTeamProjects() {
   function mapProjects(raw: typeof unassignedProjects) {
     return raw.map((p) => {
       const activeContract = p.contracts.find(
-        (c) => c.startDate && c.endDate && new Date(c.startDate) <= now && new Date(c.endDate) >= now && !c.latePayment
+        (c) => {
+          if (!c.startDate || !c.endDate || c.latePayment) return false;
+          const end = new Date(c.endDate);
+          end.setHours(23, 59, 59, 999);
+          return new Date(c.startDate) <= now && end >= now;
+        }
       );
       return {
         id: p.id,

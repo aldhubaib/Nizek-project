@@ -48,12 +48,13 @@ export function ProjectCard({ project, teams = [], contractPrefixes = [] }: Proj
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const now = new Date();
+  const endOfDay = (d: Date | string) => { const e = new Date(d); e.setHours(23, 59, 59, 999); return e; };
   const hasValidContract = project.contracts.some((c) => {
     if (!c.startDate || !c.endDate) return false;
-    return new Date(c.startDate) <= now && new Date(c.endDate) >= now;
+    return new Date(c.startDate) <= now && endOfDay(c.endDate) >= now;
   });
   const hasLatePayment = project.contracts.some((c) => c.latePayment &&
-    c.startDate && c.endDate && new Date(c.startDate) <= now && new Date(c.endDate) >= now
+    c.startDate && c.endDate && new Date(c.startDate) <= now && endOfDay(c.endDate) >= now
   );
   const isActive = hasValidContract && !hasLatePayment;
 

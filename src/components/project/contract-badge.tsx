@@ -25,6 +25,7 @@ export function ContractBadge({ contract }: { contract: Contract }) {
     const now = new Date();
     const start = new Date(contract.startDate);
     const end = new Date(contract.endDate);
+    end.setHours(23, 59, 59, 999);
     if (isWithinInterval(now, { start, end })) {
       status = "active";
     } else if (isFuture(start)) {

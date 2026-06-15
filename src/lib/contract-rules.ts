@@ -1,5 +1,16 @@
 import type { ContractType, TaskType } from "@/generated/prisma/client";
 
+export function isContractActiveOnDate(
+  startDate: Date | string | null,
+  endDate: Date | string | null,
+  now = new Date()
+): boolean {
+  if (!startDate || !endDate) return false;
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+  return new Date(startDate) <= now && end >= now;
+}
+
 const ALL_TASK_TYPES: TaskType[] = ["FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
 
 const CONTRACT_TASK_RULES: Record<ContractType, TaskType[]> = {
@@ -28,9 +39,8 @@ export function getActiveContract(
 ): ActiveContract | null {
   const now = new Date();
   return contracts.find((c) => {
-    if (!c.startDate || !c.endDate) return false;
     if (c.latePayment) return false;
-    return new Date(c.startDate) <= now && new Date(c.endDate) >= now;
+    return isContractActiveOnDate(c.startDate, c.endDate, now);
   }) ?? null;
 }
 

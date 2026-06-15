@@ -54,7 +54,9 @@ export function isProjectActive(project: ProjectWithContracts): boolean {
   const now = new Date();
   return project.contracts.some((c) => {
     if (!c.startDate || !c.endDate) return false;
-    return new Date(c.startDate) <= now && new Date(c.endDate) >= now;
+    const end = new Date(c.endDate);
+    end.setHours(23, 59, 59, 999);
+    return new Date(c.startDate) <= now && end >= now;
   });
 }
 

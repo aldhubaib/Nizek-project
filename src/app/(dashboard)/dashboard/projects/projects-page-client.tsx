@@ -87,7 +87,9 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
     p.contracts.some((c) => {
       if (c.latePayment) return false;
       if (!c.startDate || !c.endDate) return false;
-      return new Date(c.startDate) <= now && new Date(c.endDate) >= now;
+      const end = new Date(c.endDate);
+      end.setHours(23, 59, 59, 999);
+      return new Date(c.startDate) <= now && end >= now;
     });
 
   const activeProjects = filtered.filter(isProjectActive);
