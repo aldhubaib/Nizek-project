@@ -1083,7 +1083,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
               <MessageSquare className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
               <h3 className="text-[13px] font-semibold">Comments</h3>
             </div>
-            <CommentSection taskId={task.id} projectId={projectId} refreshKey={commentKey} />
+            <CommentSection key={`comments-${task.id}-${commentKey}`} taskId={task.id} projectId={projectId} />
           </div>
 
         </div>

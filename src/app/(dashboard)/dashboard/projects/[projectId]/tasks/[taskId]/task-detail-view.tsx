@@ -803,7 +803,7 @@ export function TaskDetailPage({
             <MessageSquare className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
             <h3 className="text-[13px] font-semibold">Comments</h3>
           </div>
-          <CommentSection taskId={initialTask.id} projectId={projectId} refreshKey={commentKey} />
+          <CommentSection key={`comments-${initialTask.id}-${commentKey}`} taskId={initialTask.id} projectId={projectId} />
         </div>
 
         {/* Activity */}

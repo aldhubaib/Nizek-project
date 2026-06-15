@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useState, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   DragOverlay,
@@ -61,6 +62,7 @@ export function KanbanBoard({
   allowedTaskTypes,
   activeContractType,
 }: BoardProps) {
+  const router = useRouter();
   const { tasks, setTasks, moveTask } = useKanbanStore();
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
   const [pendingMove, setPendingMove] = useState<{ taskId: string; fromStage: Stage; toStage: Stage; order: number } | null>(null);
@@ -346,20 +348,9 @@ export function KanbanBoard({
 
   async function handleConfirmDecline(comment: string, attachments?: DeclineAttachment[]) {
     if (!pendingDecline) return;
-    const DECLINE_TARGETS: Record<string, Stage> = {
-      INTERNAL_REVIEW: "IN_DEVELOPMENT",
-      CLIENT_REVIEW: "INTERNAL_REVIEW",
-    };
-    const targetStage = DECLINE_TARGETS[pendingDecline.fromStage];
     try {
       await declineTask({ taskId: pendingDecline.taskId, comment, attachments });
-      if (targetStage) {
-        const targetOrder = tasks.filter((t) => t.stage === targetStage && t.id !== pendingDecline.taskId).length;
-        moveTask(pendingDecline.taskId, targetStage, targetOrder);
-        snapshotRef.current = tasks.map((t) =>
-          t.id === pendingDecline.taskId ? { ...t, stage: targetStage, order: targetOrder } : t
-        );
-      }
+      router.refresh();
     } catch (err) {
       console.error(err);
       setTasks(snapshotRef.current);
