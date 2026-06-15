@@ -36,6 +36,7 @@ interface PendingFile {
 interface Props {
   taskId: string;
   projectId: string;
+  refreshKey?: number;
 }
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"];
@@ -52,7 +53,7 @@ function isImageType(mimeType: string | null): boolean {
   return !!mimeType && IMAGE_TYPES.includes(mimeType);
 }
 
-export function CommentSection({ taskId, projectId }: Props) {
+export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -71,11 +72,12 @@ export function CommentSection({ taskId, projectId }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    setLoading(true);
     getComments(taskId)
       .then((data) => setComments(data as Comment[]))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [taskId]);
+  }, [taskId, refreshKey]);
 
   useEffect(() => {
     getProjectMembersForMention(projectId)

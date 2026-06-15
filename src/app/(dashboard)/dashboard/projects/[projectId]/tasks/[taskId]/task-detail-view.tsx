@@ -158,6 +158,7 @@ export function TaskDetailPage({
   // Sections
   const [questionsOpen, setQuestionsOpen] = useState(true);
   const [activityKey, setActivityKey] = useState(0);
+  const [commentKey, setCommentKey] = useState(0);
   const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
 
   // Notes
@@ -339,6 +340,7 @@ export function TaskDetailPage({
       await declineTask({ taskId: initialTask.id, comment: declineComment.trim(), attachments });
       setTaskStage(declineTargetStage as Stage);
       setActivityKey((k) => k + 1);
+      setCommentKey((k) => k + 1);
       setShowDecline(false);
       setDeclineComment("");
       setDeclineFiles([]);
@@ -801,7 +803,7 @@ export function TaskDetailPage({
             <MessageSquare className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
             <h3 className="text-[13px] font-semibold">Comments</h3>
           </div>
-          <CommentSection taskId={initialTask.id} projectId={projectId} />
+          <CommentSection taskId={initialTask.id} projectId={projectId} refreshKey={commentKey} />
         </div>
 
         {/* Activity */}

@@ -298,6 +298,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const [saving, setSaving] = useState(false);
   const [savingAnswers, setSavingAnswers] = useState<Record<string, "saving" | "saved">>({});
   const [activityKey, setActivityKey] = useState(0);
+  const [commentKey, setCommentKey] = useState(0);
   const [activityOpen, setActivityOpen] = useState(false);
   const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
   const [notePanelOpen, setNotePanelOpen] = useState(false);
@@ -324,7 +325,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [titleValue, setTitleValue] = useState(task.title);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const { updateTask: updateStoreTask } = useKanbanStore();
+  const { updateTask: updateStoreTask, moveTask: moveStoreTask, tasks: storeTasks } = useKanbanStore();
   const [stageLogs, setStageLogs] = useState<{ stage: string; enteredAt: string; exitedAt: string | null }[]>([]);
   const [startedAt, setStartedAt] = useState<string | null>(null);
 
@@ -607,8 +608,10 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
         );
       }
       await declineTask({ taskId: task.id, comment: declineComment.trim(), attachments });
-      updateStoreTask(task.id, { stage: declineTargetStage as Stage });
+      const targetOrder = storeTasks.filter((t) => t.stage === declineTargetStage && t.id !== task.id).length;
+      moveStoreTask(task.id, declineTargetStage as Stage, targetOrder);
       setActivityKey((k) => k + 1);
+      setCommentKey((k) => k + 1);
       setShowDecline(false);
       setDeclineComment("");
       setDeclineFiles([]);
@@ -1080,7 +1083,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
               <MessageSquare className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
               <h3 className="text-[13px] font-semibold">Comments</h3>
             </div>
-            <CommentSection taskId={task.id} projectId={projectId} />
+            <CommentSection taskId={task.id} projectId={projectId} refreshKey={commentKey} />
           </div>
 
         </div>

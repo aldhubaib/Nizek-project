@@ -346,8 +346,20 @@ export function KanbanBoard({
 
   async function handleConfirmDecline(comment: string, attachments?: DeclineAttachment[]) {
     if (!pendingDecline) return;
+    const DECLINE_TARGETS: Record<string, Stage> = {
+      INTERNAL_REVIEW: "IN_DEVELOPMENT",
+      CLIENT_REVIEW: "INTERNAL_REVIEW",
+    };
+    const targetStage = DECLINE_TARGETS[pendingDecline.fromStage];
     try {
       await declineTask({ taskId: pendingDecline.taskId, comment, attachments });
+      if (targetStage) {
+        const targetOrder = tasks.filter((t) => t.stage === targetStage && t.id !== pendingDecline.taskId).length;
+        moveTask(pendingDecline.taskId, targetStage, targetOrder);
+        snapshotRef.current = tasks.map((t) =>
+          t.id === pendingDecline.taskId ? { ...t, stage: targetStage, order: targetOrder } : t
+        );
+      }
     } catch (err) {
       console.error(err);
       setTasks(snapshotRef.current);
