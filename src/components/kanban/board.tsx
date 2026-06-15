@@ -348,10 +348,19 @@ export function KanbanBoard({
 
   async function handleConfirmDecline(comment: string, attachments?: DeclineAttachment[]) {
     if (!pendingDecline) return;
+    // #region agent log
+    fetch('http://127.0.0.1:7547/ingest/49803be2-d45d-4aca-b2e3-00a055ccacf8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fc8f02'},body:JSON.stringify({sessionId:'fc8f02',location:'board.tsx:handleConfirmDecline',message:'BOARD decline START',data:{taskId:pendingDecline.taskId,fromStage:pendingDecline.fromStage,commentLen:comment.length,attachCount:attachments?.length??0},timestamp:Date.now(),hypothesisId:'H1,H2'})}).catch(()=>{});
+    // #endregion
     try {
       await declineTask({ taskId: pendingDecline.taskId, comment, attachments });
+      // #region agent log
+      fetch('http://127.0.0.1:7547/ingest/49803be2-d45d-4aca-b2e3-00a055ccacf8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fc8f02'},body:JSON.stringify({sessionId:'fc8f02',location:'board.tsx:handleConfirmDecline',message:'BOARD decline SUCCESS, calling router.refresh',data:{taskId:pendingDecline.taskId},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
       router.refresh();
     } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7547/ingest/49803be2-d45d-4aca-b2e3-00a055ccacf8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fc8f02'},body:JSON.stringify({sessionId:'fc8f02',location:'board.tsx:handleConfirmDecline',message:'BOARD decline ERROR',data:{error:String(err)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion
       console.error(err);
       setTasks(snapshotRef.current);
     }

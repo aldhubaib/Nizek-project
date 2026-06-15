@@ -593,6 +593,9 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   async function handleDecline() {
     if (!declineComment.trim() || declining) return;
     setDeclining(true);
+    // #region agent log
+    fetch('http://127.0.0.1:7547/ingest/49803be2-d45d-4aca-b2e3-00a055ccacf8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fc8f02'},body:JSON.stringify({sessionId:'fc8f02',location:'task-sidebar.tsx:handleDecline',message:'SIDEBAR decline START',data:{taskId:task.id,stage:task.stage,targetStage:declineTargetStage,commentLen:declineComment.length,fileCount:declineFiles.length,commentKey},timestamp:Date.now(),hypothesisId:'H3,H5'})}).catch(()=>{});
+    // #endregion
     try {
       let attachments: { filename: string; url: string; fileSize: number; mimeType: string }[] | undefined;
       if (declineFiles.length > 0) {
@@ -612,10 +615,16 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
       moveStoreTask(task.id, declineTargetStage as Stage, targetOrder);
       setActivityKey((k) => k + 1);
       setCommentKey((k) => k + 1);
+      // #region agent log
+      fetch('http://127.0.0.1:7547/ingest/49803be2-d45d-4aca-b2e3-00a055ccacf8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fc8f02'},body:JSON.stringify({sessionId:'fc8f02',location:'task-sidebar.tsx:handleDecline',message:'SIDEBAR decline SUCCESS',data:{taskId:task.id,newCommentKey:commentKey+1,movedToStage:declineTargetStage,targetOrder},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+      // #endregion
       setShowDecline(false);
       setDeclineComment("");
       setDeclineFiles([]);
     } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7547/ingest/49803be2-d45d-4aca-b2e3-00a055ccacf8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fc8f02'},body:JSON.stringify({sessionId:'fc8f02',location:'task-sidebar.tsx:handleDecline',message:'SIDEBAR decline ERROR',data:{error:String(err)},timestamp:Date.now(),hypothesisId:'H1,H3'})}).catch(()=>{});
+      // #endregion
       console.error(err);
     } finally {
       setDeclining(false);

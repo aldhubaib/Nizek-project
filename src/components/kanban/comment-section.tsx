@@ -72,9 +72,17 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7547/ingest/49803be2-d45d-4aca-b2e3-00a055ccacf8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fc8f02'},body:JSON.stringify({sessionId:'fc8f02',location:'comment-section.tsx:useEffect',message:'CommentSection FETCHING',data:{taskId,refreshKey},timestamp:Date.now(),hypothesisId:'H4,H5'})}).catch(()=>{});
+    // #endregion
     setLoading(true);
     getComments(taskId)
-      .then((data) => setComments(data as Comment[]))
+      .then((data) => {
+        // #region agent log
+        fetch('http://127.0.0.1:7547/ingest/49803be2-d45d-4aca-b2e3-00a055ccacf8',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fc8f02'},body:JSON.stringify({sessionId:'fc8f02',location:'comment-section.tsx:useEffect',message:'CommentSection GOT DATA',data:{taskId,commentCount:data.length,lastComment:data.length>0?{id:(data as any)[data.length-1].id,content:(data as any)[data.length-1].content?.slice(0,80),attachCount:(data as any)[data.length-1].attachments?.length??0}:null},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+        // #endregion
+        setComments(data as Comment[]);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [taskId, refreshKey]);

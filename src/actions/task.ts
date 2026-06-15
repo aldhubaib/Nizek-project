@@ -447,6 +447,10 @@ export async function declineTask(data: {
   comment: string;
   attachments?: { filename: string; url: string; fileSize?: number; mimeType?: string }[];
 }) {
+  // #region agent log
+  const _dl1=async(msg:string,d:any)=>{try{const fs=await import('fs');fs.appendFileSync('/Users/abdulazizaldhubaib/Code/Nizek Projects/.cursor/debug-fc8f02.log',JSON.stringify({sessionId:'fc8f02',location:'actions/task.ts',message:msg,data:d,timestamp:Date.now(),hypothesisId:'H1'})+'\n');}catch{}};
+  await _dl1('declineTask ENTRY',{taskId:data.taskId,comment:data.comment?.slice(0,50),attachmentCount:data.attachments?.length??0});
+  // #endregion
   if (!data.comment.trim()) {
     throw new Error("A comment explaining the reason is required when declining a task");
   }
@@ -517,6 +521,9 @@ export async function declineTask(data: {
     newValue: targetStage,
   });
 
+  // #region agent log
+  await _dl1('declineTask SUCCESS',{taskId:task.id,oldStage:oldStage,newStage:targetStage,commentCreated:true});
+  // #endregion
   revalidatePath(`/dashboard/projects/${task.projectId}`);
   broadcastTaskEvent(task.projectId, { type: "task-declined", taskId: task.id, userId: user.id });
 }
