@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createComment, getComments, deleteComment, getProjectMembersForMention } from "@/actions/comment";
 import { Loader2, Send, Trash2, Paperclip, X, FileText, Download, Image as ImageIcon } from "lucide-react";
+import { useKanbanStore } from "@/store/kanban";
 import { cn } from "@/lib/utils";
 
 interface MentionUser {
@@ -54,6 +55,7 @@ function isImageType(mimeType: string | null): boolean {
 }
 
 export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
+  const storeRefreshKey = useKanbanStore((s) => s.commentRefreshKey);
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -79,7 +81,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [taskId, refreshKey]);
+  }, [taskId, refreshKey, storeRefreshKey]);
 
   useEffect(() => {
     getProjectMembersForMention(projectId)

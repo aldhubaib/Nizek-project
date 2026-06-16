@@ -612,11 +612,13 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
       moveStoreTask(task.id, declineTargetStage as Stage, targetOrder);
       setActivityKey((k) => k + 1);
       setCommentKey((k) => k + 1);
+      useKanbanStore.getState().triggerCommentRefresh();
       setShowDecline(false);
       setDeclineComment("");
       setDeclineFiles([]);
     } catch (err) {
       console.error(err);
+      alert(`Failed to decline task: ${(err as Error).message}`);
     } finally {
       setDeclining(false);
     }

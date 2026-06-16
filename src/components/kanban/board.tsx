@@ -365,8 +365,10 @@ export function KanbanBoard({
           t.id === pendingDecline!.taskId ? { ...t, stage: targetStage, order: targetOrder } : t
         );
       }
+      useKanbanStore.getState().triggerCommentRefresh();
     } catch (err) {
       console.error(err);
+      alert(`Failed to decline task: ${(err as Error).message}`);
       setTasks(snapshotRef.current);
     }
     setPendingDecline(null);

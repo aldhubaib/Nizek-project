@@ -29,15 +29,18 @@ export interface KanbanTask {
 
 interface KanbanState {
   tasks: KanbanTask[];
+  commentRefreshKey: number;
   setTasks: (tasks: KanbanTask[] | ((prev: KanbanTask[]) => KanbanTask[])) => void;
   moveTask: (taskId: string, toStage: Stage, toOrder: number) => void;
   addTask: (task: KanbanTask) => void;
   updateTask: (taskId: string, data: Partial<KanbanTask>) => void;
   removeTask: (taskId: string) => void;
+  triggerCommentRefresh: () => void;
 }
 
 export const useKanbanStore = create<KanbanState>((set) => ({
   tasks: [],
+  commentRefreshKey: 0,
   setTasks: (tasks) =>
     set((state) => ({
       tasks: typeof tasks === "function" ? tasks(state.tasks) : tasks,
@@ -64,4 +67,7 @@ export const useKanbanStore = create<KanbanState>((set) => ({
     set((state) => ({
       tasks: state.tasks.filter((t) => t.id !== taskId),
     })),
+
+  triggerCommentRefresh: () =>
+    set((state) => ({ commentRefreshKey: state.commentRefreshKey + 1 })),
 }));
