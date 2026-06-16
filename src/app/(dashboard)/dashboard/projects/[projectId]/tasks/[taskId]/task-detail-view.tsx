@@ -337,7 +337,11 @@ export function TaskDetailPage({
           })
         );
       }
-      await declineTask({ taskId: initialTask.id, comment: declineComment.trim(), attachments });
+      const result = await declineTask({ taskId: initialTask.id, comment: declineComment.trim(), attachments });
+      if (!result.success) {
+        alert(`Failed to decline task: ${result.error}`);
+        return;
+      }
       setTaskStage(declineTargetStage as Stage);
       setActivityKey((k) => k + 1);
       setCommentKey((k) => k + 1);

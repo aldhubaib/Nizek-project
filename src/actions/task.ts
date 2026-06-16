@@ -446,79 +446,84 @@ export async function declineTask(data: {
   taskId: string;
   comment: string;
   attachments?: { filename: string; url: string; fileSize?: number; mimeType?: string }[];
-}) {
-  if (!data.comment.trim()) {
-    throw new Error("A comment explaining the reason is required when declining a task");
-  }
-
-  const task = await prisma.task.findUnique({
-    where: { id: data.taskId },
-    select: { id: true, stage: true, projectId: true, order: true },
-  });
-  if (!task) throw new Error("Task not found");
-
-  const targetStage = DECLINE_TARGETS[task.stage];
-  if (!targetStage) {
-    throw new Error("This task cannot be declined from its current stage");
-  }
-
-  const { user, member } = await requireProjectMember(task.projectId);
-
-  if (user.systemRole !== "ADMIN") {
-    const perms = getPermissionsFromRole(member.projectRole);
-    if (!perms.isAdmin && !perms.canDeclineTask) {
-      throw new Error("You do not have permission to decline tasks");
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!data.comment.trim()) {
+      return { success: false, error: "A comment explaining the reason is required when declining a task" };
     }
-  }
 
-  await prisma.taskComment.create({
-    data: {
-      content: `⚠️ **Declined from ${task.stage.replaceAll("_", " ")}**: ${data.comment}`,
+    const task = await prisma.task.findUnique({
+      where: { id: data.taskId },
+      select: { id: true, stage: true, projectId: true, order: true },
+    });
+    if (!task) return { success: false, error: "Task not found" };
+
+    const targetStage = DECLINE_TARGETS[task.stage];
+    if (!targetStage) {
+      return { success: false, error: `This task cannot be declined from stage "${task.stage}"` };
+    }
+
+    const { user, member } = await requireProjectMember(task.projectId);
+
+    if (user.systemRole !== "ADMIN") {
+      const perms = getPermissionsFromRole(member.projectRole);
+      if (!perms.isAdmin && !perms.canDeclineTask) {
+        return { success: false, error: "You do not have permission to decline tasks" };
+      }
+    }
+
+    await prisma.taskComment.create({
+      data: {
+        content: `⚠️ **Declined from ${task.stage.replaceAll("_", " ")}**: ${data.comment}`,
+        taskId: task.id,
+        userId: user.id,
+        ...(data.attachments?.length && {
+          attachments: {
+            create: data.attachments.map((a) => ({
+              filename: a.filename,
+              url: a.url,
+              fileSize: a.fileSize ?? null,
+              mimeType: a.mimeType ?? null,
+            })),
+          },
+        }),
+      },
+    });
+
+    const oldStage = task.stage;
+    const tasksInTarget = await prisma.task.count({
+      where: { projectId: task.projectId, stage: targetStage },
+    });
+
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { stage: targetStage, order: tasksInTarget },
+    });
+
+    await prisma.stageLog.updateMany({
+      where: { taskId: task.id, stage: oldStage, exitedAt: null },
+      data: { exitedAt: new Date() },
+    });
+
+    await prisma.stageLog.create({
+      data: { taskId: task.id, stage: targetStage },
+    });
+
+    await logTaskActivity({
       taskId: task.id,
       userId: user.id,
-      ...(data.attachments?.length && {
-        attachments: {
-          create: data.attachments.map((a) => ({
-            filename: a.filename,
-            url: a.url,
-            fileSize: a.fileSize ?? null,
-            mimeType: a.mimeType ?? null,
-          })),
-        },
-      }),
-    },
-  });
+      action: "declined",
+      field: "stage",
+      oldValue: oldStage,
+      newValue: targetStage,
+    });
 
-  const oldStage = task.stage;
-  const tasksInTarget = await prisma.task.count({
-    where: { projectId: task.projectId, stage: targetStage },
-  });
-
-  await prisma.task.update({
-    where: { id: task.id },
-    data: { stage: targetStage, order: tasksInTarget },
-  });
-
-  await prisma.stageLog.updateMany({
-    where: { taskId: task.id, stage: oldStage, exitedAt: null },
-    data: { exitedAt: new Date() },
-  });
-
-  await prisma.stageLog.create({
-    data: { taskId: task.id, stage: targetStage },
-  });
-
-  await logTaskActivity({
-    taskId: task.id,
-    userId: user.id,
-    action: "declined",
-    field: "stage",
-    oldValue: oldStage,
-    newValue: targetStage,
-  });
-
-  revalidatePath(`/dashboard/projects/${task.projectId}`);
-  broadcastTaskEvent(task.projectId, { type: "task-declined", taskId: task.id, userId: user.id });
+    revalidatePath(`/dashboard/projects/${task.projectId}`);
+    broadcastTaskEvent(task.projectId, { type: "task-declined", taskId: task.id, userId: user.id });
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: `Unexpected: ${(err as Error).message}` };
+  }
 }
 
 export async function deleteTask(taskId: string) {

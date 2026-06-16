@@ -607,7 +607,11 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
           })
         );
       }
-      await declineTask({ taskId: task.id, comment: declineComment.trim(), attachments });
+      const result = await declineTask({ taskId: task.id, comment: declineComment.trim(), attachments });
+      if (!result.success) {
+        alert(`Failed to decline task: ${result.error}`);
+        return;
+      }
       const targetOrder = storeTasks.filter((t) => t.stage === declineTargetStage && t.id !== task.id).length;
       moveStoreTask(task.id, declineTargetStage as Stage, targetOrder);
       setActivityKey((k) => k + 1);
@@ -618,7 +622,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
       setDeclineFiles([]);
     } catch (err) {
       console.error(err);
-      alert(`Failed to decline task: ${(err as Error).message}`);
+      alert(`Failed to decline: ${(err as Error).message}`);
     } finally {
       setDeclining(false);
     }

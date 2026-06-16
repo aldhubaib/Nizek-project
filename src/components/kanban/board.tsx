@@ -357,7 +357,13 @@ export function KanbanBoard({
     };
     const targetStage = DECLINE_TARGETS[pendingDecline.fromStage];
     try {
-      await declineTask({ taskId: pendingDecline.taskId, comment, attachments });
+      const result = await declineTask({ taskId: pendingDecline.taskId, comment, attachments });
+      if (!result.success) {
+        alert(`Failed to decline task: ${result.error}`);
+        setTasks(snapshotRef.current);
+        setPendingDecline(null);
+        return;
+      }
       if (targetStage) {
         const targetOrder = tasks.filter((t) => t.stage === targetStage && t.id !== pendingDecline!.taskId).length;
         moveTask(pendingDecline.taskId, targetStage, targetOrder);
