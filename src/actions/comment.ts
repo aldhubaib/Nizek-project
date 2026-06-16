@@ -9,68 +9,78 @@ export async function createComment(data: {
   content: string;
   mentionedUserIds?: string[];
   attachments?: { filename: string; url: string; fileSize?: number; mimeType?: string }[];
-}) {
-  const task = await prisma.task.findUnique({
-    where: { id: data.taskId },
-    select: { projectId: true },
-  });
-  if (!task) throw new Error("Task not found");
+}): Promise<{ success: true; comment: Record<string, unknown> } | { success: false; error: string }> {
+  try {
+    const task = await prisma.task.findUnique({
+      where: { id: data.taskId },
+      select: { projectId: true },
+    });
+    if (!task) return { success: false, error: "Task not found" };
 
-  const { user } = await requireProjectMember(task.projectId);
+    const { user } = await requireProjectMember(task.projectId);
 
-  const comment = await prisma.taskComment.create({
-    data: {
-      content: data.content,
-      taskId: data.taskId,
-      userId: user.id,
-      ...(data.mentionedUserIds?.length && {
-        mentions: {
-          create: data.mentionedUserIds.map((id) => ({ userId: id })),
-        },
-      }),
-      ...(data.attachments?.length && {
-        attachments: {
-          create: data.attachments.map((a) => ({
-            filename: a.filename,
-            url: a.url,
-            fileSize: a.fileSize ?? null,
-            mimeType: a.mimeType ?? null,
-          })),
-        },
-      }),
-    },
-    include: {
-      user: { select: { id: true, name: true, imageUrl: true } },
-      mentions: { include: { user: { select: { id: true, name: true } } } },
-      attachments: { select: { id: true, filename: true, url: true, fileSize: true, mimeType: true } },
-    },
-  });
+    const comment = await prisma.taskComment.create({
+      data: {
+        content: data.content,
+        taskId: data.taskId,
+        userId: user.id,
+        ...(data.mentionedUserIds?.length && {
+          mentions: {
+            create: data.mentionedUserIds.map((id) => ({ userId: id })),
+          },
+        }),
+        ...(data.attachments?.length && {
+          attachments: {
+            create: data.attachments.map((a) => ({
+              filename: a.filename,
+              url: a.url,
+              fileSize: a.fileSize ?? null,
+              mimeType: a.mimeType ?? null,
+            })),
+          },
+        }),
+      },
+      include: {
+        user: { select: { id: true, name: true, imageUrl: true } },
+        mentions: { include: { user: { select: { id: true, name: true } } } },
+        attachments: { select: { id: true, filename: true, url: true, fileSize: true, mimeType: true } },
+      },
+    });
 
-  if (data.mentionedUserIds?.length) {
-    broadcastMentionEvent(data.mentionedUserIds, user.id);
+    if (data.mentionedUserIds?.length) {
+      broadcastMentionEvent(data.mentionedUserIds, user.id);
+    }
+
+    return { success: true, comment: comment as unknown as Record<string, unknown> };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
-
-  return comment;
 }
 
-export async function getComments(taskId: string) {
-  const task = await prisma.task.findUnique({
-    where: { id: taskId },
-    select: { projectId: true },
-  });
-  if (!task) throw new Error("Task not found");
+export async function getComments(taskId: string): Promise<{ success: true; comments: Record<string, unknown>[] } | { success: false; error: string }> {
+  try {
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: { projectId: true },
+    });
+    if (!task) return { success: false, error: "Task not found" };
 
-  await requireProjectMember(task.projectId);
+    await requireProjectMember(task.projectId);
 
-  return prisma.taskComment.findMany({
-    where: { taskId },
-    include: {
-      user: { select: { id: true, name: true, imageUrl: true } },
-      mentions: { include: { user: { select: { id: true, name: true } } } },
-      attachments: { select: { id: true, filename: true, url: true, fileSize: true, mimeType: true } },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+    const comments = await prisma.taskComment.findMany({
+      where: { taskId },
+      include: {
+        user: { select: { id: true, name: true, imageUrl: true } },
+        mentions: { include: { user: { select: { id: true, name: true } } } },
+        attachments: { select: { id: true, filename: true, url: true, fileSize: true, mimeType: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return { success: true, comments: comments as unknown as Record<string, unknown>[] };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
 }
 
 export async function deleteComment(commentId: string) {

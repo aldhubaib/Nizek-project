@@ -58,6 +58,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
   const storeRefreshKey = useKanbanStore((s) => s.commentRefreshKey);
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [input, setInput] = useState("");
   const [members, setMembers] = useState<MentionUser[]>([]);
@@ -75,11 +76,18 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
 
   useEffect(() => {
     setLoading(true);
+    setLoadError(null);
     getComments(taskId)
-      .then((data) => {
-        setComments(data as Comment[]);
+      .then((result) => {
+        if (!result.success) {
+          setLoadError(result.error);
+          return;
+        }
+        setComments(result.comments as unknown as Comment[]);
       })
-      .catch(console.error)
+      .catch((err) => {
+        setLoadError(String(err?.message || err));
+      })
       .finally(() => setLoading(false));
   }, [taskId, refreshKey, storeRefreshKey]);
 
@@ -210,18 +218,23 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
       }
       setUploading(false);
 
-      const comment = await createComment({
+      const result = await createComment({
         taskId,
         content: trimmed || (attachments.length > 0 ? `📎 ${attachments.length} file${attachments.length > 1 ? "s" : ""} attached` : ""),
         mentionedUserIds: mentionedIds.length > 0 ? mentionedIds : undefined,
         attachments: attachments.length > 0 ? attachments : undefined,
       });
-      setComments((prev) => [...prev, comment as Comment]);
+      if (!result.success) {
+        alert(`Failed to post comment: ${result.error}`);
+        return;
+      }
+      setComments((prev) => [...prev, result.comment as unknown as Comment]);
       setInput("");
       pendingFiles.forEach((pf) => { if (pf.preview) URL.revokeObjectURL(pf.preview); });
       setPendingFiles([]);
     } catch (err) {
-      console.error(err);
+      console.error("createComment failed:", err);
+      alert(`Failed to post comment: ${(err as Error).message || err}`);
     } finally {
       setSubmitting(false);
       setUploading(false);
@@ -298,7 +311,12 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
 
   return (
     <div className="space-y-4">
-      {comments.length === 0 && (
+      {loadError && (
+        <p className="text-[11px] text-destructive text-center py-4">
+          Failed to load comments: {loadError}
+        </p>
+      )}
+      {!loadError && comments.length === 0 && (
         <p className="text-[11px] text-muted-foreground/60 text-center py-4">
           No comments yet. Be the first to comment.
         </p>
