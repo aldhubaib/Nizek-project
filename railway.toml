@@ -2,7 +2,7 @@
 buildCommand = "npm run build && cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public"
 
 [deploy]
-startCommand = "npx prisma db push --skip-generate --accept-data-loss && NODE_OPTIONS='--max-old-space-size=2048' node .next/standalone/server.js"
+startCommand = "node prisma/ensure-tables.mjs && NODE_OPTIONS='--max-old-space-size=2048' node .next/standalone/server.js"
 healthcheckPath = "/"
 healthcheckTimeout = 300
 numReplicas = 1
