@@ -259,182 +259,185 @@ export async function moveTask(data: {
   stage: "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "READY_FOR_RELEASE" | "DONE";
   order: number;
   estimatedMinutes?: number;
-}) {
-  const task = await prisma.task.findUnique({
-    where: { id: data.taskId },
-    include: { project: { include: { contracts: true } } },
-  });
-  if (!task) throw new Error("Task not found");
-
-  const { user, member } = await requireProjectMember(task.projectId);
-  const isAdmin = user.systemRole === "ADMIN";
-
-  const activeContract = getActiveContract(task.project.contracts);
-  if (!activeContract && !isAdmin) throw new Error("No active contract — this project is read-only");
-
-  if (!isAdmin && task.stage !== data.stage) {
-    const perms = getPermissionsFromRole(member.projectRole);
-    if (!canTransition(perms, task.stage, data.stage)) {
-      throw new Error(`Your role cannot move tasks from ${task.stage.replaceAll("_", " ")} to ${data.stage.replaceAll("_", " ")}`);
-    }
-  }
-
-  const oldStage = task.stage;
-
-  if (!isAdmin && oldStage === "CLARIFICATION" && data.stage !== "CLARIFICATION" && data.stage !== "NEW_REQUEST") {
-    const errors: string[] = [];
-
-    if (task.priority == null) {
-      errors.push("Priority must be set");
-    }
-
-    const requiredQuestions = await prisma.defaultQuestion.findMany({
-      where: { taskType: task.taskType, required: true, type: { not: "client" } },
-      select: { id: true, question: true },
+}): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const task = await prisma.task.findUnique({
+      where: { id: data.taskId },
+      include: { project: { include: { contracts: true } } },
     });
+    if (!task) return { success: false, error: "Task not found" };
 
-    if (requiredQuestions.length > 0) {
-      const existingAnswers = await prisma.taskAnswer.findMany({
-        where: { taskId: task.id, questionId: { in: requiredQuestions.map((q) => q.id) } },
-        select: { questionId: true, answer: true },
-      });
+    const { user, member } = await requireProjectMember(task.projectId);
+    const isAdmin = user.systemRole === "ADMIN";
 
-      const answeredMap = new Map(existingAnswers.map((a) => [a.questionId, a.answer]));
-      const unanswered = requiredQuestions.filter((q) => {
-        const answer = answeredMap.get(q.id);
-        return !answer || !answer.trim();
-      });
+    const activeContract = getActiveContract(task.project.contracts);
+    if (!activeContract && !isAdmin) return { success: false, error: "No active contract — this project is read-only" };
 
-      errors.push(...unanswered.map((q) => q.question));
-    }
-
-    const clientAnswers = await prisma.taskAnswer.findMany({
-      where: {
-        taskId: task.id,
-        question: { type: "client" },
-      },
-      select: { answer: true },
-    });
-    for (const ca of clientAnswers) {
-      try {
-        const parsed = JSON.parse(ca.answer);
-        if (parsed.needed === true && !parsed.completed) {
-          errors.push("Waiting on client — cannot move until client dependency is resolved");
-          break;
-        }
-      } catch {}
-    }
-
-    if (errors.length > 0) {
-      throw new Error(`REQUIRED_QUESTIONS:${JSON.stringify(errors)}`);
-    }
-
-    if (task.priority != null) {
-      const higherPriorityTasks = await prisma.task.findMany({
-        where: {
-          projectId: task.projectId,
-          stage: "CLARIFICATION",
-          id: { not: task.id },
-          priority: { gt: task.priority },
-        },
-        select: { taskNumber: true, title: true, priority: true, taskType: true },
-        orderBy: { priority: "desc" },
-      });
-
-      if (higherPriorityTasks.length > 0) {
-        const blockingList = higherPriorityTasks.map((t) => {
-          const prefix = t.taskType === "BUG" ? "B" : t.taskType === "REPORTED_BUG" ? "RB" : t.taskType === "ENHANCEMENT" ? "E" : t.taskType === "DESIGN" ? "D" : "F";
-          return `${prefix}-${String(t.taskNumber).padStart(3, "0")} (P${t.priority}): ${t.title}`;
-        });
-        throw new Error(`PRIORITY_BLOCKED:${JSON.stringify(blockingList)}`);
+    if (!isAdmin && task.stage !== data.stage) {
+      const perms = getPermissionsFromRole(member.projectRole);
+      if (!canTransition(perms, task.stage, data.stage)) {
+        return { success: false, error: `Your role cannot move tasks from ${task.stage.replaceAll("_", " ")} to ${data.stage.replaceAll("_", " ")}` };
       }
     }
-  }
 
-  let targetStage = data.stage;
-  if (!isAdmin && task.taskType === "BUG" && targetStage === "CLIENT_REVIEW") {
-    targetStage = "READY_FOR_RELEASE";
-  }
+    const oldStage = task.stage;
 
-  const isEnteringDev = oldStage !== "READY_FOR_DEV" && targetStage === "READY_FOR_DEV";
+    if (!isAdmin && oldStage === "CLARIFICATION" && data.stage !== "CLARIFICATION" && data.stage !== "NEW_REQUEST") {
+      const errors: string[] = [];
 
-  if (!isAdmin && isEnteringDev && !task.estimatedMinutes && !data.estimatedMinutes) {
-    throw new Error("ESTIMATE_REQUIRED");
-  }
+      if (task.priority == null) {
+        errors.push("Priority must be set");
+      }
 
-  let estimateAccuracy: "WAY_OVER" | "OVER" | "ON_TRACK" | "UNDER" | "WAY_UNDER" | undefined;
-  if (targetStage === "DONE" && oldStage !== "DONE" && task.startedAt && task.estimatedMinutes) {
-    const actualMs = Date.now() - task.startedAt.getTime();
-    const actualMinutes = actualMs / 60_000;
-    const ratio = actualMinutes / task.estimatedMinutes;
-    if (ratio > 2.0) estimateAccuracy = "WAY_OVER";
-    else if (ratio > 1.25) estimateAccuracy = "OVER";
-    else if (ratio >= 0.75) estimateAccuracy = "ON_TRACK";
-    else if (ratio >= 0.5) estimateAccuracy = "UNDER";
-    else estimateAccuracy = "WAY_UNDER";
-  }
+      const requiredQuestions = await prisma.defaultQuestion.findMany({
+        where: { taskType: task.taskType, required: true, type: { not: "client" } },
+        select: { id: true, question: true },
+      });
 
-  // Auto-assignment based on stage role track
-  let autoAssigneeId: string | null | undefined;
-  const stickyUpdates: Record<string, string> = {};
-  if (oldStage !== targetStage) {
-    autoAssigneeId = await resolveAutoAssignee(
-      targetStage,
-      { createdById: task.createdById, developerId: task.developerId, clientReviewerId: task.clientReviewerId },
-      user.id,
-      task.projectId,
-    );
+      if (requiredQuestions.length > 0) {
+        const existingAnswers = await prisma.taskAnswer.findMany({
+          where: { taskId: task.id, questionId: { in: requiredQuestions.map((q) => q.id) } },
+          select: { questionId: true, answer: true },
+        });
 
-    const track = STAGE_ROLE_MAP[targetStage];
-    if (track === "developer" && !task.developerId && autoAssigneeId) {
-      stickyUpdates.developerId = autoAssigneeId;
+        const answeredMap = new Map(existingAnswers.map((a) => [a.questionId, a.answer]));
+        const unanswered = requiredQuestions.filter((q) => {
+          const answer = answeredMap.get(q.id);
+          return !answer || !answer.trim();
+        });
+
+        errors.push(...unanswered.map((q) => q.question));
+      }
+
+      const clientAnswers = await prisma.taskAnswer.findMany({
+        where: {
+          taskId: task.id,
+          question: { type: "client" },
+        },
+        select: { answer: true },
+      });
+      for (const ca of clientAnswers) {
+        try {
+          const parsed = JSON.parse(ca.answer);
+          if (parsed.needed === true && !parsed.completed) {
+            errors.push("Waiting on client — cannot move until client dependency is resolved");
+            break;
+          }
+        } catch {}
+      }
+
+      if (errors.length > 0) {
+        return { success: false, error: `REQUIRED_QUESTIONS:${JSON.stringify(errors)}` };
+      }
+
+      if (task.priority != null) {
+        const higherPriorityTasks = await prisma.task.findMany({
+          where: {
+            projectId: task.projectId,
+            stage: "CLARIFICATION",
+            id: { not: task.id },
+            priority: { gt: task.priority },
+          },
+          select: { taskNumber: true, title: true, priority: true, taskType: true },
+          orderBy: { priority: "desc" },
+        });
+
+        if (higherPriorityTasks.length > 0) {
+          const blockingList = higherPriorityTasks.map((t) => {
+            const prefix = t.taskType === "BUG" ? "B" : t.taskType === "REPORTED_BUG" ? "RB" : t.taskType === "ENHANCEMENT" ? "E" : t.taskType === "DESIGN" ? "D" : "F";
+            return `${prefix}-${String(t.taskNumber).padStart(3, "0")} (P${t.priority}): ${t.title}`;
+          });
+          return { success: false, error: `PRIORITY_BLOCKED:${JSON.stringify(blockingList)}` };
+        }
+      }
     }
-    if (track === "client" && !task.clientReviewerId && autoAssigneeId) {
-      stickyUpdates.clientReviewerId = autoAssigneeId;
+
+    let targetStage = data.stage;
+    if (!isAdmin && task.taskType === "BUG" && targetStage === "CLIENT_REVIEW") {
+      targetStage = "READY_FOR_RELEASE";
     }
-  }
 
-  const updated = await prisma.task.update({
-    where: { id: data.taskId },
-    data: {
-      stage: targetStage,
-      order: data.order,
-      ...(isEnteringDev && !task.startedAt && { startedAt: new Date() }),
-      ...(isEnteringDev && data.estimatedMinutes && { estimatedMinutes: data.estimatedMinutes }),
-      ...(estimateAccuracy && { estimateAccuracy }),
-      ...(autoAssigneeId !== undefined && { assigneeId: autoAssigneeId }),
-      ...stickyUpdates,
-    },
-  });
+    const isEnteringDev = oldStage !== "READY_FOR_DEV" && targetStage === "READY_FOR_DEV";
 
-  if (oldStage !== targetStage) {
-    await prisma.stageLog.updateMany({
-      where: { taskId: task.id, stage: oldStage, exitedAt: null },
-      data: { exitedAt: new Date() },
+    if (!isAdmin && isEnteringDev && !task.estimatedMinutes && !data.estimatedMinutes) {
+      return { success: false, error: "ESTIMATE_REQUIRED" };
+    }
+
+    let estimateAccuracy: "WAY_OVER" | "OVER" | "ON_TRACK" | "UNDER" | "WAY_UNDER" | undefined;
+    if (targetStage === "DONE" && oldStage !== "DONE" && task.startedAt && task.estimatedMinutes) {
+      const actualMs = Date.now() - task.startedAt.getTime();
+      const actualMinutes = actualMs / 60_000;
+      const ratio = actualMinutes / task.estimatedMinutes;
+      if (ratio > 2.0) estimateAccuracy = "WAY_OVER";
+      else if (ratio > 1.25) estimateAccuracy = "OVER";
+      else if (ratio >= 0.75) estimateAccuracy = "ON_TRACK";
+      else if (ratio >= 0.5) estimateAccuracy = "UNDER";
+      else estimateAccuracy = "WAY_UNDER";
+    }
+
+    let autoAssigneeId: string | null | undefined;
+    const stickyUpdates: Record<string, string> = {};
+    if (oldStage !== targetStage) {
+      autoAssigneeId = await resolveAutoAssignee(
+        targetStage,
+        { createdById: task.createdById, developerId: task.developerId, clientReviewerId: task.clientReviewerId },
+        user.id,
+        task.projectId,
+      );
+
+      const track = STAGE_ROLE_MAP[targetStage];
+      if (track === "developer" && !task.developerId && autoAssigneeId) {
+        stickyUpdates.developerId = autoAssigneeId;
+      }
+      if (track === "client" && !task.clientReviewerId && autoAssigneeId) {
+        stickyUpdates.clientReviewerId = autoAssigneeId;
+      }
+    }
+
+    const updated = await prisma.task.update({
+      where: { id: data.taskId },
+      data: {
+        stage: targetStage,
+        order: data.order,
+        ...(isEnteringDev && !task.startedAt && { startedAt: new Date() }),
+        ...(isEnteringDev && data.estimatedMinutes && { estimatedMinutes: data.estimatedMinutes }),
+        ...(estimateAccuracy && { estimateAccuracy }),
+        ...(autoAssigneeId !== undefined && { assigneeId: autoAssigneeId }),
+        ...stickyUpdates,
+      },
     });
 
-    await prisma.stageLog.create({
-      data: { taskId: task.id, stage: targetStage },
-    });
+    if (oldStage !== targetStage) {
+      await prisma.stageLog.updateMany({
+        where: { taskId: task.id, stage: oldStage, exitedAt: null },
+        data: { exitedAt: new Date() },
+      });
 
-    await logTaskActivity({
-      taskId: task.id,
+      await prisma.stageLog.create({
+        data: { taskId: task.id, stage: targetStage },
+      });
+
+      await logTaskActivity({
+        taskId: task.id,
+        userId: user.id,
+        action: "moved",
+        field: "stage",
+        oldValue: oldStage,
+        newValue: targetStage,
+      });
+    }
+
+    broadcastTaskEvent(task.projectId, {
+      type: "task-moved",
+      taskId: data.taskId,
+      stage: updated.stage,
+      order: updated.order,
       userId: user.id,
-      action: "moved",
-      field: "stage",
-      oldValue: oldStage,
-      newValue: targetStage,
     });
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
   }
-
-  broadcastTaskEvent(task.projectId, {
-    type: "task-moved",
-    taskId: data.taskId,
-    stage: updated.stage,
-    order: updated.order,
-    userId: user.id,
-  });
-  return updated;
 }
 
 const DECLINE_TARGETS: Record<string, "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "READY_FOR_RELEASE" | "DONE"> = {

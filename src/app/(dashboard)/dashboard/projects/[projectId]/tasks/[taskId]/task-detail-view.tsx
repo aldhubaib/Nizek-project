@@ -199,7 +199,11 @@ export function TaskDetailPage({
     setMovingStage(true);
     setMoveError(null);
     try {
-      await moveTaskAction({ taskId: initialTask.id, stage, order: initialTask.order });
+      const result = await moveTaskAction({ taskId: initialTask.id, stage, order: initialTask.order });
+      if (!result.success) {
+        setMoveError([result.error ?? "Failed to change stage"]);
+        return;
+      }
       setTaskStage(stage);
       setActivityKey((k) => k + 1);
     } catch (err: any) {
@@ -273,22 +277,26 @@ export function TaskDetailPage({
     setMoveError(null);
     setShowConfirm(false);
     try {
-      await moveTaskAction({ taskId: initialTask.id, stage: nextStage.id, order: initialTask.order, estimatedMinutes });
+      const result = await moveTaskAction({ taskId: initialTask.id, stage: nextStage.id, order: initialTask.order, estimatedMinutes });
+      if (!result.success) {
+        const msg = result.error;
+        if (msg.startsWith("REQUIRED_QUESTIONS:")) {
+          try { setMoveError(JSON.parse(msg.replace("REQUIRED_QUESTIONS:", ""))); setQuestionsOpen(true); }
+          catch { setMoveError(["Some required questions are unanswered"]); }
+        } else if (msg.startsWith("PRIORITY_BLOCKED:")) {
+          try { setMoveError(["Higher priority tasks must move first:", ...JSON.parse(msg.replace("PRIORITY_BLOCKED:", ""))]); }
+          catch { setMoveError(["Higher priority tasks must be completed first"]); }
+        } else if (msg === "ESTIMATE_REQUIRED") {
+          setMoveError(["An estimated time is required"]);
+        } else {
+          setMoveError([msg || "Failed to move task. Please try again."]);
+        }
+        return;
+      }
       setTaskStage(nextStage.id);
       setActivityKey((k) => k + 1);
     } catch (err) {
-      const msg = (err as Error).message;
-      if (msg.startsWith("REQUIRED_QUESTIONS:")) {
-        try { setMoveError(JSON.parse(msg.replace("REQUIRED_QUESTIONS:", ""))); setQuestionsOpen(true); }
-        catch { setMoveError(["Some required questions are unanswered"]); }
-      } else if (msg.startsWith("PRIORITY_BLOCKED:")) {
-        try { setMoveError(["Higher priority tasks must move first:", ...JSON.parse(msg.replace("PRIORITY_BLOCKED:", ""))]); }
-        catch { setMoveError(["Higher priority tasks must be completed first"]); }
-      } else if (msg === "ESTIMATE_REQUIRED") {
-        setMoveError(["An estimated time is required"]);
-      } else {
-        setMoveError([msg || "Failed to move task. Please try again."]);
-      }
+      setMoveError([(err as Error).message || "Failed to move task. Please try again."]);
     } finally {
       setMovingStage(false);
     }
@@ -306,7 +314,11 @@ export function TaskDetailPage({
     setMoveError(null);
     setShowSkipConfirm(false);
     try {
-      await moveTaskAction({ taskId: initialTask.id, stage: "READY_FOR_RELEASE", order: initialTask.order });
+      const result = await moveTaskAction({ taskId: initialTask.id, stage: "READY_FOR_RELEASE", order: initialTask.order });
+      if (!result.success) {
+        setMoveError([result.error || "Failed to skip. Please try again."]);
+        return;
+      }
       setTaskStage("READY_FOR_RELEASE");
       setActivityKey((k) => k + 1);
     } catch (err) {

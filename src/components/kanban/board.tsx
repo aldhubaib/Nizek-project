@@ -311,9 +311,10 @@ export function KanbanBoard({
 
   function executeMoveTask(taskId: string, stage: Stage, order: number, estimatedMinutes?: number) {
     snapshotRef.current = useKanbanStore.getState().tasks;
-    moveTaskAction({ taskId, stage, order, estimatedMinutes }).catch((err) => {
+    moveTaskAction({ taskId, stage, order, estimatedMinutes }).then((result) => {
+      if (result.success) return;
       setTasks(snapshotRef.current);
-      const msg = (err as Error).message;
+      const msg = result.error;
       if (msg.startsWith("REQUIRED_QUESTIONS:")) {
         try {
           const missing = JSON.parse(msg.replace("REQUIRED_QUESTIONS:", ""));
