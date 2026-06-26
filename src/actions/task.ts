@@ -337,6 +337,7 @@ export async function moveTask(data: {
             stage: "CLARIFICATION",
             id: { not: task.id },
             priority: { gt: task.priority },
+            archivedAt: null,
           },
           select: { taskNumber: true, title: true, priority: true, taskType: true },
           orderBy: { priority: "desc" },
