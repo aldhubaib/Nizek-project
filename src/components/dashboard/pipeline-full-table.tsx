@@ -74,7 +74,7 @@ function FullRow({ task }: { task: PipelineTask }) {
 
   return (
     <Link
-      href={`/dashboard/projects/${task.project.id}?task=${task.id}`}
+      href={`/dashboard/projects/${task.project.id}/tasks/${task.id}`}
       target="_blank"
       className="grid grid-cols-[1fr_140px_110px_120px_80px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
     >
