@@ -11,7 +11,7 @@ import {
   canCreateInStage,
   canModifyInStage,
 } from "@/lib/permissions";
-import { broadcastTaskEvent } from "@/lib/pusher";
+import { broadcastTaskEvent, broadcastMentionEvent } from "@/lib/pusher";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 
 // ─── Stage → Role Track ─────────────────────────────────
@@ -476,11 +476,34 @@ export async function declineTask(data: {
       }
     }
 
+    // Find who moved this task into the stage it's being declined from, so we
+    // can @mention them (the "previous owner") on the decline comment.
+    const entryActivity = await prisma.taskActivity.findFirst({
+      where: {
+        taskId: task.id,
+        field: "stage",
+        newValue: task.stage,
+        action: { in: ["moved", "declined"] },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { userId: true, user: { select: { id: true, name: true } } },
+    });
+
+    const mentionUserIds: string[] = [];
+    let content = `⚠️ **Declined from ${task.stage.replaceAll("_", " ")}**: ${data.comment}`;
+    if (entryActivity?.user && entryActivity.userId !== user.id && entryActivity.user.name) {
+      content += `\n\n@${entryActivity.user.name}`;
+      mentionUserIds.push(entryActivity.userId);
+    }
+
     await prisma.taskComment.create({
       data: {
-        content: `⚠️ **Declined from ${task.stage.replaceAll("_", " ")}**: ${data.comment}`,
+        content,
         taskId: task.id,
         userId: user.id,
+        ...(mentionUserIds.length && {
+          mentions: { create: mentionUserIds.map((id) => ({ userId: id })) },
+        }),
         ...(data.attachments?.length && {
           attachments: {
             create: data.attachments.map((a) => ({
@@ -493,6 +516,10 @@ export async function declineTask(data: {
         }),
       },
     });
+
+    if (mentionUserIds.length) {
+      broadcastMentionEvent(mentionUserIds, user.id);
+    }
 
     const oldStage = task.stage;
     const tasksInTarget = await prisma.task.count({
