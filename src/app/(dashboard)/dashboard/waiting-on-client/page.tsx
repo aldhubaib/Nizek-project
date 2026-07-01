@@ -89,7 +89,7 @@ export default async function WaitingOnClientPage({
                   return (
                     <Link
                       key={item.task.id}
-                      href={`/dashboard/projects/${item.task.project.id}?task=${item.task.id}`}
+                      href={`/dashboard/projects/${item.task.project.id}/tasks/${item.task.id}`}
                       target="_blank"
                       className="grid grid-cols-[1fr_100px_110px_1fr] gap-3 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
                     >

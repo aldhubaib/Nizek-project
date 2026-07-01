@@ -168,7 +168,7 @@ export function ShippedSummary({ data }: { data: ShippedData }) {
                   return (
                     <Link
                       key={task.id}
-                      href={`/dashboard/projects/${task.project.id}?task=${task.id}`}
+                      href={`/dashboard/projects/${task.project.id}/tasks/${task.id}`}
                       className="grid grid-cols-[1fr_100px_120px_100px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
                     >
                       <div className="flex items-center gap-3 min-w-0">

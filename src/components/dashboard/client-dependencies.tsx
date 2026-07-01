@@ -51,7 +51,7 @@ function CompactRow({ item }: { item: ClientDepTask }) {
 
   return (
     <Link
-      href={`/dashboard/projects/${item.task.project.id}?task=${item.task.id}`}
+      href={`/dashboard/projects/${item.task.project.id}/tasks/${item.task.id}`}
       target="_blank"
       className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors group"
     >

@@ -82,7 +82,7 @@ function CompactRow({ task, maxMs }: { task: PipelineTask; maxMs: number }) {
   const TypeIcon = typeInfo?.icon ?? Sparkles;
 
   return (
-    <Link href={`/dashboard/projects/${task.project.id}?task=${task.id}`} target="_blank" className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors group">
+    <Link href={`/dashboard/projects/${task.project.id}/tasks/${task.id}`} target="_blank" className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors group">
       <Tooltip text={typeInfo?.label ?? task.taskType}>
         <div className={cn("w-6 h-6 rounded flex items-center justify-center border shrink-0", typeInfo?.color ?? "text-muted-foreground bg-muted border-border")}>
           <TypeIcon className="w-3 h-3" />

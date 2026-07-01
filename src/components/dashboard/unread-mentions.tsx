@@ -50,7 +50,7 @@ function CompactRow({ mention, onMarkRead }: { mention: Mention; onMarkRead: (id
     <div className="flex items-start gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors group">
       <div className="mt-0.5 w-2 h-2 rounded-full bg-primary shrink-0" />
       <Link
-        href={`/dashboard/projects/${mention.projectId}?task=${mention.taskId}`}
+        href={`/dashboard/projects/${mention.projectId}/tasks/${mention.taskId}`}
         className="flex-1 min-w-0"
       >
         <div className="flex items-center gap-1.5 text-[12px] flex-wrap">
@@ -90,7 +90,7 @@ function FullRow({ mention, onMarkRead }: { mention: Mention; onMarkRead: (id: s
       <div className="mt-1 w-2 h-2 rounded-full bg-primary shrink-0" />
       <Avatar user={mention.commentedBy} size={28} />
       <Link
-        href={`/dashboard/projects/${mention.projectId}?task=${mention.taskId}`}
+        href={`/dashboard/projects/${mention.projectId}/tasks/${mention.taskId}`}
         className="flex-1 min-w-0"
       >
         <div className="flex items-center gap-1.5 text-[13px]">

@@ -159,7 +159,7 @@ export function NotificationBell({ currentUserId }: Props) {
                       </div>
                     )}
                     <Link
-                      href={`/dashboard/projects/${m.projectId}?task=${m.taskId}`}
+                      href={`/dashboard/projects/${m.projectId}/tasks/${m.taskId}`}
                       onClick={() => setOpen(false)}
                       className="flex-1 min-w-0"
                     >
