@@ -14,9 +14,9 @@ import { createMeetingNote, getTaskNotes } from "@/actions/meeting-note";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { formatDistanceToNow } from "date-fns";
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
-import { ActivityTimeline } from "@/components/kanban/activity-timeline";
 import { CommentSection } from "@/components/kanban/comment-section";
 import { StageConfirmDialog, getCheckpoint } from "@/components/kanban/stage-confirm-dialog";
+import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
 import { cn } from "@/lib/utils";
 
 const ACCURACY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -160,6 +160,7 @@ export function TaskDetailPage({
   const [activityKey, setActivityKey] = useState(0);
   const [commentKey, setCommentKey] = useState(0);
   const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Notes
   const [notes, setNotes] = useState<NoteData[]>(initialNotes);
@@ -389,6 +390,14 @@ export function TaskDetailPage({
             {taskTypeMeta.prefix}-{String(initialTask.taskNumber).padStart(3, "0")}
           </span>
         </div>
+        <button
+          onClick={() => setShowHistory(true)}
+          title="Task history"
+          className="ml-auto flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+        >
+          <History className="w-3.5 h-3.5" />
+          History
+        </button>
       </div>
 
       {/* Single-column layout */}
@@ -821,15 +830,6 @@ export function TaskDetailPage({
           </div>
           <CommentSection key={`comments-${initialTask.id}-${commentKey}`} taskId={initialTask.id} projectId={projectId} />
         </div>
-
-        {/* Activity */}
-        <div className="rounded-xl bg-card border border-border p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <History className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-            <h3 className="text-[13px] font-semibold">Activity</h3>
-          </div>
-          <ActivityTimeline taskId={initialTask.id} refreshKey={activityKey} />
-        </div>
       </div>
 
       {/* Stage confirm dialog */}
@@ -854,6 +854,15 @@ export function TaskDetailPage({
           />
         ) : null;
       })()}
+
+      {/* Task history popup */}
+      {showHistory && (
+        <TaskHistoryDialog
+          taskId={initialTask.id}
+          refreshKey={activityKey}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
 
       {/* Note editor (full-screen) */}
       {noteEditorOpen && (
