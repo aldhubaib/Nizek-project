@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember, requireProjectRole } from "@/lib/auth";
+import { logTaskActivity } from "@/lib/activity";
 import { revalidatePath } from "next/cache";
 
 export async function createMeetingNote(data: {
@@ -32,6 +33,16 @@ export async function createMeetingNote(data: {
       ...(data.taskId && { taskId: data.taskId }),
     },
   });
+
+  if (data.taskId) {
+    await logTaskActivity({
+      taskId: data.taskId,
+      userId: user.id,
+      action: "note_created",
+      field: "note",
+      newValue: data.title,
+    });
+  }
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
   return note;

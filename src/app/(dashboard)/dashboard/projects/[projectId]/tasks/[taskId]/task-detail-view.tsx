@@ -378,7 +378,7 @@ export function TaskDetailPage({
       {/* Header */}
       <div className="h-12 flex items-center gap-3 px-6 pr-14 border-b border-border shrink-0 sticky top-0 bg-background z-10">
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push(`/dashboard/projects/${projectId}`)}
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -871,7 +871,7 @@ export function TaskDetailPage({
           projectId={projectId}
           taskTypeMeta={taskTypeMeta}
           onClose={() => setNoteEditorOpen(false)}
-          onSaved={() => { setNoteEditorOpen(false); refreshNotes(); }}
+          onSaved={() => { setNoteEditorOpen(false); refreshNotes(); setActivityKey((k) => k + 1); }}
         />
       )}
     </div>

@@ -52,6 +52,8 @@ function describeActivity(a: Activity): string {
       return `${name} updated ${a.field ?? "task"}`;
     case "answered":
       return `${name} updated an answer`;
+    case "note_created":
+      return `${name} added a note${a.newValue ? `: ${a.newValue}` : ""}`;
     default:
       return `${name} ${a.action}`;
   }
