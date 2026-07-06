@@ -139,6 +139,8 @@ model Project {
   defaultClientReviewerId String?
   defaultClientReviewer   User?  @relation("ProjectDefaultClient", fields: [defaultClientReviewerId], references: [id], onDelete: SetNull)
 
+  maxPipelineTasks Int @default(3)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -448,6 +450,8 @@ model Invitation {
 model PendingTeamInvite {
   id         String     @id @default(cuid())
   email      String     @unique
+  firstName  String?
+  lastName   String?
   systemRole SystemRole
   createdAt  DateTime   @default(now())
 }

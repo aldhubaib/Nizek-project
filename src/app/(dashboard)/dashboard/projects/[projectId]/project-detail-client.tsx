@@ -93,6 +93,7 @@ interface Project {
   contracts: Contract[];
   _count: { tasks: number; meetingNotes: number; assets: number };
   defaultClientReviewerId?: string | null;
+  maxPipelineTasks?: number;
 }
 
 interface NoteHistoryEntry {
@@ -329,6 +330,7 @@ export function ProjectDetailClient({
               currentUserId={currentUserId}
               allowedTaskTypes={allowedTaskTypes}
               activeContractType={activeContractType}
+              maxPipelineTasks={project.maxPipelineTasks}
             />
           </TabsContent>
 

@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { UpdateNotifier } from "@/components/update-notifier";
+import { getAppVersion } from "@/lib/version";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,6 +35,7 @@ export default function RootLayout({
       <body className="min-h-full bg-background text-foreground">
         <ClerkProvider appearance={{ baseTheme: dark }}>
           <TooltipProvider>{children}</TooltipProvider>
+          <UpdateNotifier currentVersion={getAppVersion()} />
         </ClerkProvider>
       </body>
     </html>

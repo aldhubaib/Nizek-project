@@ -4,6 +4,8 @@ import { getTaskStageLogs } from "@/actions/task";
 import { getTaskNotes } from "@/actions/meeting-note";
 import { requireProjectMember } from "@/lib/auth";
 import { getPermissionsFromRole, getAdminPermissions } from "@/lib/permissions";
+import { isProjectAccessError } from "@/lib/project-access";
+import { notFound } from "next/navigation";
 import { TaskDetailPage as TaskDetailClient } from "./task-detail-view";
 
 interface Props {
@@ -30,7 +32,12 @@ export default async function TaskDetailPage({ params }: Props) {
     );
   }
 
-  const { user, member } = await requireProjectMember(task.projectId);
+  const { user, member } = await requireProjectMember(task.projectId).catch(
+    (err): never => {
+      if (isProjectAccessError(err)) notFound();
+      throw err;
+    }
+  );
 
   let userPermissions;
   if (user.systemRole === "ADMIN") {
@@ -44,7 +51,10 @@ export default async function TaskDetailPage({ params }: Props) {
     getTaskAnswers(taskId),
     getTaskStageLogs(taskId),
     getTaskNotes(taskId),
-  ]);
+  ]).catch((err): never => {
+    if (isProjectAccessError(err)) notFound();
+    throw err;
+  });
 
   const answersMap: Record<string, string> = {};
   existingAnswers.forEach((a: { questionId: string; answer: string }) => {
@@ -75,6 +85,7 @@ export default async function TaskDetailPage({ params }: Props) {
       stageLogData={stageLogData}
       initialNotes={notes}
       isAdmin={user.systemRole === "ADMIN"}
+      canDelete={user.systemRole === "ADMIN" || userPermissions.canDeleteTask}
       canSkipClientReview={
         user.systemRole === "ADMIN" ||
         (userPermissions.canMoveTask &&

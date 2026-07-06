@@ -132,6 +132,7 @@ export async function updateProject(data: {
   logoUrl?: string | null;
   teamId?: string;
   defaultClientReviewerId?: string | null;
+  maxPipelineTasks?: number;
 }) {
   await requireProjectRole(data.projectId, ["ADMIN", "PROJECT_MANAGER"]);
 
@@ -143,6 +144,9 @@ export async function updateProject(data: {
       ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
       ...(data.teamId && { teamId: data.teamId }),
       ...(data.defaultClientReviewerId !== undefined && { defaultClientReviewerId: data.defaultClientReviewerId }),
+      ...(data.maxPipelineTasks !== undefined && {
+        maxPipelineTasks: Math.max(1, Math.min(50, Math.round(data.maxPipelineTasks))),
+      }),
     },
   });
 
@@ -389,18 +393,19 @@ export async function removeMember(data: {
   projectId: string;
   memberId: string;
   transferToUserId?: string;
-}) {
-  const { canInviteMembers, canInviteClients } = await requireMemberManagement(data.projectId);
+}): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+  const { user: actingUser, canInviteMembers, canInviteClients } = await requireMemberManagement(data.projectId);
 
   const member = await prisma.projectMember.findUnique({
     where: { id: data.memberId },
-    include: { user: { select: { id: true, systemRole: true } } },
+    include: { user: { select: { id: true, systemRole: true, name: true, email: true } } },
   });
-  if (!member) throw new Error("Member not found");
+  if (!member) return { success: false, error: "Member not found" };
 
   const targetIsClient = member.user.systemRole === "CLIENT";
-  if (targetIsClient && !canInviteClients) throw new Error("You don't have permission to manage clients");
-  if (!targetIsClient && !canInviteMembers) throw new Error("You don't have permission to manage team members");
+  if (targetIsClient && !canInviteClients) return { success: false, error: "You don't have permission to manage clients" };
+  if (!targetIsClient && !canInviteMembers) return { success: false, error: "You don't have permission to manage team members" };
 
   const taskCount = await prisma.task.count({
     where: {
@@ -416,14 +421,30 @@ export async function removeMember(data: {
   });
 
   if (taskCount > 0 && !data.transferToUserId) {
-    throw new Error(`TRANSFER_REQUIRED:${taskCount}`);
+    return { success: false, error: `TRANSFER_REQUIRED:${taskCount}` };
   }
 
   if (taskCount > 0 && data.transferToUserId) {
     const targetMember = await prisma.projectMember.findFirst({
       where: { projectId: data.projectId, userId: data.transferToUserId },
+      include: { user: { select: { name: true, email: true } } },
     });
-    if (!targetMember) throw new Error("Transfer target is not a member of this project");
+    if (!targetMember) return { success: false, error: "Transfer target is not a member of this project" };
+
+    // Snapshot the affected tasks before reassigning so each one gets a history entry.
+    const affectedTasks = await prisma.task.findMany({
+      where: {
+        projectId: data.projectId,
+        archivedAt: null,
+        OR: [
+          { assigneeId: member.userId },
+          { createdById: member.userId },
+          { developerId: member.userId },
+          { clientReviewerId: member.userId },
+        ],
+      },
+      select: { id: true },
+    });
 
     await prisma.$transaction([
       prisma.task.updateMany({
@@ -443,6 +464,21 @@ export async function removeMember(data: {
         data: { clientReviewerId: data.transferToUserId },
       }),
     ]);
+
+    const removedName = member.user.name ?? member.user.email;
+    const targetName = targetMember.user.name ?? targetMember.user.email;
+    if (affectedTasks.length > 0) {
+      await prisma.taskActivity.createMany({
+        data: affectedTasks.map((t) => ({
+          taskId: t.id,
+          userId: actingUser.id,
+          action: "transferred",
+          field: "owner",
+          oldValue: removedName,
+          newValue: targetName,
+        })),
+      });
+    }
   }
 
   if (data.projectId) {
@@ -457,6 +493,10 @@ export async function removeMember(data: {
   });
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
+  return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
 }
 
 export async function updateMemberRole(data: {

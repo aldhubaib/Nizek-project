@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Loader2, MessageCircleQuestion, History, MessageSquare,
   ChevronRight, ChevronDown, Pencil, Check, Clock, Undo2, Gauge, Timer,
-  FileText, Plus, Paperclip, X,
+  FileText, Plus, Paperclip, X, MoreVertical, Trash2,
 } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
-import { updateTask, moveTask as moveTaskAction, declineTask } from "@/actions/task";
+import { updateTask, moveTask as moveTaskAction, declineTask, deleteTask } from "@/actions/task";
 import { createMeetingNote, getTaskNotes } from "@/actions/meeting-note";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { formatDistanceToNow } from "date-fns";
@@ -112,6 +112,7 @@ interface Props {
   initialNotes: NoteData[];
   isAdmin: boolean;
   canSkipClientReview?: boolean;
+  canDelete?: boolean;
 }
 
 export function TaskDetailPage({
@@ -124,6 +125,7 @@ export function TaskDetailPage({
   initialNotes,
   isAdmin,
   canSkipClientReview,
+  canDelete,
 }: Props) {
   const router = useRouter();
   const questions = allQuestions.filter((q) => q.taskType === initialTask.taskType);
@@ -162,6 +164,11 @@ export function TaskDetailPage({
   const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
+  // Header actions menu
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [deleting, setDeleting] = useState(false);
+
   // Notes
   const [notes, setNotes] = useState<NoteData[]>(initialNotes);
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
@@ -194,6 +201,31 @@ export function TaskDetailPage({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [showAdminStages]);
 
+  useEffect(() => {
+    if (!showMenu) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showMenu]);
+
+  async function handleDeleteTask() {
+    if (deleting) return;
+    if (!confirm("Delete this task? This cannot be undone.")) return;
+    setShowMenu(false);
+    setDeleting(true);
+    try {
+      await deleteTask(initialTask.id);
+      router.push(`/dashboard/projects/${projectId}`);
+    } catch (err) {
+      alert((err as Error).message);
+      setDeleting(false);
+    }
+  }
+
   async function handleAdminStageChange(stage: Stage) {
     if (stage === taskStage || movingStage) return;
     setShowAdminStages(false);
@@ -202,7 +234,13 @@ export function TaskDetailPage({
     try {
       const result = await moveTaskAction({ taskId: initialTask.id, stage, order: initialTask.order });
       if (!result.success) {
-        setMoveError([result.error ?? "Failed to change stage"]);
+        const msg = result.error ?? "";
+        if (msg.startsWith("WIP_LIMIT:")) {
+          const max = msg.replace("WIP_LIMIT:", "");
+          setMoveError([`Pipeline limit reached — this project allows up to ${max} active tasks across Ready for Dev, In Development, and Internal Review. Move an existing task past Internal Review before adding another.`]);
+        } else {
+          setMoveError([msg || "Failed to change stage"]);
+        }
         return;
       }
       setTaskStage(stage);
@@ -289,6 +327,9 @@ export function TaskDetailPage({
           catch { setMoveError(["Higher priority tasks must be completed first"]); }
         } else if (msg === "ESTIMATE_REQUIRED") {
           setMoveError(["An estimated time is required"]);
+        } else if (msg.startsWith("WIP_LIMIT:")) {
+          const max = msg.replace("WIP_LIMIT:", "");
+          setMoveError([`Pipeline limit reached — up to ${max} active tasks are allowed across Ready for Dev, In Development, and Internal Review. Move an existing task past Internal Review before adding another.`]);
         } else {
           setMoveError([msg || "Failed to move task. Please try again."]);
         }
@@ -398,6 +439,29 @@ export function TaskDetailPage({
           <History className="w-3.5 h-3.5" />
           History
         </button>
+        {canDelete && (
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setShowMenu((v) => !v)}
+              disabled={deleting}
+              title="More actions"
+              className="flex items-center justify-center rounded-md border border-border w-7 h-7 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+            >
+              {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MoreVertical className="w-3.5 h-3.5" />}
+            </button>
+            {showMenu && (
+              <div className="absolute top-full right-0 mt-1.5 z-50 rounded-lg border border-border bg-card shadow-xl py-1 min-w-[160px]">
+                <button
+                  onClick={handleDeleteTask}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] font-medium text-destructive hover:bg-destructive/10 transition-colors text-left"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete task
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Single-column layout */}

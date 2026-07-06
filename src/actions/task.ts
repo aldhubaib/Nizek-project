@@ -358,6 +358,31 @@ export async function moveTask(data: {
       targetStage = "READY_FOR_RELEASE";
     }
 
+    // Pipeline WIP limit: block bringing a new task into the active pipeline
+    // (Ready for Dev, In Development, Internal Review) when it's already full.
+    // Moves within the pipeline, moves out of it, and declines back into it are
+    // never blocked — only fresh entries from an earlier stage count.
+    const PIPELINE_STAGES = ["READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW"];
+    const STAGE_SEQUENCE = ["NEW_REQUEST", "CLARIFICATION", "READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW", "READY_FOR_RELEASE", "DONE"];
+    const isEnteringPipeline =
+      PIPELINE_STAGES.includes(targetStage) &&
+      !PIPELINE_STAGES.includes(oldStage) &&
+      STAGE_SEQUENCE.indexOf(oldStage) < STAGE_SEQUENCE.indexOf("READY_FOR_DEV");
+
+    if (isEnteringPipeline) {
+      const maxPipelineTasks = task.project.maxPipelineTasks ?? 3;
+      const pipelineCount = await prisma.task.count({
+        where: {
+          projectId: task.projectId,
+          stage: { in: PIPELINE_STAGES as any },
+          archivedAt: null,
+        },
+      });
+      if (pipelineCount >= maxPipelineTasks) {
+        return { success: false, error: `WIP_LIMIT:${maxPipelineTasks}` };
+      }
+    }
+
     const isEnteringDev = oldStage !== "READY_FOR_DEV" && targetStage === "READY_FOR_DEV";
 
     if (!isAdmin && isEnteringDev && !task.estimatedMinutes && !data.estimatedMinutes) {

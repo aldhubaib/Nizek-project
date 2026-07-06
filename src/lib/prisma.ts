@@ -16,9 +16,14 @@ function createClient() {
   const pool = new Pool({
     connectionString,
     max: 10,
-    idleTimeoutMillis: 20_000,
+    idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
-    allowExitOnIdle: true,
+    // Keep TCP connections alive so idle sockets aren't silently dropped by the
+    // network (a common cause of "Connection terminated unexpectedly" / ETIMEDOUT).
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
+    // NOTE: this runs as a long-lived server on Railway, so we must NOT allow the
+    // pool to exit on idle — that churns connections and forces slow reconnects.
   });
 
   pool.on("error", (err) => {

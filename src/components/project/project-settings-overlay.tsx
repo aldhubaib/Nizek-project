@@ -51,6 +51,7 @@ interface ProjectSettingsProps {
     team?: Team | null;
     contracts: Contract[];
     defaultClientReviewerId?: string | null;
+    maxPipelineTasks?: number;
   };
   teams?: Team[];
   contractPrefixes?: ContractPrefixOption[];
@@ -75,6 +76,7 @@ export function ProjectSettingsOverlay({
   const [description, setDescription] = useState(project.description || "");
   const [teamId, setTeamId] = useState(project.team?.id || "");
   const [clientReviewerId, setClientReviewerId] = useState(project.defaultClientReviewerId || "");
+  const [maxPipelineTasks, setMaxPipelineTasks] = useState(String(project.maxPipelineTasks ?? 3));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -124,12 +126,14 @@ export function ProjectSettingsOverlay({
   async function handleSave() {
     setSaving(true);
     try {
+      const parsedMax = parseInt(maxPipelineTasks, 10);
       await updateProject({
         projectId: project.id,
         name: name.trim(),
         description,
         ...(teamId && { teamId }),
         defaultClientReviewerId: clientReviewerId || null,
+        ...(Number.isFinite(parsedMax) && parsedMax > 0 && { maxPipelineTasks: parsedMax }),
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -300,6 +304,23 @@ export function ProjectSettingsOverlay({
                 ))}
               </select>
             )}
+          </div>
+
+          {/* Pipeline Task Limit */}
+          <div className="space-y-2">
+            <Label htmlFor="proj-max-tasks" className="text-[13px] font-semibold">Max Tasks in Pipeline</Label>
+            <p className="text-[11px] text-muted-foreground">
+              The most tasks allowed at once across <strong className="text-foreground">Ready for Dev</strong>, <strong className="text-foreground">In Development</strong>, and <strong className="text-foreground">Internal Review</strong>. New tasks can&apos;t enter until an existing one moves past Internal Review.
+            </p>
+            <Input
+              id="proj-max-tasks"
+              type="number"
+              min={1}
+              max={50}
+              value={maxPipelineTasks}
+              onChange={(e) => setMaxPipelineTasks(e.target.value)}
+              className="text-[13px] w-28"
+            />
           </div>
 
           {/* Contracts */}

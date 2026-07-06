@@ -61,6 +61,8 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
   const [search, setSearch] = useState("");
   const [changingRole, setChangingRole] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
+  const [inviteFirstName, setInviteFirstName] = useState("");
+  const [inviteLastName, setInviteLastName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteIsAdmin, setInviteIsAdmin] = useState(false);
   const [inviting, setInviting] = useState(false);
@@ -78,14 +80,18 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
+    if (!inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim()) return;
     setInviting(true);
     try {
       await inviteToTeam({
         email: inviteEmail.trim(),
+        firstName: inviteFirstName.trim(),
+        lastName: inviteLastName.trim(),
         systemRole: inviteIsAdmin ? "ADMIN" : "DEVELOPER",
       });
       setShowInvite(false);
+      setInviteFirstName("");
+      setInviteLastName("");
       setInviteEmail("");
       setInviteIsAdmin(false);
     } catch (err) {
@@ -266,6 +272,30 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
               </button>
             </div>
             <form onSubmit={handleInvite} className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">First name</label>
+                  <input
+                    type="text"
+                    required
+                    value={inviteFirstName}
+                    onChange={(e) => setInviteFirstName(e.target.value)}
+                    placeholder="Jane"
+                    className="w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Last name</label>
+                  <input
+                    type="text"
+                    required
+                    value={inviteLastName}
+                    onChange={(e) => setInviteLastName(e.target.value)}
+                    placeholder="Doe"
+                    className="w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                  />
+                </div>
+              </div>
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Email</label>
                 <input
@@ -312,7 +342,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
                 </button>
                 <button
                   type="submit"
-                  disabled={inviting}
+                  disabled={inviting || !inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim()}
                   className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {inviting ? "Sending..." : "Send Invite"}

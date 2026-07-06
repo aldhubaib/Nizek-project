@@ -4,6 +4,8 @@ import { getTaskQuestions } from "@/actions/task-question";
 import { requireProjectMember } from "@/lib/auth";
 import { getPermissionsFromRole, getAdminPermissions } from "@/lib/permissions";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
+import { isProjectAccessError } from "@/lib/project-access";
+import { notFound } from "next/navigation";
 import { ProjectDetailClient } from "./project-detail-client";
 import type { KanbanTask } from "@/store/kanban";
 
@@ -19,7 +21,10 @@ export default async function ProjectDetailPage({ params }: Props) {
     requireProjectMember(projectId),
     getTasksByProject(projectId),
     getTaskQuestions(),
-  ]);
+  ]).catch((err): never => {
+    if (isProjectAccessError(err)) notFound();
+    throw err;
+  });
 
   const isSystemAdmin = user.systemRole === "ADMIN";
   const isProjectAdmin = member.projectRole?.isAdmin ?? false;

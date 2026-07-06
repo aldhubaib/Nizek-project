@@ -236,6 +236,8 @@ export async function getPendingInvitations() {
 export async function inviteToTeam(data: {
   email: string;
   systemRole: SystemRole;
+  firstName: string;
+  lastName: string;
   projectId?: string;
   roleId?: string;
 }) {
@@ -245,11 +247,16 @@ export async function inviteToTeam(data: {
   }
 
   const email = data.email.toLowerCase().trim();
+  const firstName = data.firstName.trim();
+  const lastName = data.lastName.trim();
+  if (!firstName || !lastName) {
+    throw new Error("First name and last name are required");
+  }
 
   await prisma.pendingTeamInvite.upsert({
     where: { email },
-    update: { systemRole: data.systemRole },
-    create: { email, systemRole: data.systemRole },
+    update: { systemRole: data.systemRole, firstName, lastName },
+    create: { email, systemRole: data.systemRole, firstName, lastName },
   });
 
   if (data.systemRole === "CLIENT" && data.projectId && data.roleId) {

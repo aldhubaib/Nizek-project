@@ -2,7 +2,8 @@ import { getProject } from "@/actions/project";
 import { getTaskQuestions } from "@/actions/task-question";
 import { requireProjectMember } from "@/lib/auth";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
-import { redirect } from "next/navigation";
+import { isProjectAccessError } from "@/lib/project-access";
+import { notFound, redirect } from "next/navigation";
 import { NewTaskForm } from "./new-task-form";
 
 interface Props {
@@ -11,7 +12,10 @@ interface Props {
 
 export default async function NewTaskPage({ params }: Props) {
   const { projectId } = await params;
-  const project = await getProject(projectId);
+  const project = await getProject(projectId).catch((err): never => {
+    if (isProjectAccessError(err)) notFound();
+    throw err;
+  });
   const questions = await getTaskQuestions();
   const { user } = await requireProjectMember(project.id);
 

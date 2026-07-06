@@ -92,20 +92,22 @@ export function MemberList({
 
     setRemoving(true);
     try {
-      await removeMember({ projectId, memberId });
-    } catch (err) {
-      const msg = (err as Error).message || "";
-      const match = msg.match(/^TRANSFER_REQUIRED:(\d+)$/);
-      if (match) {
-        setTransferState({
-          memberId,
-          memberName: member.user.name ?? member.user.email,
-          taskCount: parseInt(match[1], 10),
-          transferToUserId: "",
-        });
-      } else {
-        alert(msg || "Failed to remove member");
+      const result = await removeMember({ projectId, memberId });
+      if (!result.success) {
+        const match = result.error.match(/^TRANSFER_REQUIRED:(\d+)$/);
+        if (match) {
+          setTransferState({
+            memberId,
+            memberName: member.user.name ?? member.user.email,
+            taskCount: parseInt(match[1], 10),
+            transferToUserId: "",
+          });
+        } else {
+          alert(result.error || "Failed to remove member");
+        }
       }
+    } catch (err) {
+      alert((err as Error).message || "Failed to remove member");
     } finally {
       setRemoving(false);
     }
@@ -115,11 +117,15 @@ export function MemberList({
     if (!transferState || !transferState.transferToUserId) return;
     setRemoving(true);
     try {
-      await removeMember({
+      const result = await removeMember({
         projectId,
         memberId: transferState.memberId,
         transferToUserId: transferState.transferToUserId,
       });
+      if (!result.success) {
+        alert(result.error || "Failed to transfer tasks");
+        return;
+      }
       setTransferState(null);
     } catch (err) {
       alert((err as Error).message || "Failed to transfer tasks");

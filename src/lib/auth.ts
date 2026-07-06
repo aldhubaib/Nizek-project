@@ -54,6 +54,11 @@ export const getCurrentUser = cache(async () => {
       where: { email },
     });
 
+    const invitedName = pendingInvite
+      ? `${pendingInvite.firstName ?? ""} ${pendingInvite.lastName ?? ""}`.trim()
+      : "";
+    const clerkName = `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim();
+
     try {
       user = await prisma.user.upsert({
         where: { clerkId },
@@ -61,9 +66,7 @@ export const getCurrentUser = cache(async () => {
         create: {
           clerkId,
           email,
-          name:
-            `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim() ||
-            null,
+          name: invitedName || clerkName || null,
           imageUrl: clerkUser.imageUrl,
           ...(pendingInvite && { systemRole: pendingInvite.systemRole }),
         },

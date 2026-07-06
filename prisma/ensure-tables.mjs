@@ -28,6 +28,15 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS "CommentAttachment_commentId_idx"
   ON "CommentAttachment"("commentId");
+
+ALTER TABLE "Project"
+  ADD COLUMN IF NOT EXISTS "maxPipelineTasks" INTEGER NOT NULL DEFAULT 3;
+
+ALTER TABLE "PendingTeamInvite"
+  ADD COLUMN IF NOT EXISTS "firstName" TEXT;
+
+ALTER TABLE "PendingTeamInvite"
+  ADD COLUMN IF NOT EXISTS "lastName" TEXT;
 `;
 
 try {
