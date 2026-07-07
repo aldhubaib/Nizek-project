@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useUser, useClerk } from "@clerk/nextjs";
 import { UserCog, LogOut, Loader2 } from "lucide-react";
 import {
@@ -27,8 +28,9 @@ import { cn } from "@/lib/utils";
  * Clerk's profile modal) and a "Sign out" action guarded by a confirm dialog.
  */
 export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
+  const router = useRouter();
   const { user } = useUser();
-  const { signOut, openUserProfile } = useClerk();
+  const { signOut } = useClerk();
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
@@ -96,7 +98,10 @@ export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
             </div>
           </div>
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="gap-2.5" onClick={() => openUserProfile()}>
+          <DropdownMenuItem
+            className="gap-2.5"
+            onClick={() => router.push("/dashboard/account")}
+          >
             <UserCog className="h-4 w-4" />
             Manage account
           </DropdownMenuItem>
