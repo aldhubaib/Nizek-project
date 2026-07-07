@@ -1,0 +1,58 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth";
+
+export async function POST(req: NextRequest) {
+  try {
+    const user = await requireUser();
+    const { endpoint, keys } = await req.json();
+
+    if (!endpoint || !keys?.p256dh || !keys?.auth) {
+      return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
+    }
+
+    await prisma.pushSubscription.upsert({
+      where: { endpoint },
+      create: {
+        memberId: user.id,
+        endpoint,
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+      },
+      update: {
+        memberId: user.id,
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+      },
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json(
+      { error: "Failed to save subscription" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const user = await requireUser();
+    const { endpoint } = await req.json().catch(() => ({}));
+
+    if (endpoint) {
+      await prisma.pushSubscription.deleteMany({
+        where: { endpoint, memberId: user.id },
+      });
+    } else {
+      await prisma.pushSubscription.deleteMany({ where: { memberId: user.id } });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json(
+      { error: "Failed to remove subscription" },
+      { status: 500 },
+    );
+  }
+}

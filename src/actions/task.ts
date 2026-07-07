@@ -14,6 +14,7 @@ import {
 import { broadcastTaskEvent, broadcastMentionEvent } from "@/lib/pusher";
 import { publish, broadcast, taskChannel, userChannel } from "@/lib/centrifugo";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
+import { sendPush } from "@/lib/push";
 
 // ─── Stage → Role Track ─────────────────────────────────
 type RoleTrack = "pm" | "developer" | "client";
@@ -558,12 +559,17 @@ export async function declineTask(data: {
             linkUrl: `/dashboard/projects/${task.projectId}/tasks/${task.id}`,
           })),
       });
+      const declineRecipients = mentionUserIds.filter((id) => id !== user.id);
       void broadcast(
-        mentionUserIds
-          .filter((id) => id !== user.id)
-          .map((rid) => userChannel(rid)),
+        declineRecipients.map((rid) => userChannel(rid)),
         { type: "notification.new" },
       );
+      void sendPush(declineRecipients, {
+        title: `${user.name ?? "Someone"} declined a task`,
+        body: `#${task.taskNumber} ${task.title}: ${declineSnippet}`,
+        url: `/dashboard/projects/${task.projectId}/tasks/${task.id}`,
+        tag: `task-${task.id}`,
+      });
     }
 
     // Stream the decline comment to anyone viewing this task (best-effort).

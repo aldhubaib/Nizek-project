@@ -100,11 +100,12 @@ model User {
   assets         Asset[]
   invitations    Invitation[]
 
-  conversations    ConversationParticipant[] @relation("ConversationMember")
-  messages         Message[]                 @relation("MessageAuthor")
-  messageMentions  MessageMention[]          @relation("MessageMentionedUser")
-  messageReactions MessageReaction[]         @relation("MessageReactionAuthor")
-  notifications    Notification[]            @relation("NotificationRecipient")
+  conversations     ConversationParticipant[] @relation("ConversationMember")
+  messages          Message[]                 @relation("MessageAuthor")
+  messageMentions   MessageMention[]          @relation("MessageMentionedUser")
+  messageReactions  MessageReaction[]         @relation("MessageReactionAuthor")
+  notifications     Notification[]            @relation("NotificationRecipient")
+  pushSubscriptions PushSubscription[]        @relation("PushSubscriptionMember")
 }
 
 model Team {
@@ -584,4 +585,16 @@ model Notification {
   createdAt   DateTime @default(now())
 
   @@index([recipientId, read, createdAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  memberId  String
+  member    User     @relation("PushSubscriptionMember", fields: [memberId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([memberId])
 }

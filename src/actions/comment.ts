@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
 import { broadcastMentionEvent } from "@/lib/pusher";
 import { publish, broadcast, taskChannel, userChannel } from "@/lib/centrifugo";
+import { sendPush } from "@/lib/push";
 
 export async function createComment(data: {
   taskId: string;
@@ -70,6 +71,12 @@ export async function createComment(data: {
         mentionRecipients.map((rid) => userChannel(rid)),
         { type: "notification.new" },
       );
+      void sendPush(mentionRecipients, {
+        title: `${comment.user.name ?? "Someone"} mentioned you`,
+        body: `#${task.taskNumber} ${task.title}: ${snippet}`,
+        url: `/dashboard/projects/${task.projectId}/tasks/${data.taskId}`,
+        tag: `task-${data.taskId}`,
+      });
     }
 
     // Live-stream the new comment to anyone viewing this task (Centrifugo).

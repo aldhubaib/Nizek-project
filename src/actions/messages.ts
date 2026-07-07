@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { hasProjectAccess } from "@/lib/project-access";
 import { getActiveContract } from "@/lib/contract-rules";
+import { sendPush } from "@/lib/push";
 import {
   broadcast,
   taskChannel,
@@ -459,6 +460,13 @@ export async function sendMessage(
           body: preview,
           linkUrl: url,
         })),
+      });
+      // OS-level web push on top of the in-app bell.
+      void sendPush(uniqueRecipients, {
+        title,
+        body: preview,
+        url,
+        tag: `msg-${message.id}`,
       });
     }
 
