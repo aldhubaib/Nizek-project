@@ -9,7 +9,17 @@ import {
   globalPresenceChannel,
 } from "@/lib/channels";
 import { getThreadMessages } from "@/actions/messages";
+import { getActiveContract } from "@/lib/contract-rules";
 import { ThreadChat, type ThreadTarget } from "./thread-chat";
+
+const CONTRACT_SELECT = {
+  id: true,
+  contractType: true,
+  label: true,
+  startDate: true,
+  endDate: true,
+  latePayment: true,
+} as const;
 
 export default async function ThreadPage({
   params,
@@ -27,12 +37,20 @@ export default async function ThreadPage({
   let subtitle = "";
   let peerMemberIds: string[] = [];
   const memberNames: Record<string, string> = {};
+  // Project chat/task threads are read-only when the project has no active
+  // contract (mirrors Falak: inactive projects have a read-only channel).
+  let inactive = false;
 
   if (threadId.startsWith("task-")) {
     const taskId = threadId.slice(5);
     const task = await prisma.task.findFirst({
       where: { id: taskId },
-      select: { id: true, title: true, projectId: true, project: { select: { name: true } } },
+      select: {
+        id: true,
+        title: true,
+        projectId: true,
+        project: { select: { name: true, contracts: { select: CONTRACT_SELECT } } },
+      },
     });
     if (!task) notFound();
     if (!(await hasProjectAccess(task.projectId))) notFound();
@@ -41,12 +59,13 @@ export default async function ThreadPage({
     presenceChannel = taskChannel(task.id);
     title = task.title;
     subtitle = task.project.name;
+    inactive = !getActiveContract(task.project.contracts);
   } else if (threadId.startsWith("project-")) {
     const projectId = threadId.slice(8);
     if (!(await hasProjectAccess(projectId))) notFound();
     const project = await prisma.project.findUnique({
       where: { id: projectId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, contracts: { select: CONTRACT_SELECT } },
     });
     if (!project) notFound();
     target = { projectId: project.id };
@@ -54,6 +73,7 @@ export default async function ThreadPage({
     presenceChannel = projectChannel(project.id);
     title = project.name;
     subtitle = "Project chat";
+    inactive = !getActiveContract(project.contracts);
   } else if (threadId.startsWith("conv-")) {
     const conversationId = threadId.slice(5);
     const convo = await prisma.conversation.findFirst({
@@ -112,7 +132,7 @@ export default async function ThreadPage({
       hasMoreOlder={page.hasMore}
       memberNames={memberNames}
       peerMemberIds={peerMemberIds}
-      archived={false}
+      inactive={inactive}
       readOnly={false}
     />
   );

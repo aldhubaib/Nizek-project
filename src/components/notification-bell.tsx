@@ -1,65 +1,66 @@
 "use client";
 
-import { useState, useEffect, useRef, useTransition, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { Bell, Eye, CheckCheck, AtSign } from "lucide-react";
+import { Bell, CheckCheck, Maximize2, AtSign, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getUnreadMentions, getUnreadMentionCount, markMentionRead, markMentionsReadBulk } from "@/actions/dashboard";
+import {
+  getNotifications,
+  getUnreadCount,
+  markNotificationRead,
+  markAllNotificationsRead,
+  type NotificationDTO,
+} from "@/actions/notifications";
 import { formatDistanceToNow } from "date-fns";
-import { getPusherClient, userChannel } from "@/lib/pusher-client";
+import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
+import { useChannel } from "@/components/realtime/hooks";
+import { userChannel } from "@/lib/channels";
 
-interface Mention {
-  id: string;
-  taskId: string;
-  taskTitle: string;
-  taskNumber: number;
-  taskType: string;
-  projectId: string;
-  projectName: string;
-  comment: string;
-  commentedBy: { id: string; name: string | null; imageUrl: string | null };
-  commentedAt: string;
-}
-
-const POLL_FALLBACK_INTERVAL = 120_000;
+const POLL_FALLBACK_INTERVAL = 60_000;
 
 interface Props {
   currentUserId?: string;
 }
 
+function iconFor(type: string) {
+  if (type === "mention") return AtSign;
+  if (type === "message" || type === "dm") return MessageSquare;
+  return Bell;
+}
+
 export function NotificationBell({ currentUserId }: Props) {
   const [count, setCount] = useState(0);
-  const [mentions, setMentions] = useState<Mention[]>([]);
+  const [items, setItems] = useState<NotificationDTO[]>([]);
   const [open, setOpen] = useState(false);
-  const [loaded, setLoaded] = useState(false);
   const [isPending, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
 
+  const refresh = useCallback(() => {
+    Promise.all([getNotifications(30), getUnreadCount()])
+      .then(([list, c]) => {
+        setItems(list);
+        setCount(c);
+      })
+      .catch(() => {});
+  }, []);
+
   const fetchCount = useCallback(() => {
-    getUnreadMentionCount().then(setCount).catch(() => {});
+    getUnreadCount().then(setCount).catch(() => {});
   }, []);
 
   useEffect(() => {
     fetchCount();
-
-    if (currentUserId) {
-      const pusher = getPusherClient();
-      if (pusher) {
-        const channel = pusher.subscribe(userChannel(currentUserId));
-        channel.bind("mention", () => {
-          fetchCount();
-          setLoaded(false);
-        });
-        return () => {
-          channel.unbind_all();
-          pusher.unsubscribe(userChannel(currentUserId));
-        };
-      }
-    }
-
     const id = setInterval(fetchCount, POLL_FALLBACK_INTERVAL);
     return () => clearInterval(id);
-  }, [fetchCount, currentUserId]);
+  }, [fetchCount]);
+
+  // Live: refresh the instant anything lands on our user channel (chat mentions,
+  // DMs, task-comment mentions). Falls back to polling when Centrifugo is off.
+  const cent = useCentrifugo();
+  useChannel(cent && currentUserId ? userChannel(currentUserId) : null, () => {
+    if (open) refresh();
+    else fetchCount();
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -72,33 +73,32 @@ export function NotificationBell({ currentUserId }: Props) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
-  async function handleOpen() {
+  function handleOpen() {
     if (open) {
       setOpen(false);
       return;
     }
     setOpen(true);
-    if (!loaded || mentions.length !== count) {
-      const data = await getUnreadMentions();
-      setMentions(data);
-      setCount(data.length);
-      setLoaded(true);
-    }
+    refresh();
   }
 
-  function handleMarkRead(id: string) {
-    startTransition(async () => {
-      await markMentionRead(id);
-      setMentions((prev) => prev.filter((m) => m.id !== id));
-      setCount((c) => Math.max(0, c - 1));
-    });
+  function handleClick(n: NotificationDTO) {
+    if (!n.read) {
+      startTransition(async () => {
+        await markNotificationRead(n.id);
+        setItems((prev) =>
+          prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)),
+        );
+        setCount((c) => Math.max(0, c - 1));
+      });
+    }
+    setOpen(false);
   }
 
   function handleMarkAllRead() {
-    const ids = mentions.map((m) => m.id);
     startTransition(async () => {
-      await markMentionsReadBulk(ids);
-      setMentions([]);
+      await markAllNotificationsRead();
+      setItems((prev) => prev.map((x) => ({ ...x, read: true })));
       setCount(0);
     });
   }
@@ -107,6 +107,7 @@ export function NotificationBell({ currentUserId }: Props) {
     <div ref={ref} className="relative">
       <button
         onClick={handleOpen}
+        aria-label="Notifications"
         className="relative w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
       >
         <Bell className="w-4 h-4" />
@@ -121,71 +122,105 @@ export function NotificationBell({ currentUserId }: Props) {
         <div className="absolute right-0 top-10 z-[999] w-[380px] max-h-[480px] rounded-xl border border-border bg-card shadow-2xl flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
-              <AtSign className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-[13px] font-semibold">Mentions</span>
+              <span className="text-[13px] font-semibold">Notifications</span>
               {count > 0 && (
                 <span className="text-[10px] font-semibold text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-px">
                   {count}
                 </span>
               )}
             </div>
-            {mentions.length > 0 && (
+            <div className="flex items-center gap-1">
               <button
                 onClick={handleMarkAllRead}
-                disabled={isPending}
-                className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                disabled={isPending || count === 0}
+                className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                title="Mark all read"
               >
                 <CheckCheck className="w-3 h-3" />
                 Mark all read
               </button>
-            )}
+              <Link
+                href="/dashboard/messages"
+                onClick={() => setOpen(false)}
+                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                title="Open inbox"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
 
-          <div className={cn("flex-1 overflow-y-auto", isPending && "opacity-60 pointer-events-none")}>
-            {mentions.length === 0 ? (
+          <div
+            className={cn(
+              "flex-1 overflow-y-auto",
+              isPending && "opacity-60 pointer-events-none",
+            )}
+          >
+            {items.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
-                <Bell className="w-6 h-6 text-muted-foreground/20 mb-2" strokeWidth={1.5} />
+                <Bell
+                  className="w-6 h-6 text-muted-foreground/20 mb-2"
+                  strokeWidth={1.5}
+                />
                 <p className="text-[12px] text-muted-foreground">All caught up</p>
               </div>
             ) : (
               <div className="divide-y divide-border/50">
-                {mentions.map((m) => (
-                  <div key={m.id} className="flex items-start gap-2.5 px-4 py-3 hover:bg-accent/20 transition-colors group">
-                    {m.commentedBy.imageUrl ? (
-                      <img src={m.commentedBy.imageUrl} alt="" className="w-6 h-6 rounded-full shrink-0 mt-0.5" />
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
-                        {(m.commentedBy.name ?? "?")[0]}
+                {items.map((n) => {
+                  const Icon = iconFor(n.type);
+                  const inner = (
+                    <div
+                      className={cn(
+                        "flex items-start gap-2.5 px-4 py-3 transition-colors hover:bg-accent/20 group",
+                        !n.read && "bg-primary/[0.06]",
+                      )}
+                    >
+                      <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary/15 text-primary mt-0.5">
+                        <Icon className="h-3.5 w-3.5" />
                       </div>
-                    )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-[12px] font-medium">
+                            {n.title}
+                          </span>
+                          <span className="ml-auto shrink-0 text-[9px] text-muted-foreground/60">
+                            {formatDistanceToNow(new Date(n.createdAt), {
+                              addSuffix: true,
+                            })}
+                          </span>
+                        </div>
+                        {n.body && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
+                            {n.body}
+                          </p>
+                        )}
+                      </div>
+                      {!n.read && (
+                        <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-primary" />
+                      )}
+                    </div>
+                  );
+
+                  return n.linkUrl ? (
                     <Link
-                      href={`/dashboard/projects/${m.projectId}/tasks/${m.taskId}`}
-                      onClick={() => setOpen(false)}
-                      className="flex-1 min-w-0"
+                      key={n.id}
+                      href={n.linkUrl}
+                      onClick={() => handleClick(n)}
+                      className="block"
                     >
-                      <div className="text-[11px]">
-                        <span className="font-semibold">{m.commentedBy.name}</span>
-                        <span className="text-muted-foreground"> in </span>
-                        <span className="font-medium">#{m.taskNumber} {m.taskTitle}</span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">{m.comment}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-[9px] text-muted-foreground/50">{m.projectName}</span>
-                        <span className="text-[9px] text-muted-foreground/30">·</span>
-                        <span className="text-[9px] text-muted-foreground/50">
-                          {formatDistanceToNow(new Date(m.commentedAt), { addSuffix: true })}
-                        </span>
-                      </div>
+                      {inner}
                     </Link>
+                  ) : (
                     <button
-                      onClick={() => handleMarkRead(m.id)}
-                      className="shrink-0 p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
-                      title="Mark as read"
+                      key={n.id}
+                      type="button"
+                      onClick={() => handleClick(n)}
+                      className="w-full text-left"
                     >
-                      <Eye className="w-3 h-3" />
+                      {inner}
                     </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

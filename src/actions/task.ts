@@ -12,7 +12,7 @@ import {
   canModifyInStage,
 } from "@/lib/permissions";
 import { broadcastTaskEvent, broadcastMentionEvent } from "@/lib/pusher";
-import { publish, taskChannel } from "@/lib/centrifugo";
+import { publish, broadcast, taskChannel, userChannel } from "@/lib/centrifugo";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 
 // ─── Stage → Role Track ─────────────────────────────────
@@ -484,7 +484,7 @@ export async function declineTask(data: {
 
     const task = await prisma.task.findUnique({
       where: { id: data.taskId },
-      select: { id: true, stage: true, projectId: true, order: true },
+      select: { id: true, stage: true, projectId: true, order: true, title: true, taskNumber: true },
     });
     if (!task) return { success: false, error: "Task not found" };
 
@@ -545,6 +545,25 @@ export async function declineTask(data: {
 
     if (mentionUserIds.length) {
       broadcastMentionEvent(mentionUserIds, user.id);
+
+      const declineSnippet = data.comment.replace(/\s+/g, " ").trim().slice(0, 140);
+      await prisma.notification.createMany({
+        data: mentionUserIds
+          .filter((id) => id !== user.id)
+          .map((rid) => ({
+            recipientId: rid,
+            type: "mention",
+            title: `${user.name ?? "Someone"} declined a task`,
+            body: `#${task.taskNumber} ${task.title}: ${declineSnippet}`,
+            linkUrl: `/dashboard/projects/${task.projectId}/tasks/${task.id}`,
+          })),
+      });
+      void broadcast(
+        mentionUserIds
+          .filter((id) => id !== user.id)
+          .map((rid) => userChannel(rid)),
+        { type: "notification.new" },
+      );
     }
 
     // Stream the decline comment to anyone viewing this task (best-effort).

@@ -248,7 +248,7 @@ export function ThreadChat({
   hasMoreOlder = false,
   memberNames = {},
   peerMemberIds = [],
-  archived = false,
+  inactive = false,
   readOnly = false,
 }: {
   channel: string;
@@ -261,7 +261,7 @@ export function ThreadChat({
   hasMoreOlder?: boolean;
   memberNames?: Record<string, string>;
   peerMemberIds?: string[];
-  archived?: boolean;
+  inactive?: boolean;
   readOnly?: boolean;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -1341,10 +1341,10 @@ export function ThreadChat({
       {/* Composer */}
       <div className="shrink-0 border-t border-border/60 p-3">
         <div className="mx-auto max-w-3xl">
-          {archived || readOnly ? (
+          {inactive || readOnly ? (
             <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-surface/30 px-4 py-3 text-xs text-muted-foreground">
-              {archived
-                ? "This project is archived. The channel is read-only."
+              {inactive
+                ? "This project is not active. The channel is read-only."
                 : "You have read-only access to this chat."}
             </div>
           ) : (

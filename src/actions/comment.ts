@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
 import { broadcastMentionEvent } from "@/lib/pusher";
-import { publish, taskChannel } from "@/lib/centrifugo";
+import { publish, broadcast, taskChannel, userChannel } from "@/lib/centrifugo";
 
 export async function createComment(data: {
   taskId: string;
@@ -14,7 +14,7 @@ export async function createComment(data: {
   try {
     const task = await prisma.task.findUnique({
       where: { id: data.taskId },
-      select: { projectId: true },
+      select: { projectId: true, taskNumber: true, title: true },
     });
     if (!task) return { success: false, error: "Task not found" };
 
@@ -48,8 +48,28 @@ export async function createComment(data: {
       },
     });
 
-    if (data.mentionedUserIds?.length) {
-      broadcastMentionEvent(data.mentionedUserIds, user.id);
+    const mentionRecipients = (data.mentionedUserIds ?? []).filter(
+      (id) => id !== user.id,
+    );
+    if (mentionRecipients.length) {
+      broadcastMentionEvent(mentionRecipients, user.id);
+
+      // Feed the notification bell (Notification table) so task-comment
+      // mentions live alongside chat/DM notifications.
+      const snippet = data.content.replace(/\s+/g, " ").trim().slice(0, 140);
+      await prisma.notification.createMany({
+        data: mentionRecipients.map((rid) => ({
+          recipientId: rid,
+          type: "mention",
+          title: `${comment.user.name ?? "Someone"} mentioned you`,
+          body: `#${task.taskNumber} ${task.title}: ${snippet}`,
+          linkUrl: `/dashboard/projects/${task.projectId}/tasks/${data.taskId}`,
+        })),
+      });
+      void broadcast(
+        mentionRecipients.map((rid) => userChannel(rid)),
+        { type: "notification.new" },
+      );
     }
 
     // Live-stream the new comment to anyone viewing this task (Centrifugo).

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { hasProjectAccess } from "@/lib/project-access";
+import { getActiveContract } from "@/lib/contract-rules";
 import {
   broadcast,
   taskChannel,
@@ -10,6 +11,15 @@ import {
   conversationChannel,
   userChannel,
 } from "@/lib/centrifugo";
+
+const CONTRACT_SELECT = {
+  id: true,
+  contractType: true,
+  label: true,
+  startDate: true,
+  endDate: true,
+  latePayment: true,
+} as const;
 
 // Single write path for every chat surface: project channels, direct messages,
 // and (deep-linked) task threads. Persists to Postgres (source of truth),
@@ -312,12 +322,16 @@ export async function sendMessage(
           title: true,
           taskNumber: true,
           projectId: true,
-          project: { select: { name: true } },
+          project: {
+            select: { name: true, contracts: { select: CONTRACT_SELECT } },
+          },
         },
       });
       if (!task) throw new Error("Task not found");
       if (!(await hasProjectAccess(task.projectId)))
         throw new Error("Permission denied");
+      if (!getActiveContract(task.project.contracts))
+        throw new Error("This project is not active");
       projectId = task.projectId;
       taskTitle = task.title;
       taskNumber = task.taskNumber;
@@ -327,9 +341,12 @@ export async function sendMessage(
         throw new Error("Permission denied");
       const project = await prisma.project.findUnique({
         where: { id: projectId },
-        select: { name: true },
+        select: { name: true, contracts: { select: CONTRACT_SELECT } },
       });
-      projectName = project?.name ?? "";
+      if (!project) throw new Error("Project not found");
+      if (!getActiveContract(project.contracts))
+        throw new Error("This project is not active");
+      projectName = project.name;
     } else {
       throw new Error("No thread specified");
     }
@@ -588,7 +605,7 @@ export type InboxThread = {
   unread: number;
   avatar: string;
   initials: string;
-  archived: boolean;
+  inactive: boolean;
 };
 
 export async function getInboxThreads(): Promise<InboxThread[]> {
@@ -606,6 +623,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         id: true,
         name: true,
         logoUrl: true,
+        contracts: { select: CONTRACT_SELECT },
         messages: {
           where: { conversationId: null },
           orderBy: { createdAt: "desc" },
@@ -661,7 +679,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       unread,
       avatar: generateColor(p.name),
       initials: p.name.charAt(0).toUpperCase(),
-      archived: false,
+      inactive: !getActiveContract(p.contracts),
     };
   });
 
@@ -690,7 +708,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         unread: unreadMap.get(`/dashboard/messages/conv-${c.id}`) ?? 0,
         avatar: generateColor(name),
         initials: name.charAt(0).toUpperCase(),
-        archived: false,
+        inactive: false,
       };
     });
 

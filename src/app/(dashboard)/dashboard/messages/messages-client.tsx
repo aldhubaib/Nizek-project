@@ -236,7 +236,14 @@ function ThreadRow({
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium">{thread.name}</span>
+          <span className={cn("truncate text-sm font-medium", thread.inactive && "text-muted-foreground")}>
+            {thread.name}
+          </span>
+          {thread.inactive && (
+            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+              Inactive
+            </span>
+          )}
           <span className="ml-auto shrink-0 text-xxs text-muted-foreground">
             {formatRelative(thread.lastAt)}
           </span>
