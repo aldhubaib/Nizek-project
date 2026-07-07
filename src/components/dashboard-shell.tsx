@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { NotificationBell } from "@/components/notification-bell";
 import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
@@ -13,6 +14,10 @@ export function DashboardShell({ children, isAdmin = false, currentUserId }: { c
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [isDesktop, setIsDesktop] = useState(true);
+  const pathname = usePathname();
+  // The inbox is a full-screen overlay with its own header — hide the global
+  // notification bell there so it doesn't float over the conversation.
+  const onInbox = pathname.startsWith("/dashboard/messages");
 
   useEffect(() => {
     const handleResize = () =>
@@ -71,7 +76,11 @@ export function DashboardShell({ children, isAdmin = false, currentUserId }: { c
               Nizek Project
             </span>
           </div>
-          <NotificationBell currentUserId={currentUserId} />
+          {onInbox ? (
+            <div className="w-8 h-8" />
+          ) : (
+            <NotificationBell currentUserId={currentUserId} />
+          )}
         </div>
       )}
 
@@ -101,7 +110,7 @@ export function DashboardShell({ children, isAdmin = false, currentUserId }: { c
           isDesktop ? "rounded-l-2xl" : "pt-12"
         }`}
       >
-        {isDesktop && (
+        {isDesktop && !onInbox && (
           <div className="fixed top-3 right-4 z-[100]">
             <NotificationBell currentUserId={currentUserId} />
           </div>
