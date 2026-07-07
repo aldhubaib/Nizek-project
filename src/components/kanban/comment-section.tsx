@@ -5,6 +5,8 @@ import { createComment, getComments, deleteComment, getProjectMembersForMention 
 import { Loader2, Send, Trash2, Paperclip, X, FileText, Download, Image as ImageIcon } from "lucide-react";
 import { useKanbanStore } from "@/store/kanban";
 import { cn } from "@/lib/utils";
+import { useChannel } from "@/components/realtime/hooks";
+import { taskChannel } from "@/lib/channels";
 
 interface MentionUser {
   id: string;
@@ -99,6 +101,25 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
       })
       .catch(console.error);
   }, [projectId]);
+
+  // Live comment stream (Centrifugo). When someone else posts on this task,
+  // refetch so the new comment appears without a manual refresh. Own comments
+  // are already appended optimistically in handleSubmit. Degrades gracefully to
+  // the existing refreshKey polling when Centrifugo isn't configured.
+  const onRealtimeComment = useCallback(
+    (data: unknown) => {
+      const evt = data as { type?: string; authorId?: string } | null;
+      if (!evt || evt.type !== "comment.new") return;
+      if (evt.authorId && evt.authorId === currentUserId) return;
+      getComments(taskId)
+        .then((result) => {
+          if (result.success) setComments(result.comments as unknown as Comment[]);
+        })
+        .catch(() => {});
+    },
+    [taskId, currentUserId],
+  );
+  useChannel(taskChannel(taskId), onRealtimeComment);
 
   const filteredMembers = members.filter((m) =>
     m.name?.toLowerCase().includes(mentionQuery.toLowerCase())

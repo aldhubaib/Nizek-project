@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { NotificationBell } from "@/components/notification-bell";
+import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
 import { Menu } from "lucide-react";
 
 const DESKTOP_BREAKPOINT = 1024;
@@ -36,7 +37,7 @@ export function DashboardShell({ children, isAdmin = false, currentUserId }: { c
 
   const expanded = pinned || hovered;
 
-  return (
+  const shell = (
     <div className="flex min-h-screen">
       {/* Desktop sidebar — pushes content, not overlay */}
       {isDesktop && (
@@ -108,5 +109,13 @@ export function DashboardShell({ children, isAdmin = false, currentUserId }: { c
         {children}
       </main>
     </div>
+  );
+
+  // Chat/inbox realtime runs over a single shared Centrifugo WebSocket for the
+  // whole dashboard session. Pusher (board/task events) is untouched.
+  return currentUserId ? (
+    <CentrifugoProvider memberId={currentUserId}>{shell}</CentrifugoProvider>
+  ) : (
+    shell
   );
 }

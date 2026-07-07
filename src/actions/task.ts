@@ -12,6 +12,7 @@ import {
   canModifyInStage,
 } from "@/lib/permissions";
 import { broadcastTaskEvent, broadcastMentionEvent } from "@/lib/pusher";
+import { publish, taskChannel } from "@/lib/centrifugo";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 
 // ─── Stage → Role Track ─────────────────────────────────
@@ -521,7 +522,7 @@ export async function declineTask(data: {
       mentionUserIds.push(entryActivity.userId);
     }
 
-    await prisma.taskComment.create({
+    const declineComment = await prisma.taskComment.create({
       data: {
         content,
         taskId: task.id,
@@ -545,6 +546,13 @@ export async function declineTask(data: {
     if (mentionUserIds.length) {
       broadcastMentionEvent(mentionUserIds, user.id);
     }
+
+    // Stream the decline comment to anyone viewing this task (best-effort).
+    void publish(taskChannel(task.id), {
+      type: "comment.new",
+      commentId: declineComment.id,
+      authorId: user.id,
+    });
 
     const oldStage = task.stage;
     const tasksInTarget = await prisma.task.count({

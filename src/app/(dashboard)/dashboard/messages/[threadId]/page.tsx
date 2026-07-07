@@ -1,0 +1,119 @@
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth";
+import { hasProjectAccess } from "@/lib/project-access";
+import {
+  taskChannel,
+  projectChannel,
+  conversationChannel,
+  globalPresenceChannel,
+} from "@/lib/channels";
+import { getThreadMessages } from "@/actions/messages";
+import { ThreadChat, type ThreadTarget } from "./thread-chat";
+
+export default async function ThreadPage({
+  params,
+}: {
+  params: Promise<{ threadId: string }>;
+}) {
+  const { threadId } = await params;
+  const user = await requireUser();
+
+  // Thread id encodes the kind: task-<id>, project-<id>, or conv-<id>.
+  let target: ThreadTarget = {};
+  let channel = "";
+  let presenceChannel: string | null = null;
+  let title = "";
+  let subtitle = "";
+  let peerMemberIds: string[] = [];
+  const memberNames: Record<string, string> = {};
+
+  if (threadId.startsWith("task-")) {
+    const taskId = threadId.slice(5);
+    const task = await prisma.task.findFirst({
+      where: { id: taskId },
+      select: { id: true, title: true, projectId: true, project: { select: { name: true } } },
+    });
+    if (!task) notFound();
+    if (!(await hasProjectAccess(task.projectId))) notFound();
+    target = { taskId: task.id, projectId: task.projectId };
+    channel = taskChannel(task.id);
+    presenceChannel = taskChannel(task.id);
+    title = task.title;
+    subtitle = task.project.name;
+  } else if (threadId.startsWith("project-")) {
+    const projectId = threadId.slice(8);
+    if (!(await hasProjectAccess(projectId))) notFound();
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, name: true },
+    });
+    if (!project) notFound();
+    target = { projectId: project.id };
+    channel = projectChannel(project.id);
+    presenceChannel = projectChannel(project.id);
+    title = project.name;
+    subtitle = "Project chat";
+  } else if (threadId.startsWith("conv-")) {
+    const conversationId = threadId.slice(5);
+    const convo = await prisma.conversation.findFirst({
+      where: {
+        id: conversationId,
+        participants: { some: { memberId: user.id } },
+      },
+      include: {
+        participants: {
+          include: { member: { select: { id: true, name: true, email: true } } },
+        },
+      },
+    });
+    if (!convo) notFound();
+    const others = convo.participants
+      .map((p) => p.member)
+      .filter((m) => m.id !== user.id);
+    for (const p of convo.participants) {
+      memberNames[p.member.id] = p.member.name ?? p.member.email;
+    }
+    peerMemberIds = others.map((m) => m.id);
+    target = { conversationId: convo.id };
+    channel = conversationChannel(convo.id);
+    presenceChannel = globalPresenceChannel();
+    title =
+      convo.title ??
+      (others.map((m) => m.name ?? m.email).join(", ") || "Direct message");
+    subtitle = convo.isGroup ? `${convo.participants.length} members` : "Direct message";
+  } else {
+    notFound();
+  }
+
+  // Latest page only (50 messages) — older pages load on demand in the client.
+  const page = await getThreadMessages(target);
+
+  // Mark this thread's notifications as read.
+  const linkUrl = target.conversationId
+    ? `/dashboard/messages/conv-${target.conversationId}`
+    : target.taskId
+      ? `/dashboard/projects/${target.projectId}/tasks/${target.taskId}`
+      : `/dashboard/messages/project-${target.projectId}`;
+  await prisma.notification.updateMany({
+    where: { recipientId: user.id, read: false, linkUrl },
+    data: { read: true },
+  });
+
+  return (
+    <ThreadChat
+      channel={channel}
+      presenceChannel={presenceChannel}
+      target={target}
+      title={title}
+      subtitle={subtitle}
+      currentMemberId={user.id}
+      messages={page.messages}
+      hasMoreOlder={page.hasMore}
+      memberNames={memberNames}
+      peerMemberIds={peerMemberIds}
+      archived={false}
+      readOnly={false}
+    />
+  );
+}

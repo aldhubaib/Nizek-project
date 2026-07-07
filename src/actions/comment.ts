@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
 import { broadcastMentionEvent } from "@/lib/pusher";
+import { publish, taskChannel } from "@/lib/centrifugo";
 
 export async function createComment(data: {
   taskId: string;
@@ -50,6 +51,14 @@ export async function createComment(data: {
     if (data.mentionedUserIds?.length) {
       broadcastMentionEvent(data.mentionedUserIds, user.id);
     }
+
+    // Live-stream the new comment to anyone viewing this task (Centrifugo).
+    // Best-effort; no-op when Centrifugo isn't configured.
+    void publish(taskChannel(data.taskId), {
+      type: "comment.new",
+      commentId: comment.id,
+      authorId: user.id,
+    });
 
     return { success: true, comment: comment as unknown as Record<string, unknown> };
   } catch (err) {

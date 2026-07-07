@@ -1,0 +1,62 @@
+{
+  "health": {
+    "enabled": true
+  },
+  "client": {
+    "allowed_origins": [
+      "http://localhost:3000"
+    ]
+  },
+  "channel": {
+    "namespaces": [
+      {
+        "name": "user",
+        "presence": false,
+        "history_size": 0,
+        "history_ttl": "0s"
+      },
+      {
+        "name": "task",
+        "presence": true,
+        "join_leave": true,
+        "history_size": 50,
+        "history_ttl": "300s",
+        "force_recovery": true,
+        "allow_publish_for_subscriber": true,
+        "allow_presence_for_subscriber": true
+      },
+      {
+        "name": "project",
+        "presence": true,
+        "join_leave": true,
+        "history_size": 50,
+        "history_ttl": "300s",
+        "force_recovery": true,
+        "allow_publish_for_subscriber": true,
+        "allow_presence_for_subscriber": true
+      },
+      {
+        "name": "conv",
+        "presence": true,
+        "join_leave": true,
+        "history_size": 100,
+        "history_ttl": "600s",
+        "force_recovery": true,
+        "allow_publish_for_subscriber": true,
+        "allow_presence_for_subscriber": true
+      },
+      {
+        "name": "presence",
+        "presence": true,
+        "join_leave": true,
+        "allow_presence_for_subscriber": true
+      }
+    ]
+  },
+  "engine": {
+    "type": "redis",
+    "redis": {
+      "address": "redis://localhost:6379"
+    }
+  }
+}

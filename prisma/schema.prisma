@@ -99,6 +99,12 @@ model User {
   noteEdits      NoteHistory[]
   assets         Asset[]
   invitations    Invitation[]
+
+  conversations    ConversationParticipant[] @relation("ConversationMember")
+  messages         Message[]                 @relation("MessageAuthor")
+  messageMentions  MessageMention[]          @relation("MessageMentionedUser")
+  messageReactions MessageReaction[]         @relation("MessageReactionAuthor")
+  notifications    Notification[]            @relation("NotificationRecipient")
 }
 
 model Team {
@@ -150,6 +156,7 @@ model Project {
   meetingNotes MeetingNote[]
   assets       Asset[]
   invitations  Invitation[]
+  messages     Message[]
   @@index([teamId])
 }
 
@@ -258,6 +265,7 @@ model Task {
   comments   TaskComment[]
   stageLogs  StageLog[]
   notes      MeetingNote[]
+  messages   Message[]
 
   @@unique([projectId, taskNumber])
   @@index([projectId, stage])
@@ -471,4 +479,109 @@ model DefaultQuestion {
   answers TaskAnswer[]
 
   @@index([taskType])
+}
+
+// ─── Chat / Inbox (Centrifugo) ───────────────────────────
+// Unified message model: a message belongs to exactly one thread —
+// a task (taskId), a project channel (projectId), or a direct
+// conversation (conversationId). Identity everywhere is User.id.
+
+model Conversation {
+  id        String   @id @default(cuid())
+  isGroup   Boolean  @default(false)
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  memberId       String
+  member         User         @relation("ConversationMember", fields: [memberId], references: [id], onDelete: Cascade)
+  lastReadAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@unique([conversationId, memberId])
+  @@index([memberId])
+}
+
+model Message {
+  id             String        @id @default(cuid())
+  taskId         String?
+  task           Task?         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  projectId      String?
+  project        Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  replyToId      String?
+  authorId       String
+  author         User          @relation("MessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  body           String
+  kind           String        @default("message")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  mentions    MessageMention[]
+  reactions   MessageReaction[]
+  attachments MessageAttachment[]
+
+  @@index([taskId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([conversationId, createdAt])
+}
+
+model MessageMention {
+  id        String  @id @default(cuid())
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  memberId  String
+  member    User    @relation("MessageMentionedUser", fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, memberId])
+  @@index([memberId])
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  memberId  String
+  member    User     @relation("MessageReactionAuthor", fields: [memberId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, memberId, emoji])
+  @@index([messageId])
+}
+
+model MessageAttachment {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  filename  String
+  url       String
+  fileSize  Int?
+  mimeType  String?
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  recipientId String
+  recipient   User     @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  type        String
+  title       String
+  body        String?
+  linkUrl     String?
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([recipientId, read, createdAt])
 }

@@ -12,3 +12,19 @@ const PROJECT_ACCESS_MESSAGES = new Set([
 export function isProjectAccessError(err: unknown): boolean {
   return err instanceof Error && PROJECT_ACCESS_MESSAGES.has(err.message);
 }
+
+/**
+ * Boolean "can this user read this project?" check for realtime authorization
+ * and chat access. Wraps requireProjectMember (which throws for
+ * non-members/missing projects) so callers get a simple yes/no. System admins
+ * pass via the virtual-member path in requireProjectMember.
+ */
+export async function hasProjectAccess(projectId: string): Promise<boolean> {
+  const { requireProjectMember } = await import("@/lib/auth");
+  try {
+    await requireProjectMember(projectId);
+    return true;
+  } catch {
+    return false;
+  }
+}
