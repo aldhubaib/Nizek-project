@@ -9,6 +9,11 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// A pass-through fetch handler makes the app installable across browsers that
+// still require one. It intentionally does NOT cache — the in-app
+// UpdateNotifier owns versioning, so responses always come from the network.
+self.addEventListener("fetch", () => {});
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 

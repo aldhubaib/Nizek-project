@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { NotificationBell } from "@/components/notification-bell";
 import { PushNotifier } from "@/components/push-notifier";
+import { InstallPrompt } from "@/components/install-prompt";
 import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
 import { Menu } from "lucide-react";
 
@@ -119,6 +120,7 @@ export function DashboardShell({ children, isAdmin = false, currentUserId }: { c
         {children}
       </main>
       <PushNotifier />
+      <InstallPrompt />
     </div>
   );
 
