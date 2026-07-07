@@ -1,111 +1,138 @@
 "use client";
 
-const CARDS = [
-  { title: "Mobile App Redesign", stage: "In Dev", color: "bg-primary/20 border-primary/30", stageColor: "text-primary bg-primary/15" },
-  { title: "API Integration", stage: "Review", color: "bg-violet-500/20 border-violet-500/30", stageColor: "text-violet-400 bg-violet-500/15" },
-  { title: "Dashboard Analytics", stage: "Done", color: "bg-emerald-500/20 border-emerald-500/30", stageColor: "text-emerald-400 bg-emerald-500/15" },
-  { title: "Design System v2", stage: "Ready", color: "bg-amber-500/20 border-amber-500/30", stageColor: "text-amber-400 bg-amber-500/15" },
-  { title: "Payment Gateway", stage: "Clarify", color: "bg-rose-500/20 border-rose-500/30", stageColor: "text-rose-400 bg-rose-500/15" },
-  { title: "User Onboarding", stage: "In Dev", color: "bg-cyan-500/20 border-cyan-500/30", stageColor: "text-cyan-400 bg-cyan-500/15" },
-  { title: "Search Refactor", stage: "Review", color: "bg-primary/20 border-primary/30", stageColor: "text-primary bg-primary/15" },
-  { title: "Auth System", stage: "Done", color: "bg-emerald-500/20 border-emerald-500/30", stageColor: "text-emerald-400 bg-emerald-500/15" },
-  { title: "Notifications", stage: "Ready", color: "bg-violet-500/20 border-violet-500/30", stageColor: "text-violet-400 bg-violet-500/15" },
-  { title: "File Upload", stage: "In Dev", color: "bg-amber-500/20 border-amber-500/30", stageColor: "text-amber-400 bg-amber-500/15" },
-  { title: "E-commerce Cart", stage: "Clarify", color: "bg-rose-500/20 border-rose-500/30", stageColor: "text-rose-400 bg-rose-500/15" },
-  { title: "CI/CD Pipeline", stage: "Done", color: "bg-cyan-500/20 border-cyan-500/30", stageColor: "text-cyan-400 bg-cyan-500/15" },
+export type GalleryPhoto = { id: string; column: "a" | "b"; url: string };
+
+const CARDS_A = [
+  { title: "Mobile App Redesign", from: "#bcdcff", to: "#e8f2ff", text: "#1a2340" },
+  { title: "Work is bond", from: "#0f0f0f", to: "#1a1a1a", text: "#f2ead6" },
+  { title: "Ambitious teams ship", from: "#ff5a2a", to: "#ff7a4a", text: "#0d0d0d" },
+  { title: "Studio Portrait", from: "#f0e6d8", to: "#d9cab6", text: "#2b2416" },
+  { title: "Ocean Deep", from: "#0c2340", to: "#2d8a9e", text: "#e8f4f8" },
 ];
 
-function FloatingCard({ title, stage, color, stageColor }: typeof CARDS[number]) {
+const CARDS_B = [
+  { title: "Visual Electric", from: "#f3ede4", to: "#dcd2c2", text: "#2b2416" },
+  { title: "Data visualization studio", from: "#0d0d18", to: "#1a1a2e", text: "#e8e6f5" },
+  { title: "A personal assistant", from: "#f5efe6", to: "#e8dcc8", text: "#2b2416" },
+  { title: "Resources to get started", from: "#0a1f14", to: "#12341f", text: "#e8f0e0" },
+  { title: "Neon Mint", from: "#0d1b2a", to: "#2dd4a8", text: "#0a1a12" },
+];
+
+export function AuthLayout({
+  children,
+  photos = [],
+  logoUrl = null,
+}: {
+  children: React.ReactNode;
+  photos?: GalleryPhoto[];
+  logoUrl?: string | null;
+}) {
   return (
-    <div className={`rounded-xl border ${color} backdrop-blur-sm p-3.5 w-[200px] shrink-0`}>
-      <div className="flex items-center justify-between mb-2">
-        <span className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${stageColor}`}>
-          {stage}
-        </span>
-        <div className="flex -space-x-1">
-          <div className="w-4 h-4 rounded-full bg-white/10 border border-white/5" />
-          <div className="w-4 h-4 rounded-full bg-white/10 border border-white/5" />
-        </div>
-      </div>
-      <p className="text-[11px] font-medium text-white/70 leading-tight">{title}</p>
-      <div className="mt-2.5 flex gap-1.5">
-        <div className="h-1 rounded-full bg-white/10 flex-1" />
-        <div className="h-1 rounded-full bg-white/5 flex-[0.6]" />
-      </div>
-    </div>
-  );
-}
-
-function ScrollColumn({ cards, direction }: { cards: typeof CARDS; direction: "up" | "down" }) {
-  const doubled = [...cards, ...cards];
-  return (
-    <div className="flex flex-col gap-3 overflow-hidden h-full">
-      <div
-        className={direction === "up" ? "animate-scroll-up" : "animate-scroll-down"}
-        style={{ display: "flex", flexDirection: "column", gap: "12px" }}
-      >
-        {doubled.map((card, i) => (
-          <FloatingCard key={`${card.title}-${i}`} {...card} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function AuthLayout({ children }: { children: React.ReactNode }) {
-  const col1 = CARDS.slice(0, 4);
-  const col2 = CARDS.slice(4, 8);
-  const col3 = CARDS.slice(8, 12);
-
-  return (
-    <div className="flex min-h-screen">
-      {/* Left — Animated visual */}
-      <div className="hidden lg:flex flex-1 relative overflow-hidden bg-[#08080a] items-center justify-center">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-violet-500/5" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,#08080a_100%)]" />
-
-        <div className="relative flex gap-3 h-[600px] -rotate-12 scale-[0.85] opacity-60">
-          <ScrollColumn cards={col1} direction="up" />
-          <ScrollColumn cards={col2} direction="down" />
-          <ScrollColumn cards={col3} direction="up" />
-        </div>
-
-        {/* Overlay text */}
-        <div className="absolute bottom-8 left-8 right-8">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-6 h-6 rounded-md bg-primary/20 flex items-center justify-center">
-              <span className="text-[10px] font-bold text-primary">N</span>
-            </div>
-            <span className="text-[11px] font-semibold text-white/40 tracking-wide">Nizek Project</span>
-          </div>
-          <p className="text-[11px] text-white/20 max-w-xs leading-relaxed">
-            Track tasks, manage contracts, and keep your team aligned — all in one place.
-          </p>
-        </div>
-      </div>
-
-      {/* Right — Auth form */}
-      <div className="flex flex-col items-center justify-center w-full lg:w-[480px] lg:min-w-[480px] px-6 py-12 bg-background relative">
-        <div className="w-full max-w-[360px] flex flex-col items-center">
+    <div className="flex min-h-screen w-full bg-black text-white">
+      {/* Left: auth form */}
+      <div className="flex flex-1 items-center justify-center px-6 py-12">
+        <div className="flex w-full max-w-[400px] flex-col items-center text-center">
           {/* Logo */}
-          <div className="flex items-center gap-2.5 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center">
-              <span className="text-sm font-bold text-primary">N</span>
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logoUrl} alt="Nizek" className="h-11 w-11 rounded-xl" />
+          ) : (
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15">
+              <span className="text-base font-bold text-primary">N</span>
             </div>
-            <span className="text-lg font-bold tracking-tight text-foreground">Nizek Project</span>
-          </div>
+          )}
+
+          <h1 className="mt-6 text-[26px] font-semibold leading-[1.2] tracking-tight text-white">
+            Welcome to Nizek
+          </h1>
+          <p className="text-[26px] font-semibold leading-[1.2] tracking-tight text-white/45">
+            Start managing now.
+          </p>
 
           {/* Clerk form */}
-          {children}
+          <div className="mt-8 w-full">{children}</div>
 
-          {/* Footer */}
-          <p className="mt-8 text-[10px] text-muted-foreground/50 text-center">
+          <p className="mt-8 text-[10px] text-white/30">
             Access is restricted to approved accounts only.
           </p>
-          <p className="mt-2 text-[10px] text-muted-foreground/30">
-            nizek &middot; v1.0
-          </p>
         </div>
+      </div>
+
+      {/* Right: scrolling gallery */}
+      <ScrollingGallery photos={photos} />
+    </div>
+  );
+}
+
+function ScrollingGallery({ photos }: { photos: GalleryPhoto[] }) {
+  const custom = photos.length > 0;
+  const photosA = photos.filter((p) => p.column === "a");
+  const photosB = photos.filter((p) => p.column === "b");
+
+  return (
+    <div className="relative hidden w-[46%] shrink-0 overflow-hidden lg:block">
+      <div className="absolute inset-0 grid grid-cols-2 gap-4 p-4">
+        <div className="relative overflow-hidden">
+          <div className="animate-scroll-up flex flex-col gap-4">
+            {custom
+              ? [...photosA, ...photosA].map((p, i) => (
+                  <PhotoCard key={`a-${i}`} src={p.url} />
+                ))
+              : [...CARDS_A, ...CARDS_A].map((c, i) => (
+                  <GalleryCard key={`a-${i}`} {...c} />
+                ))}
+          </div>
+        </div>
+        <div className="relative overflow-hidden">
+          <div className="animate-scroll-down flex flex-col gap-4">
+            {custom
+              ? [...photosB, ...photosB].map((p, i) => (
+                  <PhotoCard key={`b-${i}`} src={p.url} />
+                ))
+              : [...CARDS_B, ...CARDS_B].map((c, i) => (
+                  <GalleryCard key={`b-${i}`} {...c} />
+                ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Top/bottom fade for polish */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black to-transparent" />
+    </div>
+  );
+}
+
+function PhotoCard({ src }: { src: string }) {
+  return (
+    <div className="aspect-[4/3] w-full overflow-hidden rounded-xl shadow-lg ring-1 ring-white/5">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" className="h-full w-full object-cover" />
+    </div>
+  );
+}
+
+function GalleryCard({
+  title,
+  from,
+  to,
+  text,
+}: {
+  title: string;
+  from: string;
+  to: string;
+  text: string;
+}) {
+  return (
+    <div
+      className="flex aspect-[4/3] w-full flex-col justify-end rounded-xl p-5 shadow-lg ring-1 ring-white/5"
+      style={{
+        backgroundImage: `linear-gradient(135deg, ${from}, ${to})`,
+        color: text,
+      }}
+    >
+      <div className="text-[15px] font-semibold leading-tight tracking-tight">
+        {title}
       </div>
     </div>
   );

@@ -26,6 +26,15 @@ export async function uploadToR2(
   return `${process.env.R2_PUBLIC_URL}/${key}`;
 }
 
+export function generateR2Key(prefix: string, filename: string): string {
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10).replace(/-/g, "");
+  const time = now.toISOString().slice(11, 19).replace(/:/g, "");
+  const rand = crypto.randomUUID().slice(0, 8);
+  const ext = filename.includes(".") ? filename.split(".").pop() : "bin";
+  return `${prefix}/${date}/${time}_${rand}.${ext}`;
+}
+
 export function extractR2Key(url: string): string | null {
   const publicUrl = process.env.R2_PUBLIC_URL;
   if (!publicUrl || !url.startsWith(publicUrl)) return null;

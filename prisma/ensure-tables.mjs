@@ -121,6 +121,32 @@ CREATE TABLE IF NOT EXISTS "PushSubscription" (
     CONSTRAINT "PushSubscription_pkey" PRIMARY KEY ("id")
 );
 
+CREATE TABLE IF NOT EXISTS "BrandingAsset" (
+    "id" TEXT NOT NULL,
+    "slot" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "r2Key" TEXT NOT NULL,
+    "contentType" TEXT NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "width" INTEGER NOT NULL DEFAULT 0,
+    "height" INTEGER NOT NULL DEFAULT 0,
+    "size" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "BrandingAsset_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE IF NOT EXISTS "LoginPhoto" (
+    "id" TEXT NOT NULL,
+    "url" TEXT NOT NULL,
+    "r2Key" TEXT NOT NULL,
+    "contentType" TEXT,
+    "column" TEXT NOT NULL DEFAULT 'a',
+    "order" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "LoginPhoto_pkey" PRIMARY KEY ("id")
+);
+
 CREATE UNIQUE INDEX IF NOT EXISTS "ConversationParticipant_conversationId_memberId_key"
   ON "ConversationParticipant"("conversationId", "memberId");
 CREATE INDEX IF NOT EXISTS "ConversationParticipant_memberId_idx"
@@ -139,6 +165,8 @@ CREATE INDEX IF NOT EXISTS "Notification_recipientId_read_createdAt_idx"
   ON "Notification"("recipientId", "read", "createdAt");
 CREATE UNIQUE INDEX IF NOT EXISTS "PushSubscription_endpoint_key" ON "PushSubscription"("endpoint");
 CREATE INDEX IF NOT EXISTS "PushSubscription_memberId_idx" ON "PushSubscription"("memberId");
+CREATE UNIQUE INDEX IF NOT EXISTS "BrandingAsset_slot_key" ON "BrandingAsset"("slot");
+CREATE INDEX IF NOT EXISTS "LoginPhoto_column_order_idx" ON "LoginPhoto"("column", "order");
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'ConversationParticipant_conversationId_fkey') THEN

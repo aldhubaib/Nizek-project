@@ -1,9 +1,38 @@
 import { SignIn } from "@clerk/nextjs";
-import { AuthLayout } from "@/components/auth/auth-layout";
+import { AuthLayout, type GalleryPhoto } from "@/components/auth/auth-layout";
+import { prisma } from "@/lib/prisma";
+import { getBrandingMap } from "@/lib/branding";
 
-export default function SignInPage() {
+export const dynamic = "force-dynamic";
+
+async function loadGallery(): Promise<{
+  photos: GalleryPhoto[];
+  logoUrl: string | null;
+}> {
+  try {
+    const [rows, branding] = await Promise.all([
+      prisma.loginPhoto.findMany({
+        orderBy: [{ column: "asc" }, { order: "asc" }, { createdAt: "asc" }],
+      }),
+      getBrandingMap(),
+    ]);
+    return {
+      photos: rows.map((p) => ({
+        id: p.id,
+        column: p.column === "b" ? "b" : "a",
+        url: p.url,
+      })),
+      logoUrl: branding.webLogo?.url ?? null,
+    };
+  } catch {
+    return { photos: [], logoUrl: null };
+  }
+}
+
+export default async function SignInPage() {
+  const { photos, logoUrl } = await loadGallery();
   return (
-    <AuthLayout>
+    <AuthLayout photos={photos} logoUrl={logoUrl}>
       <SignIn
         appearance={{
           elements: {

@@ -5,6 +5,7 @@ import { dark } from "@clerk/themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdateNotifier } from "@/components/update-notifier";
 import { getAppVersion } from "@/lib/version";
+import { getBrandingMap, brandingUrl } from "@/lib/branding";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -17,10 +18,24 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Nizek Project",
-  description: "Project management for teams",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const map = await getBrandingMap();
+  const favicon = brandingUrl(map, "favicon");
+  const apple = map.appleTouchIcon?.url;
+  const og = map.ogImage?.url;
+
+  const icons: Metadata["icons"] = {};
+  if (favicon) icons.icon = favicon;
+  if (apple) icons.apple = apple;
+
+  return {
+    title: "Nizek Project",
+    description: "Project management for teams",
+    manifest: "/manifest.json",
+    icons: favicon || apple ? icons : undefined,
+    openGraph: og ? { images: [{ url: og }] } : undefined,
+  };
+}
 
 export default function RootLayout({
   children,

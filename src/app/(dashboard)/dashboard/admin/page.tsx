@@ -5,6 +5,8 @@ import { getTeams, ensureDefaultTeams, getPendingInvitesForTeam, getTeamMembers,
 import { getRoles } from "@/actions/role";
 import { getContractPrefixes } from "@/actions/contract-prefix";
 import { getDefaultQuestions } from "@/actions/default-question";
+import { getBrandingAssets } from "@/actions/branding";
+import { getLoginPhotos } from "@/actions/login-photos";
 import { AdminPageClient } from "./admin-page-client";
 
 export default async function AdminPage() {
@@ -13,7 +15,7 @@ export default async function AdminPage() {
 
   await ensureDefaultTeams();
 
-  const [teams, pendingInvites, members, invitations, teamInvites, roles, prefixes, questions] = await Promise.all([
+  const [teams, pendingInvites, members, invitations, teamInvites, roles, prefixes, questions, branding, loginPhotos] = await Promise.all([
     getTeams(),
     getPendingInvitesForTeam(),
     getTeamMembers(),
@@ -22,6 +24,8 @@ export default async function AdminPage() {
     getRoles(),
     getContractPrefixes(),
     getDefaultQuestions(),
+    getBrandingAssets(),
+    getLoginPhotos(),
   ]);
 
   return (
@@ -35,6 +39,8 @@ export default async function AdminPage() {
         roles={roles}
         prefixes={prefixes}
         questions={questions}
+        branding={branding}
+        loginPhotos={loginPhotos}
       />
     </Suspense>
   );
