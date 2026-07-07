@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Undo2, Loader2, AlertTriangle, Paperclip, X, FileText } from "lucide-react";
+import { Undo2, Loader2, AlertTriangle, AtSign, Paperclip, X, FileText } from "lucide-react";
 import type { Stage } from "@/store/kanban";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -33,14 +33,17 @@ export interface DeclineAttachment {
 
 interface Props {
   fromStage: Stage;
+  /** Person who submitted the task — @mentioned by default and not editable. */
+  mentionName?: string | null;
   onConfirm: (comment: string, attachments?: DeclineAttachment[]) => Promise<void>;
   onCancel: () => void;
 }
 
-export function DeclineDialog({ fromStage, onConfirm, onCancel }: Props) {
+export function DeclineDialog({ fromStage, mentionName, onConfirm, onCancel }: Props) {
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleFilesSelected(files: FileList | null) {
@@ -117,19 +120,26 @@ export function DeclineDialog({ fromStage, onConfirm, onCancel }: Props) {
               <label className="text-[12px] font-medium text-foreground">
                 Reason for declining <span className="text-destructive">*</span>
               </label>
+              {mentionName && (
+                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span>Notifying</span>
+                  <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 font-medium text-primary">
+                    <AtSign className="w-3 h-3" />
+                    {mentionName}
+                  </span>
+                </div>
+              )}
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 placeholder="Explain what needs to be fixed or changed..."
-                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-destructive/30 focus:border-destructive/50 resize-none transition-colors"
+                className="w-full rounded-lg border border-destructive/40 bg-background px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-destructive/30 focus:border-destructive/50 resize-none transition-colors"
                 rows={4}
                 autoFocus
               />
-              {comment.length === 0 && (
-                <p className="text-[11px] text-muted-foreground/60">
-                  A comment is required when declining a task
-                </p>
-              )}
+              <p className="text-[11px] text-muted-foreground/60">
+                A comment is required when declining a task
+              </p>
             </div>
 
             {/* Pending files */}
@@ -158,13 +168,24 @@ export function DeclineDialog({ fromStage, onConfirm, onCancel }: Props) {
               </div>
             )}
 
-            {/* Attach button */}
+            {/* Dropzone */}
             <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFilesSelected(e.dataTransfer.files); }}
+              className={`mt-3 flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-6 text-center transition-colors ${
+                dragOver
+                  ? "border-destructive/50 bg-destructive/5"
+                  : "border-border/70 bg-muted/20 hover:border-border hover:bg-muted/30"
+              }`}
             >
-              <Paperclip className="w-3.5 h-3.5" />
-              Attach files
+              <Paperclip className="w-5 h-5 text-muted-foreground" />
+              <span className="text-[13px] text-muted-foreground">Attach files</span>
+              <span className="text-[11px] text-muted-foreground/70">
+                Drop a file or click to browse
+              </span>
             </button>
             <input
               ref={fileInputRef}

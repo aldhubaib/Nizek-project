@@ -12,7 +12,7 @@ import {
   canModifyInStage,
 } from "@/lib/permissions";
 import { broadcastTaskEvent, broadcastMentionEvent } from "@/lib/pusher";
-import { publish, broadcast, taskChannel, userChannel } from "@/lib/centrifugo";
+import { publish, broadcast, taskChannel, projectChannel, userChannel } from "@/lib/centrifugo";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import { sendPush } from "@/lib/push";
 
@@ -485,7 +485,16 @@ export async function declineTask(data: {
 
     const task = await prisma.task.findUnique({
       where: { id: data.taskId },
-      select: { id: true, stage: true, projectId: true, order: true, title: true, taskNumber: true },
+      select: {
+        id: true,
+        stage: true,
+        projectId: true,
+        order: true,
+        title: true,
+        taskNumber: true,
+        assigneeId: true,
+        assignee: { select: { id: true, name: true } },
+      },
     });
     if (!task) return { success: false, error: "Task not found" };
 
@@ -516,11 +525,23 @@ export async function declineTask(data: {
       select: { userId: true, user: { select: { id: true, name: true } } },
     });
 
-    const mentionUserIds: string[] = [];
+    // Resolve who to @mention (and notify) on the rejection. Primary: whoever
+    // moved the task into the stage it's being declined from. Fallback: the
+    // current assignee, so a rejection always has someone to notify.
+    let submitterId: string | null = null;
+    let submitterName: string | null = null;
+    if (entryActivity?.user && entryActivity.userId !== user.id) {
+      submitterId = entryActivity.userId;
+      submitterName = entryActivity.user.name ?? null;
+    } else if (task.assignee && task.assigneeId !== user.id) {
+      submitterId = task.assignee.id;
+      submitterName = task.assignee.name ?? null;
+    }
+
+    const mentionUserIds: string[] = submitterId ? [submitterId] : [];
     let content = `⚠️ **Declined from ${task.stage.replaceAll("_", " ")}**: ${data.comment}`;
-    if (entryActivity?.user && entryActivity.userId !== user.id && entryActivity.user.name) {
-      content += `\n\n@${entryActivity.user.name}`;
-      mentionUserIds.push(entryActivity.userId);
+    if (submitterId) {
+      content += `\n\n@${submitterName ?? "user"}`;
     }
 
     const declineComment = await prisma.taskComment.create({
@@ -546,30 +567,6 @@ export async function declineTask(data: {
 
     if (mentionUserIds.length) {
       broadcastMentionEvent(mentionUserIds, user.id);
-
-      const declineSnippet = data.comment.replace(/\s+/g, " ").trim().slice(0, 140);
-      await prisma.notification.createMany({
-        data: mentionUserIds
-          .filter((id) => id !== user.id)
-          .map((rid) => ({
-            recipientId: rid,
-            type: "mention",
-            title: `${user.name ?? "Someone"} declined a task`,
-            body: `#${task.taskNumber} ${task.title}: ${declineSnippet}`,
-            linkUrl: `/dashboard/projects/${task.projectId}/tasks/${task.id}`,
-          })),
-      });
-      const declineRecipients = mentionUserIds.filter((id) => id !== user.id);
-      void broadcast(
-        declineRecipients.map((rid) => userChannel(rid)),
-        { type: "notification.new" },
-      );
-      void sendPush(declineRecipients, {
-        title: `${user.name ?? "Someone"} declined a task`,
-        body: `#${task.taskNumber} ${task.title}: ${declineSnippet}`,
-        url: `/dashboard/projects/${task.projectId}/tasks/${task.id}`,
-        tag: `task-${task.id}`,
-      });
     }
 
     // Stream the decline comment to anyone viewing this task (best-effort).
@@ -577,6 +574,103 @@ export async function declineTask(data: {
       type: "comment.new",
       commentId: declineComment.id,
       authorId: user.id,
+    });
+
+    // Post the rejection into the project chat channel so it shows in the
+    // project chat + inbox, and notify the submitter (bell + OS push).
+    const declineSnippet = data.comment.replace(/\s+/g, " ").trim().slice(0, 140);
+    // Mention marker is placed first so the chat renders "@Name  reason".
+    const rejectionBody = submitterId
+      ? `@[${submitterName ?? "user"}](${submitterId}) ${data.comment}`
+      : data.comment;
+
+    const rejectionMessage = await prisma.message.create({
+      data: {
+        taskId: task.id,
+        projectId: task.projectId,
+        authorId: user.id,
+        body: rejectionBody,
+        kind: "rejection",
+        ...(submitterId && { mentions: { create: [{ memberId: submitterId }] } }),
+        ...(data.attachments?.length && {
+          attachments: {
+            create: data.attachments.map((a) => ({
+              filename: a.filename,
+              url: a.url,
+              fileSize: a.fileSize ?? null,
+              mimeType: a.mimeType ?? null,
+            })),
+          },
+        }),
+      },
+      include: {
+        author: { select: { id: true, name: true, email: true } },
+        attachments: {
+          select: { id: true, filename: true, url: true, fileSize: true, mimeType: true },
+        },
+      },
+    });
+
+    const authorName =
+      rejectionMessage.author.name ?? rejectionMessage.author.email ?? "Someone";
+    const displayBody = rejectionBody.replace(/@\[([^\]]+)\]\(([^)]+)\)/g, "@$1");
+    const rejectionDto = {
+      id: rejectionMessage.id,
+      taskId: task.id,
+      projectId: task.projectId,
+      conversationId: null,
+      kind: "rejection",
+      authorId: user.id,
+      authorName,
+      body: displayBody,
+      createdAt: rejectionMessage.createdAt.toISOString(),
+      attachments: rejectionMessage.attachments.map((a) => ({
+        id: a.id,
+        name: a.filename,
+        url: a.url,
+        contentType: a.mimeType,
+        sizeBytes: a.fileSize,
+        isImage: Boolean(a.mimeType && a.mimeType.startsWith("image/")),
+      })),
+      replyToId: null,
+      task: {
+        id: task.id,
+        projectId: task.projectId,
+        number: task.taskNumber,
+        title: task.title,
+      },
+      mentions: submitterName ? [submitterName] : [],
+    };
+
+    void broadcast([taskChannel(task.id), projectChannel(task.projectId)], {
+      type: "message.new",
+      message: rejectionDto,
+    });
+
+    if (submitterId) {
+      const title = `${user.name ?? "Someone"} declined "${task.title}"`;
+      const notifBody = `#${task.taskNumber} ${task.title}: ${declineSnippet}`;
+      const linkUrl = `/dashboard/projects/${task.projectId}/tasks/${task.id}`;
+      await prisma.notification.create({
+        data: { recipientId: submitterId, type: "rejection", title, body: notifBody, linkUrl },
+      });
+      void broadcast([userChannel(submitterId)], { type: "notification.new" });
+      void sendPush([submitterId], {
+        title,
+        body: notifBody,
+        url: linkUrl,
+        tag: `task-${task.id}`,
+      });
+    }
+
+    // Bump the project thread in the inbox sidebar for the people involved.
+    const inboxTargets = [...new Set([user.id, ...(submitterId ? [submitterId] : [])])];
+    void broadcast(inboxTargets.map(userChannel), {
+      type: "inbox",
+      threadId: `project-${task.projectId}`,
+      projectId: task.projectId,
+      taskId: null,
+      conversationId: null,
     });
 
     const oldStage = task.stage;
