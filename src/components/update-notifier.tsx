@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Sparkles } from "lucide-react";
 
 const POLL_INTERVAL_MS = 60_000;
 
@@ -36,7 +36,6 @@ function setFavicon(href: string) {
  */
 export function UpdateNotifier({ currentVersion }: { currentVersion: string }) {
   const [newVersion, setNewVersion] = useState<string | null>(null);
-  const dismissedRef = useRef<string | null>(null);
 
   const check = useCallback(async () => {
     try {
@@ -45,13 +44,10 @@ export function UpdateNotifier({ currentVersion }: { currentVersion: string }) {
       const data = (await res.json()) as VersionResponse;
       if (!data?.version || data.version === currentVersion) return;
 
-      // A changed logo should apply right away, regardless of whether the user
-      // has dismissed the update prompt.
+      // A changed logo should apply right away.
       if (data.logo) setFavicon(data.logo);
 
-      if (data.version !== dismissedRef.current) {
-        setNewVersion(data.version);
-      }
+      setNewVersion(data.version);
     } catch {
       // Network hiccup — ignore and retry on the next interval.
     }
@@ -79,11 +75,6 @@ export function UpdateNotifier({ currentVersion }: { currentVersion: string }) {
 
   if (!newVersion) return null;
 
-  const dismiss = () => {
-    dismissedRef.current = newVersion;
-    setNewVersion(null);
-  };
-
   const update = () => {
     window.location.reload();
   };
@@ -109,21 +100,8 @@ export function UpdateNotifier({ currentVersion }: { currentVersion: string }) {
               >
                 Update now
               </button>
-              <button
-                onClick={dismiss}
-                className="h-7 px-2.5 rounded-lg text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-card/60 transition-colors"
-              >
-                Later
-              </button>
             </div>
           </div>
-          <button
-            onClick={dismiss}
-            aria-label="Dismiss"
-            className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-card/60 transition-colors shrink-0"
-          >
-            <X className="w-3.5 h-3.5" strokeWidth={1.5} />
-          </button>
         </div>
       </div>
     </div>

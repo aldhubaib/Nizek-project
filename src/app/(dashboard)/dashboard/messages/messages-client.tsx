@@ -10,6 +10,8 @@ import {
   MessageSquare,
   X,
   PenSquare,
+  Archive,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +77,7 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<"all" | "project" | "direct">("all");
   const [composeOpen, setComposeOpen] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
 
   const cent = useCentrifugo();
   const online = usePresence(cent ? globalPresenceChannel() : null);
@@ -86,7 +89,7 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
     if (d?.type === "inbox") router.refresh();
   });
 
-  const rows = useMemo(() => {
+  const allRows = useMemo(() => {
     return threads
       .filter((t) => (tab === "all" ? true : t.kind === tab))
       .filter((t) =>
@@ -101,6 +104,14 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
         return tb - ta;
       });
   }, [threads, tab, q]);
+
+  // Inactive projects collapse into their own section (like Falak's archived).
+  const rows = useMemo(() => allRows.filter((t) => !t.inactive), [allRows]);
+  const inactiveRows = useMemo(
+    () => allRows.filter((t) => t.inactive),
+    [allRows],
+  );
+  const showInactiveSection = tab !== "direct" && inactiveRows.length > 0;
 
   return (
     <aside
@@ -167,7 +178,7 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
       </div>
 
       <ul className="min-h-0 flex-1 overflow-y-auto">
-        {rows.length === 0 && (
+        {rows.length === 0 && !showInactiveSection && (
           <li className="p-6 text-center text-xs text-muted-foreground">
             No conversations
           </li>
@@ -184,6 +195,42 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
             />
           </li>
         ))}
+
+        {showInactiveSection && (
+          <li>
+            <button
+              type="button"
+              onClick={() => setShowInactive((v) => !v)}
+              aria-expanded={showInactive}
+              className="flex w-full items-center gap-2 border-y border-border/40 bg-surface/30 px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface/60"
+            >
+              <Archive className="h-3.5 w-3.5" />
+              <span>Inactive projects</span>
+              <span className="ml-1 rounded-full bg-surface px-1.5 text-tiny">
+                {inactiveRows.length}
+              </span>
+              <ChevronDown
+                className={cn(
+                  "ml-auto h-3.5 w-3.5 transition-transform",
+                  showInactive && "rotate-180",
+                )}
+              />
+            </button>
+            {showInactive && (
+              <ul>
+                {inactiveRows.map((thread) => (
+                  <li key={thread.id}>
+                    <ThreadRow
+                      thread={thread}
+                      active={pathname === `/dashboard/messages/${thread.id}`}
+                      isOnline={false}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        )}
       </ul>
 
       <ComposeDialog
@@ -210,7 +257,9 @@ function ThreadRow({
       className={cn(
         "flex items-start gap-3 border-b border-border/40 px-3 py-3 transition-colors hover:bg-surface/60",
         active && "bg-surface/80",
-        thread.unread > 0 && !active && "bg-primary/[0.05]",
+        !thread.inactive && thread.unread > 0 && !active && "bg-primary/[0.05]",
+        thread.inactive && "opacity-70 hover:opacity-100",
+        thread.inactive && active && "opacity-100",
       )}
     >
       <div className="relative shrink-0">

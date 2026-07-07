@@ -6,7 +6,6 @@ import { UserButton } from "@clerk/nextjs";
 import {
   LayoutDashboard,
   FolderKanban,
-  Inbox,
   Settings,
   Pin,
   PinOff,
@@ -21,7 +20,6 @@ import { cn } from "@/lib/utils";
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false },
   { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false },
-  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false },
   { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true },
 ];
 
