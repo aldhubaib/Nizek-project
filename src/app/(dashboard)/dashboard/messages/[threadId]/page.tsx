@@ -37,6 +37,8 @@ export default async function ThreadPage({
   let subtitle = "";
   let peerMemberIds: string[] = [];
   const memberNames: Record<string, string> = {};
+  // Who can be @mentioned in this thread's composer.
+  let mentionables: { id: string; name: string }[] = [];
   // Project chat/task threads are read-only when the project has no active
   // contract (mirrors Falak: inactive projects have a read-only channel).
   let inactive = false;
@@ -95,6 +97,7 @@ export default async function ThreadPage({
       memberNames[p.member.id] = p.member.name ?? p.member.email;
     }
     peerMemberIds = others.map((m) => m.id);
+    mentionables = others.map((m) => ({ id: m.id, name: m.name ?? m.email }));
     target = { conversationId: convo.id };
     channel = conversationChannel(convo.id);
     presenceChannel = globalPresenceChannel();
@@ -104,6 +107,27 @@ export default async function ThreadPage({
     subtitle = convo.isGroup ? `${convo.participants.length} members` : "Direct message";
   } else {
     notFound();
+  }
+
+  // People involved in a project/task thread: project members plus system
+  // admins (who can access every project without being explicit members).
+  if (target.projectId) {
+    const [projectMembers, admins] = await Promise.all([
+      prisma.projectMember.findMany({
+        where: { projectId: target.projectId },
+        select: { user: { select: { id: true, name: true, email: true } } },
+      }),
+      prisma.user.findMany({
+        where: { systemRole: "ADMIN" },
+        select: { id: true, name: true, email: true },
+      }),
+    ]);
+    const map = new Map<string, { id: string; name: string }>();
+    for (const m of [...projectMembers.map((pm) => pm.user), ...admins]) {
+      map.set(m.id, { id: m.id, name: m.name ?? m.email });
+    }
+    map.delete(user.id);
+    mentionables = [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 
   // Latest page only (50 messages) — older pages load on demand in the client.
@@ -132,6 +156,7 @@ export default async function ThreadPage({
       hasMoreOlder={page.hasMore}
       memberNames={memberNames}
       peerMemberIds={peerMemberIds}
+      mentionables={mentionables}
       inactive={inactive}
       readOnly={false}
     />

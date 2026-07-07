@@ -30,6 +30,7 @@ import {
   AlertOctagon,
   ArrowUpRight,
   CheckSquare,
+  AtSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -248,6 +249,7 @@ export function ThreadChat({
   hasMoreOlder = false,
   memberNames = {},
   peerMemberIds = [],
+  mentionables = [],
   inactive = false,
   readOnly = false,
 }: {
@@ -261,6 +263,8 @@ export function ThreadChat({
   hasMoreOlder?: boolean;
   memberNames?: Record<string, string>;
   peerMemberIds?: string[];
+  /** People involved in this thread, offered by the @ mention autocomplete. */
+  mentionables?: { id: string; name: string }[];
   inactive?: boolean;
   readOnly?: boolean;
 }) {
@@ -451,6 +455,45 @@ export function ThreadChat({
     setTimeout(() => composerRef.current?.focus(), 0);
   };
 
+  // Detect a trailing "@query" token in the draft — opens the member picker.
+  // Mentions display as plain "@Name" while typing; on send each picked name
+  // becomes the "@[Name](userId)" token that sendMessage parses to notify them.
+  const mentionToken = useMemo(() => {
+    if (mentionables.length === 0) return null;
+    const m = /(^|\s)@([^\s@]*)$/.exec(draft);
+    if (!m) return null;
+    return { start: m.index + m[1].length, query: m[2].toLowerCase() };
+  }, [draft, mentionables.length]);
+
+  const mentionResults = useMemo(() => {
+    if (!mentionToken) return [];
+    const q = mentionToken.query;
+    const filtered = q
+      ? mentionables.filter((m) => m.name.toLowerCase().includes(q))
+      : mentionables;
+    return filtered.slice(0, 6);
+  }, [mentionToken, mentionables]);
+  const mentionPickerOpen = !!mentionToken && mentionResults.length > 0;
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [pickedMentions, setPickedMentions] = useState<
+    { id: string; name: string }[]
+  >([]);
+
+  useEffect(() => {
+    setMentionIndex(0);
+  }, [mentionToken?.query, mentionResults.length]);
+
+  const pickMention = (m: { id: string; name: string }) => {
+    if (!mentionToken) return;
+    const before = draft.slice(0, mentionToken.start);
+    const after = draft.slice(mentionToken.start + 1 + mentionToken.query.length);
+    setDraft(`${before}@${m.name} ${after}`.replace(/ {2,}/g, " "));
+    setPickedMentions((prev) =>
+      prev.some((p) => p.id === m.id) ? prev : [...prev, m],
+    );
+    setTimeout(() => composerRef.current?.focus(), 0);
+  };
+
   // Files wait locally (no upload) until the user presses Send.
   const pickFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -615,8 +658,16 @@ export function ThreadChat({
   );
 
   const send = () => {
-    const text = draft.trim();
+    let text = draft.trim();
     if (!text && pending.length === 0) return;
+    // Convert picked "@Name" mentions into @[Name](id) tokens the server parses.
+    // Longest names first so "@Adham Ali" isn't clobbered by "@Adham".
+    const sortedMentions = [...pickedMentions].sort(
+      (a, b) => b.name.length - a.name.length,
+    );
+    for (const m of sortedMentions) {
+      text = text.split(`@${m.name}`).join(`@[${m.name}](${m.id})`);
+    }
     const files = [...pending];
     const replyId = replyTo;
     const taskRefId = pendingTaskRef?.id ?? null;
@@ -624,6 +675,7 @@ export function ThreadChat({
     setPending([]);
     setReplyTo(null);
     setPendingTaskRef(null);
+    setPickedMentions([]);
 
     if (files.length === 0) {
       const entry: OutboxEntry = {
@@ -1368,6 +1420,38 @@ export function ThreadChat({
               </button>
             </div>
           )}
+          {mentionPickerOpen && (
+            <div className="relative">
+              <div className="absolute -top-1 left-0 z-10 w-full -translate-y-full overflow-hidden rounded-lg border border-border/60 bg-popover shadow-lg">
+                <div className="border-b border-border/60 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  People in {title}
+                </div>
+                <ul className="max-h-60 overflow-y-auto py-1">
+                  {mentionResults.map((m, i) => (
+                    <li key={m.id}>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          pickMention(m);
+                        }}
+                        onMouseEnter={() => setMentionIndex(i)}
+                        className={cn(
+                          "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm",
+                          i === mentionIndex ? "bg-surface" : "hover:bg-surface/60",
+                        )}
+                      >
+                        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary">
+                          {m.name.slice(0, 1).toUpperCase()}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{m.name}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
           {pickerOpen && (
             <div className="relative">
               <div className="absolute -top-1 left-0 z-10 w-full -translate-y-full overflow-hidden rounded-lg border border-border/60 bg-popover shadow-lg">
@@ -1544,6 +1628,20 @@ export function ThreadChat({
             >
               <Paperclip className="h-4 w-4" />
             </Button>
+            {mentionables.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full"
+                aria-label="Mention someone"
+                onClick={() => {
+                  setDraft((d) => (d && !/\s$/.test(d) ? `${d} @` : `${d}@`));
+                  setTimeout(() => composerRef.current?.focus(), 0);
+                }}
+              >
+                <AtSign className="h-4 w-4" />
+              </Button>
+            )}
             <Textarea
               ref={composerRef}
               value={draft}
@@ -1552,6 +1650,31 @@ export function ThreadChat({
                 notifyTyping();
               }}
               onKeyDown={(e) => {
+                if (mentionPickerOpen) {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setMentionIndex((i) => (i + 1) % mentionResults.length);
+                    return;
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setMentionIndex(
+                      (i) =>
+                        (i - 1 + mentionResults.length) % mentionResults.length,
+                    );
+                    return;
+                  }
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    pickMention(mentionResults[mentionIndex]);
+                    return;
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setDraft((d) => d.replace(/(^|\s)@[^\s@]*$/, "$1"));
+                    return;
+                  }
+                }
                 if (pickerOpen) {
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
