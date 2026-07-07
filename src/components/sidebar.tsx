@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { UserButton } from "@clerk/nextjs";
+import { UserMenu } from "@/components/user-menu";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -132,19 +132,8 @@ export function Sidebar({
       </nav>
 
       {/* User */}
-      <div
-        className={cn(
-          "px-3 py-3 flex items-center gap-2.5 hover:bg-card/60 transition-colors",
-          collapsed && "justify-center"
-        )}
-      >
-        <UserButton
-          appearance={{
-            elements: {
-              avatarBox: "w-7 h-7",
-            },
-          }}
-        />
+      <div className={cn("px-2 py-2", collapsed && "px-1.5")}>
+        <UserMenu collapsed={collapsed} />
       </div>
     </div>
   );
