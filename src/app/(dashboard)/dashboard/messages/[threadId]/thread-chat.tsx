@@ -30,7 +30,6 @@ import {
   AlertOctagon,
   ArrowUpRight,
   CheckSquare,
-  AtSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -167,6 +166,34 @@ function renderBodyWithMentions(
   return <>{parts}</>;
 }
 
+// Highlights picked "@Name" mentions in blue inside the composer overlay.
+function renderComposerHighlight(text: string, names: string[]) {
+  if (names.length === 0) return text;
+  const pattern = new RegExp(
+    `@(${names
+      .slice()
+      .sort((a, b) => b.length - a.length)
+      .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("|")})`,
+    "g",
+  );
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > last) parts.push(text.slice(last, match.index));
+    parts.push(
+      <span key={`cm-${key++}`} className="font-medium text-primary">
+        @{match[1]}
+      </span>,
+    );
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return <>{parts}</>;
+}
+
 export type ThreadTarget = {
   taskId?: string | null;
   projectId?: string | null;
@@ -292,6 +319,7 @@ export function ThreadChat({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const mirrorRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const lb = useLightbox();
 
@@ -475,9 +503,6 @@ export function ThreadChat({
   }, [mentionToken, mentionables]);
   const mentionPickerOpen = !!mentionToken && mentionResults.length > 0;
   const [mentionIndex, setMentionIndex] = useState(0);
-  const [pickedMentions, setPickedMentions] = useState<
-    { id: string; name: string }[]
-  >([]);
 
   useEffect(() => {
     setMentionIndex(0);
@@ -488,9 +513,6 @@ export function ThreadChat({
     const before = draft.slice(0, mentionToken.start);
     const after = draft.slice(mentionToken.start + 1 + mentionToken.query.length);
     setDraft(`${before}@${m.name} ${after}`.replace(/ {2,}/g, " "));
-    setPickedMentions((prev) =>
-      prev.some((p) => p.id === m.id) ? prev : [...prev, m],
-    );
     setTimeout(() => composerRef.current?.focus(), 0);
   };
 
@@ -660,9 +682,10 @@ export function ThreadChat({
   const send = () => {
     let text = draft.trim();
     if (!text && pending.length === 0) return;
-    // Convert picked "@Name" mentions into @[Name](id) tokens the server parses.
-    // Longest names first so "@Adham Ali" isn't clobbered by "@Adham".
-    const sortedMentions = [...pickedMentions].sort(
+    // Convert any "@Full Name" that matches a project member into the
+    // @[Name](id) token the server parses. Longest names first so
+    // "@Adham Ali" isn't clobbered by "@Adham".
+    const sortedMentions = [...mentionables].sort(
       (a, b) => b.name.length - a.name.length,
     );
     for (const m of sortedMentions) {
@@ -675,7 +698,6 @@ export function ThreadChat({
     setPending([]);
     setReplyTo(null);
     setPendingTaskRef(null);
-    setPickedMentions([]);
 
     if (files.length === 0) {
       const entry: OutboxEntry = {
@@ -1628,23 +1650,28 @@ export function ThreadChat({
             >
               <Paperclip className="h-4 w-4" />
             </Button>
-            {mentionables.length > 0 && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="rounded-full"
-                aria-label="Mention someone"
-                onClick={() => {
-                  setDraft((d) => (d && !/\s$/.test(d) ? `${d} @` : `${d}@`));
-                  setTimeout(() => composerRef.current?.focus(), 0);
-                }}
+            <div className="relative flex-1">
+              <div
+                aria-hidden
+                ref={mirrorRef}
+                className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words p-2 text-sm text-foreground"
               >
-                <AtSign className="h-4 w-4" />
-              </Button>
-            )}
+                {renderComposerHighlight(
+                  draft,
+                  mentionables.map((m) => m.name),
+                )}
+                {"\u200b"}
+              </div>
             <Textarea
               ref={composerRef}
               value={draft}
+              onScroll={(e) => {
+                const m = mirrorRef.current;
+                if (m) {
+                  m.scrollTop = e.currentTarget.scrollTop;
+                  m.scrollLeft = e.currentTarget.scrollLeft;
+                }
+              }}
               onChange={(e) => {
                 setDraft(e.target.value);
                 notifyTyping();
@@ -1715,9 +1742,10 @@ export function ThreadChat({
                     ? `Message ${title} — type # to link a task`
                     : `Message ${title}`
               }
-              className="min-h-10 flex-1 resize-none border-0 bg-transparent p-2 text-sm shadow-none focus-visible:ring-0"
+              className="relative min-h-10 w-full resize-none border-0 !bg-transparent p-2 text-sm !text-transparent caret-foreground shadow-none focus-visible:ring-0 dark:!bg-transparent"
               rows={1}
             />
+            </div>
             {draft.trim() || pending.length > 0 ? (
               <Button
                 size="icon"
