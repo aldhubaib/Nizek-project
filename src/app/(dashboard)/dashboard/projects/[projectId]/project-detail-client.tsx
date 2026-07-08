@@ -18,7 +18,8 @@ import { getContractPrefixes } from "@/actions/contract-prefix";
 import { getTeams } from "@/actions/team";
 
 import type { TaskQuestion } from "@/components/kanban/question-field";
-import { LayoutGrid, FileText, Paperclip, Users, Settings, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { LayoutGrid, FileText, Paperclip, Users, Settings, Loader2, ArrowLeft } from "lucide-react";
 import type { KanbanTask } from "@/store/kanban";
 export interface UserPermissions {
   canCreateTask: boolean;
@@ -258,6 +259,14 @@ export function ProjectDetailClient({
     <div>
       <div className="h-12 flex items-center justify-between px-6 pr-14 border-b border-border shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
+          <Link
+            href="/dashboard/projects"
+            className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
+            title="Back to all projects"
+            aria-label="Back to all projects"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
           {project.logoUrl ? (
             <img
               src={project.logoUrl}

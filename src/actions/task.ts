@@ -256,6 +256,65 @@ export async function updateTask(data: {
   return updated;
 }
 
+/**
+ * Claim a task by assigning it to the current user. Offered on the board when
+ * the viewer clicks a task's avatar and holds the right to move that task at its
+ * current stage (admins always qualify). The server re-checks the permission.
+ */
+export async function assignTaskToMe(
+  taskId: string
+): Promise<{ success: true } | { success: false; error: string }> {
+  try {
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      include: { project: { include: { contracts: true } } },
+    });
+    if (!task) return { success: false, error: "Task not found" };
+
+    const { user, member } = await requireProjectMember(task.projectId);
+    const isAdmin = user.systemRole === "ADMIN";
+
+    const activeContract = getActiveContract(task.project.contracts);
+    if (!activeContract && !isAdmin) {
+      return { success: false, error: "No active contract — this project is read-only" };
+    }
+
+    if (!isAdmin) {
+      const perms = getPermissionsFromRole(member.projectRole);
+      const canMoveAtStage =
+        perms.canMoveTask && (perms.allowedTransitions[task.stage]?.length ?? 0) > 0;
+      if (!canMoveAtStage) {
+        return { success: false, error: "You don't have permission to assign tasks at this stage" };
+      }
+    }
+
+    if (task.assigneeId === user.id) return { success: true };
+
+    await prisma.task.update({
+      where: { id: taskId },
+      data: { assigneeId: user.id },
+    });
+
+    await logTaskActivity({
+      taskId,
+      userId: user.id,
+      action: "updated",
+      field: "assignee",
+      newValue: user.name ?? null,
+    });
+
+    revalidatePath(`/dashboard/projects/${task.projectId}`);
+    broadcastTaskEvent(task.projectId, { type: "task-updated", taskId, userId: user.id });
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to assign task",
+    };
+  }
+}
+
 export async function moveTask(data: {
   taskId: string;
   stage: "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "READY_FOR_RELEASE" | "DONE";

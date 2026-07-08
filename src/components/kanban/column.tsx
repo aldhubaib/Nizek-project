@@ -29,9 +29,16 @@ interface ColumnProps {
   dragTaskType?: string | null;
   isAdmin?: boolean;
   canSkipClientReview?: boolean;
+  canSelfAssign?: (task: KanbanTask) => boolean;
+  onSelfAssign?: (task: KanbanTask) => void;
 }
 
-export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled, projectId, questions, canCreateTask, dragFromStage, dragTaskType, isAdmin, canSkipClientReview }: ColumnProps) {
+export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled, projectId, questions, canCreateTask, dragFromStage, dragTaskType, isAdmin, canSkipClientReview, canSelfAssign, onSelfAssign }: ColumnProps) {
+  const selfAssignProps = useCallback(
+    (task: KanbanTask) =>
+      onSelfAssign && canSelfAssign?.(task) ? () => onSelfAssign(task) : undefined,
+    [onSelfAssign, canSelfAssign]
+  );
   const router = useRouter();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
@@ -129,6 +136,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
                         locked={i > 0}
                         onExpand={() => handleExpand(task.id)}
                         projectId={projectId}
+                        onSelfAssign={selfAssignProps(task)}
                       />
                     ))}
                   </div>
@@ -156,6 +164,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
                         locked
                         onExpand={() => setSelectedTaskId(task.id)}
                         projectId={projectId}
+                        onSelfAssign={selfAssignProps(task)}
                       />
                     ))}
                   </div>
@@ -183,6 +192,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
                         locked
                         onExpand={() => setSelectedTaskId(task.id)}
                         projectId={projectId}
+                        onSelfAssign={selfAssignProps(task)}
                       />
                     ))}
                   </div>
@@ -198,6 +208,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
                   disabled={disabled}
                   onExpand={() => setSelectedTaskId(task.id)}
                   projectId={projectId}
+                  onSelfAssign={selfAssignProps(task)}
                 />
               ))}
             </div>

@@ -15,7 +15,8 @@ import {
 import { KanbanColumn } from "./column";
 import { TaskCard } from "./task-card";
 import { useKanbanStore, type KanbanTask, type Stage } from "@/store/kanban";
-import { moveTask as moveTaskAction, declineTask, pollTaskUpdates } from "@/actions/task";
+import { moveTask as moveTaskAction, declineTask, pollTaskUpdates, assignTaskToMe } from "@/actions/task";
+import { useUser } from "@clerk/nextjs";
 import type { TaskQuestion } from "./question-field";
 import { StageConfirmDialog, getCheckpoint } from "./stage-confirm-dialog";
 import { DeclineDialog, type DeclineAttachment } from "./decline-dialog";
@@ -53,6 +54,14 @@ interface BoardProps {
 
 const PIPELINE_STAGES: Stage[] = ["READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW"];
 
+const ASSIGN_TO_ME_CHECKPOINT = {
+  title: "Taking ownership",
+  message: "By confirming, this task will be assigned to you and you take ownership of it.",
+  confirmLabel: "Assign to Me",
+  confirmColor: "bg-blue-600 hover:bg-blue-700",
+  assignToMe: true,
+} as const;
+
 function wipLimitMessage(max: number) {
   return `Pipeline limit reached — this project allows up to ${max} active task${max === 1 ? "" : "s"} across Ready for Dev, In Development, and Internal Review. Move an existing task past Internal Review (or complete it) before adding another.`;
 }
@@ -70,9 +79,11 @@ export function KanbanBoard({
   maxPipelineTasks = 3,
 }: BoardProps) {
   const { tasks, setTasks, moveTask } = useKanbanStore();
+  const { user } = useUser();
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
   const [pendingMove, setPendingMove] = useState<{ taskId: string; fromStage: Stage; toStage: Stage; order: number; assigneeName: string | null; assigneeAvatar: string | null } | null>(null);
   const [pendingDecline, setPendingDecline] = useState<{ taskId: string; fromStage: Stage; mentionName: string | null; mentionAvatar: string | null } | null>(null);
+  const [assignTarget, setAssignTarget] = useState<{ taskId: string; assigneeName: string | null; assigneeAvatar: string | null } | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const isDragging = useRef(false);
@@ -172,6 +183,55 @@ export function KanbanBoard({
     userPermissions.canMoveTask &&
     (userPermissions.allowedTransitions?.["INTERNAL_REVIEW"] ?? []).includes("READY_FOR_RELEASE")
   );
+
+  // Claim a task by clicking its avatar — offered when the viewer can move it at
+  // its current stage (admins always qualify), and it isn't already theirs.
+  const canSelfAssign = useCallback(
+    (task: KanbanTask) => {
+      if (!isProjectActive) return false;
+      if (task.assignee?.id === currentUserId) return false;
+      if (userPermissions.isAdmin) return true;
+      if (!userPermissions.canMoveTask) return false;
+      const allowed = userPermissions.allowedTransitions?.[task.stage];
+      return Array.isArray(allowed) && allowed.length > 0;
+    },
+    [userPermissions, isProjectActive, currentUserId]
+  );
+
+  const openSelfAssign = useCallback((task: KanbanTask) => {
+    setAssignTarget({
+      taskId: task.id,
+      assigneeName: task.assignee?.name ?? null,
+      assigneeAvatar: task.assignee?.imageUrl ?? null,
+    });
+  }, []);
+
+  function handleConfirmAssign() {
+    if (!assignTarget) return;
+    const { taskId } = assignTarget;
+    setAssignTarget(null);
+    const snapshot = useKanbanStore.getState().tasks;
+    setTasks(
+      snapshot.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              assignee: {
+                id: currentUserId ?? "",
+                name: user?.fullName || user?.firstName || null,
+                imageUrl: user?.imageUrl ?? null,
+              },
+            }
+          : t
+      )
+    );
+    assignTaskToMe(taskId).then((result) => {
+      if (!result.success) {
+        setTasks(snapshot);
+        setPermissionError(result.error || "Failed to assign task. Please try again.");
+      }
+    });
+  }
 
   function isDeclineMove(fromStage: Stage, toStage: Stage) {
     return (
@@ -476,6 +536,8 @@ export function KanbanBoard({
               dragTaskType={dragTaskType}
               isAdmin={userPermissions.isAdmin}
               canSkipClientReview={canSkipClientReview}
+              canSelfAssign={canSelfAssign}
+              onSelfAssign={openSelfAssign}
             />
           );
         })}
@@ -504,6 +566,16 @@ export function KanbanBoard({
           mentionAvatar={pendingDecline.mentionAvatar}
           onConfirm={handleConfirmDecline}
           onCancel={handleCancelDecline}
+        />
+      )}
+
+      {assignTarget && (
+        <StageConfirmDialog
+          checkpoint={ASSIGN_TO_ME_CHECKPOINT}
+          currentAssigneeName={assignTarget.assigneeName}
+          currentAssigneeAvatar={assignTarget.assigneeAvatar}
+          onConfirm={handleConfirmAssign}
+          onCancel={() => setAssignTarget(null)}
         />
       )}
 

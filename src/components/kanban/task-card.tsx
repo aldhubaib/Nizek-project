@@ -81,9 +81,11 @@ interface TaskCardProps {
   locked?: boolean;
   onExpand?: () => void;
   projectId?: string;
+  /** Present only when the viewer may claim this task at its current stage. */
+  onSelfAssign?: () => void;
 }
 
-export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, locked, onExpand, projectId }: TaskCardProps) {
+export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, locked, onExpand, projectId, onSelfAssign }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -217,8 +219,24 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
           )}
 
           <div className="ml-auto flex items-center gap-1">
-            {task.assignee && (
-              <UserAvatar name={task.assignee.name} imageUrl={task.assignee.imageUrl} />
+            {onSelfAssign ? (
+              <button
+                type="button"
+                aria-label="Assign this task to me"
+                title={task.assignee ? `${task.assignee.name ?? "Assigned"} — click to assign to me` : "Assign to me"}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelfAssign();
+                }}
+                className="cursor-pointer rounded-full transition-shadow hover:ring-2 hover:ring-primary/60"
+              >
+                <UserAvatar name={task.assignee?.name ?? null} imageUrl={task.assignee?.imageUrl ?? null} />
+              </button>
+            ) : (
+              task.assignee && (
+                <UserAvatar name={task.assignee.name} imageUrl={task.assignee.imageUrl} />
+              )
             )}
           </div>
         </div>
