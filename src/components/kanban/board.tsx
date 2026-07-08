@@ -71,8 +71,8 @@ export function KanbanBoard({
 }: BoardProps) {
   const { tasks, setTasks, moveTask } = useKanbanStore();
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
-  const [pendingMove, setPendingMove] = useState<{ taskId: string; fromStage: Stage; toStage: Stage; order: number } | null>(null);
-  const [pendingDecline, setPendingDecline] = useState<{ taskId: string; fromStage: Stage; mentionName: string | null } | null>(null);
+  const [pendingMove, setPendingMove] = useState<{ taskId: string; fromStage: Stage; toStage: Stage; order: number; assigneeName: string | null; assigneeAvatar: string | null } | null>(null);
+  const [pendingDecline, setPendingDecline] = useState<{ taskId: string; fromStage: Stage; mentionName: string | null; mentionAvatar: string | null } | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const isDragging = useRef(false);
@@ -321,13 +321,13 @@ export function KanbanBoard({
     }
 
     if (isDeclineMove(fromStage, targetStage)) {
-      setPendingDecline({ taskId: activeId, fromStage, mentionName: task.assignee?.name ?? null });
+      setPendingDecline({ taskId: activeId, fromStage, mentionName: task.assignee?.name ?? null, mentionAvatar: task.assignee?.imageUrl ?? null });
       return;
     }
 
     const checkpoint = getCheckpoint(fromStage, targetStage);
     if (checkpoint) {
-      setPendingMove({ taskId: activeId, fromStage, toStage: targetStage, order: task.order });
+      setPendingMove({ taskId: activeId, fromStage, toStage: targetStage, order: task.order, assigneeName: task.assignee?.name ?? null, assigneeAvatar: task.assignee?.imageUrl ?? null });
       return;
     }
 
@@ -489,6 +489,8 @@ export function KanbanBoard({
         return checkpoint ? (
           <StageConfirmDialog
             checkpoint={checkpoint}
+            currentAssigneeName={pendingMove.assigneeName}
+            currentAssigneeAvatar={pendingMove.assigneeAvatar}
             onConfirm={handleConfirmMove}
             onCancel={handleCancelMove}
           />
@@ -499,6 +501,7 @@ export function KanbanBoard({
         <DeclineDialog
           fromStage={pendingDecline.fromStage}
           mentionName={pendingDecline.mentionName}
+          mentionAvatar={pendingDecline.mentionAvatar}
           onConfirm={handleConfirmDecline}
           onCancel={handleCancelDecline}
         />

@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
+import { useUser } from "@clerk/nextjs";
+import { ArrowRight, UserCheck, ShieldAlert } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Stage } from "@/store/kanban";
 
 interface CheckpointConfig {
@@ -11,16 +14,19 @@ interface CheckpointConfig {
   confirmLabel: string;
   confirmColor: string;
   requiresEstimate?: boolean;
+  /** Render the "taking ownership" hand-off chips (current assignee → me). */
+  assignToMe?: boolean;
 }
 
 const CHECKPOINTS: Partial<Record<string, CheckpointConfig>> = {
   "CLARIFICATION→READY_FOR_DEV": {
-    title: "Move to Ready for Dev",
+    title: "Taking ownership",
     message: "By confirming, you acknowledge that you understand the requirements and are taking ownership of this task.",
     notice: "The task timer will start once you confirm.",
     confirmLabel: "I Understand",
     confirmColor: "bg-blue-600 hover:bg-blue-700",
     requiresEstimate: true,
+    assignToMe: true,
   },
   "INTERNAL_REVIEW→CLIENT_REVIEW": {
     title: "Move to Client Review",
@@ -49,6 +55,8 @@ export function getCheckpoint(fromStage: Stage, toStage: Stage): CheckpointConfi
 
 interface Props {
   checkpoint: CheckpointConfig;
+  currentAssigneeName?: string | null;
+  currentAssigneeAvatar?: string | null;
   onConfirm: (estimatedMinutes?: number) => void;
   onCancel: () => void;
 }
@@ -62,10 +70,20 @@ const PRESETS = [
   { label: "2d", minutes: 960 },
 ];
 
-export function StageConfirmDialog({ checkpoint, onConfirm, onCancel }: Props) {
+export function StageConfirmDialog({
+  checkpoint,
+  currentAssigneeName,
+  currentAssigneeAvatar,
+  onConfirm,
+  onCancel,
+}: Props) {
+  const { user } = useUser();
   const [confirming, setConfirming] = useState(false);
   const [selectedMinutes, setSelectedMinutes] = useState(0);
   const [estimateError, setEstimateError] = useState(false);
+
+  const me = user?.fullName || user?.firstName || "You";
+  const meAvatar = user?.imageUrl || null;
 
   function handleConfirm() {
     if (checkpoint.requiresEstimate) {
@@ -84,16 +102,74 @@ export function StageConfirmDialog({ checkpoint, onConfirm, onCancel }: Props) {
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onCancel} />
-      <div className="relative bg-card border border-border rounded-xl shadow-2xl max-w-md w-full mx-4 p-6">
-        <h3 className="text-[15px] font-semibold text-foreground mb-3">
-          {checkpoint.title}
-        </h3>
-        <p className="text-[13px] text-muted-foreground leading-relaxed mb-4">
-          {checkpoint.message}
-        </p>
+      <div className="relative bg-card border border-border rounded-xl shadow-2xl max-w-lg w-full mx-4 p-5">
+        <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-surface/60 p-3">
+          <div
+            className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${
+              checkpoint.assignToMe
+                ? "bg-primary/15 text-primary"
+                : "bg-amber-500/15 text-amber-500"
+            }`}
+          >
+            {checkpoint.assignToMe ? (
+              <UserCheck className="h-5 w-5" />
+            ) : (
+              <ShieldAlert className="h-5 w-5" />
+            )}
+          </div>
+
+          {checkpoint.assignToMe ? (
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                {checkpoint.title}
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-[13px]">
+                {currentAssigneeName ? (
+                  <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-muted/60 py-0.5 pl-0.5 pr-2.5 text-muted-foreground">
+                    <Avatar className="size-5">
+                      {currentAssigneeAvatar && (
+                        <AvatarImage src={currentAssigneeAvatar} alt={currentAssigneeName} />
+                      )}
+                      <AvatarFallback className="bg-muted text-[10px] font-semibold text-muted-foreground">
+                        {currentAssigneeName.slice(0, 1).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="truncate">{currentAssigneeName}</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/60 px-2.5 py-1 text-muted-foreground">
+                    Unassigned
+                  </span>
+                )}
+                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-primary/15 py-0.5 pl-0.5 pr-2.5 font-medium text-primary">
+                  <Avatar className="size-5">
+                    {meAvatar && <AvatarImage src={meAvatar} alt={me} />}
+                    <AvatarFallback className="bg-primary text-[10px] font-bold text-primary-foreground">
+                      {me.slice(0, 1).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="truncate">{me}</span>
+                </span>
+              </div>
+              <p className="text-[12px] leading-relaxed text-muted-foreground">
+                {checkpoint.message}
+              </p>
+            </div>
+          ) : (
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                {checkpoint.title}
+              </div>
+              <p className="text-[13px] leading-relaxed text-muted-foreground">
+                {checkpoint.message}
+              </p>
+            </div>
+          )}
+        </div>
 
         {checkpoint.requiresEstimate && (
-          <div className="mb-4">
+          <div className="mt-4">
             <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
               Estimated Time
             </label>
@@ -122,12 +198,13 @@ export function StageConfirmDialog({ checkpoint, onConfirm, onCancel }: Props) {
         )}
 
         {checkpoint.notice && (
-          <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 mb-6">
+          <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 mt-4">
             <span className="text-amber-400 text-[13px]">⏱</span>
             <p className="text-[12px] text-amber-400/90 font-medium">{checkpoint.notice}</p>
           </div>
         )}
-        <div className="flex items-center justify-end gap-3">
+
+        <div className="flex items-center justify-end gap-3 mt-6">
           <button
             onClick={onCancel}
             className="px-4 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"

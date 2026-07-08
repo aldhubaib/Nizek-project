@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { useUser } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
-import { Undo2, Loader2, AlertTriangle, AtSign, Paperclip, X, FileText } from "lucide-react";
+import { Undo2, Loader2, AlertTriangle, ArrowRight, Paperclip, X, FileText, User } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Stage } from "@/store/kanban";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -35,16 +37,22 @@ interface Props {
   fromStage: Stage;
   /** Person who submitted the task — @mentioned by default and not editable. */
   mentionName?: string | null;
+  mentionAvatar?: string | null;
   onConfirm: (comment: string, attachments?: DeclineAttachment[]) => Promise<void>;
   onCancel: () => void;
 }
 
-export function DeclineDialog({ fromStage, mentionName, onConfirm, onCancel }: Props) {
+export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm, onCancel }: Props) {
+  const { user } = useUser();
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const me = user?.fullName || user?.firstName || "You";
+  const meAvatar = user?.imageUrl || null;
+  const toLabel = STAGE_LABELS[DECLINE_TARGETS[fromStage]] ?? "the previous stage";
 
   function handleFilesSelected(files: FileList | null) {
     if (!files) return;
@@ -104,14 +112,44 @@ export function DeclineDialog({ fromStage, mentionName, onConfirm, onCancel }: P
       <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[901] w-full max-w-md">
         <div className="rounded-xl border border-destructive/30 bg-card shadow-2xl overflow-hidden">
           <div className="px-5 pt-5 pb-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-destructive/15 flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-destructive" />
+            <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-surface/60 p-3 mb-4">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-destructive/15 text-destructive">
+                <AlertTriangle className="h-5 w-5" />
               </div>
-              <div>
-                <h3 className="text-[14px] font-semibold">Decline Task</h3>
-                <p className="text-[12px] text-muted-foreground">
-                  Return this task from {STAGE_LABELS[fromStage] ?? fromStage} back to {STAGE_LABELS[DECLINE_TARGETS[fromStage]] ?? "previous stage"}
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Decline a task
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-[13px]">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/60 py-0.5 pl-0.5 pr-2.5 text-muted-foreground">
+                    <Avatar className="size-5">
+                      {meAvatar && <AvatarImage src={meAvatar} alt={me} />}
+                      <AvatarFallback className="bg-muted text-[10px] font-semibold text-muted-foreground">
+                        {me.slice(0, 1).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    You
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  {mentionName ? (
+                    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-primary/15 py-0.5 pl-0.5 pr-2.5 font-medium text-primary">
+                      <Avatar className="size-5">
+                        {mentionAvatar && <AvatarImage src={mentionAvatar} alt={mentionName} />}
+                        <AvatarFallback className="bg-primary text-[10px] font-bold text-primary-foreground">
+                          {mentionName.slice(0, 1).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="truncate">{mentionName}</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/60 px-2.5 py-1 text-muted-foreground">
+                      <User className="h-3.5 w-3.5" />
+                      Unassigned
+                    </span>
+                  )}
+                </div>
+                <p className="text-[12px] leading-relaxed text-muted-foreground">
+                  {mentionName ? `${mentionName} will be notified and this` : "This"} task will move back to {toLabel}.
                 </p>
               </div>
             </div>
@@ -120,15 +158,6 @@ export function DeclineDialog({ fromStage, mentionName, onConfirm, onCancel }: P
               <label className="text-[12px] font-medium text-foreground">
                 Reason for declining <span className="text-destructive">*</span>
               </label>
-              {mentionName && (
-                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <span>Notifying</span>
-                  <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 font-medium text-primary">
-                    <AtSign className="w-3 h-3" />
-                    {mentionName}
-                  </span>
-                </div>
-              )}
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
