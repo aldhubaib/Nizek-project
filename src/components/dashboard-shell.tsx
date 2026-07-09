@@ -7,6 +7,7 @@ import { NotificationBell } from "@/components/notification-bell";
 import { NotificationSound } from "@/components/notification-sound";
 import { PushNotifier } from "@/components/push-notifier";
 import { InstallPrompt } from "@/components/install-prompt";
+import { OfflineNotice } from "@/components/offline-notice";
 import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
 import { Menu } from "lucide-react";
 
@@ -123,6 +124,7 @@ export function DashboardShell({ children, isAdmin = false, currentUserId, notif
       <NotificationSound currentUserId={currentUserId} soundUrl={notificationSoundUrl} />
       <PushNotifier />
       <InstallPrompt />
+      <OfflineNotice />
     </div>
   );
 
