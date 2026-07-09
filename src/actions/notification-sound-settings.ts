@@ -1,10 +1,28 @@
 "use server";
 
 import { updateTag } from "next/cache";
+import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { BRANDING_CACHE_TAG, NOTIFICATION_SOUND_SLOT } from "@/lib/branding";
 import { generateR2Key, uploadToR2, deleteFromR2 } from "@/lib/r2";
+import { publish } from "@/lib/centrifugo";
+import { globalPresenceChannel } from "@/lib/channels";
+
+// Event pushed to every signed-in client so open sessions swap the sound
+// immediately, without waiting for a page reload or the per-replica cache TTL.
+export const NOTIFICATION_SOUND_EVENT = "notification-sound-changed";
+
+async function announceSoundChange(url: string | null): Promise<void> {
+  try {
+    await publish(globalPresenceChannel(), {
+      type: NOTIFICATION_SOUND_EVENT,
+      url,
+    });
+  } catch {
+    /* best-effort — clients still pick it up on next focus/reload */
+  }
+}
 
 const MAX_NOTIFICATION_SOUND_BYTES = 3 * 1024 * 1024; // 3 MB — keep it short.
 const ALLOWED_MIME = [
@@ -44,6 +62,21 @@ export async function getNotificationSound(): Promise<NotificationSoundDTO> {
     size: row.size,
     updatedAt: row.updatedAt.getTime(),
   };
+}
+
+/**
+ * Fresh (uncached) current sound URL for any signed-in user. Clients call this
+ * on mount and on tab focus so they always converge to the latest sound even if
+ * a cached layout render or another replica served a stale URL.
+ */
+export async function getActiveNotificationSoundUrl(): Promise<string | null> {
+  const { userId } = await auth();
+  if (!userId) return null;
+  const row = await prisma.brandingAsset.findUnique({
+    where: { slot: NOTIFICATION_SOUND_SLOT },
+    select: { url: true },
+  });
+  return row?.url ?? null;
 }
 
 export async function setNotificationSound(formData: FormData): Promise<void> {
@@ -90,6 +123,7 @@ export async function setNotificationSound(formData: FormData): Promise<void> {
 
   if (existing) await deleteFromR2(existing.r2Key).catch(() => {});
   updateTag(BRANDING_CACHE_TAG);
+  await announceSoundChange(url);
 }
 
 export async function removeNotificationSound(): Promise<void> {
@@ -102,4 +136,5 @@ export async function removeNotificationSound(): Promise<void> {
     await deleteFromR2(existing.r2Key).catch(() => {});
   }
   updateTag(BRANDING_CACHE_TAG);
+  await announceSoundChange(null);
 }
