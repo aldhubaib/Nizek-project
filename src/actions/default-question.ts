@@ -16,6 +16,7 @@ export async function addDefaultQuestion(data: {
   question: string;
   type?: "text" | "select" | "file" | "link" | "client";
   options?: string[];
+  multiple?: boolean;
   mandatory?: boolean;
   required?: boolean;
   taskType?: "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
@@ -34,6 +35,7 @@ export async function addDefaultQuestion(data: {
       question: data.question,
       type: data.type ?? "text",
       options: data.options ? JSON.stringify(data.options) : null,
+      multiple: data.type === "select" ? (data.multiple ?? false) : false,
       mandatory: data.mandatory ?? false,
       required: data.required ?? false,
       order: (maxOrder._max.order ?? 0) + 1,
@@ -51,6 +53,7 @@ export async function updateDefaultQuestion(data: {
   question?: string;
   type?: "text" | "select" | "file" | "link" | "client";
   options?: string[];
+  multiple?: boolean;
   mandatory?: boolean;
   required?: boolean;
 }) {
@@ -62,6 +65,7 @@ export async function updateDefaultQuestion(data: {
       ...(data.question !== undefined && { question: data.question }),
       ...(data.type !== undefined && { type: data.type }),
       ...(data.options !== undefined && { options: JSON.stringify(data.options) }),
+      ...(data.multiple !== undefined && { multiple: data.multiple }),
       ...(data.mandatory !== undefined && { mandatory: data.mandatory }),
       ...(data.required !== undefined && { required: data.required }),
     },

@@ -38,6 +38,7 @@ interface Question {
   question: string;
   type: string;
   options: string | null;
+  multiple: boolean;
   mandatory: boolean;
   required: boolean;
   order: number;
@@ -56,17 +57,46 @@ const TABS: { id: TaskType; label: string; icon: typeof Sparkles; color: string;
   { id: "DESIGN", label: "Design", icon: Palette, color: "text-muted-foreground", activeColor: "bg-cyan-500/15 border-cyan-500/40 text-cyan-400" },
 ];
 
+function SelectModeToggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="inline-flex items-center rounded-md border border-border bg-muted/50 p-0.5">
+      <button
+        type="button"
+        onClick={() => onChange(false)}
+        className={cn(
+          "rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
+          !value ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        Single select
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(true)}
+        className={cn(
+          "rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
+          value ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        Multi select
+      </button>
+    </div>
+  );
+}
+
 function SortableQuestionItem({
   q,
   index,
   editingId,
   editValue,
   editOptions,
+  editMultiple,
   editMandatory,
   editRequired,
   setEditingId,
   setEditValue,
   setEditOptions,
+  setEditMultiple,
   setEditMandatory,
   setEditRequired,
   onUpdate,
@@ -79,11 +109,13 @@ function SortableQuestionItem({
   editingId: string | null;
   editValue: string;
   editOptions: string;
+  editMultiple: boolean;
   editMandatory: boolean;
   editRequired: boolean;
   setEditingId: (id: string | null) => void;
   setEditValue: (v: string) => void;
   setEditOptions: (v: string) => void;
+  setEditMultiple: (v: boolean) => void;
   setEditMandatory: (v: boolean) => void;
   setEditRequired: (v: boolean) => void;
   onUpdate: (id: string) => void;
@@ -141,16 +173,19 @@ function SortableQuestionItem({
             <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>Cancel</Button>
           </div>
           {q.type === "select" && (
-            <Input
-              value={editOptions}
-              onChange={(e) => setEditOptions(e.target.value)}
-              placeholder="Options (comma-separated): iOS, Android, Web..."
-              className="h-7 text-[12px]"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") onUpdate(q.id);
-                if (e.key === "Escape") setEditingId(null);
-              }}
-            />
+            <>
+              <Input
+                value={editOptions}
+                onChange={(e) => setEditOptions(e.target.value)}
+                placeholder="Options (comma-separated): iOS, Android, Web..."
+                className="h-7 text-[12px]"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") onUpdate(q.id);
+                  if (e.key === "Escape") setEditingId(null);
+                }}
+              />
+              <SelectModeToggle value={editMultiple} onChange={setEditMultiple} />
+            </>
           )}
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -180,6 +215,7 @@ function SortableQuestionItem({
               setEditingId(q.id);
               setEditValue(q.question);
               setEditOptions(getOptionsList(q).join(", "));
+              setEditMultiple(q.multiple);
               setEditMandatory(q.mandatory);
               setEditRequired(q.required);
             }}
@@ -196,7 +232,7 @@ function SortableQuestionItem({
             )}
           </button>
           <span className="text-[10px] text-muted-foreground/50 font-mono shrink-0">
-                    {q.type === "select" ? "dropdown" : q.type === "file" ? "file" : q.type === "link" ? "link" : q.type === "client" ? "client" : "text"}
+                    {q.type === "select" ? (q.multiple ? "dropdown · multi" : "dropdown") : q.type === "file" ? "file" : q.type === "link" ? "link" : q.type === "client" ? "client" : "text"}
           </span>
           <button
             onClick={() => onToggleField(q.id, "mandatory", !q.mandatory)}
@@ -240,12 +276,14 @@ export function DefaultQuestionsManager({ questions }: Props) {
   const [newQuestion, setNewQuestion] = useState("");
   const [newType, setNewType] = useState<"text" | "select" | "file" | "link" | "client">("text");
   const [newOptions, setNewOptions] = useState("");
+  const [newMultiple, setNewMultiple] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newMandatory, setNewMandatory] = useState(false);
   const [newRequired, setNewRequired] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [editOptions, setEditOptions] = useState("");
+  const [editMultiple, setEditMultiple] = useState(false);
   const [editMandatory, setEditMandatory] = useState(false);
   const [editRequired, setEditRequired] = useState(false);
 
@@ -289,6 +327,7 @@ export function DefaultQuestionsManager({ questions }: Props) {
         question: newQuestion.trim(),
         type: newType,
         options,
+        multiple: newType === "select" ? newMultiple : false,
         mandatory: newMandatory,
         required: newRequired,
         taskType: activeType,
@@ -296,6 +335,7 @@ export function DefaultQuestionsManager({ questions }: Props) {
       setNewQuestion("");
       setNewOptions("");
       setNewType("text");
+      setNewMultiple(false);
       setNewMandatory(false);
       setNewRequired(false);
     } catch (err) {
@@ -320,7 +360,14 @@ export function DefaultQuestionsManager({ questions }: Props) {
       const options = q?.type === "select"
         ? editOptions.split(",").map((o) => o.trim()).filter(Boolean)
         : undefined;
-      await updateDefaultQuestion({ questionId, question: editValue.trim(), options, mandatory: editMandatory, required: editRequired });
+      await updateDefaultQuestion({
+        questionId,
+        question: editValue.trim(),
+        options,
+        ...(q?.type === "select" && { multiple: editMultiple }),
+        mandatory: editMandatory,
+        required: editRequired,
+      });
       setEditingId(null);
     } catch (err) {
       console.error(err);
@@ -405,11 +452,13 @@ export function DefaultQuestionsManager({ questions }: Props) {
                   editingId={editingId}
                   editValue={editValue}
                   editOptions={editOptions}
+                  editMultiple={editMultiple}
                   editMandatory={editMandatory}
                   editRequired={editRequired}
                   setEditingId={setEditingId}
                   setEditValue={setEditValue}
                   setEditOptions={setEditOptions}
+                  setEditMultiple={setEditMultiple}
                   setEditMandatory={setEditMandatory}
                   setEditRequired={setEditRequired}
                   onUpdate={handleUpdate}
@@ -461,12 +510,15 @@ export function DefaultQuestionsManager({ questions }: Props) {
         </div>
 
         {newType === "select" && (
-          <Input
-            value={newOptions}
-            onChange={(e) => setNewOptions(e.target.value)}
-            placeholder="Options (comma-separated): Client, Admin, Vendor..."
-            className="h-8 text-[12px]"
-          />
+          <div className="space-y-2">
+            <Input
+              value={newOptions}
+              onChange={(e) => setNewOptions(e.target.value)}
+              placeholder="Options (comma-separated): Client, Admin, Vendor..."
+              className="h-8 text-[12px]"
+            />
+            <SelectModeToggle value={newMultiple} onChange={setNewMultiple} />
+          </div>
         )}
 
         <div className="flex items-center justify-between">

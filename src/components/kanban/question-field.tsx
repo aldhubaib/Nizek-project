@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { uploadFileToR2 } from "@/lib/upload";
 
 function Lightbox({
   images,
@@ -133,9 +134,21 @@ export interface TaskQuestion {
   question: string;
   type: string;
   options: string | null;
+  multiple?: boolean;
   mandatory?: boolean;
   required?: boolean;
   order: number;
+}
+
+function parseMultiValue(raw: string): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map((v) => String(v));
+  } catch {
+    /* not JSON — treat as a single legacy value */
+  }
+  return [raw];
 }
 
 interface Props {
@@ -160,6 +173,18 @@ export function QuestionField({ question, index, value, onChange, compact, reado
   const parsedOptions: string[] = question.options
     ? JSON.parse(question.options)
     : [];
+
+  const selectedValues = parseMultiValue(value);
+  const toggleMultiValue = useCallback(
+    (opt: string) => {
+      const current = parseMultiValue(value);
+      const next = current.includes(opt)
+        ? current.filter((v) => v !== opt)
+        : [...current, opt];
+      onChange(next.length ? JSON.stringify(next) : "");
+    },
+    [value, onChange]
+  );
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -190,29 +215,36 @@ export function QuestionField({ question, index, value, onChange, compact, reado
 
     setUploading(true);
     setUploadError(null);
-    setUploadProgress({ current: 0, total: files.length });
+
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+    const list = Array.from(files);
+    const tooBig = list.filter((f) => f.size > MAX_FILE_SIZE);
+    const toUpload = list.filter((f) => f.size <= MAX_FILE_SIZE);
+
+    setUploadProgress({ current: 0, total: toUpload.length });
 
     const uploaded: { name: string; dataUrl: string }[] = [];
-    const failed: string[] = [];
+    const failed: string[] = tooBig.map((f) => `${f.name} (too large)`);
 
-    for (let i = 0; i < files.length; i++) {
-      setUploadProgress({ current: i + 1, total: files.length });
-      const file = files[i];
-      const form = new FormData();
-      form.append("file", file);
-      try {
-        const res = await fetch("/api/upload", { method: "POST", body: form });
-        if (!res.ok) {
-          const body = await res.json().catch(() => null);
-          throw new Error(body?.error || `Upload failed (${res.status})`);
-        }
-        const { url } = await res.json();
-        uploaded.push({ name: file.name, dataUrl: url });
-      } catch (err) {
-        failed.push(file.name);
-        console.error(`Failed to upload ${file.name}:`, err);
+    // Upload all files in parallel (presigned direct-to-R2), updating progress
+    // as each completes rather than one-at-a-time.
+    let done = 0;
+    const results = await Promise.allSettled(
+      toUpload.map(async (file) => {
+        const up = await uploadFileToR2(file);
+        done += 1;
+        setUploadProgress({ current: done, total: toUpload.length });
+        return { name: file.name, dataUrl: up.url };
+      }),
+    );
+    results.forEach((r, idx) => {
+      if (r.status === "fulfilled") {
+        uploaded.push(r.value);
+      } else {
+        failed.push(toUpload[idx].name);
+        console.error(`Failed to upload ${toUpload[idx].name}:`, r.reason);
       }
-    }
+    });
 
     if (uploaded.length > 0) {
       const combined = [...fileEntries, ...uploaded];
@@ -319,6 +351,19 @@ export function QuestionField({ question, index, value, onChange, compact, reado
         <a href={value} target="_blank" rel="noopener noreferrer" className="text-[13px] text-blue-400 hover:underline break-all">
           {value}
         </a>
+      );
+    }
+    if (question.type === "select" && question.multiple) {
+      const values = parseMultiValue(value);
+      if (values.length === 0) return <p className="text-[13px] text-muted-foreground/50">—</p>;
+      return (
+        <div className="flex flex-wrap gap-1.5">
+          {values.map((v) => (
+            <span key={v} className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-[12px] text-foreground/80">
+              {v}
+            </span>
+          ))}
+        </div>
       );
     }
     if (!value) return <p className="text-[13px] text-muted-foreground/50">—</p>;
@@ -520,18 +565,42 @@ export function QuestionField({ question, index, value, onChange, compact, reado
           />
         </div>
       ) : question.type === "select" && parsedOptions.length > 0 ? (
-        <Select value={value} onValueChange={(val) => onChange(val ?? "")}>
-          <SelectTrigger className="w-full h-9 text-[13px]">
-            <SelectValue placeholder="Select..." />
-          </SelectTrigger>
-          <SelectContent>
-            {parsedOptions.map((opt) => (
-              <SelectItem key={opt} value={opt}>
-                {opt}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        question.multiple ? (
+          <div className="flex flex-wrap gap-1.5">
+            {parsedOptions.map((opt) => {
+              const selected = selectedValues.includes(opt);
+              return (
+                <button
+                  type="button"
+                  key={opt}
+                  onClick={() => toggleMultiValue(opt)}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[12px] transition-colors",
+                    selected
+                      ? "border-primary/40 bg-primary/15 text-primary"
+                      : "border-border bg-muted/40 text-muted-foreground hover:text-foreground hover:border-muted-foreground/40"
+                  )}
+                >
+                  {selected && <Check className="w-3 h-3" strokeWidth={2} />}
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <Select value={value} onValueChange={(val) => onChange(val ?? "")}>
+            <SelectTrigger className="w-full h-9 text-[13px]">
+              <SelectValue placeholder="Select..." />
+            </SelectTrigger>
+            <SelectContent>
+              {parsedOptions.map((opt) => (
+                <SelectItem key={opt} value={opt}>
+                  {opt}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )
       ) : (
         <Textarea
           ref={textareaRef}
