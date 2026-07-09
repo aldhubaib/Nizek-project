@@ -1,8 +1,11 @@
 [build]
-buildCommand = "npm run build && node prisma/migrate.mjs && cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public"
+buildCommand = "npm run build && cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public"
 
 [deploy]
-startCommand = "NODE_OPTIONS='--max-old-space-size=2048' node .next/standalone/server.js"
+# Migrations run at deploy time (not build): the Postgres private network is only
+# reachable at runtime. `migrate deploy` takes an advisory lock, so it is safe
+# even with multiple replicas booting at once.
+startCommand = "node prisma/migrate.mjs && NODE_OPTIONS='--max-old-space-size=2048' node .next/standalone/server.js"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 # Horizontal scale-out. The app is stateless (Clerk JWT auth, Centrifugo runs as

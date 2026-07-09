@@ -27,6 +27,17 @@ function run(cmd) {
   execSync(cmd, { stdio: "inherit" });
 }
 
+// Like run(), but tolerates failure. Used for the one-time baseline resolve so a
+// second replica booting concurrently doesn't crash if the first already
+// recorded the baseline migration.
+function runTolerant(cmd) {
+  try {
+    run(cmd);
+  } catch (err) {
+    console.warn(`[migrate] non-fatal: ${cmd} -> ${err?.message ?? err}`);
+  }
+}
+
 async function tableExists(client, name) {
   const { rows } = await client.query("SELECT to_regclass($1) AS oid", [
     `public."${name}"`,
@@ -50,7 +61,7 @@ async function main() {
 
   if (needsBaseline) {
     console.log("[migrate] Existing schema detected without migration history; baselining.");
-    run(`npx prisma migrate resolve --applied ${BASELINE}`);
+    runTolerant(`npx prisma migrate resolve --applied ${BASELINE}`);
   }
 
   run("npx prisma migrate deploy");
