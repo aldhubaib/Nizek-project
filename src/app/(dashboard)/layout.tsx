@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { SignOutButton } from "@clerk/nextjs";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { getCurrentUser } from "@/lib/auth";
+import { getNotificationSoundUrl } from "@/lib/branding";
 
 export default async function DashboardLayout({
   children,
@@ -36,5 +37,7 @@ export default async function DashboardLayout({
     );
   }
 
-  return <DashboardShell isAdmin={user?.systemRole === "ADMIN"} currentUserId={user?.id}>{children}</DashboardShell>;
+  const notificationSoundUrl = await getNotificationSoundUrl();
+
+  return <DashboardShell isAdmin={user?.systemRole === "ADMIN"} currentUserId={user?.id} notificationSoundUrl={notificationSoundUrl}>{children}</DashboardShell>;
 }

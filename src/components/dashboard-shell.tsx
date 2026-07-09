@@ -12,7 +12,7 @@ import { Menu } from "lucide-react";
 
 const DESKTOP_BREAKPOINT = 1024;
 
-export function DashboardShell({ children, isAdmin = false, currentUserId }: { children: React.ReactNode; isAdmin?: boolean; currentUserId?: string }) {
+export function DashboardShell({ children, isAdmin = false, currentUserId, notificationSoundUrl }: { children: React.ReactNode; isAdmin?: boolean; currentUserId?: string; notificationSoundUrl?: string | null }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -120,7 +120,7 @@ export function DashboardShell({ children, isAdmin = false, currentUserId }: { c
         )}
         {children}
       </main>
-      <NotificationSound currentUserId={currentUserId} />
+      <NotificationSound currentUserId={currentUserId} soundUrl={notificationSoundUrl} />
       <PushNotifier />
       <InstallPrompt />
     </div>

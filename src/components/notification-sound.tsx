@@ -7,10 +7,12 @@ import { userChannel } from "@/lib/channels";
 import {
   playNotificationSound,
   primeNotificationAudio,
+  setCustomNotificationSound,
 } from "@/lib/notification-sound";
 
 interface Props {
   currentUserId?: string;
+  soundUrl?: string | null;
 }
 
 /**
@@ -18,8 +20,13 @@ interface Props {
  * app is open. Mounted once app-wide (including the inbox route, where the
  * notification bell is hidden) so coverage is consistent everywhere.
  */
-export function NotificationSound({ currentUserId }: Props) {
+export function NotificationSound({ currentUserId, soundUrl }: Props) {
   const cent = useCentrifugo();
+
+  // Register the admin-configured custom sound (if any).
+  useEffect(() => {
+    setCustomNotificationSound(soundUrl ?? null);
+  }, [soundUrl]);
 
   // Unlock audio on the first interaction so later notifications can chime.
   useEffect(() => {

@@ -22,6 +22,24 @@ export function setNotificationSoundEnabled(enabled: boolean): void {
   }
 }
 
+// Admin-configured custom sound. When set, it plays instead of the generated
+// chime. Stored module-level so any caller (component or settings preview) uses
+// the same one.
+let customSoundUrl: string | null = null;
+let customAudio: HTMLAudioElement | null = null;
+
+export function setCustomNotificationSound(url: string | null): void {
+  if (typeof window === "undefined") return;
+  if (url === customSoundUrl) return;
+  customSoundUrl = url;
+  if (url) {
+    customAudio = new Audio(url);
+    customAudio.preload = "auto";
+  } else {
+    customAudio = null;
+  }
+}
+
 // Lazily created and reused so we don't spawn an AudioContext per chime.
 let audioCtx: AudioContext | null = null;
 
@@ -66,16 +84,7 @@ function emitChime(ctx: AudioContext): void {
   }
 }
 
-/**
- * Plays a short two-tone chime using the Web Audio API (no asset needed).
- * Respects the user's per-device preference unless `force` is true (used for the
- * settings preview so the user can hear it even before toggling on).
- *
- * Browsers start an AudioContext "suspended" until a user gesture, and tones
- * scheduled into a suspended context are silent — so we resume first, then emit.
- */
-export function playNotificationSound(force = false): void {
-  if (!force && !isNotificationSoundEnabled()) return;
+function playChime(): void {
   const ctx = getAudioContext();
   if (!ctx) return;
   if (ctx.state === "suspended") {
@@ -83,6 +92,31 @@ export function playNotificationSound(force = false): void {
   } else {
     emitChime(ctx);
   }
+}
+
+/**
+ * Plays the notification sound: the admin-uploaded custom audio if configured,
+ * otherwise a short two-tone chime via the Web Audio API (no asset needed).
+ * Respects the user's per-device preference unless `force` is true (used for the
+ * settings preview so the user can hear it even before toggling on).
+ *
+ * Browsers start audio "suspended" until a user gesture, so we resume/unlock
+ * first (see primeNotificationAudio) and fall back to the chime if the custom
+ * clip can't play.
+ */
+export function playNotificationSound(force = false): void {
+  if (!force && !isNotificationSoundEnabled()) return;
+  if (customAudio) {
+    try {
+      customAudio.currentTime = 0;
+      const p = customAudio.play();
+      if (p && typeof p.catch === "function") p.catch(() => playChime());
+      return;
+    } catch {
+      /* fall through to the generated chime */
+    }
+  }
+  playChime();
 }
 
 // Unlocks audio on the first user gesture so later (non-gesture) notifications
@@ -95,6 +129,23 @@ export function primeNotificationAudio(): void {
   unlockAttached = true;
 
   const unlock = () => {
+    // Unlock the custom HTMLAudioElement (autoplay policy) by doing a silent
+    // play/pause during this gesture so later programmatic plays are allowed.
+    if (customAudio) {
+      const el = customAudio;
+      const wasMuted = el.muted;
+      el.muted = true;
+      el.play()
+        .then(() => {
+          el.pause();
+          el.currentTime = 0;
+          el.muted = wasMuted;
+        })
+        .catch(() => {
+          el.muted = wasMuted;
+        });
+    }
+
     const ctx = getAudioContext();
     if (!ctx) {
       detach();

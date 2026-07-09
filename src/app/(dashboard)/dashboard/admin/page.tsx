@@ -7,6 +7,7 @@ import { getContractPrefixes } from "@/actions/contract-prefix";
 import { getDefaultQuestions } from "@/actions/default-question";
 import { getBrandingAssets } from "@/actions/branding";
 import { getLoginPhotos } from "@/actions/login-photos";
+import { getNotificationSound } from "@/actions/notification-sound-settings";
 import { AdminPageClient } from "./admin-page-client";
 
 export default async function AdminPage() {
@@ -15,7 +16,7 @@ export default async function AdminPage() {
 
   await ensureDefaultTeams();
 
-  const [teams, pendingInvites, members, invitations, teamInvites, roles, prefixes, questions, branding, loginPhotos] = await Promise.all([
+  const [teams, pendingInvites, members, invitations, teamInvites, roles, prefixes, questions, branding, loginPhotos, notificationSound] = await Promise.all([
     getTeams(),
     getPendingInvitesForTeam(),
     getTeamMembers(),
@@ -26,6 +27,7 @@ export default async function AdminPage() {
     getDefaultQuestions(),
     getBrandingAssets(),
     getLoginPhotos(),
+    getNotificationSound(),
   ]);
 
   return (
@@ -41,6 +43,7 @@ export default async function AdminPage() {
         questions={questions}
         branding={branding}
         loginPhotos={loginPhotos}
+        notificationSound={notificationSound}
       />
     </Suspense>
   );

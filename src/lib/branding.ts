@@ -54,3 +54,21 @@ export function brandingUrl(
 ): string | null {
   return map[slot]?.url ?? BRANDING_FALLBACKS[slot] ?? null;
 }
+
+// Storage slot for the admin-configured custom notification sound. Stored in the
+// same BrandingAsset table (singleton row) but kept out of BRANDING_SLOTS since
+// it's audio, not an image with dimension/sharp validation.
+export const NOTIFICATION_SOUND_SLOT = "notificationSound";
+
+/**
+ * URL of the admin-uploaded custom notification sound, or null if none is set.
+ * Reuses the cached branding rows so it's cheap on every dashboard render.
+ */
+export async function getNotificationSoundUrl(): Promise<string | null> {
+  try {
+    const rows = await getCachedBrandingRows();
+    return rows.find((r) => r.slot === NOTIFICATION_SOUND_SLOT)?.url ?? null;
+  } catch {
+    return null;
+  }
+}

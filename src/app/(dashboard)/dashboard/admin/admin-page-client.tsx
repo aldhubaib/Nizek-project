@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   Image as ImageIcon,
   LogIn,
+  Volume2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { TeamsManager } from "@/components/settings/teams-manager";
@@ -21,8 +22,10 @@ import { ContractPrefixManager } from "@/components/settings/contract-prefix-man
 import { DefaultQuestionsManager } from "@/components/settings/default-questions-manager";
 import { AppLogoClient } from "./app-logo-client";
 import { LoginSettingsClient } from "./login-settings-client";
+import { NotificationSoundClient } from "./notification-sound-client";
 import type { BrandingAssetDTO } from "@/actions/branding";
 import type { LoginPhotoDTO } from "@/actions/login-photos";
+import type { NotificationSoundDTO } from "@/actions/notification-sound-settings";
 import type { BrandingSlotId } from "@/lib/branding-slots";
 
 type TabId =
@@ -32,7 +35,8 @@ type TabId =
   | "contracts"
   | "questions"
   | "app-logo"
-  | "login";
+  | "login"
+  | "notification-sound";
 
 type SettingsItem = {
   id: TabId;
@@ -97,6 +101,12 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         icon: LogIn,
         desc: "Add photos shown on the sign-in page's scrolling gallery.",
       },
+      {
+        id: "notification-sound",
+        label: "Notification Sound",
+        icon: Volume2,
+        desc: "Upload a custom sound played when people receive notifications.",
+      },
     ],
   },
 ];
@@ -114,6 +124,7 @@ interface Props {
   questions: any;
   branding: Partial<Record<BrandingSlotId, BrandingAssetDTO>>;
   loginPhotos: LoginPhotoDTO[];
+  notificationSound: NotificationSoundDTO;
 }
 
 export function AdminPageClient({
@@ -127,6 +138,7 @@ export function AdminPageClient({
   questions,
   branding,
   loginPhotos,
+  notificationSound,
 }: Props) {
   const searchParams = useSearchParams();
   const activeTab = searchParams.get("tab") as TabId | null;
@@ -194,6 +206,9 @@ export function AdminPageClient({
         {active.id === "app-logo" && <AppLogoClient assets={branding} />}
         {active.id === "login" && (
           <LoginSettingsClient photos={loginPhotos} />
+        )}
+        {active.id === "notification-sound" && (
+          <NotificationSoundClient sound={notificationSound} />
         )}
       </div>
     </div>
