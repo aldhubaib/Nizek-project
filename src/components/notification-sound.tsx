@@ -3,11 +3,12 @@
 import { useCallback, useEffect } from "react";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { useChannel } from "@/components/realtime/hooks";
-import { userChannel, globalPresenceChannel } from "@/lib/channels";
 import {
-  getActiveNotificationSoundUrl,
+  userChannel,
+  globalPresenceChannel,
   NOTIFICATION_SOUND_EVENT,
-} from "@/actions/notification-sound-settings";
+} from "@/lib/channels";
+import { getActiveNotificationSoundUrl } from "@/actions/notification-sound-settings";
 import {
   playNotificationSound,
   primeNotificationAudio,

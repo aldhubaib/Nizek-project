@@ -7,11 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { BRANDING_CACHE_TAG, NOTIFICATION_SOUND_SLOT } from "@/lib/branding";
 import { generateR2Key, uploadToR2, deleteFromR2 } from "@/lib/r2";
 import { publish } from "@/lib/centrifugo";
-import { globalPresenceChannel } from "@/lib/channels";
-
-// Event pushed to every signed-in client so open sessions swap the sound
-// immediately, without waiting for a page reload or the per-replica cache TTL.
-export const NOTIFICATION_SOUND_EVENT = "notification-sound-changed";
+import { globalPresenceChannel, NOTIFICATION_SOUND_EVENT } from "@/lib/channels";
 
 async function announceSoundChange(url: string | null): Promise<void> {
   try {

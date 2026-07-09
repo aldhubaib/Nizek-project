@@ -20,3 +20,8 @@ export const GLOBAL_PRESENCE_ID = "global";
 export function globalPresenceChannel(): string {
   return `presence:${GLOBAL_PRESENCE_ID}`;
 }
+
+// Event published on the global presence channel when an admin changes the
+// custom notification sound, so open clients swap it live. Defined here (not in
+// the "use server" action module, where only async functions may be exported).
+export const NOTIFICATION_SOUND_EVENT = "notification-sound-changed";
