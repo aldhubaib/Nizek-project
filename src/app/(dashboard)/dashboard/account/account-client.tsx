@@ -88,14 +88,27 @@ export function AccountClient({
 
   const pickAvatar = async (file: File | null) => {
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Please choose an image file.");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setError("Image must be under 8 MB.");
+      return;
+    }
     setUploading(true);
     setError(null);
-    const fd = new FormData();
-    fd.set("file", file);
-    const res = await updateMyAvatar(fd);
-    setUploading(false);
-    if (res.ok) setImageUrl(res.data.imageUrl);
-    else setError(res.error);
+    try {
+      const fd = new FormData();
+      fd.set("file", file);
+      const res = await updateMyAvatar(fd);
+      if (res.ok) setImageUrl(res.data.imageUrl);
+      else setError(res.error);
+    } catch {
+      setError("Upload failed. Please try a smaller photo or try again.");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const togglePush = async (next: boolean) => {
