@@ -18,15 +18,23 @@ export function isCentrifugoConfigured(): boolean {
   return Boolean(HMAC_SECRET && API_URL && API_KEY);
 }
 
-// Channel helpers live in a client-safe module and are re-exported for callers
-// that already import from here.
-export {
+// Channel helpers live in a client-safe module. Import locally (so this module
+// can use them) and re-export for callers that already import from here.
+import {
   userChannel,
   taskChannel,
   projectChannel,
   conversationChannel,
   globalPresenceChannel,
 } from "@/lib/channels";
+
+export {
+  userChannel,
+  taskChannel,
+  projectChannel,
+  conversationChannel,
+  globalPresenceChannel,
+};
 
 // ─── JWT (HS256) ──────────────────────────────────────────────────────────────
 
@@ -72,6 +80,29 @@ export function subscriptionToken(memberId: string, channel: string): string {
 
 let warnedNotConfigured = false;
 
+// Server->Centrifugo publishes reuse TCP connections via a keep-alive dispatcher
+// so bursts of events don't each pay a fresh TCP+TLS handshake. We lazily install
+// an undici Agent as the global dispatcher when available; undici (Node's fetch)
+// also pools with keep-alive by default, so this is a best-effort tightening.
+let dispatcherReady = false;
+async function ensureKeepAliveDispatcher(): Promise<void> {
+  if (dispatcherReady) return;
+  dispatcherReady = true;
+  try {
+    // Non-literal specifier so bundlers/TS don't hard-require undici at build.
+    const moduleName = "undici";
+    const undici: {
+      setGlobalDispatcher: (d: unknown) => void;
+      Agent: new (opts: Record<string, number>) => unknown;
+    } = await import(/* webpackIgnore: true */ moduleName);
+    undici.setGlobalDispatcher(
+      new undici.Agent({ keepAliveTimeout: 30_000, keepAliveMaxTimeout: 60_000, connections: 64 }),
+    );
+  } catch {
+    // undici not importable directly — global fetch still pools by default.
+  }
+}
+
 async function apiCall(method: string, params: unknown): Promise<void> {
   if (!isCentrifugoConfigured()) {
     if (!warnedNotConfigured) {
@@ -82,6 +113,7 @@ async function apiCall(method: string, params: unknown): Promise<void> {
     }
     return;
   }
+  await ensureKeepAliveDispatcher();
   try {
     const res = await fetch(`${API_URL}/api/${method}`, {
       method: "POST",
@@ -109,6 +141,24 @@ async function apiCall(method: string, params: unknown): Promise<void> {
 
 export async function publish(channel: string, data: unknown): Promise<void> {
   await apiCall("publish", { channel, data });
+}
+
+// ─── Kanban board events (consolidated from Pusher) ────────────────────────────
+// Board task events ride the project channel alongside chat; subscribers filter by
+// the `task-*` discriminator so chat and board payloads never cross-fire.
+
+export type TaskEvent =
+  | { type: "task-moved"; taskId: string; stage: string; order: number; userId: string }
+  | { type: "task-created"; taskId: string; userId: string }
+  | { type: "task-updated"; taskId: string; userId: string }
+  | { type: "task-deleted"; taskId: string; userId: string }
+  | { type: "task-declined"; taskId: string; userId: string };
+
+export async function broadcastTaskEvent(
+  projectId: string,
+  event: TaskEvent,
+): Promise<void> {
+  await publish(projectChannel(projectId), event);
 }
 
 /** Publish the same payload to multiple channels in one round-trip. */

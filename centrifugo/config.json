@@ -19,8 +19,8 @@
         "name": "task",
         "presence": true,
         "join_leave": true,
-        "history_size": 50,
-        "history_ttl": "300s",
+        "history_size": 100,
+        "history_ttl": "1800s",
         "force_recovery": true,
         "allow_publish_for_subscriber": true,
         "allow_presence_for_subscriber": true
@@ -29,8 +29,8 @@
         "name": "project",
         "presence": true,
         "join_leave": true,
-        "history_size": 50,
-        "history_ttl": "300s",
+        "history_size": 100,
+        "history_ttl": "1800s",
         "force_recovery": true,
         "allow_publish_for_subscriber": true,
         "allow_presence_for_subscriber": true
@@ -39,8 +39,8 @@
         "name": "conv",
         "presence": true,
         "join_leave": true,
-        "history_size": 100,
-        "history_ttl": "600s",
+        "history_size": 200,
+        "history_ttl": "3600s",
         "force_recovery": true,
         "allow_publish_for_subscriber": true,
         "allow_presence_for_subscriber": true

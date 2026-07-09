@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const R2 = new S3Client({
   region: "auto",
@@ -8,6 +9,26 @@ const R2 = new S3Client({
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
   },
 });
+
+// Issue a short-lived presigned PUT URL so the browser can upload straight to
+// R2 (no server-as-proxy, no 50MB in-heap buffers). Returns the URL to PUT to
+// and the eventual public URL of the object.
+export async function presignPutUrl(
+  key: string,
+  contentType: string,
+  expiresInSeconds = 300,
+): Promise<{ uploadUrl: string; publicUrl: string }> {
+  const uploadUrl = await getSignedUrl(
+    R2,
+    new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME!,
+      Key: key,
+      ContentType: contentType,
+    }),
+    { expiresIn: expiresInSeconds },
+  );
+  return { uploadUrl, publicUrl: `${process.env.R2_PUBLIC_URL}/${key}` };
+}
 
 export async function uploadToR2(
   buffer: Buffer,

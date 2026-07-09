@@ -7,7 +7,7 @@ import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, getTaskStageLogs, deleteTask } from "@/actions/task";
 import { createMeetingNote, updateMeetingNote, getTaskNotes } from "@/actions/meeting-note";
-import { RichTextEditor } from "@/components/rich-text-editor";
+import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { QuestionField, type TaskQuestion } from "./question-field";
@@ -314,7 +314,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [titleValue, setTitleValue] = useState(task.title);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const { updateTask: updateStoreTask } = useKanbanStore();
+  const updateStoreTask = useKanbanStore((s) => s.updateTask);
   const [stageLogs, setStageLogs] = useState<{ stage: string; enteredAt: string; exitedAt: string | null }[]>([]);
   const [startedAt, setStartedAt] = useState<string | null>(null);
 

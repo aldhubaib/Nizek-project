@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import {
@@ -82,15 +83,63 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
   const cent = useCentrifugo();
   const online = usePresence(cent ? globalPresenceChannel() : null);
 
-  // Live inbox: refresh the server-rendered thread list when anything lands on
-  // our user channel.
+  // Local copy so realtime inbox events can patch rows in place. Server truth
+  // (the `threads` prop) wins on navigation / RSC re-render. Reset via the
+  // React-sanctioned "store previous prop in state" pattern (no effect).
+  const [liveThreads, setLiveThreads] = useState<InboxThread[]>(threads);
+  const [prevThreads, setPrevThreads] = useState(threads);
+  if (prevThreads !== threads) {
+    setPrevThreads(threads);
+    setLiveThreads(threads);
+  }
+
+  // Live inbox: patch the affected row from the event delta instead of
+  // refetching the whole RSC tree. Falls back to a refresh only when the target
+  // row isn't present yet (e.g. a brand-new conversation/thread).
   useChannel(cent ? userChannel(cent.memberId) : null, (data) => {
-    const d = data as { type?: string } | null;
-    if (d?.type === "inbox") router.refresh();
+    const d = data as
+      | {
+          type?: string;
+          conversationId?: string | null;
+          projectId?: string | null;
+          authorId?: string;
+          lastAuthor?: string;
+          lastMessage?: string;
+          lastAt?: string;
+        }
+      | null;
+    if (d?.type !== "inbox") return;
+
+    const rowId = d.conversationId
+      ? `conv-${d.conversationId}`
+      : d.projectId
+        ? `project-${d.projectId}`
+        : null;
+    if (!rowId) return;
+
+    const isSelf = d.authorId != null && cent != null && d.authorId === cent.memberId;
+    const isViewing = pathname === `/dashboard/messages/${rowId}`;
+
+    setLiveThreads((prev) => {
+      const idx = prev.findIndex((t) => t.id === rowId);
+      if (idx === -1) {
+        // Unknown thread (first message of a new conversation) — reconcile once.
+        router.refresh();
+        return prev;
+      }
+      const next = [...prev];
+      const row = { ...next[idx] };
+      if (d.lastMessage != null) row.lastMessage = d.lastMessage;
+      if (d.lastAuthor != null) row.lastAuthor = d.lastAuthor;
+      if (d.lastAt) row.lastAt = d.lastAt;
+      if (!isSelf && !isViewing) row.unread = (row.unread ?? 0) + 1;
+      next[idx] = row;
+      return next;
+    });
   });
 
   const allRows = useMemo(() => {
-    return threads
+    return liveThreads
       .filter((t) => (tab === "all" ? true : t.kind === tab))
       .filter((t) =>
         q
@@ -103,7 +152,7 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
         const tb = b.lastAt ? new Date(b.lastAt).getTime() : 0;
         return tb - ta;
       });
-  }, [threads, tab, q]);
+  }, [liveThreads, tab, q]);
 
   // Inactive projects collapse into their own section (like Falak's archived).
   const rows = useMemo(() => allRows.filter((t) => !t.inactive), [allRows]);
@@ -264,10 +313,11 @@ function ThreadRow({
     >
       <div className="relative shrink-0">
         {thread.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={thread.logoUrl}
             alt=""
+            width={36}
+            height={36}
             className="h-9 w-9 rounded-full object-cover"
           />
         ) : (

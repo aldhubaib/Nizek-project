@@ -1,10 +1,15 @@
 [build]
-buildCommand = "npm run build && cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public"
+buildCommand = "npm run build && node prisma/migrate.mjs && cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public"
 
 [deploy]
-startCommand = "node prisma/ensure-tables.mjs && NODE_OPTIONS='--max-old-space-size=2048' node .next/standalone/server.js"
-healthcheckPath = "/"
+startCommand = "NODE_OPTIONS='--max-old-space-size=2048' node .next/standalone/server.js"
+healthcheckPath = "/api/health"
 healthcheckTimeout = 300
-numReplicas = 1
+# Horizontal scale-out. The app is stateless (Clerk JWT auth, Centrifugo runs as
+# its own service, caches are TTL/tag-based per replica), so it scales safely.
+# Each replica opens up to PG_POOL_MAX (default 10) DB connections; to go beyond
+# ~a few replicas, put a Postgres connection pooler (PgBouncer) in front and/or
+# lower PG_POOL_MAX so total connections stay under Postgres max_connections.
+numReplicas = 2
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5

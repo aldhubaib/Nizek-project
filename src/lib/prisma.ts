@@ -12,10 +12,15 @@ const globalForPrisma = globalThis as unknown as {
   pool: Pool | undefined;
 };
 
+// Pool size is env-tunable so we can raise it per-replica when a Postgres
+// connection pooler (e.g. PgBouncer) sits in front, enabling horizontal
+// scale-out without exhausting DB connections. Defaults to 10.
+const POOL_MAX = Number(process.env.PG_POOL_MAX ?? 10) || 10;
+
 function createClient() {
   const pool = new Pool({
     connectionString,
-    max: 10,
+    max: POOL_MAX,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
     // Keep TCP connections alive so idle sockets aren't silently dropped by the

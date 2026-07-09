@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Paperclip,
@@ -64,11 +63,79 @@ import {
 } from "@/components/messages/chat-attachments";
 import { LinkPreviewCard } from "@/components/messages/link-preview";
 import { firstUrl } from "@/lib/link-preview";
+import { uploadFileToR2 } from "@/lib/upload";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
 // Number of bars in the live recording waveform.
 const VOICE_BAR_COUNT = 40;
+
+// Live recording waveform. Runs its own RAF loop and writes bar heights straight
+// to the DOM via refs, so the ~60fps updates never re-render the (huge) chat
+// component. Only mounts while recording.
+function VoiceVisualizer({
+  analyserRef,
+  pausedRef,
+  paused,
+}: {
+  analyserRef: React.RefObject<AnalyserNode | null>;
+  pausedRef: React.RefObject<boolean>;
+  paused: boolean;
+}) {
+  const barsRef = useRef<(HTMLSpanElement | null)[]>([]);
+  const levelsRef = useRef<number[]>(new Array(VOICE_BAR_COUNT).fill(0));
+
+  useEffect(() => {
+    const analyser = analyserRef.current;
+    let raf = 0;
+    const data = analyser ? new Uint8Array(analyser.fftSize) : null;
+    const apply = (v: number, el: HTMLSpanElement | null) => {
+      if (!el) return;
+      el.style.height = `${Math.max(3, Math.round(v * 26))}px`;
+      el.style.opacity = String(pausedRef.current ? 0.35 : 0.5 + v * 0.5);
+    };
+    const loop = () => {
+      if (analyser && data && !pausedRef.current) {
+        analyser.getByteTimeDomainData(data);
+        let peak = 0;
+        for (let i = 0; i < data.length; i++) {
+          const v = Math.abs(data[i] - 128) / 128;
+          if (v > peak) peak = v;
+        }
+        const level = Math.min(1, peak * 2.5);
+        const shifted = levelsRef.current.slice(1);
+        shifted.push(level);
+        levelsRef.current = shifted;
+        for (let i = 0; i < barsRef.current.length; i++) apply(shifted[i], barsRef.current[i]);
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [analyserRef, pausedRef]);
+
+  return (
+    <div
+      className="flex min-w-0 flex-1 items-center justify-center gap-[2px]"
+      aria-hidden
+    >
+      {Array.from({ length: VOICE_BAR_COUNT }).map((_, i) => (
+        <span
+          key={i}
+          ref={(el) => {
+            barsRef.current[i] = el;
+          }}
+          className="w-[2px] rounded-full bg-muted-foreground/70"
+          style={{
+            height: "3px",
+            opacity: paused ? 0.35 : 0.5,
+            transition: "height 90ms linear",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 type AttachmentMeta = {
   filename: string;
@@ -77,39 +144,12 @@ type AttachmentMeta = {
   mimeType: string | null;
 };
 
-// Server-buffered upload with progress (Nizek's /api/upload → { url, key }).
+// Presigned direct-to-R2 upload with progress.
 function uploadFile(
   file: File,
   onProgress: (pct: number) => void,
 ): Promise<AttachmentMeta> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    const fd = new FormData();
-    fd.append("file", file);
-    xhr.open("POST", "/api/upload");
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const d = JSON.parse(xhr.responseText) as { url: string };
-          resolve({
-            filename: file.name,
-            url: d.url,
-            fileSize: file.size,
-            mimeType: file.type || null,
-          });
-        } catch {
-          reject(new Error("Bad upload response"));
-        }
-      } else {
-        reject(new Error(`Upload failed (${xhr.status})`));
-      }
-    };
-    xhr.onerror = () => reject(new Error("Network error"));
-    xhr.send(fd);
-  });
+  return uploadFileToR2(file, onProgress);
 }
 
 export type ChatMessage = {
@@ -312,6 +352,295 @@ type OutboxEntry = {
   status: "uploading" | "sending" | "error";
 };
 
+// One chat message. Memoized so unrelated parent re-renders (typing indicator,
+// presence, composer keystrokes, recording timer) don't re-render every row —
+// a row only re-renders when its own `m`/derived props change. Callbacks are
+// stable (useCallback in the parent), so `memo` holds.
+const MessageRow = memo(function MessageRow({
+  m,
+  mine,
+  showDay,
+  newGroup,
+  showAuthor,
+  notFirst,
+  dimmed,
+  replied,
+  showTaskCard,
+  currentMemberId,
+  react,
+  handleReply,
+  handleCopy,
+  handleDelete,
+  scrollToMessage,
+  openImage,
+}: {
+  m: ChatMessage;
+  mine: boolean;
+  showDay: boolean;
+  newGroup: boolean;
+  showAuthor: boolean;
+  notFirst: boolean;
+  dimmed: boolean;
+  replied: ChatMessage | null | undefined;
+  showTaskCard: boolean;
+  currentMemberId: string;
+  react: (id: string, emoji: string) => void;
+  handleReply: (id: string) => void;
+  handleCopy: (text: string) => void;
+  handleDelete: (id: string) => void;
+  scrollToMessage: (id: string) => void;
+  openImage: (att: MessageAttachment) => void;
+}) {
+  const imageAtts = m.attachments.filter((a) => a.isImage);
+  const fileAtts = m.attachments.filter((a) => !a.isImage);
+
+  return (
+    <div id={`msg-${m.id}`} className={cn("contents", dimmed && "opacity-30")}>
+      {showDay && (
+        <div className="my-2 flex items-center justify-center">
+          <span className="rounded-full bg-surface px-3 py-1 text-tiny font-medium text-muted-foreground">
+            {formatDay(m.createdAt)}
+          </span>
+        </div>
+      )}
+      <div
+        className={cn(
+          "flex gap-2",
+          mine ? "justify-end" : "justify-start",
+          newGroup && !showDay && notFirst && "mt-3",
+        )}
+      >
+        {!mine && (
+          <div className="w-8 shrink-0 self-start">
+            {showAuthor && (
+              <div
+                className="grid h-8 w-8 place-items-center rounded-full bg-primary/20 text-xxs font-semibold text-primary"
+                aria-hidden
+              >
+                {m.authorName
+                  .split(" ")
+                  .map((s) => s[0])
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase()}
+              </div>
+            )}
+          </div>
+        )}
+        <div className={cn("flex max-w-[70%] flex-col gap-1.5", mine && "items-end")}>
+          {showAuthor && (
+            <div className="px-1 text-tiny text-muted-foreground">{m.authorName}</div>
+          )}
+          {(m.body || replied || (m.task && showTaskCard)) && (() => {
+            const notice = (!!m.task && showTaskCard) || m.kind === "rejection";
+            const blue = mine && !notice;
+            return (
+            <div className="group relative">
+              <div
+                className={cn(
+                  "flex max-w-full flex-col gap-1.5 text-sm leading-relaxed",
+                  notice
+                    ? "min-w-64 rounded-xl border border-border/60 bg-surface-2/80 p-2.5 text-foreground"
+                    : "rounded-2xl px-3.5 py-2",
+                  !notice &&
+                    (blue
+                      ? "rounded-br-md bg-primary text-primary-foreground"
+                      : "rounded-bl-md bg-surface-2 text-foreground"),
+                )}
+              >
+                {m.task && showTaskCard && (
+                  <Link
+                    href={`/dashboard/projects/${m.task.projectId}/tasks/${m.task.id}`}
+                    className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2 transition-colors hover:bg-background"
+                  >
+                    <CheckSquare className="h-4 w-4 shrink-0 text-primary" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                        Task · #{fmtTaskNumber(m.task.number)}
+                      </div>
+                      <div className="truncate text-xs font-semibold text-foreground">
+                        {m.task.title}
+                      </div>
+                    </div>
+                    <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  </Link>
+                )}
+                {replied && (
+                  <button
+                    type="button"
+                    onClick={() => scrollToMessage(m.replyToId!)}
+                    className={cn(
+                      "-mx-1 flex flex-col gap-0.5 rounded-md border-l-2 px-2 py-1 text-left text-xs",
+                      blue
+                        ? "border-primary-foreground/60 bg-primary-foreground/10 text-primary-foreground/90"
+                        : "border-primary/70 bg-primary/10 text-foreground/80",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "text-[11px] font-semibold",
+                        blue ? "text-primary-foreground" : "text-primary",
+                      )}
+                    >
+                      {replied.authorId === currentMemberId ? "You" : replied.authorName}
+                    </span>
+                    <span className="line-clamp-2 opacity-90">
+                      {replied.body
+                        ? replied.body.length > 120
+                          ? `${replied.body.slice(0, 120)}…`
+                          : replied.body
+                        : "Attachment"}
+                    </span>
+                  </button>
+                )}
+                {m.body &&
+                  (m.kind === "rejection" ? (
+                    (() => {
+                      const who = (m.mentions ?? []).find((n) =>
+                        m.body.startsWith(`@${n}`),
+                      );
+                      const reason = who
+                        ? m.body.slice(who.length + 1).trim()
+                        : m.body;
+                      return (
+                        <>
+                          <div className="flex items-start gap-2 rounded-lg border-l-2 border-destructive bg-destructive/10 px-2.5 py-2 text-xs">
+                            <AlertOctagon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[10px] font-bold uppercase tracking-wider text-destructive">
+                                Rejected
+                              </div>
+                              {reason && (
+                                <div className="mt-0.5 whitespace-pre-wrap break-words text-foreground/90">
+                                  {reason}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-end gap-2 px-0.5">
+                            {who && (
+                              <span className="rounded bg-primary/15 px-1 py-0.5 text-xs font-medium text-primary">
+                                @{who}
+                              </span>
+                            )}
+                            <span className="ml-auto shrink-0 text-[10px] leading-none text-muted-foreground">
+                              {formatTime(m.createdAt)}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })()
+                  ) : (
+                    <div className={cn("flex items-end gap-2", notice && "px-0.5")}>
+                      <span className="whitespace-pre-wrap break-words">
+                        {renderMessageBody(m.body, m.mentions, blue)}
+                      </span>
+                      <span
+                        className={cn(
+                          "ml-1 shrink-0 translate-y-0.5 text-[10px] leading-none",
+                          blue
+                            ? "text-primary-foreground/70"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {formatTime(m.createdAt)}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+              <MessageCaret
+                mine={mine}
+                onReact={(emoji) => react(m.id, emoji)}
+                onReply={() => handleReply(m.id)}
+                onCopy={() => handleCopy(m.body)}
+                onDelete={() => handleDelete(m.id)}
+              />
+            </div>
+            );
+          })()}
+          {m.kind !== "rejection" && (() => {
+            const previewUrl = firstUrl(m.body);
+            return previewUrl ? (
+              <LinkPreviewCard url={previewUrl} mine={mine} />
+            ) : null;
+          })()}
+          {imageAtts.length > 0 && (
+            <div
+              className={cn(
+                "flex max-w-full flex-wrap gap-1.5",
+                mine ? "justify-end" : "justify-start",
+              )}
+            >
+              {imageAtts.map((a) => (
+                <AttachmentBubble
+                  key={a.id}
+                  attachment={a}
+                  mine={mine}
+                  onOpenImage={openImage}
+                  menu={
+                    <ImageActionsMenu
+                      onReact={(emoji) => react(m.id, emoji)}
+                      onReply={() => handleReply(m.id)}
+                      onCopy={() => handleCopy(m.body)}
+                      onDelete={() => handleDelete(m.id)}
+                    />
+                  }
+                />
+              ))}
+            </div>
+          )}
+          {fileAtts.length > 0 && (
+            <div className="flex max-w-full flex-col gap-1.5">
+              {fileAtts.map((a) => (
+                <AttachmentBubble
+                  key={a.id}
+                  attachment={a}
+                  mine={mine}
+                  onOpenImage={openImage}
+                  timeLabel={
+                    isVoiceAttachment(a) ? formatTime(m.createdAt) : undefined
+                  }
+                  menu={
+                    <FileCaretMenu
+                      onReact={(emoji) => react(m.id, emoji)}
+                      onReply={() => handleReply(m.id)}
+                      onCopy={() => handleCopy(m.body)}
+                      onDelete={() => handleDelete(m.id)}
+                    />
+                  }
+                />
+              ))}
+            </div>
+          )}
+          {m.reactions.length > 0 && (
+            <div className={cn("flex flex-wrap gap-1", mine ? "justify-end" : "justify-start")}>
+              {m.reactions.map((r) => {
+                const mineReacted = r.memberIds.includes(currentMemberId);
+                return (
+                  <button
+                    key={r.emoji}
+                    type="button"
+                    onClick={() => react(m.id, r.emoji)}
+                    className={cn(
+                      "flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs leading-none transition-colors",
+                      mineReacted
+                        ? "border-primary/50 bg-primary/15 text-foreground"
+                        : "border-border/60 bg-surface/60 text-muted-foreground hover:bg-surface",
+                    )}
+                  >
+                    <span>{r.emoji}</span>
+                    <span className="text-[10px] font-medium">{r.memberIds.length}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
 export function ThreadChat({
   channel,
   presenceChannel,
@@ -369,16 +698,21 @@ export function ThreadChat({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
   const lb = useLightbox();
 
   const online = usePresence(presenceChannel);
   const { typing, notifyTyping } = useTyping(channel);
 
-  useEffect(() => {
+  // Adjust state when the server-provided messages change (thread switch / RSC
+  // update) during render instead of in an effect — avoids the extra commit +
+  // re-render cascade the effect version triggered. Uses the React-sanctioned
+  // "store previous prop in state" pattern.
+  const [prevInitial, setPrevInitial] = useState(initialMessages);
+  if (prevInitial !== initialMessages) {
+    setPrevInitial(initialMessages);
     setMessages(initialMessages);
     setHasMore(hasMoreOlder);
-  }, [initialMessages, hasMoreOlder]);
+  }
 
   // Fetch the previous page (older messages) and prepend it, keeping the
   // viewport anchored so the list doesn't jump.
@@ -679,7 +1013,9 @@ export function ThreadChat({
                   },
                 ],
           );
-          router.refresh();
+          // No router.refresh(): the message is already shown optimistically and
+          // other clients receive it live over Centrifugo. Reconciliation happens
+          // on the next navigation / RSC render.
         } else {
           setOutbox((prev) =>
             prev.map((o) =>
@@ -690,7 +1026,7 @@ export function ThreadChat({
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [target.taskId, target.projectId, target.conversationId, router],
+    [target.taskId, target.projectId, target.conversationId],
   );
 
   // Upload each of an entry's files, tracking progress; deliver once all are up.
@@ -789,9 +1125,6 @@ export function ThreadChat({
   const [recording, setRecording] = useState(false);
   const [recordPaused, setRecordPaused] = useState(false);
   const [recordSecs, setRecordSecs] = useState(0);
-  const [recordLevels, setRecordLevels] = useState<number[]>(() =>
-    new Array(VOICE_BAR_COUNT).fill(0),
-  );
   const [recordError, setRecordError] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordChunksRef = useRef<Blob[]>([]);
@@ -801,8 +1134,6 @@ export function ThreadChat({
   const recordAccumulatedRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const levelsRef = useRef<number[]>(new Array(VOICE_BAR_COUNT).fill(0));
   const recordPausedRef = useRef(false);
 
   // Send a finished recording through the normal attachment pipeline.
@@ -834,37 +1165,10 @@ export function ThreadChat({
     [replyTo, startUploads],
   );
 
-  const runVisualizer = useCallback(() => {
-    const analyser = analyserRef.current;
-    if (!analyser) return;
-    const data = new Uint8Array(analyser.fftSize);
-    const loop = () => {
-      if (!recordPausedRef.current) {
-        analyser.getByteTimeDomainData(data);
-        let peak = 0;
-        for (let i = 0; i < data.length; i++) {
-          const v = Math.abs(data[i] - 128) / 128;
-          if (v > peak) peak = v;
-        }
-        const level = Math.min(1, peak * 2.5);
-        const shifted = levelsRef.current.slice(1);
-        shifted.push(level);
-        levelsRef.current = shifted;
-        setRecordLevels([...shifted]);
-      }
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-  }, []);
-
   const cleanupRecordingResources = () => {
     if (recordTimerRef.current) {
       clearInterval(recordTimerRef.current);
       recordTimerRef.current = null;
-    }
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
     }
     audioCtxRef.current?.close().catch(() => {});
     audioCtxRef.current = null;
@@ -890,8 +1194,6 @@ export function ThreadChat({
       discardRecordingRef.current = false;
       recordAccumulatedRef.current = 0;
       recordPausedRef.current = false;
-      levelsRef.current = new Array(VOICE_BAR_COUNT).fill(0);
-      setRecordLevels(levelsRef.current);
       setRecordPaused(false);
       rec.ondataavailable = (e) => {
         if (e.data.size > 0) recordChunksRef.current.push(e.data);
@@ -922,7 +1224,6 @@ export function ThreadChat({
         src.connect(analyser);
         audioCtxRef.current = ctx;
         analyserRef.current = analyser;
-        runVisualizer();
       } catch {}
       recorderRef.current = rec;
       rec.start(250);
@@ -974,7 +1275,6 @@ export function ThreadChat({
     return () => {
       discardRecordingRef.current = true;
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
       audioCtxRef.current?.close().catch(() => {});
       try {
         recorderRef.current?.stop();
@@ -1007,46 +1307,49 @@ export function ThreadChat({
     setOutbox((prev) => prev.filter((o) => o.tempId !== tempId));
   };
 
-  const react = (messageId: string, emoji: string) => {
-    setMessages((prev) =>
-      prev.map((m) => {
-        if (m.id !== messageId) return m;
-        const existing = m.reactions.find((r) => r.emoji === emoji);
-        let reactions: ReactionSummary[];
-        if (existing) {
-          const mine = existing.memberIds.includes(currentMemberId);
-          const memberIds = mine
-            ? existing.memberIds.filter((id) => id !== currentMemberId)
-            : [...existing.memberIds, currentMemberId];
-          reactions = memberIds.length
-            ? m.reactions.map((r) => (r.emoji === emoji ? { ...r, memberIds } : r))
-            : m.reactions.filter((r) => r.emoji !== emoji);
-        } else {
-          reactions = [...m.reactions, { emoji, memberIds: [currentMemberId] }];
-        }
-        return { ...m, reactions };
-      }),
-    );
-    startTransition(async () => {
-      await toggleReaction(messageId, emoji);
-    });
-  };
+  const react = useCallback(
+    (messageId: string, emoji: string) => {
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId) return m;
+          const existing = m.reactions.find((r) => r.emoji === emoji);
+          let reactions: ReactionSummary[];
+          if (existing) {
+            const mine = existing.memberIds.includes(currentMemberId);
+            const memberIds = mine
+              ? existing.memberIds.filter((id) => id !== currentMemberId)
+              : [...existing.memberIds, currentMemberId];
+            reactions = memberIds.length
+              ? m.reactions.map((r) => (r.emoji === emoji ? { ...r, memberIds } : r))
+              : m.reactions.filter((r) => r.emoji !== emoji);
+          } else {
+            reactions = [...m.reactions, { emoji, memberIds: [currentMemberId] }];
+          }
+          return { ...m, reactions };
+        }),
+      );
+      startTransition(async () => {
+        await toggleReaction(messageId, emoji);
+      });
+    },
+    [currentMemberId],
+  );
 
-  const handleReply = (id: string) => {
+  const handleReply = useCallback((id: string) => {
     setReplyTo(id);
     setTimeout(() => composerRef.current?.focus(), 0);
-  };
+  }, []);
 
-  const handleCopy = (text: string) => {
+  const handleCopy = useCallback((text: string) => {
     navigator.clipboard.writeText(text);
-  };
+  }, []);
 
-  const handleDelete = (id: string) => {
+  const handleDelete = useCallback((id: string) => {
     setMessages((prev) => prev.filter((m) => m.id !== id));
     startTransition(async () => {
       await deleteMessageAction(id);
     });
-  };
+  }, []);
 
   const peersOnline = peerMemberIds.some((id) => online.has(id));
   const typingLabel = useMemo(() => {
@@ -1068,13 +1371,13 @@ export function ThreadChat({
     return new Set(searchMatches.map((m) => m.id));
   }, [searchMatches]);
 
-  const scrollToMessage = (id: string) => {
+  const scrollToMessage = useCallback((id: string) => {
     const el = document.getElementById(`msg-${id}`);
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "center" });
     el.classList.add("ring-2", "ring-primary/60", "rounded-2xl");
     setTimeout(() => el.classList.remove("ring-2", "ring-primary/60", "rounded-2xl"), 1500);
-  };
+  }, []);
 
   const allImages = useMemo(
     () => messages.flatMap((m) => m.attachments.filter((a) => a.isImage)),
@@ -1087,7 +1390,10 @@ export function ThreadChat({
     return map;
   }, [messages]);
 
-  const openImage = (att: MessageAttachment) => lb.open(att, allImages);
+  const openImage = useCallback(
+    (att: MessageAttachment) => lb.open(att, allImages),
+    [lb, allImages],
+  );
 
   useEffect(() => {
     if (searchOpen) searchInputRef.current?.focus();
@@ -1186,261 +1492,30 @@ export function ThreadChat({
             </div>
           )}
           {messages.map((m, i) => {
-            const mine = m.authorId === currentMemberId;
             const prev = messages[i - 1];
             const showDay = !prev || !sameDay(prev.createdAt, m.createdAt);
             const newGroup = !prev || prev.authorId !== m.authorId || showDay;
-            const showAuthor = !mine && newGroup;
-            const dimmed = sq && matchIds && !matchIds.has(m.id);
-            const replied = m.replyToId ? byId.get(m.replyToId) : null;
-            const imageAtts = m.attachments.filter((a) => a.isImage);
-            const fileAtts = m.attachments.filter((a) => !a.isImage);
-
+            const mine = m.authorId === currentMemberId;
             return (
-              <div key={m.id} id={`msg-${m.id}`} className={cn("contents", dimmed && "opacity-30")}>
-                {showDay && (
-                  <div className="my-2 flex items-center justify-center">
-                    <span className="rounded-full bg-surface px-3 py-1 text-tiny font-medium text-muted-foreground">
-                      {formatDay(m.createdAt)}
-                    </span>
-                  </div>
-                )}
-                <div
-                  className={cn(
-                    "flex gap-2",
-                    mine ? "justify-end" : "justify-start",
-                    newGroup && !showDay && i > 0 && "mt-3",
-                  )}
-                >
-                  {!mine && (
-                    <div className="w-8 shrink-0 self-start">
-                      {showAuthor && (
-                        <div
-                          className="grid h-8 w-8 place-items-center rounded-full bg-primary/20 text-xxs font-semibold text-primary"
-                          aria-hidden
-                        >
-                          {m.authorName
-                            .split(" ")
-                            .map((s) => s[0])
-                            .slice(0, 2)
-                            .join("")
-                            .toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div className={cn("flex max-w-[70%] flex-col gap-1.5", mine && "items-end")}>
-                    {showAuthor && (
-                      <div className="px-1 text-tiny text-muted-foreground">{m.authorName}</div>
-                    )}
-                    {(m.body || replied || (m.task && !target.taskId)) && (() => {
-                      const notice =
-                        (!!m.task && !target.taskId) || m.kind === "rejection";
-                      const blue = mine && !notice;
-                      return (
-                      <div className="group relative">
-                        <div
-                          className={cn(
-                            "flex max-w-full flex-col gap-1.5 text-sm leading-relaxed",
-                            notice
-                              ? "min-w-64 rounded-xl border border-border/60 bg-surface-2/80 p-2.5 text-foreground"
-                              : "rounded-2xl px-3.5 py-2",
-                            !notice &&
-                              (blue
-                                ? "rounded-br-md bg-primary text-primary-foreground"
-                                : "rounded-bl-md bg-surface-2 text-foreground"),
-                          )}
-                        >
-                          {m.task && !target.taskId && (
-                            <Link
-                              href={`/dashboard/projects/${m.task.projectId}/tasks/${m.task.id}`}
-                              className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2 transition-colors hover:bg-background"
-                            >
-                              <CheckSquare className="h-4 w-4 shrink-0 text-primary" />
-                              <div className="min-w-0 flex-1">
-                                <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                                  Task · #{fmtTaskNumber(m.task.number)}
-                                </div>
-                                <div className="truncate text-xs font-semibold text-foreground">
-                                  {m.task.title}
-                                </div>
-                              </div>
-                              <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            </Link>
-                          )}
-                          {replied && (
-                            <button
-                              type="button"
-                              onClick={() => scrollToMessage(m.replyToId!)}
-                              className={cn(
-                                "-mx-1 flex flex-col gap-0.5 rounded-md border-l-2 px-2 py-1 text-left text-xs",
-                                blue
-                                  ? "border-primary-foreground/60 bg-primary-foreground/10 text-primary-foreground/90"
-                                  : "border-primary/70 bg-primary/10 text-foreground/80",
-                              )}
-                            >
-                              <span
-                                className={cn(
-                                  "text-[11px] font-semibold",
-                                  blue ? "text-primary-foreground" : "text-primary",
-                                )}
-                              >
-                                {replied.authorId === currentMemberId ? "You" : replied.authorName}
-                              </span>
-                              <span className="line-clamp-2 opacity-90">
-                                {replied.body
-                                  ? replied.body.length > 120
-                                    ? `${replied.body.slice(0, 120)}…`
-                                    : replied.body
-                                  : "Attachment"}
-                              </span>
-                            </button>
-                          )}
-                          {m.body &&
-                            (m.kind === "rejection" ? (
-                              (() => {
-                                const who = (m.mentions ?? []).find((n) =>
-                                  m.body.startsWith(`@${n}`),
-                                );
-                                const reason = who
-                                  ? m.body.slice(who.length + 1).trim()
-                                  : m.body;
-                                return (
-                                  <>
-                                    <div className="flex items-start gap-2 rounded-lg border-l-2 border-destructive bg-destructive/10 px-2.5 py-2 text-xs">
-                                      <AlertOctagon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
-                                      <div className="min-w-0 flex-1">
-                                        <div className="text-[10px] font-bold uppercase tracking-wider text-destructive">
-                                          Rejected
-                                        </div>
-                                        {reason && (
-                                          <div className="mt-0.5 whitespace-pre-wrap break-words text-foreground/90">
-                                            {reason}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-end gap-2 px-0.5">
-                                      {who && (
-                                        <span className="rounded bg-primary/15 px-1 py-0.5 text-xs font-medium text-primary">
-                                          @{who}
-                                        </span>
-                                      )}
-                                      <span className="ml-auto shrink-0 text-[10px] leading-none text-muted-foreground">
-                                        {formatTime(m.createdAt)}
-                                      </span>
-                                    </div>
-                                  </>
-                                );
-                              })()
-                            ) : (
-                              <div className={cn("flex items-end gap-2", notice && "px-0.5")}>
-                                <span className="whitespace-pre-wrap break-words">
-                                  {renderMessageBody(m.body, m.mentions, blue)}
-                                </span>
-                                <span
-                                  className={cn(
-                                    "ml-1 shrink-0 translate-y-0.5 text-[10px] leading-none",
-                                    blue
-                                      ? "text-primary-foreground/70"
-                                      : "text-muted-foreground",
-                                  )}
-                                >
-                                  {formatTime(m.createdAt)}
-                                </span>
-                              </div>
-                            ))}
-                        </div>
-                        <MessageCaret
-                          mine={mine}
-                          onReact={(emoji) => react(m.id, emoji)}
-                          onReply={() => handleReply(m.id)}
-                          onCopy={() => handleCopy(m.body)}
-                          onDelete={() => handleDelete(m.id)}
-                        />
-                      </div>
-                      );
-                    })()}
-                    {m.kind !== "rejection" && (() => {
-                      const previewUrl = firstUrl(m.body);
-                      return previewUrl ? (
-                        <LinkPreviewCard url={previewUrl} mine={mine} />
-                      ) : null;
-                    })()}
-                    {imageAtts.length > 0 && (
-                      <div
-                        className={cn(
-                          "flex max-w-full flex-wrap gap-1.5",
-                          mine ? "justify-end" : "justify-start",
-                        )}
-                      >
-                        {imageAtts.map((a) => (
-                          <AttachmentBubble
-                            key={a.id}
-                            attachment={a}
-                            mine={mine}
-                            onOpenImage={openImage}
-                            menu={
-                              <ImageActionsMenu
-                                onReact={(emoji) => react(m.id, emoji)}
-                                onReply={() => handleReply(m.id)}
-                                onCopy={() => handleCopy(m.body)}
-                                onDelete={() => handleDelete(m.id)}
-                              />
-                            }
-                          />
-                        ))}
-                      </div>
-                    )}
-                    {fileAtts.length > 0 && (
-                      <div className="flex max-w-full flex-col gap-1.5">
-                        {fileAtts.map((a) => (
-                          <AttachmentBubble
-                            key={a.id}
-                            attachment={a}
-                            mine={mine}
-                            onOpenImage={openImage}
-                            timeLabel={
-                              isVoiceAttachment(a) ? formatTime(m.createdAt) : undefined
-                            }
-                            menu={
-                              <FileCaretMenu
-                                onReact={(emoji) => react(m.id, emoji)}
-                                onReply={() => handleReply(m.id)}
-                                onCopy={() => handleCopy(m.body)}
-                                onDelete={() => handleDelete(m.id)}
-                              />
-                            }
-                          />
-                        ))}
-                      </div>
-                    )}
-                    {m.reactions.length > 0 && (
-                      <div className={cn("flex flex-wrap gap-1", mine ? "justify-end" : "justify-start")}>
-                        {m.reactions.map((r) => {
-                          const mineReacted = r.memberIds.includes(currentMemberId);
-                          return (
-                            <button
-                              key={r.emoji}
-                              type="button"
-                              onClick={() => react(m.id, r.emoji)}
-                              className={cn(
-                                "flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs leading-none transition-colors",
-                                mineReacted
-                                  ? "border-primary/50 bg-primary/15 text-foreground"
-                                  : "border-border/60 bg-surface/60 text-muted-foreground hover:bg-surface",
-                              )}
-                            >
-                              <span>{r.emoji}</span>
-                              <span className="text-[10px] font-medium">{r.memberIds.length}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <MessageRow
+                key={m.id}
+                m={m}
+                mine={mine}
+                showDay={showDay}
+                newGroup={newGroup}
+                showAuthor={!mine && newGroup}
+                notFirst={i > 0}
+                dimmed={Boolean(sq && matchIds && !matchIds.has(m.id))}
+                replied={m.replyToId ? byId.get(m.replyToId) : null}
+                showTaskCard={!target.taskId}
+                currentMemberId={currentMemberId}
+                react={react}
+                handleReply={handleReply}
+                handleCopy={handleCopy}
+                handleDelete={handleDelete}
+                scrollToMessage={scrollToMessage}
+                openImage={openImage}
+              />
             );
           })}
           {outbox.map((o) => (
@@ -1664,22 +1739,11 @@ export function ThreadChat({
                   {Math.floor(recordSecs / 60)}:{String(recordSecs % 60).padStart(2, "0")}
                 </span>
               </div>
-              <div
-                className="flex min-w-0 flex-1 items-center justify-center gap-[2px]"
-                aria-hidden
-              >
-                {recordLevels.map((v, i) => (
-                  <span
-                    key={i}
-                    className="w-[2px] rounded-full bg-muted-foreground/70"
-                    style={{
-                      height: `${Math.max(3, Math.round(v * 26))}px`,
-                      opacity: recordPaused ? 0.35 : 0.5 + v * 0.5,
-                      transition: "height 90ms linear",
-                    }}
-                  />
-                ))}
-              </div>
+              <VoiceVisualizer
+                analyserRef={analyserRef}
+                pausedRef={recordPausedRef}
+                paused={recordPaused}
+              />
               <Button
                 variant="ghost"
                 size="icon"

@@ -11,13 +11,14 @@ import {
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, moveTask as moveTaskAction, declineTask, deleteTask } from "@/actions/task";
 import { createMeetingNote, getTaskNotes } from "@/actions/meeting-note";
-import { RichTextEditor } from "@/components/rich-text-editor";
+import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { formatDistanceToNow } from "date-fns";
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
 import { CommentSection } from "@/components/kanban/comment-section";
 import { StageConfirmDialog, getCheckpoint } from "@/components/kanban/stage-confirm-dialog";
 import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
 import { cn } from "@/lib/utils";
+import { uploadFileToR2 } from "@/lib/upload";
 
 const ACCURACY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   WAY_OVER:  { label: "Way Over",  color: "text-destructive",  bg: "bg-destructive/20 border-destructive/40" },
@@ -382,12 +383,8 @@ export function TaskDetailPage({
       if (declineFiles.length > 0) {
         attachments = await Promise.all(
           declineFiles.map(async (file) => {
-            const fd = new FormData();
-            fd.append("file", file);
-            const res = await fetch("/api/upload", { method: "POST", body: fd });
-            if (!res.ok) throw new Error(`Upload failed for ${file.name}`);
-            const { url } = await res.json();
-            return { filename: file.name, url, fileSize: file.size, mimeType: file.type };
+            const up = await uploadFileToR2(file);
+            return { filename: file.name, url: up.url, fileSize: file.size, mimeType: file.type };
           })
         );
       }

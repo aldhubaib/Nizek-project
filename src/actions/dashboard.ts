@@ -21,7 +21,7 @@ export async function getDashboardData(projectId: string) {
 
   const [tasks, project, mentions] = await Promise.all([
     prisma.task.findMany({
-      where: { projectId },
+      where: { projectId, archivedAt: null },
       select: {
         id: true,
         title: true,
@@ -1200,10 +1200,12 @@ export async function getStageFunnel() {
 
   const projectFilter = funnelProjectFilter(user.systemRole, user.id);
 
-  const [nonClarTasks, clarTasks, requiredQuestions, projects] = await Promise.all([
-    prisma.task.findMany({
+  const [nonClarGroups, clarTasks, requiredQuestions, projects] = await Promise.all([
+    // Count non-clarification tasks in the DB instead of loading every row into JS.
+    prisma.task.groupBy({
+      by: ["projectId", "stage"],
       where: { archivedAt: null, stage: { not: "CLARIFICATION" }, project: projectFilter },
-      select: { stage: true, projectId: true },
+      _count: { _all: true },
     }),
     prisma.task.findMany({
       where: { archivedAt: null, stage: "CLARIFICATION", project: projectFilter },
@@ -1233,22 +1235,26 @@ export async function getStageFunnel() {
   const totals: Record<string, number> = {};
   for (const s of FUNNEL_STAGES) totals[s] = 0;
 
-  for (const t of nonClarTasks) {
-    totals[t.stage] = (totals[t.stage] ?? 0) + 1;
-    if (!byProject[t.projectId]) {
-      byProject[t.projectId] = {};
-      for (const s of FUNNEL_STAGES) byProject[t.projectId][s] = 0;
+  const ensureProject = (projectId: string) => {
+    if (!byProject[projectId]) {
+      byProject[projectId] = {};
+      for (const s of FUNNEL_STAGES) byProject[projectId][s] = 0;
     }
-    byProject[t.projectId][t.stage]++;
+  };
+
+  let nonClarTotal = 0;
+  for (const g of nonClarGroups) {
+    const count = g._count._all;
+    nonClarTotal += count;
+    totals[g.stage] = (totals[g.stage] ?? 0) + count;
+    ensureProject(g.projectId);
+    byProject[g.projectId][g.stage] += count;
   }
 
   for (const t of clarTasks) {
     const bucket = computeBucket("CLARIFICATION", t.taskType, t.priority, t.answers, requiredByType);
     totals[bucket] = (totals[bucket] ?? 0) + 1;
-    if (!byProject[t.projectId]) {
-      byProject[t.projectId] = {};
-      for (const s of FUNNEL_STAGES) byProject[t.projectId][s] = 0;
-    }
+    ensureProject(t.projectId);
     byProject[t.projectId][bucket]++;
   }
 
@@ -1257,7 +1263,7 @@ export async function getStageFunnel() {
     totals,
     byProject,
     projects: Object.entries(projectMap).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
-    totalTasks: nonClarTasks.length + clarTasks.length,
+    totalTasks: nonClarTotal + clarTasks.length,
   };
 }
 
@@ -1275,6 +1281,8 @@ export async function getFunnelTasks() {
         assignee: { select: { id: true, name: true, imageUrl: true } },
         answers: { select: { questionId: true, answer: true } },
       },
+      orderBy: { updatedAt: "desc" },
+      take: 2000,
     }),
     prisma.defaultQuestion.findMany({
       where: { required: true, type: { not: "client" } },

@@ -8,10 +8,14 @@
     "start": "NODE_OPTIONS='--max-old-space-size=2048' next start",
     "lint": "eslint",
     "gen:icons": "node scripts/generate-pwa-icons.mjs",
+    "db:migrate": "node prisma/migrate.mjs",
+    "db:migrate:dev": "prisma migrate dev",
+    "analyze": "ANALYZE=true npm run build",
     "postinstall": "prisma generate"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1057.0",
+    "@aws-sdk/s3-request-presigner": "^3.1083.0",
     "@base-ui/react": "^1.4.1",
     "@clerk/nextjs": "^7.3.5",
     "@clerk/themes": "^2.4.57",
@@ -35,8 +39,6 @@
     "next": "16.2.6",
     "pg": "^8.20.0",
     "prisma": "^7.8.0",
-    "pusher": "^5.3.3",
-    "pusher-js": "^8.5.0",
     "react": "19.2.4",
     "react-day-picker": "^10.0.1",
     "react-dom": "19.2.4",
@@ -50,6 +52,7 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.2.10",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

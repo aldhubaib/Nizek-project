@@ -13,6 +13,7 @@ import { ContractBadge } from "@/components/project/contract-badge";
 import { AddContractDialog } from "@/components/project/add-contract-dialog";
 import { EditContractDialog } from "@/components/project/edit-contract-dialog";
 import { cn } from "@/lib/utils";
+import { uploadFileToR2 } from "@/lib/upload";
 
 interface Team {
   id: string;
@@ -97,11 +98,7 @@ export function ProjectSettingsOverlay({
     }
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("Upload failed");
-      const { url } = await res.json();
+      const { url } = await uploadFileToR2(file);
       await updateProject({ projectId: project.id, logoUrl: url });
       setLogo(url);
     } catch (err) {

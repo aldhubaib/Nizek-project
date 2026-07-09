@@ -10,7 +10,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useRouter } from "next/navigation";
 import { Centrifuge, Subscription } from "centrifuge";
 import { globalPresenceChannel } from "@/lib/channels";
 
@@ -57,14 +56,8 @@ export function CentrifugoProvider({
   memberId: string;
   children: ReactNode;
 }) {
-  const router = useRouter();
   const [connected, setConnected] = useState(false);
   const clientRef = useRef<Centrifuge | null>(null);
-  // True after a disconnect so the next "connected" event can resync data the
-  // client missed while the socket was down (server refetch of the open view).
-  const wasDisconnectedRef = useRef(false);
-  const routerRef = useRef(router);
-  routerRef.current = router;
   // channel -> { sub, handlers } so multiple listeners share one Subscription.
   const subsRef = useRef<
     Map<string, { sub: Subscription; handlers: Set<MessageHandler> }>
@@ -84,45 +77,65 @@ export function CentrifugoProvider({
       return;
     }
 
-    const client = new Centrifuge(WS_URL, {
-      getToken: () => fetchToken(),
-    });
-    clientRef.current = client;
+    let cancelled = false;
+    let client: Centrifuge | null = null;
 
-    client.on("connected", () => {
-      setConnected(true);
-      // Join the global presence channel so this user counts as online for the
-      // whole session (independent of which page/thread is open).
-      const presenceChannel = globalPresenceChannel();
-      pinnedRef.current.add(presenceChannel);
-      ensureSubRef.current?.(presenceChannel);
-      // Back online after an outage: refetch the open view so anything missed
-      // while disconnected (messages, inbox rows, presence) appears without a
-      // manual refresh. Channel history recovery covers short gaps; this is
-      // the belt-and-braces catch-all for long ones.
-      if (wasDisconnectedRef.current) {
-        wasDisconnectedRef.current = false;
-        routerRef.current.refresh();
+    // Lazy-init: defer the WS handshake + token fetch until the browser is idle
+    // so it doesn't compete with initial dashboard hydration / LCP. Presence and
+    // notifications come online a beat after first paint instead of blocking it.
+    const start = () => {
+      if (cancelled) return;
+      client = new Centrifuge(WS_URL, {
+        getToken: () => fetchToken(),
+      });
+      clientRef.current = client;
+
+      client.on("connected", () => {
+        setConnected(true);
+        // Join the global presence channel so this user counts as online for the
+        // whole session (independent of which page/thread is open).
+        const presenceChannel = globalPresenceChannel();
+        pinnedRef.current.add(presenceChannel);
+        ensureSubRef.current?.(presenceChannel);
+        // No blanket router.refresh() on reconnect. Missed publications inside the
+        // channel history window are replayed on resubscribe (force_recovery) and
+        // applied by each view's delta handlers; navigation reloads cover the rest.
+      });
+      client.on("disconnected", () => {
+        setConnected(false);
+      });
+      client.on("error", (ctx) => {
+        console.warn("[realtime] client error:", ctx.error?.message ?? ctx);
+      });
+      client.connect();
+    };
+
+    const ric = (
+      window as unknown as {
+        requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
       }
-    });
-    client.on("disconnected", () => {
-      wasDisconnectedRef.current = true;
-      setConnected(false);
-    });
-    client.on("error", (ctx) => {
-      console.warn("[realtime] client error:", ctx.error?.message ?? ctx);
-    });
-    client.connect();
+    ).requestIdleCallback;
+    const cic = (window as unknown as { cancelIdleCallback?: (id: number) => void })
+      .cancelIdleCallback;
+    const handle: number = ric
+      ? ric(start, { timeout: 2000 })
+      : (setTimeout(start, 200) as unknown as number);
 
     return () => {
-      subsRef.current.forEach(({ sub }) => {
-        try {
-          sub.unsubscribe();
-          client.removeSubscription(sub);
-        } catch {}
-      });
-      subsRef.current.clear();
-      client.disconnect();
+      cancelled = true;
+      if (ric && cic) cic(handle);
+      else clearTimeout(handle);
+      const c = client;
+      if (c) {
+        subsRef.current.forEach(({ sub }) => {
+          try {
+            sub.unsubscribe();
+            c.removeSubscription(sub);
+          } catch {}
+        });
+        subsRef.current.clear();
+        c.disconnect();
+      }
       clientRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -147,14 +160,6 @@ export function CentrifugoProvider({
           h(ctx.data);
         } catch {}
       });
-    });
-    // Missed publications within the channel's history window are replayed as
-    // regular publications on resubscribe (force_recovery in centrifugo
-    // config). If the gap was too large to recover, refetch from the server.
-    sub.on("subscribed", (ctx) => {
-      if (ctx.wasRecovering && !ctx.recovered) {
-        routerRef.current.refresh();
-      }
     });
     sub.on("error", (ctx) => {
       console.warn(`[realtime] subscription error (${channel}):`, ctx.error?.message ?? ctx);

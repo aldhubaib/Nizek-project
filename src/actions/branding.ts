@@ -1,8 +1,10 @@
 "use server";
 
 import sharp from "sharp";
+import { updateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
+import { BRANDING_CACHE_TAG } from "@/lib/branding";
 import { generateR2Key, uploadToR2, deleteFromR2 } from "@/lib/r2";
 import {
   getBrandingSlot,
@@ -228,6 +230,7 @@ export async function setBrandingAsset(formData: FormData): Promise<void> {
         height: size,
       });
     }
+    updateTag(BRANDING_CACHE_TAG);
     return;
   }
 
@@ -238,6 +241,7 @@ export async function setBrandingAsset(formData: FormData): Promise<void> {
     width: dims.width,
     height: dims.height,
   });
+  updateTag(BRANDING_CACHE_TAG);
 }
 
 export async function removeBrandingAsset(
@@ -248,12 +252,15 @@ export async function removeBrandingAsset(
   const slot = getBrandingSlot(slotId);
   if (!slot) throw new Error("Unknown logo slot");
 
-  for (const storageSlot of storageSlotsFor(slot.id)) {
-    const row = await prisma.brandingAsset.findUnique({
-      where: { slot: storageSlot },
-    });
-    if (!row) continue;
-    await deleteFromR2(row.r2Key).catch(() => {});
-    await prisma.brandingAsset.delete({ where: { slot: storageSlot } });
-  }
+  const storageSlots = storageSlotsFor(slot.id);
+  const rows = await prisma.brandingAsset.findMany({
+    where: { slot: { in: storageSlots } },
+  });
+  if (rows.length === 0) return;
+
+  await Promise.all(rows.map((r) => deleteFromR2(r.r2Key).catch(() => {})));
+  await prisma.brandingAsset.deleteMany({
+    where: { slot: { in: rows.map((r) => r.slot) } },
+  });
+  updateTag(BRANDING_CACHE_TAG);
 }

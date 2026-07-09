@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { KanbanBoard } from "@/components/kanban/board";
+import { KanbanBoard } from "@/components/kanban/board-lazy";
 import { MeetingNotesTab } from "@/components/project/meeting-notes-tab";
 import { AssetsTab } from "@/components/project/assets-tab";
 import { MemberList } from "@/components/team/member-list";

@@ -3,9 +3,11 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Expand, ExternalLink, Sparkles, Wrench, Bug, Clock, Timer, Undo2, AlertCircle, Palette, Gauge } from "lucide-react";
-import { useState, useEffect, memo } from "react";
+import { memo } from "react";
+import Image from "next/image";
 import type { KanbanTask, TaskType, EstimateAccuracy } from "@/store/kanban";
 import { cn } from "@/lib/utils";
+import { useMinuteTick } from "@/lib/use-minute-clock";
 
 function getPriorityStyle(priority: number) {
   if (priority >= 9) return { color: "text-destructive", bg: "bg-destructive/15 border-destructive/20" };
@@ -42,13 +44,7 @@ function formatDuration(ms: number): string {
   return `${seconds}s`;
 }
 
-function useLiveDuration(isoDate: string | null | undefined) {
-  const [, tick] = useState(0);
-  useEffect(() => {
-    if (!isoDate) return;
-    const interval = setInterval(() => tick((n) => n + 1), 60_000);
-    return () => clearInterval(interval);
-  }, [isoDate]);
+function liveDuration(isoDate: string | null | undefined): string | null {
   if (!isoDate) return null;
   return formatDuration(Date.now() - new Date(isoDate).getTime());
 }
@@ -58,10 +54,13 @@ function UserAvatar({ name, imageUrl, size = 5 }: { name: string | null; imageUr
   const sizeClass = size === 5 ? "w-5 h-5 text-[9px]" : "w-4 h-4 text-[8px]";
 
   if (imageUrl) {
+    const px = size === 5 ? 20 : 16;
     return (
-      <img
+      <Image
         src={imageUrl}
         alt={name ?? "User"}
+        width={px}
+        height={px}
         className={cn("rounded-full object-cover", size === 5 ? "w-5 h-5" : "w-4 h-4")}
       />
     );
@@ -79,13 +78,16 @@ interface TaskCardProps {
   isOverlay?: boolean;
   disabled?: boolean;
   locked?: boolean;
-  onExpand?: () => void;
+  // Stable callbacks (receive the task/id) so this memo'd card doesn't re-render
+  // just because the parent recreated a per-card closure.
+  onExpand?: (taskId: string) => void;
   projectId?: string;
-  /** Present only when the viewer may claim this task at its current stage. */
-  onSelfAssign?: () => void;
+  /** True when the viewer may claim this task at its current stage. */
+  canSelfAssign?: boolean;
+  onSelfAssign?: (task: KanbanTask) => void;
 }
 
-export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, locked, onExpand, projectId, onSelfAssign }: TaskCardProps) {
+export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, locked, onExpand, projectId, canSelfAssign, onSelfAssign }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -104,8 +106,11 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
   const typeConfig = TYPE_CONFIG[task.taskType] ?? TYPE_CONFIG.FEATURE;
   const TypeIcon = typeConfig.icon;
 
-  const totalTime = useLiveDuration(task.startedAt);
-  const stageTime = useLiveDuration(task.stageEnteredAt);
+  // One shared minute clock drives all cards' live durations (re-render once/min
+  // only while this card actually shows a duration).
+  useMinuteTick(Boolean(task.startedAt || task.stageEnteredAt));
+  const totalTime = liveDuration(task.startedAt);
+  const stageTime = liveDuration(task.stageEnteredAt);
 
   return (
     <div
@@ -139,7 +144,7 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onExpand();
+                onExpand(task.id);
               }}
               onPointerDown={(e) => e.stopPropagation()}
               className="rounded-md p-1 text-muted-foreground/40 hover:text-foreground hover:bg-accent transition-all"
@@ -219,7 +224,7 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
           )}
 
           <div className="ml-auto flex items-center gap-1">
-            {onSelfAssign ? (
+            {canSelfAssign && onSelfAssign ? (
               <button
                 type="button"
                 aria-label="Assign this task to me"
@@ -227,7 +232,7 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onSelfAssign();
+                  onSelfAssign(task);
                 }}
                 className="cursor-pointer rounded-full transition-shadow hover:ring-2 hover:ring-primary/60"
               >

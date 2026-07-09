@@ -15,13 +15,14 @@ import {
 import { KanbanColumn } from "./column";
 import { TaskCard } from "./task-card";
 import { useKanbanStore, type KanbanTask, type Stage } from "@/store/kanban";
-import { moveTask as moveTaskAction, declineTask, pollTaskUpdates, assignTaskToMe } from "@/actions/task";
+import { moveTask as moveTaskAction, declineTask, pollTaskUpdates, assignTaskToMe, getBoardTask } from "@/actions/task";
 import { useUser } from "@clerk/nextjs";
 import type { TaskQuestion } from "./question-field";
 import { StageConfirmDialog, getCheckpoint } from "./stage-confirm-dialog";
 import { DeclineDialog, type DeclineAttachment } from "./decline-dialog";
-import { getPusherClient, projectChannel } from "@/lib/pusher-client";
-import type { TaskEvent } from "@/lib/pusher";
+import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
+import { useChannel } from "@/components/realtime/hooks";
+import { projectChannel } from "@/lib/channels";
 
 interface QuestionWithType extends TaskQuestion {
   taskType: string;
@@ -39,7 +40,7 @@ const STAGES: { id: Stage; label: string; color: string }[] = [
   { id: "DONE", label: "Done", color: "bg-emerald-500" },
 ];
 
-interface BoardProps {
+export interface BoardProps {
   initialTasks: KanbanTask[];
   projectId: string;
   userRole: string;
@@ -78,8 +79,13 @@ export function KanbanBoard({
   activeContractType,
   maxPipelineTasks = 3,
 }: BoardProps) {
-  const { tasks, setTasks, moveTask } = useKanbanStore();
+  // Selector subscriptions so the board only re-renders on task changes, not on
+  // unrelated store updates (e.g. commentRefreshKey).
+  const tasks = useKanbanStore((s) => s.tasks);
+  const setTasks = useKanbanStore((s) => s.setTasks);
+  const moveTask = useKanbanStore((s) => s.moveTask);
   const { user } = useUser();
+  const cent = useCentrifugo();
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
   const [pendingMove, setPendingMove] = useState<{ taskId: string; fromStage: Stage; toStage: Stage; order: number; assigneeName: string | null; assigneeAvatar: string | null } | null>(null);
   const [pendingDecline, setPendingDecline] = useState<{ taskId: string; fromStage: Stage; mentionName: string | null; mentionAvatar: string | null } | null>(null);
@@ -142,27 +148,58 @@ export function KanbanBoard({
     }
   }, [projectId, setTasks]);
 
-  // Pusher real-time subscription
+  // Realtime board sync over Centrifugo (consolidated from Pusher). Instead of
+  // refetching the whole board on every remote event, patch the single affected
+  // task via an O(1) fetch (or remove it on delete).
+  const applyRemoteTask = useCallback(
+    async (taskId: string) => {
+      try {
+        const updated = await getBoardTask(taskId);
+        if (!updated) {
+          useKanbanStore.getState().removeTask(taskId);
+          return;
+        }
+        const dto = updated as unknown as KanbanTask;
+        setTasks((prev: KanbanTask[]) => {
+          const exists = prev.some((t) => t.id === taskId);
+          return exists
+            ? prev.map((t) => (t.id === taskId ? dto : t))
+            : [...prev, dto];
+        });
+      } catch {
+        // Best-effort; the fallback poll (when realtime is off) covers gaps.
+      }
+    },
+    [setTasks],
+  );
+
+  const handleTaskEvent = useCallback(
+    (data: unknown) => {
+      const ev = data as { type?: string; taskId?: string; userId?: string };
+      // The project channel also carries chat payloads — only react to task-*.
+      if (!ev?.type || !ev.type.startsWith("task-")) return;
+      if (ev.userId === currentUserId) return; // ignore our own echoes
+      if (isDragging.current || pendingDeclineRef.current) return;
+      if (ev.type === "task-deleted") {
+        if (ev.taskId) useKanbanStore.getState().removeTask(ev.taskId);
+        return;
+      }
+      if (ev.taskId) void applyRemoteTask(ev.taskId);
+    },
+    [currentUserId, applyRemoteTask],
+  );
+
+  useChannel(
+    isProjectActive && cent?.enabled ? projectChannel(projectId) : null,
+    handleTaskEvent,
+  );
+
+  // Fallback polling only when the realtime transport is unavailable.
   useEffect(() => {
-    if (!isProjectActive) return;
-
-    const pusher = getPusherClient();
-    if (pusher) {
-      const channel = pusher.subscribe(projectChannel(projectId));
-      channel.bind("task-change", (event: TaskEvent) => {
-        if (event.userId === currentUserId) return;
-        refetchTasks();
-      });
-
-      return () => {
-        channel.unbind_all();
-        pusher.unsubscribe(projectChannel(projectId));
-      };
-    }
-
+    if (!isProjectActive || cent?.enabled) return;
     const interval = setInterval(refetchTasks, 30_000);
     return () => clearInterval(interval);
-  }, [projectId, isProjectActive, currentUserId, refetchTasks]);
+  }, [isProjectActive, cent?.enabled, refetchTasks]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })

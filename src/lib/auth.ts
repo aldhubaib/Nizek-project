@@ -2,7 +2,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { cache } from "react";
 
-async function acceptPendingInvitations(userId: string, email: string) {
+export async function acceptPendingInvitations(userId: string, email: string) {
   const pending = await prisma.invitation.findMany({
     where: { email: { equals: email, mode: "insensitive" }, status: "PENDING" },
   });
@@ -86,13 +86,11 @@ export const getCurrentUser = cache(async () => {
     assignUserToDefaultTeam(user.id, user.systemRole === "CLIENT").catch(() => {});
 
     await acceptPendingInvitations(user.id, user.email);
-  } else {
-    acceptPendingInvitations(user.id, user.email).catch(() => {});
-
-    prisma.pendingTeamInvite
-      .deleteMany({ where: { email: { equals: user.email, mode: "insensitive" } } })
-      .catch(() => {});
   }
+  // NOTE: For existing users we intentionally do NOT run invitation acceptance or
+  // pendingTeamInvite cleanup here — that used to run on every dashboard request.
+  // Invitations that arrive after signup are reconciled lazily in getProjects()
+  // (the projects list entry point) via acceptPendingInvitations().
 
   return user;
 });
@@ -104,7 +102,10 @@ export async function requireUser() {
   return user;
 }
 
-export async function requireProjectMember(projectId: string) {
+// Wrapped in React cache() so repeated calls within a single request/render
+// (e.g. getProject + getTasksByProject + page loader all check membership)
+// hit the DB only once per projectId.
+export const requireProjectMember = cache(async (projectId: string) => {
   const user = await requireUser();
 
   const member = await prisma.projectMember.findUnique({
@@ -131,7 +132,7 @@ export async function requireProjectMember(projectId: string) {
 
   if (!member) throw new Error("Not a member of this project");
   return { user, member };
-}
+});
 
 export async function requireProjectRole(projectId: string, roles: string[]) {
   const { user, member } = await requireProjectMember(projectId);

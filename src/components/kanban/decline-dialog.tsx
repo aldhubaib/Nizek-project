@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Undo2, Loader2, AlertTriangle, ArrowRight, Paperclip, X, FileText, User } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Stage } from "@/store/kanban";
+import { uploadFileToR2 } from "@/lib/upload";
 
 const STAGE_LABELS: Record<string, string> = {
   INTERNAL_REVIEW: "Internal Review",
@@ -87,12 +88,8 @@ export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm
       if (pendingFiles.length > 0) {
         attachments = await Promise.all(
           pendingFiles.map(async ({ file }) => {
-            const formData = new FormData();
-            formData.append("file", file);
-            const res = await fetch("/api/upload", { method: "POST", body: formData });
-            if (!res.ok) throw new Error(`Upload failed for ${file.name}`);
-            const { url } = await res.json();
-            return { filename: file.name, url, fileSize: file.size, mimeType: file.type };
+            const up = await uploadFileToR2(file);
+            return { filename: file.name, url: up.url, fileSize: file.size, mimeType: file.type };
           })
         );
       }

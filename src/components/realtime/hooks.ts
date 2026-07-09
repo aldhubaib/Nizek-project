@@ -49,13 +49,16 @@ export function usePresence(channel: string | null): Set<string> {
     sub?.on("join", onJoin);
     sub?.on("leave", onLeave);
 
-    const interval = setInterval(refresh, 30_000);
+    // No periodic poll: presence is kept live by join/leave. We only seed once
+    // from the initial snapshot above, and re-seed on (re)subscribe.
+    const onSubscribed = () => void refresh();
+    sub?.on("subscribed", onSubscribed);
 
     return () => {
       cancelled = true;
-      clearInterval(interval);
       sub?.off("join", onJoin);
       sub?.off("leave", onLeave);
+      sub?.off("subscribed", onSubscribed);
       off();
     };
   }, [cent, channel]);

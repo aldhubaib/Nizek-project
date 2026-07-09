@@ -4,6 +4,36 @@ import type { LinkPreview } from "@/lib/link-preview";
 
 export const runtime = "nodejs";
 
+// Server-side cache so repeated views of the same link (very common in chat)
+// don't re-fetch and re-parse the target page every time. Keyed by URL.
+const PREVIEW_TTL_MS = 60 * 60 * 1000; // 1h
+const previewCache = new Map<string, { data: LinkPreview & { unavailable?: boolean }; expires: number }>();
+
+function getCachedPreview(url: string) {
+  const hit = previewCache.get(url);
+  if (!hit) return undefined;
+  if (hit.expires < Date.now()) {
+    previewCache.delete(url);
+    return undefined;
+  }
+  return hit.data;
+}
+
+function setCachedPreview(url: string, data: LinkPreview & { unavailable?: boolean }) {
+  previewCache.set(url, { data, expires: Date.now() + PREVIEW_TTL_MS });
+  if (previewCache.size > 2000) {
+    const now = Date.now();
+    for (const [k, v] of previewCache) if (v.expires < now) previewCache.delete(k);
+  }
+}
+
+function cachedJson(url: string, data: LinkPreview & { unavailable?: boolean }) {
+  setCachedPreview(url, data);
+  return NextResponse.json(data, {
+    headers: { "Cache-Control": "private, max-age=3600" },
+  });
+}
+
 function decodeEntities(s: string): string {
   return s
     .replace(/&amp;/g, "&")
@@ -50,6 +80,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unsupported protocol" }, { status: 400 });
   }
 
+  const cacheKey = parsed.toString();
+  const cached = getCachedPreview(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached, {
+      headers: { "Cache-Control": "private, max-age=3600" },
+    });
+  }
+
   const host = parsed.hostname.replace(/^www\./, "");
   const fallback: LinkPreview = {
     url: parsed.toString(),
@@ -76,13 +114,13 @@ export async function GET(req: NextRequest) {
 
     const contentType = res.headers.get("content-type") ?? "";
     if (!res.ok) {
-      return NextResponse.json({ ...fallback, unavailable: true });
+      return cachedJson(cacheKey, { ...fallback, unavailable: true });
     }
     if (contentType.startsWith("image/")) {
-      return NextResponse.json({ ...fallback, image: parsed.toString() });
+      return cachedJson(cacheKey, { ...fallback, image: parsed.toString() });
     }
     if (!contentType.includes("html")) {
-      return NextResponse.json(fallback);
+      return cachedJson(cacheKey, fallback);
     }
 
     const html = (await res.text()).slice(0, 500_000);
@@ -143,8 +181,8 @@ export async function GET(req: NextRequest) {
       siteName,
       favicon,
     };
-    return NextResponse.json(preview);
+    return cachedJson(cacheKey, preview);
   } catch {
-    return NextResponse.json({ ...fallback, unavailable: true });
+    return cachedJson(cacheKey, { ...fallback, unavailable: true });
   }
 }

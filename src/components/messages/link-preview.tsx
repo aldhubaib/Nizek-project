@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LinkPreview } from "@/lib/link-preview";
@@ -37,7 +37,7 @@ function load(url: string): Promise<LinkPreview> {
   return promise;
 }
 
-export function useLinkPreview(url: string | null) {
+export function useLinkPreview(url: string | null, enabled = true) {
   const [data, setData] = useState<LinkPreview | null>(() =>
     url ? cache.get(url) ?? null : null,
   );
@@ -52,6 +52,9 @@ export function useLinkPreview(url: string | null) {
       setData(cached);
       return;
     }
+    // Don't fetch until the card is actually visible (message list can hold many
+    // links). The composer passes enabled=true so its single preview loads now.
+    if (!enabled) return;
     let active = true;
     load(url).then((d) => {
       if (active) setData(d);
@@ -59,9 +62,37 @@ export function useLinkPreview(url: string | null) {
     return () => {
       active = false;
     };
-  }, [url]);
+  }, [url, enabled]);
 
   return data;
+}
+
+// Fires once when the element first scrolls into view (with a margin so the
+// fetch starts slightly before it's visible).
+function useInView<T extends Element>(enabled: boolean) {
+  const ref = useRef<T | null>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    if (!enabled || inView) return;
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setInView(true);
+      return;
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setInView(true);
+          obs.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [enabled, inView]);
+  return { ref, inView };
 }
 
 function hostOf(url: string): string {
@@ -83,7 +114,10 @@ export function LinkPreviewCard({
   mine?: boolean;
   onDismiss?: () => void;
 }) {
-  const data = useLinkPreview(url);
+  // Composer preview loads immediately; message previews defer until in view.
+  const isComposer = variant === "composer";
+  const { ref: viewRef, inView } = useInView<HTMLAnchorElement>(!isComposer);
+  const data = useLinkPreview(url, isComposer || inView);
 
   const title = data?.siteName || data?.title || hostOf(url);
   const favicon = data?.favicon ?? null;
@@ -155,6 +189,7 @@ export function LinkPreviewCard({
 
   return (
     <a
+      ref={viewRef}
       href={url}
       target="_blank"
       rel="noopener noreferrer"

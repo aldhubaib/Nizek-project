@@ -138,6 +138,7 @@ export async function getTeamMembers() {
 
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "asc" },
+    take: 1000,
     include: {
       projects: {
         include: {
@@ -212,15 +213,25 @@ export async function getPendingInvitations() {
     where: { email: { in: invitations.map((i) => i.email), mode: "insensitive" } },
     select: { id: true, email: true },
   });
+  const userIdByEmail = new Map(users.map((u) => [u.email.toLowerCase(), u.id]));
+
+  // Single query for all relevant memberships instead of one findUnique per invitation.
+  const memberships = users.length
+    ? await prisma.projectMember.findMany({
+        where: {
+          userId: { in: users.map((u) => u.id) },
+          projectId: { in: invitations.map((i) => i.projectId) },
+        },
+        select: { userId: true, projectId: true },
+      })
+    : [];
+  const memberSet = new Set(memberships.map((m) => `${m.userId}|${m.projectId}`));
 
   const staleIds: string[] = [];
   for (const inv of invitations) {
-    const user = users.find((u) => u.email.toLowerCase() === inv.email.toLowerCase());
-    if (!user) continue;
-    const isMember = await prisma.projectMember.findUnique({
-      where: { userId_projectId: { userId: user.id, projectId: inv.projectId } },
-    });
-    if (isMember) staleIds.push(inv.id);
+    const userId = userIdByEmail.get(inv.email.toLowerCase());
+    if (!userId) continue;
+    if (memberSet.has(`${userId}|${inv.projectId}`)) staleIds.push(inv.id);
   }
 
   if (staleIds.length > 0) {
@@ -518,30 +529,31 @@ export async function toggleBlockUser(
     }
 
     if (transfers && transfers.length > 0) {
-      for (const t of transfers) {
-        await prisma.$transaction([
-          prisma.task.updateMany({
-            where: { projectId: t.projectId, assigneeId: userId, archivedAt: null },
-            data: { assigneeId: t.transferToUserId },
-          }),
-          prisma.task.updateMany({
-            where: { projectId: t.projectId, createdById: userId },
-            data: { createdById: t.transferToUserId },
-          }),
-          prisma.task.updateMany({
-            where: { projectId: t.projectId, developerId: userId, archivedAt: null },
-            data: { developerId: t.transferToUserId },
-          }),
-          prisma.task.updateMany({
-            where: { projectId: t.projectId, clientReviewerId: userId, archivedAt: null },
-            data: { clientReviewerId: t.transferToUserId },
-          }),
-          prisma.project.updateMany({
-            where: { id: t.projectId, defaultClientReviewerId: userId },
-            data: { defaultClientReviewerId: t.transferToUserId },
-          }),
-        ]);
-      }
+      // Flatten all per-project transfers into a single transaction instead of
+      // one round-trip transaction per project.
+      const ops = transfers.flatMap((t) => [
+        prisma.task.updateMany({
+          where: { projectId: t.projectId, assigneeId: userId, archivedAt: null },
+          data: { assigneeId: t.transferToUserId },
+        }),
+        prisma.task.updateMany({
+          where: { projectId: t.projectId, createdById: userId },
+          data: { createdById: t.transferToUserId },
+        }),
+        prisma.task.updateMany({
+          where: { projectId: t.projectId, developerId: userId, archivedAt: null },
+          data: { developerId: t.transferToUserId },
+        }),
+        prisma.task.updateMany({
+          where: { projectId: t.projectId, clientReviewerId: userId, archivedAt: null },
+          data: { clientReviewerId: t.transferToUserId },
+        }),
+        prisma.project.updateMany({
+          where: { id: t.projectId, defaultClientReviewerId: userId },
+          data: { defaultClientReviewerId: t.transferToUserId },
+        }),
+      ]);
+      await prisma.$transaction(ops);
     }
   }
 

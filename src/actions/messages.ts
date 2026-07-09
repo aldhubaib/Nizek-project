@@ -486,6 +486,12 @@ export async function sendMessage(
       projectId,
       taskId,
       conversationId,
+      // Delta payload so the inbox sidebar can patch the row in place instead of
+      // refetching the whole RSC tree.
+      authorId: user.id,
+      lastAuthor: authorName,
+      lastMessage: preview,
+      lastAt: new Date().toISOString(),
     });
 
     return dto;
@@ -642,6 +648,8 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
     }),
     prisma.conversation.findMany({
       where: { participants: { some: { memberId: user.id } } },
+      orderBy: { updatedAt: "desc" },
+      take: 200,
       include: {
         participants: {
           include: { member: { select: { id: true, name: true, email: true } } },
@@ -661,17 +669,21 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
   ]);
 
   const unreadMap = new Map<string, number>();
+  // Pre-aggregate per-project task-thread unreads in a single pass over the
+  // notification groups, instead of scanning the whole map once per project.
+  const projectTaskUnread = new Map<string, number>();
   for (const row of unreadCounts) {
-    if (row.linkUrl) unreadMap.set(row.linkUrl, row._count);
+    if (!row.linkUrl) continue;
+    unreadMap.set(row.linkUrl, row._count);
+    const m = row.linkUrl.match(/^\/dashboard\/projects\/([^/]+)\//);
+    if (m) projectTaskUnread.set(m[1], (projectTaskUnread.get(m[1]) ?? 0) + row._count);
   }
 
   const projectThreads: InboxThread[] = projects.map((p) => {
     const last = p.messages[0];
-    let unread = unreadMap.get(`/dashboard/messages/project-${p.id}`) ?? 0;
-    const taskPrefix = `/dashboard/projects/${p.id}/`;
-    for (const [url, count] of unreadMap) {
-      if (url.startsWith(taskPrefix)) unread += count;
-    }
+    const unread =
+      (unreadMap.get(`/dashboard/messages/project-${p.id}`) ?? 0) +
+      (projectTaskUnread.get(p.id) ?? 0);
     return {
       id: `project-${p.id}`,
       kind: "project" as const,
@@ -772,6 +784,7 @@ export async function getMessageableMembers() {
     where: { id: { not: user.id }, blocked: false },
     select: { id: true, name: true, email: true },
     orderBy: { name: "asc" },
+    take: 500,
   });
 }
 

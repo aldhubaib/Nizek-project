@@ -10,6 +10,8 @@ export type LoginPhotoDTO = {
   column: "a" | "b";
 };
 
+const MAX_LOGIN_PHOTO_BYTES = 10 * 1024 * 1024; // 10 MB
+
 async function requireLoginEditor() {
   const user = await requireUser();
   if (user.systemRole !== "ADMIN") throw new Error("Permission denied");
@@ -40,6 +42,10 @@ export async function addLoginPhoto(formData: FormData): Promise<void> {
     throw new Error("No image provided");
   if (!file.type.startsWith("image/"))
     throw new Error("Only image files are allowed");
+  if (file.size > MAX_LOGIN_PHOTO_BYTES)
+    throw new Error(
+      `Image is too large. Maximum is ${MAX_LOGIN_PHOTO_BYTES / (1024 * 1024)} MB.`,
+    );
 
   const key = generateR2Key("login_photo", file.name || "photo.jpg");
   const bytes = Buffer.from(await file.arrayBuffer());

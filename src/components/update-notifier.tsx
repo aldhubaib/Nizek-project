@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 
-const POLL_INTERVAL_MS = 60_000;
+// Primarily event-driven: we check on tab focus / visibility changes (which
+// covers the common "user came back to the app" case). A long backstop interval
+// catches deploys while the tab stays focused, without a chatty 60s poll.
+const POLL_INTERVAL_MS = 10 * 60_000;
 
 interface VersionResponse {
   version: string;

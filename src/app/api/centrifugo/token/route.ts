@@ -11,6 +11,32 @@ import {
 
 export const runtime = "nodejs";
 
+// Short-TTL in-memory cache of channel-access decisions so a client subscribing
+// to many channels in quick succession doesn't re-run the DB access check for
+// each one. Keyed by `${memberId}:${channel}`. Realtime auth tolerates a small
+// staleness window; anything longer than the TTL re-verifies.
+const ACCESS_TTL_MS = 20_000;
+const accessCache = new Map<string, { allowed: boolean; expires: number }>();
+
+function getCachedAccess(key: string): boolean | undefined {
+  const hit = accessCache.get(key);
+  if (!hit) return undefined;
+  if (hit.expires < Date.now()) {
+    accessCache.delete(key);
+    return undefined;
+  }
+  return hit.allowed;
+}
+
+function setCachedAccess(key: string, allowed: boolean): void {
+  accessCache.set(key, { allowed, expires: Date.now() + ACCESS_TTL_MS });
+  // Opportunistic cleanup so the map can't grow unbounded.
+  if (accessCache.size > 5000) {
+    const now = Date.now();
+    for (const [k, v] of accessCache) if (v.expires < now) accessCache.delete(k);
+  }
+}
+
 // Mints Centrifugo JWTs for the signed-in user (identity = User.id).
 //   POST {}                       -> connection token
 //   POST { channel: "task:123" }  -> subscription token (after access check)
@@ -34,7 +60,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ token: connectionToken(memberId) });
   }
 
-  const allowed = await canSubscribe(channel, memberId);
+  const cacheKey = `${memberId}:${channel}`;
+  let allowed = getCachedAccess(cacheKey);
+  if (allowed === undefined) {
+    allowed = await canSubscribe(channel, memberId);
+    setCachedAccess(cacheKey, allowed);
+  }
   if (!allowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

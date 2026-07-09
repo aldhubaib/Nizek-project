@@ -11,8 +11,7 @@ import {
   canCreateInStage,
   canModifyInStage,
 } from "@/lib/permissions";
-import { broadcastTaskEvent, broadcastMentionEvent } from "@/lib/pusher";
-import { publish, broadcast, taskChannel, projectChannel, userChannel } from "@/lib/centrifugo";
+import { publish, broadcast, broadcastTaskEvent, taskChannel, projectChannel, userChannel } from "@/lib/centrifugo";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import { sendPush } from "@/lib/push";
 
@@ -624,10 +623,6 @@ export async function declineTask(data: {
       },
     });
 
-    if (mentionUserIds.length) {
-      broadcastMentionEvent(mentionUserIds, user.id);
-    }
-
     // Stream the decline comment to anyone viewing this task (best-effort).
     void publish(taskChannel(task.id), {
       type: "comment.new",
@@ -883,40 +878,104 @@ export async function permanentlyDeleteTask(taskId: string) {
   revalidatePath(`/dashboard/projects/${task.projectId}`);
 }
 
+const BOARD_TASK_SELECT = {
+  id: true,
+  title: true,
+  description: true,
+  taskNumber: true,
+  taskType: true,
+  stage: true,
+  order: true,
+  priority: true,
+  startedAt: true,
+  estimatedMinutes: true,
+  estimateAccuracy: true,
+  assigneeId: true,
+  createdById: true,
+  developerId: true,
+  clientReviewerId: true,
+  projectId: true,
+  assignee: { select: { id: true, name: true, imageUrl: true } },
+  createdBy: { select: { id: true, name: true, imageUrl: true } },
+  answers: { select: { questionId: true, answer: true, question: { select: { type: true } } } },
+  stageLogs: {
+    where: { exitedAt: null },
+    orderBy: { enteredAt: "desc" as const },
+    take: 1,
+    select: { enteredAt: true },
+  },
+  _count: { select: { notes: true } },
+} as const;
+
+type BoardTaskRow = {
+  id: string;
+  title: string;
+  taskType: string;
+  priority: number | null;
+  startedAt: Date | null;
+  estimatedMinutes: number | null;
+  estimateAccuracy: unknown;
+  answers: { questionId: string; answer: string; question: { type: string } }[];
+  stageLogs: { enteredAt: Date }[];
+  _count: { notes: number };
+  [key: string]: unknown;
+};
+
+function requiredIdsByType(
+  requiredQuestions: { id: string; taskType: string; type: string }[],
+): Map<string, string[]> {
+  const requiredByType = new Map<string, string[]>();
+  for (const q of requiredQuestions) {
+    if (q.type === "client") continue;
+    const list = requiredByType.get(q.taskType) ?? [];
+    list.push(q.id);
+    requiredByType.set(q.taskType, list);
+  }
+  return requiredByType;
+}
+
+function mapBoardTask(
+  task: BoardTaskRow,
+  declines: { internal: number; client: number },
+  reqIds: string[],
+) {
+  const answeredIds = new Set(task.answers.map((a) => a.questionId));
+  const hasAllRequired = reqIds.every((id) => answeredIds.has(id)) && task.priority != null;
+
+  const waitingOnClient = task.answers.some((a) => {
+    if (a.question.type !== "client") return false;
+    try {
+      const parsed = JSON.parse(a.answer);
+      return parsed.needed === true && !parsed.completed;
+    } catch { return false; }
+  });
+
+  const isReadyForTransition = hasAllRequired && !waitingOnClient;
+  const currentLog = task.stageLogs[0];
+
+  return {
+    ...task,
+    answers: undefined,
+    stageLogs: undefined,
+    isReadyForTransition,
+    startedAt: task.startedAt?.toISOString() ?? null,
+    stageEnteredAt: currentLog?.enteredAt?.toISOString() ?? null,
+    declineCount: declines.internal + declines.client,
+    internalDeclines: declines.internal,
+    clientDeclines: declines.client,
+    estimatedMinutes: task.estimatedMinutes,
+    estimateAccuracy: task.estimateAccuracy,
+    notesCount: task._count.notes,
+  };
+}
+
 export async function getTasksByProject(projectId: string) {
   await requireProjectMember(projectId);
 
   const [tasks, requiredQuestions, declineCounts] = await Promise.all([
     prisma.task.findMany({
       where: { projectId, archivedAt: null },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        taskNumber: true,
-        taskType: true,
-        stage: true,
-        order: true,
-        priority: true,
-        startedAt: true,
-        estimatedMinutes: true,
-        estimateAccuracy: true,
-        assigneeId: true,
-        createdById: true,
-        developerId: true,
-        clientReviewerId: true,
-        projectId: true,
-        assignee: { select: { id: true, name: true, imageUrl: true } },
-        createdBy: { select: { id: true, name: true, imageUrl: true } },
-        answers: { select: { questionId: true, answer: true, question: { select: { type: true } } } },
-        stageLogs: {
-          where: { exitedAt: null },
-          orderBy: { enteredAt: "desc" },
-          take: 1,
-          select: { enteredAt: true },
-        },
-        _count: { select: { notes: true } },
-      },
+      select: BOARD_TASK_SELECT,
       orderBy: { order: "asc" },
     }),
     prisma.defaultQuestion.findMany({
@@ -933,53 +992,53 @@ export async function getTasksByProject(projectId: string) {
   const declinesByTask = new Map<string, { internal: number; client: number }>();
   for (const d of declineCounts) {
     const entry = declinesByTask.get(d.taskId) ?? { internal: 0, client: 0 };
-    if (d.oldValue === "CLIENT_REVIEW") {
-      entry.client += 1;
-    } else {
-      entry.internal += 1;
-    }
+    if (d.oldValue === "CLIENT_REVIEW") entry.client += 1;
+    else entry.internal += 1;
     declinesByTask.set(d.taskId, entry);
   }
 
-  const requiredByType = new Map<string, string[]>();
-  for (const q of requiredQuestions) {
-    if (q.type === "client") continue;
-    const list = requiredByType.get(q.taskType) ?? [];
-    list.push(q.id);
-    requiredByType.set(q.taskType, list);
+  const requiredByType = requiredIdsByType(requiredQuestions);
+
+  return tasks.map((task) =>
+    mapBoardTask(
+      task as unknown as BoardTaskRow,
+      declinesByTask.get(task.id) ?? { internal: 0, client: 0 },
+      requiredByType.get(task.taskType) ?? [],
+    ),
+  );
+}
+
+// O(1) fetch for a single board task — used by the realtime delta path so a
+// remote task event patches one card instead of refetching the whole board.
+export async function getBoardTask(taskId: string) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { ...BOARD_TASK_SELECT, archivedAt: true },
+  });
+  // Caller (board) treats null as "removed" (deleted or archived off the board).
+  if (!task || task.archivedAt) return null;
+
+  await requireProjectMember(task.projectId as string);
+
+  const [requiredQuestions, declineCounts] = await Promise.all([
+    prisma.defaultQuestion.findMany({
+      where: { required: true, taskType: task.taskType },
+      select: { id: true, taskType: true, type: true },
+    }),
+    prisma.taskActivity.findMany({
+      where: { action: "declined", taskId },
+      select: { oldValue: true },
+    }),
+  ]);
+
+  const declines = { internal: 0, client: 0 };
+  for (const d of declineCounts) {
+    if (d.oldValue === "CLIENT_REVIEW") declines.client += 1;
+    else declines.internal += 1;
   }
 
-  return tasks.map((task) => {
-    const reqIds = requiredByType.get(task.taskType) ?? [];
-    const answeredIds = new Set(task.answers.map((a) => a.questionId));
-    const hasAllRequired = reqIds.every((id) => answeredIds.has(id)) && task.priority != null;
-
-    const waitingOnClient = task.answers.some((a) => {
-      if (a.question.type !== "client") return false;
-      try {
-        const parsed = JSON.parse(a.answer);
-        return parsed.needed === true && !parsed.completed;
-      } catch { return false; }
-    });
-
-    const isReadyForTransition = hasAllRequired && !waitingOnClient;
-
-    const currentLog = task.stageLogs[0];
-    return {
-      ...task,
-      answers: undefined,
-      stageLogs: undefined,
-      isReadyForTransition,
-      startedAt: task.startedAt?.toISOString() ?? null,
-      stageEnteredAt: currentLog?.enteredAt?.toISOString() ?? null,
-      declineCount: (declinesByTask.get(task.id)?.internal ?? 0) + (declinesByTask.get(task.id)?.client ?? 0),
-      internalDeclines: declinesByTask.get(task.id)?.internal ?? 0,
-      clientDeclines: declinesByTask.get(task.id)?.client ?? 0,
-      estimatedMinutes: task.estimatedMinutes,
-      estimateAccuracy: task.estimateAccuracy,
-      notesCount: task._count.notes,
-    };
-  });
+  const reqIds = (requiredIdsByType(requiredQuestions).get(task.taskType) ?? []);
+  return mapBoardTask(task as unknown as BoardTaskRow, declines, reqIds);
 }
 
 export async function pollTaskUpdates(projectId: string) {

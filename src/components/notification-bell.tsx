@@ -48,15 +48,19 @@ export function NotificationBell({ currentUserId }: Props) {
     getUnreadCount().then(setCount).catch(() => {});
   }, []);
 
+  const cent = useCentrifugo();
+
+  // Event-driven when realtime is available: seed once, then rely on the user
+  // channel. Only fall back to polling when Centrifugo isn't configured.
   useEffect(() => {
     fetchCount();
+    if (cent?.enabled) return;
     const id = setInterval(fetchCount, POLL_FALLBACK_INTERVAL);
     return () => clearInterval(id);
-  }, [fetchCount]);
+  }, [fetchCount, cent?.enabled]);
 
   // Live: refresh the instant anything lands on our user channel (chat mentions,
-  // DMs, task-comment mentions). Falls back to polling when Centrifugo is off.
-  const cent = useCentrifugo();
+  // DMs, task-comment mentions).
   useChannel(cent && currentUserId ? userChannel(currentUserId) : null, () => {
     if (open) refresh();
     else fetchCount();

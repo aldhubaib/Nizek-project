@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireUser, requireProjectMember, requireProjectRole } from "@/lib/auth";
+import { requireUser, requireProjectMember, requireProjectRole, acceptPendingInvitations } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { Resend } from "resend";
 import { validateContractDates } from "@/lib/contract-rules";
@@ -97,6 +97,9 @@ export async function createProject(data: {
 
 export async function getProjects() {
   const user = await requireUser();
+  // Reconcile any invitations that arrived after signup (moved out of the
+  // per-request getCurrentUser hot path). Best-effort; never blocks the list.
+  await acceptPendingInvitations(user.id, user.email).catch(() => {});
   const where = user.systemRole === "ADMIN" ? {} : { members: { some: { userId: user.id } } };
   return prisma.project.findMany({
     where,

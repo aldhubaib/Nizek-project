@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Upload, FileIcon, Trash2, Download, Image, FileText as FileTextIcon } from "lucide-react";
 import { createAsset, deleteAsset } from "@/actions/asset";
+import { uploadFileToR2 } from "@/lib/upload";
 
 interface Asset {
   id: string;
@@ -44,12 +45,7 @@ export function AssetsTab({ assets, projectId, canEdit }: Props) {
 
     setUploading(true);
     try {
-      const form = new FormData();
-      form.append("file", file);
-
-      const res = await fetch("/api/upload", { method: "POST", body: form });
-      if (!res.ok) throw new Error("Upload failed");
-      const { url } = await res.json();
+      const { url } = await uploadFileToR2(file);
 
       await createAsset({
         projectId,

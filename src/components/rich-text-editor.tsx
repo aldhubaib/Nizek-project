@@ -25,8 +25,9 @@ import {
   Type,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { uploadFileToR2 } from "@/lib/upload";
 
-interface Props {
+export interface RichTextEditorProps {
   content: string;
   onChange: (html: string) => void;
   placeholder?: string;
@@ -38,7 +39,7 @@ export function RichTextEditor({
   onChange,
   placeholder = "Type '/' for commands...",
   borderless = false,
-}: Props) {
+}: RichTextEditorProps) {
   const [slashMenu, setSlashMenu] = useState<{ x: number; y: number; query: string } | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -125,12 +126,8 @@ export function RichTextEditor({
 
   async function insertImageFile(file: File) {
     if (!editor) return;
-    const form = new FormData();
-    form.append("file", file);
     try {
-      const res = await fetch("/api/upload", { method: "POST", body: form });
-      if (!res.ok) throw new Error("Upload failed");
-      const { url } = await res.json();
+      const { url } = await uploadFileToR2(file);
       editor.chain().focus().setImage({ src: url }).run();
     } catch (err) {
       console.error("Image upload failed:", err);

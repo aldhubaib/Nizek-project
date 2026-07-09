@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { createComment, getComments, deleteComment, getProjectMembersForMention } from "@/actions/comment";
+import { createComment, getComments, getComment, deleteComment, getProjectMembersForMention } from "@/actions/comment";
 import { Loader2, Send, Trash2, Paperclip, X, FileText, Download, Image as ImageIcon } from "lucide-react";
 import { useKanbanStore } from "@/store/kanban";
 import { cn } from "@/lib/utils";
+import { uploadFileToR2 } from "@/lib/upload";
 import { useChannel } from "@/components/realtime/hooks";
 import { taskChannel } from "@/lib/channels";
 
@@ -103,21 +104,25 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
   }, [projectId]);
 
   // Live comment stream (Centrifugo). When someone else posts on this task,
-  // refetch so the new comment appears without a manual refresh. Own comments
-  // are already appended optimistically in handleSubmit. Degrades gracefully to
-  // the existing refreshKey polling when Centrifugo isn't configured.
+  // append just that one comment (delta) instead of reloading the whole thread.
+  // Own comments are already appended optimistically in handleSubmit.
   const onRealtimeComment = useCallback(
     (data: unknown) => {
-      const evt = data as { type?: string; authorId?: string } | null;
-      if (!evt || evt.type !== "comment.new") return;
+      const evt = data as { type?: string; authorId?: string; commentId?: string } | null;
+      if (!evt || evt.type !== "comment.new" || !evt.commentId) return;
       if (evt.authorId && evt.authorId === currentUserId) return;
-      getComments(taskId)
+      const newId = evt.commentId;
+      getComment(newId)
         .then((result) => {
-          if (result.success) setComments(result.comments as unknown as Comment[]);
+          if (!result.success) return;
+          const incoming = result.comment as unknown as Comment;
+          setComments((prev) =>
+            prev.some((c) => c.id === incoming.id) ? prev : [...prev, incoming],
+          );
         })
         .catch(() => {});
     },
-    [taskId, currentUserId],
+    [currentUserId],
   );
   useChannel(taskChannel(taskId), onRealtimeComment);
 
@@ -211,12 +216,8 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
   async function uploadFiles(files: PendingFile[]): Promise<{ filename: string; url: string; fileSize: number; mimeType: string }[]> {
     const results = await Promise.all(
       files.map(async ({ file }) => {
-        const formData = new FormData();
-        formData.append("file", file);
-        const res = await fetch("/api/upload", { method: "POST", body: formData });
-        if (!res.ok) throw new Error(`Upload failed for ${file.name}`);
-        const { url } = await res.json();
-        return { filename: file.name, url, fileSize: file.size, mimeType: file.type };
+        const up = await uploadFileToR2(file);
+        return { filename: file.name, url: up.url, fileSize: file.size, mimeType: file.type };
       })
     );
     return results;

@@ -2,7 +2,6 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
-import { broadcastMentionEvent } from "@/lib/pusher";
 import { publish, broadcast, taskChannel, userChannel } from "@/lib/centrifugo";
 import { sendPush } from "@/lib/push";
 
@@ -53,8 +52,6 @@ export async function createComment(data: {
       (id) => id !== user.id,
     );
     if (mentionRecipients.length) {
-      broadcastMentionEvent(mentionRecipients, user.id);
-
       // Feed the notification bell (Notification table) so task-comment
       // mentions live alongside chat/DM notifications.
       const snippet = data.content.replace(/\s+/g, " ").trim().slice(0, 140);
@@ -86,6 +83,31 @@ export async function createComment(data: {
       commentId: comment.id,
       authorId: user.id,
     });
+
+    return { success: true, comment: comment as unknown as Record<string, unknown> };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+}
+
+// Fetch a single comment (for the realtime delta path: append one new comment
+// instead of reloading the whole thread on every remote comment event).
+export async function getComment(
+  commentId: string,
+): Promise<{ success: true; comment: Record<string, unknown> } | { success: false; error: string }> {
+  try {
+    const comment = await prisma.taskComment.findUnique({
+      where: { id: commentId },
+      include: {
+        task: { select: { projectId: true } },
+        user: { select: { id: true, name: true, imageUrl: true } },
+        mentions: { include: { user: { select: { id: true, name: true } } } },
+        attachments: { select: { id: true, filename: true, url: true, fileSize: true, mimeType: true } },
+      },
+    });
+    if (!comment) return { success: false, error: "Comment not found" };
+
+    await requireProjectMember(comment.task.projectId);
 
     return { success: true, comment: comment as unknown as Record<string, unknown> };
   } catch (err) {
