@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { NotificationBell } from "@/components/notification-bell";
+import { NotificationSound } from "@/components/notification-sound";
 import { PushNotifier } from "@/components/push-notifier";
 import { InstallPrompt } from "@/components/install-prompt";
 import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
@@ -119,6 +120,7 @@ export function DashboardShell({ children, isAdmin = false, currentUserId }: { c
         )}
         {children}
       </main>
+      <NotificationSound currentUserId={currentUserId} />
       <PushNotifier />
       <InstallPrompt />
     </div>
