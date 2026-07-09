@@ -3,9 +3,9 @@
 import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Undo2, Gauge, Timer, FileText, Plus, Maximize2, Trash2, UserCircle2, Paperclip } from "lucide-react";
+import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Gauge, Timer, FileText, Plus, Maximize2, Trash2 } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
-import { updateTask, moveTask as moveTaskAction, declineTask, getTaskStageLogs, deleteTask, getEligibleAssignees } from "@/actions/task";
+import { updateTask, getTaskStageLogs, deleteTask } from "@/actions/task";
 import { createMeetingNote, updateMeetingNote, getTaskNotes } from "@/actions/meeting-note";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { useRouter } from "next/navigation";
@@ -14,7 +14,6 @@ import { QuestionField, type TaskQuestion } from "./question-field";
 import { ActivityTimeline } from "./activity-timeline";
 import { CommentSection } from "./comment-section";
 import { useKanbanStore, type KanbanTask, type Stage } from "@/store/kanban";
-import { StageConfirmDialog, getCheckpoint } from "./stage-confirm-dialog";
 import { cn } from "@/lib/utils";
 
 const ACCURACY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -287,7 +286,7 @@ function NoteFullScreenViewer({
   );
 }
 
-export function TaskSidebar({ task, open, onClose, questions: allQuestions, projectId, isAdmin, canSkipClientReview }: Props) {
+export function TaskSidebar({ task, open, onClose, questions: allQuestions, projectId }: Props) {
   const questions = allQuestions.filter((q) => q.taskType === task.taskType);
   const router = useRouter();
 
@@ -298,25 +297,15 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const [saving, setSaving] = useState(false);
   const [savingAnswers, setSavingAnswers] = useState<Record<string, "saving" | "saved">>({});
   const [activityKey, setActivityKey] = useState(0);
-  const [commentKey, setCommentKey] = useState(0);
+  const [commentKey] = useState(0);
   const [activityOpen, setActivityOpen] = useState(false);
   const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
   const [notePanelOpen, setNotePanelOpen] = useState(false);
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
-  const [movingStage, setMovingStage] = useState(false);
-  const [moveError, setMoveError] = useState<string[] | null>(null);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [questionsOpen, setQuestionsOpen] = useState(false);
-  const [showDecline, setShowDecline] = useState(false);
-  const [declineComment, setDeclineComment] = useState("");
-  const [declineFiles, setDeclineFiles] = useState<File[]>([]);
-  const declineFileRef = useRef<HTMLInputElement>(null);
   const [deleting, setDeleting] = useState(false);
-  const [showAdminStages, setShowAdminStages] = useState(false);
-  const adminStagesRef = useRef<HTMLDivElement>(null);
 
   const taskTypeMeta = TASK_TYPE_META[task.taskType] ?? TASK_TYPE_META.FEATURE;
-  const [declining, setDeclining] = useState(false);
   const canDeleteTask = task.stage === "NEW_REQUEST" || task.stage === "CLARIFICATION";
   const [editingAnswers, setEditingAnswers] = useState<Record<string, boolean>>({});
   const [editingTitle, setEditingTitle] = useState(false);
@@ -325,7 +314,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [titleValue, setTitleValue] = useState(task.title);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const { updateTask: updateStoreTask, moveTask: moveStoreTask, tasks: storeTasks } = useKanbanStore();
+  const { updateTask: updateStoreTask } = useKanbanStore();
   const [stageLogs, setStageLogs] = useState<{ stage: string; enteredAt: string; exitedAt: string | null }[]>([]);
   const [startedAt, setStartedAt] = useState<string | null>(null);
 
@@ -399,37 +388,6 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   }
 
   useEffect(() => {
-    if (!showAdminStages) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (adminStagesRef.current && !adminStagesRef.current.contains(e.target as Node)) {
-        setShowAdminStages(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showAdminStages]);
-
-  async function handleAdminStageChange(targetStage: Stage) {
-    setShowAdminStages(false);
-    if (targetStage === task.stage) return;
-    setMovingStage(true);
-    setMoveError(null);
-    try {
-      const result = await moveTaskAction({ taskId: task.id, stage: targetStage, order: task.order });
-      if (!result.success) {
-        setMoveError([result.error || "Failed to move task"]);
-        return;
-      }
-      updateStoreTask(task.id, { stage: targetStage });
-      setActivityKey((k) => k + 1);
-    } catch (err) {
-      setMoveError([(err as Error).message || "Failed to move task"]);
-    } finally {
-      setMovingStage(false);
-    }
-  }
-
-  useEffect(() => {
     if (!open) return;
     setLoading(true);
     setEditingAnswers({});
@@ -490,7 +448,6 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
       answers: [{ questionId: pending.questionId, answer: pending.value }],
     }).then(() => {
       setSavingAnswers((prev) => ({ ...prev, [questionId]: "saved" }));
-      setMoveError(null);
       setActivityKey((k) => k + 1);
       setTimeout(() => setSavingAnswers((prev) => {
         const next = { ...prev };
@@ -518,127 +475,8 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   }, []);
 
   const currentStageIndex = STAGES.findIndex((s) => s.id === task.stage);
-  const nextStage = currentStageIndex < STAGES.length - 1 ? STAGES[currentStageIndex + 1] : null;
   const clarificationIndex = STAGES.findIndex((s) => s.id === "CLARIFICATION");
   const isPostClarification = currentStageIndex > clarificationIndex;
-
-  function handleMoveToNext() {
-    if (!nextStage || movingStage) return;
-    const checkpoint = getCheckpoint(task.stage as Stage, nextStage.id);
-    if (checkpoint) {
-      setShowConfirm(true);
-      return;
-    }
-    executeMove();
-  }
-
-  async function executeMove(estimatedMinutes?: number) {
-    if (!nextStage) return;
-    setMovingStage(true);
-    setMoveError(null);
-    setShowConfirm(false);
-    try {
-      const result = await moveTaskAction({ taskId: task.id, stage: nextStage.id, order: task.order, estimatedMinutes });
-      if (!result.success) {
-        const msg = result.error;
-        if (msg.startsWith("REQUIRED_QUESTIONS:")) {
-          try {
-            const missing = JSON.parse(msg.replace("REQUIRED_QUESTIONS:", ""));
-            setMoveError(missing);
-            setQuestionsOpen(true);
-          } catch {
-            setMoveError(["Some required questions are unanswered"]);
-          }
-        } else if (msg.startsWith("PRIORITY_BLOCKED:")) {
-          try {
-            const blocking = JSON.parse(msg.replace("PRIORITY_BLOCKED:", ""));
-            setMoveError(["Higher priority tasks must move first:", ...blocking]);
-          } catch {
-            setMoveError(["Higher priority tasks must be completed first"]);
-          }
-        } else if (msg === "ESTIMATE_REQUIRED") {
-          setMoveError(["An estimated time is required"]);
-        } else {
-          setMoveError([msg || "Failed to move task. Please try again."]);
-        }
-        return;
-      }
-      updateStoreTask(task.id, { stage: nextStage.id, ...(estimatedMinutes ? { estimatedMinutes } : {}) });
-      setActivityKey((k) => k + 1);
-    } catch (err) {
-      setMoveError([(err as Error).message || "Failed to move task. Please try again."]);
-    } finally {
-      setMovingStage(false);
-    }
-  }
-
-  const showSkipButton = task.stage === "INTERNAL_REVIEW" && canSkipClientReview && task.taskType !== "BUG";
-  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
-
-  function handleSkipClientReview() {
-    setShowSkipConfirm(true);
-  }
-
-  async function executeSkip() {
-    setMovingStage(true);
-    setMoveError(null);
-    setShowSkipConfirm(false);
-    try {
-      const result = await moveTaskAction({ taskId: task.id, stage: "READY_FOR_RELEASE", order: task.order });
-      if (!result.success) {
-        setMoveError([result.error || "Failed to skip. Please try again."]);
-        return;
-      }
-      updateStoreTask(task.id, { stage: "READY_FOR_RELEASE" });
-      setActivityKey((k) => k + 1);
-    } catch (err) {
-      setMoveError([(err as Error).message || "Failed to skip. Please try again."]);
-    } finally {
-      setMovingStage(false);
-    }
-  }
-
-  const canDecline = task.stage === "INTERNAL_REVIEW" || task.stage === "CLIENT_REVIEW";
-  const declineTargetStage = task.stage === "CLIENT_REVIEW" ? "INTERNAL_REVIEW" : "IN_DEVELOPMENT";
-  const declineTargetLabel = task.stage === "CLIENT_REVIEW" ? "Internal Review" : "In Development";
-
-  async function handleDecline() {
-    if (!declineComment.trim() || declining) return;
-    setDeclining(true);
-    try {
-      let attachments: { filename: string; url: string; fileSize: number; mimeType: string }[] | undefined;
-      if (declineFiles.length > 0) {
-        attachments = await Promise.all(
-          declineFiles.map(async (file) => {
-            const fd = new FormData();
-            fd.append("file", file);
-            const res = await fetch("/api/upload", { method: "POST", body: fd });
-            if (!res.ok) throw new Error(`Upload failed for ${file.name}`);
-            const { url } = await res.json();
-            return { filename: file.name, url, fileSize: file.size, mimeType: file.type };
-          })
-        );
-      }
-      const result = await declineTask({ taskId: task.id, comment: declineComment.trim(), attachments });
-      if (!result.success) {
-        alert(`Failed to decline task: ${result.error}`);
-        return;
-      }
-      const targetOrder = storeTasks.filter((t) => t.stage === declineTargetStage && t.id !== task.id).length;
-      moveStoreTask(task.id, declineTargetStage as Stage, targetOrder);
-      setActivityKey((k) => k + 1);
-      setCommentKey((k) => k + 1);
-      useKanbanStore.getState().triggerCommentRefresh();
-      setShowDecline(false);
-      setDeclineComment("");
-      setDeclineFiles([]);
-    } catch (err) {
-      console.error(err);
-      alert(`Failed to decline: ${(err as Error).message}`);
-    } finally {
-      setDeclining(false);
-    }
-  }
 
   async function handleDeleteTask() {
     if (!confirm("Delete this task? This cannot be undone.")) return;
@@ -838,188 +676,9 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
             )}
           </div>
 
-          {/* Change Status */}
-          <div className="mb-5">
-            <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
-              Change Status
-            </label>
-            {isAdmin ? (
-              <div className="relative" ref={adminStagesRef}>
-                <button
-                  onClick={() => setShowAdminStages((v) => !v)}
-                  disabled={movingStage}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-primary/15 border-primary/20 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50"
-                >
-                  {movingStage ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <>
-                      <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
-                      {STAGES[currentStageIndex]?.label}
-                      <ChevronDown className={cn("w-3 h-3 ml-0.5 transition-transform", showAdminStages && "rotate-180")} />
-                    </>
-                  )}
-                </button>
-                {showAdminStages && (
-                  <div className="absolute top-full left-0 mt-1 w-48 rounded-lg border border-border bg-popover shadow-xl overflow-hidden z-50">
-                    {STAGES.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => handleAdminStageChange(s.id)}
-                        className={cn(
-                          "flex items-center gap-2 w-full px-3 py-2 text-[12px] hover:bg-accent/50 transition-colors text-left",
-                          s.id === task.stage && "bg-primary/10 font-semibold"
-                        )}
-                      >
-                        <span className={cn("w-2 h-2 rounded-full shrink-0", s.color)} />
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-primary/15 border-primary/20 text-primary">
-                  <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
-                  {STAGES[currentStageIndex]?.label}
-                </span>
-                {nextStage && (
-                  <>
-                    <ChevronRight className="w-3 h-3 text-muted-foreground/50" />
-                    <button
-                      onClick={handleMoveToNext}
-                      disabled={movingStage}
-                      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-muted border-border text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30 transition-colors disabled:opacity-50"
-                    >
-                      {movingStage ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <>
-                          <span className={cn("w-2 h-2 rounded-full", nextStage.color)} />
-                          {nextStage.label}
-                        </>
-                      )}
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-            {showSkipButton && (
-              <div className="mt-2">
-                <button
-                  onClick={handleSkipClientReview}
-                  disabled={movingStage}
-                  className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-400/80 hover:text-amber-400 transition-colors disabled:opacity-50"
-                >
-                  <ChevronRight className="w-3 h-3" />
-                  Skip Client Review → Ready for Release
-                </button>
-              </div>
-            )}
-            {canDecline && (
-              <div className="mt-2">
-                {!showDecline ? (
-                  <button
-                    onClick={() => setShowDecline(true)}
-                    className="inline-flex items-center gap-1.5 text-[11px] font-medium text-destructive/70 hover:text-destructive transition-colors"
-                  >
-                    <Undo2 className="w-3 h-3" />
-                    Decline &amp; return to {declineTargetLabel}
-                  </button>
-                ) : (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2.5">
-                    <p className="text-[11px] font-medium text-destructive">
-                      Why is this being declined?
-                    </p>
-                    <textarea
-                      value={declineComment}
-                      onChange={(e) => setDeclineComment(e.target.value)}
-                      placeholder="Explain what needs to be fixed..."
-                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-destructive/50 resize-none"
-                      rows={3}
-                      autoFocus
-                    />
-                    {declineFiles.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {declineFiles.map((f, i) => (
-                          <span key={i} className="inline-flex items-center gap-1 rounded bg-muted/50 px-1.5 py-0.5 text-[10px] text-foreground/70">
-                            <FileText className="w-2.5 h-2.5" />
-                            <span className="truncate max-w-[80px]">{f.name}</span>
-                            <button onClick={() => setDeclineFiles((prev) => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive">
-                              <X className="w-2.5 h-2.5" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={handleDecline}
-                        disabled={!declineComment.trim() || declining}
-                        className="h-7 text-[11px]"
-                      >
-                        {declining ? (
-                          <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                        ) : (
-                          <Undo2 className="w-3 h-3 mr-1" />
-                        )}
-                        Decline
-                      </Button>
-                      <button
-                        onClick={() => declineFileRef.current?.click()}
-                        className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                        title="Attach files"
-                      >
-                        <Paperclip className="w-3.5 h-3.5" />
-                      </button>
-                      <input
-                        ref={declineFileRef}
-                        type="file"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => {
-                          if (e.target.files) setDeclineFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
-                          e.target.value = "";
-                        }}
-                      />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => { setShowDecline(false); setDeclineComment(""); setDeclineFiles([]); }}
-                        className="h-7 text-[11px]"
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-            {moveError && (
-              <div className="mt-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
-                <p className="text-[11px] font-medium text-destructive mb-1">
-                  Answer these required questions first:
-                </p>
-                <ul className="space-y-0.5">
-                  {moveError.map((q, i) => (
-                    <li key={i} className="text-[11px] text-destructive/80">
-                      • {q}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-
           {/* Time Tracking moved to modal via Clock icon button */}
 
           {/* Estimate section moved to Time Tracking modal */}
-
-          <AssigneePicker task={task} projectId={projectId} />
-
 
           {/* Questions */}
           {questions.length > 0 && (
@@ -1220,28 +879,6 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
           </div>
         </div>
       )}
-
-      {showConfirm && nextStage && (() => {
-        const checkpoint = getCheckpoint(task.stage as Stage, nextStage.id);
-        return checkpoint ? (
-          <StageConfirmDialog
-            checkpoint={checkpoint}
-            onConfirm={(estimatedMinutes) => executeMove(estimatedMinutes)}
-            onCancel={() => setShowConfirm(false)}
-          />
-        ) : null;
-      })()}
-
-      {showSkipConfirm && (() => {
-        const checkpoint = getCheckpoint("INTERNAL_REVIEW" as Stage, "READY_FOR_RELEASE" as Stage);
-        return checkpoint ? (
-          <StageConfirmDialog
-            checkpoint={checkpoint}
-            onConfirm={() => executeSkip()}
-            onCancel={() => setShowSkipConfirm(false)}
-          />
-        ) : null;
-      })()}
 
       {notePanelOpen && (
         <TaskNotesPanel
@@ -1478,141 +1115,3 @@ function TaskNoteEditor({
   );
 }
 
-const ROLE_TRACK_LABELS: Record<string, string> = {
-  pm: "Management",
-  developer: "Development",
-  client: "Client",
-};
-
-function AssigneePicker({ task, projectId }: { task: KanbanTask; projectId: string }) {
-  const [open, setOpen] = useState(false);
-  const [eligible, setEligible] = useState<{ id: string; name: string | null; imageUrl: string | null; systemRole: string }[]>([]);
-  const [loadingList, setLoadingList] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const { updateTask: updateStoreTask } = useKanbanStore();
-
-  const STAGE_ROLE_MAP: Record<string, string> = {
-    NEW_REQUEST: "pm",
-    CLARIFICATION: "pm",
-    READY_FOR_DEV: "developer",
-    IN_DEVELOPMENT: "developer",
-    INTERNAL_REVIEW: "pm",
-    CLIENT_REVIEW: "client",
-    READY_FOR_RELEASE: "developer",
-    DONE: "developer",
-  };
-
-  const track = STAGE_ROLE_MAP[task.stage] ?? "developer";
-  const trackLabel = ROLE_TRACK_LABELS[track] ?? track;
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
-
-  async function handleOpen() {
-    if (open) { setOpen(false); return; }
-    setOpen(true);
-    setLoadingList(true);
-    try {
-      const list = await getEligibleAssignees(projectId, task.stage);
-      setEligible(list);
-    } catch { }
-    setLoadingList(false);
-  }
-
-  async function handleAssign(userId: string) {
-    setSaving(true);
-    try {
-      await updateTask({ taskId: task.id, assigneeId: userId });
-      const picked = eligible.find((u) => u.id === userId);
-      if (picked) {
-        updateStoreTask(task.id, { assignee: { id: picked.id, name: picked.name, imageUrl: picked.imageUrl } });
-      }
-      setOpen(false);
-    } catch (err) {
-      console.error(err);
-    }
-    setSaving(false);
-  }
-
-  return (
-    <div className="mb-5" ref={ref}>
-      <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
-        Assigned To
-        <span className="ml-1.5 normal-case text-[9px] text-muted-foreground/50 font-normal">
-          {trackLabel} role
-        </span>
-      </label>
-
-      <button
-        onClick={handleOpen}
-        disabled={saving}
-        className="flex items-center gap-2 w-full rounded-md border border-border px-2.5 py-1.5 text-[13px] hover:bg-accent/30 transition-colors text-left"
-      >
-        {task.assignee ? (
-          <>
-            {task.assignee.imageUrl ? (
-              <img src={task.assignee.imageUrl} alt="" className="w-5 h-5 rounded-full shrink-0" />
-            ) : (
-              <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold shrink-0">
-                {(task.assignee.name ?? "?")[0]}
-              </div>
-            )}
-            <span className="truncate flex-1">{task.assignee.name ?? "Unknown"}</span>
-          </>
-        ) : (
-          <>
-            <UserCircle2 className="w-5 h-5 text-muted-foreground/40 shrink-0" />
-            <span className="text-muted-foreground truncate flex-1">Unassigned</span>
-          </>
-        )}
-        <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform shrink-0", open && "rotate-180")} />
-      </button>
-
-      {open && (
-        <div className="mt-1 rounded-lg border border-border bg-popover shadow-xl overflow-hidden z-50 relative">
-          {loadingList ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-            </div>
-          ) : eligible.length === 0 ? (
-            <div className="px-3 py-3 text-[12px] text-muted-foreground text-center">
-              No eligible members for this stage
-            </div>
-          ) : (
-            <div className="max-h-[200px] overflow-y-auto">
-              {eligible.map((u) => (
-                <button
-                  key={u.id}
-                  onClick={() => handleAssign(u.id)}
-                  disabled={saving}
-                  className={cn(
-                    "flex items-center gap-2.5 w-full px-3 py-2 text-[12px] hover:bg-accent/30 transition-colors text-left disabled:opacity-50",
-                    task.assignee?.id === u.id && "bg-primary/10"
-                  )}
-                >
-                  {u.imageUrl ? (
-                    <img src={u.imageUrl} alt="" className="w-5 h-5 rounded-full shrink-0" />
-                  ) : (
-                    <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold shrink-0">
-                      {(u.name ?? "?")[0]}
-                    </div>
-                  )}
-                  <span className="truncate flex-1 font-medium">{u.name ?? "Unknown"}</span>
-                  <span className="text-[9px] text-muted-foreground/50 shrink-0">{u.systemRole}</span>
-                  {task.assignee?.id === u.id && <Check className="w-3 h-3 text-primary shrink-0" />}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
