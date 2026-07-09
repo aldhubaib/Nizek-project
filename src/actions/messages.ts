@@ -105,6 +105,7 @@ export type MessageDTO = {
   kind: string;
   authorId: string;
   authorName: string;
+  authorImageUrl: string | null;
   body: string;
   createdAt: string;
   attachments: MessageAttachment[];
@@ -138,6 +139,7 @@ export type ThreadMessage = {
   id: string;
   authorId: string;
   authorName: string;
+  authorImageUrl: string | null;
   body: string;
   createdAt: string;
   replyToId: string | null;
@@ -192,7 +194,7 @@ export async function getThreadMessages(input: {
   const rows = await prisma.message.findMany({
     where,
     include: {
-      author: { select: { id: true, name: true, email: true } },
+      author: { select: { id: true, name: true, email: true, imageUrl: true } },
       reactions: {
         select: { emoji: true, memberId: true },
         orderBy: { createdAt: "asc" },
@@ -222,6 +224,7 @@ export async function getThreadMessages(input: {
       id: c.id,
       authorId: c.authorId,
       authorName: c.author.name ?? c.author.email,
+      authorImageUrl: c.author.imageUrl ?? null,
       body: toDisplayBody(c.body),
       createdAt: c.createdAt.toISOString(),
       replyToId: c.replyToId ?? null,
@@ -378,7 +381,7 @@ export async function sendMessage(
           : undefined,
       },
       include: {
-        author: { select: { id: true, name: true, email: true } },
+        author: { select: { id: true, name: true, email: true, imageUrl: true } },
         attachments: {
           select: { id: true, filename: true, url: true, fileSize: true, mimeType: true },
         },
@@ -409,6 +412,7 @@ export async function sendMessage(
       kind: message.kind,
       authorId: user.id,
       authorName,
+      authorImageUrl: message.author.imageUrl ?? null,
       body: display,
       createdAt: message.createdAt.toISOString(),
       attachments,
@@ -612,6 +616,7 @@ export type InboxThread = {
   projectId: string | null;
   conversationId: string | null;
   logoUrl: string | null;
+  peerImageUrl: string | null;
   peerMemberIds: string[];
   lastMessage: string;
   lastAuthor: string;
@@ -652,7 +657,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       take: 200,
       include: {
         participants: {
-          include: { member: { select: { id: true, name: true, email: true } } },
+          include: { member: { select: { id: true, name: true, email: true, imageUrl: true } } },
         },
         messages: {
           orderBy: { createdAt: "desc" },
@@ -692,6 +697,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       projectId: p.id,
       conversationId: null,
       logoUrl: p.logoUrl ?? null,
+      peerImageUrl: null,
       peerMemberIds: [],
       lastMessage: last ? toDisplayBody(last.body) || "📎 Attachment" : "",
       lastAuthor: last ? (last.author.name ?? last.author.email) : "",
@@ -721,6 +727,8 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         projectId: null,
         conversationId: c.id,
         logoUrl: null,
+        // 1:1 DMs show the other person's photo; groups keep the initial.
+        peerImageUrl: !c.isGroup && others.length === 1 ? (others[0].imageUrl ?? null) : null,
         peerMemberIds: others.map((m) => m.id),
         lastMessage: last ? toDisplayBody(last.body) || "📎 Attachment" : "",
         lastAuthor: last ? (last.author.name ?? last.author.email) : "",
@@ -782,7 +790,7 @@ export async function getMessageableMembers() {
   const user = await requireUser();
   return prisma.user.findMany({
     where: { id: { not: user.id }, blocked: false },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, imageUrl: true },
     orderBy: { name: "asc" },
     take: 500,
   });

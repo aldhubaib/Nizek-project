@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowLeft,
   Paperclip,
@@ -156,6 +157,7 @@ export type ChatMessage = {
   id: string;
   authorId: string;
   authorName: string;
+  authorImageUrl?: string | null;
   body: string;
   createdAt: string;
   attachments: MessageAttachment[];
@@ -413,17 +415,27 @@ const MessageRow = memo(function MessageRow({
         {!mine && (
           <div className="w-8 shrink-0 self-start">
             {showAuthor && (
-              <div
-                className="grid h-8 w-8 place-items-center rounded-full bg-primary/20 text-xxs font-semibold text-primary"
-                aria-hidden
-              >
-                {m.authorName
-                  .split(" ")
-                  .map((s) => s[0])
-                  .slice(0, 2)
-                  .join("")
-                  .toUpperCase()}
-              </div>
+              m.authorImageUrl ? (
+                <Image
+                  src={m.authorImageUrl}
+                  alt=""
+                  width={32}
+                  height={32}
+                  className="h-8 w-8 rounded-full object-cover"
+                />
+              ) : (
+                <div
+                  className="grid h-8 w-8 place-items-center rounded-full bg-primary/20 text-xxs font-semibold text-primary"
+                  aria-hidden
+                >
+                  {m.authorName
+                    .split(" ")
+                    .map((s) => s[0])
+                    .slice(0, 2)
+                    .join("")
+                    .toUpperCase()}
+                </div>
+              )
             )}
           </div>
         )}
@@ -780,6 +792,7 @@ export function ThreadChat({
             id: m.id,
             authorId: m.authorId,
             authorName: m.authorName,
+            authorImageUrl: m.authorImageUrl ?? null,
             body: m.body,
             createdAt: m.createdAt,
             attachments: m.attachments ?? [],
@@ -1002,6 +1015,7 @@ export function ThreadChat({
                     id: m.id,
                     authorId: m.authorId,
                     authorName: m.authorName,
+                    authorImageUrl: m.authorImageUrl ?? null,
                     body: m.body,
                     createdAt: m.createdAt,
                     attachments: m.attachments,

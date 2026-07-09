@@ -44,7 +44,7 @@ function formatRelative(iso: string) {
   return `${days}d`;
 }
 
-type Member = { id: string; name: string | null; email: string };
+type Member = { id: string; name: string | null; email: string; imageUrl?: string | null };
 
 // True when the user is viewing a specific thread (not the inbox index).
 function useOnThread() {
@@ -312,9 +312,9 @@ function ThreadRow({
       )}
     >
       <div className="relative shrink-0">
-        {thread.logoUrl ? (
+        {thread.logoUrl || thread.peerImageUrl ? (
           <Image
-            src={thread.logoUrl}
+            src={(thread.logoUrl ?? thread.peerImageUrl) as string}
             alt=""
             width={36}
             height={36}
@@ -441,14 +441,24 @@ function ComposeDialog({
                   className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-surface/60 disabled:opacity-60"
                 >
                   <div className="relative shrink-0">
-                    <div className="grid h-8 w-8 place-items-center rounded-full bg-primary/20 text-xxs font-semibold text-primary">
-                      {name
-                        .split(" ")
-                        .map((s) => s[0])
-                        .slice(0, 2)
-                        .join("")
-                        .toUpperCase()}
-                    </div>
+                    {m.imageUrl ? (
+                      <Image
+                        src={m.imageUrl}
+                        alt=""
+                        width={32}
+                        height={32}
+                        className="h-8 w-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="grid h-8 w-8 place-items-center rounded-full bg-primary/20 text-xxs font-semibold text-primary">
+                        {name
+                          .split(" ")
+                          .map((s) => s[0])
+                          .slice(0, 2)
+                          .join("")
+                          .toUpperCase()}
+                      </div>
+                    )}
                     {online.has(m.id) && (
                       <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-emerald-500" />
                     )}
