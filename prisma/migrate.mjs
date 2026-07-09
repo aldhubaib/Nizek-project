@@ -50,17 +50,35 @@ async function main() {
   await client.connect();
 
   let needsBaseline = false;
+  let baselineFailed = false;
   try {
     const hasMigrations = await tableExists(client, "_prisma_migrations");
     const hasSchema = await tableExists(client, "User");
     // Existing DB that predates Prisma Migrate -> baseline it.
     needsBaseline = !hasMigrations && hasSchema;
+
+    // A prior deploy may have run `migrate deploy` before baselining, so 0_init
+    // tried to CREATE TABLE over an already-populated schema and was recorded as
+    // failed (Prisma P3009). The schema is genuinely present, so clear the
+    // failed baseline by marking it applied.
+    if (hasMigrations && hasSchema) {
+      const { rows } = await client.query(
+        `SELECT 1 FROM "_prisma_migrations"
+         WHERE migration_name = $1 AND finished_at IS NULL AND rolled_back_at IS NULL
+         LIMIT 1`,
+        [BASELINE],
+      );
+      baselineFailed = rows.length > 0;
+    }
   } finally {
     await client.end();
   }
 
   if (needsBaseline) {
     console.log("[migrate] Existing schema detected without migration history; baselining.");
+    runTolerant(`npx prisma migrate resolve --applied ${BASELINE}`);
+  } else if (baselineFailed) {
+    console.log("[migrate] Baseline migration in failed state but schema present; marking applied.");
     runTolerant(`npx prisma migrate resolve --applied ${BASELINE}`);
   }
 
