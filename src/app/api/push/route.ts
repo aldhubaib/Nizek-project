@@ -5,11 +5,15 @@ import { requireUser } from "@/lib/auth";
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser();
-    const { endpoint, keys } = await req.json();
+    const { endpoint, keys, deviceId, userAgent } = await req.json();
 
     if (!endpoint || !keys?.p256dh || !keys?.auth) {
       return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
     }
+
+    const did = typeof deviceId === "string" && deviceId ? deviceId : null;
+    const ua =
+      typeof userAgent === "string" && userAgent ? userAgent.slice(0, 512) : null;
 
     await prisma.pushSubscription.upsert({
       where: { endpoint },
@@ -18,11 +22,15 @@ export async function POST(req: NextRequest) {
         endpoint,
         p256dh: keys.p256dh,
         auth: keys.auth,
+        deviceId: did,
+        userAgent: ua,
       },
       update: {
         memberId: user.id,
         p256dh: keys.p256dh,
         auth: keys.auth,
+        deviceId: did,
+        userAgent: ua,
       },
     });
 

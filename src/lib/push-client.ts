@@ -1,6 +1,8 @@
 // Browser-side helpers for Web Push subscriptions. Shared by the service
 // worker registration banner and the notifications toggle.
 
+import { getDeviceId } from "@/lib/device-id";
+
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
 function urlBase64ToUint8Array(base64String: string) {
@@ -56,7 +58,13 @@ export async function syncPushSubscription(
     await fetch("/api/push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ endpoint: sub.endpoint, keys: sub.keys }),
+      body: JSON.stringify({
+        endpoint: sub.endpoint,
+        keys: sub.keys,
+        deviceId: getDeviceId(),
+        userAgent:
+          typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+      }),
     });
     return true;
   } catch {

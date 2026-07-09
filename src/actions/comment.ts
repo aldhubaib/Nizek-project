@@ -2,8 +2,9 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
-import { publish, broadcast, taskChannel, userChannel } from "@/lib/centrifugo";
+import { publish, taskChannel } from "@/lib/centrifugo";
 import { sendPush } from "@/lib/push";
+import { createAndPublishNotifications } from "@/lib/notify";
 
 export async function createComment(data: {
   taskId: string;
@@ -55,19 +56,13 @@ export async function createComment(data: {
       // Feed the notification bell (Notification table) so task-comment
       // mentions live alongside chat/DM notifications.
       const snippet = data.content.replace(/\s+/g, " ").trim().slice(0, 140);
-      await prisma.notification.createMany({
-        data: mentionRecipients.map((rid) => ({
-          recipientId: rid,
-          type: "mention",
-          title: `${comment.user.name ?? "Someone"} mentioned you`,
-          body: `#${task.taskNumber} ${task.title}: ${snippet}`,
-          linkUrl: `/dashboard/projects/${task.projectId}/tasks/${data.taskId}`,
-        })),
+      await createAndPublishNotifications({
+        recipientIds: mentionRecipients,
+        type: "mention",
+        title: `${comment.user.name ?? "Someone"} mentioned you`,
+        body: `#${task.taskNumber} ${task.title}: ${snippet}`,
+        linkUrl: `/dashboard/projects/${task.projectId}/tasks/${data.taskId}`,
       });
-      void broadcast(
-        mentionRecipients.map((rid) => userChannel(rid)),
-        { type: "notification.new" },
-      );
       void sendPush(mentionRecipients, {
         title: `${comment.user.name ?? "Someone"} mentioned you`,
         body: `#${task.taskNumber} ${task.title}: ${snippet}`,

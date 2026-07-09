@@ -14,7 +14,13 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { useChannel } from "@/components/realtime/hooks";
-import { userChannel } from "@/lib/channels";
+import {
+  userChannel,
+  NOTIFICATION_NEW,
+  NOTIFICATION_READ,
+  NOTIFICATION_READ_ALL,
+} from "@/lib/channels";
+import { updateAppBadge } from "@/lib/app-badge";
 
 const POLL_FALLBACK_INTERVAL = 60_000;
 
@@ -34,6 +40,11 @@ export function NotificationBell({ currentUserId }: Props) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
+
+  // Keep the OS app-icon badge in lockstep with the unread count.
+  useEffect(() => {
+    updateAppBadge(count);
+  }, [count]);
 
   const refresh = useCallback(() => {
     Promise.all([getNotifications(30), getUnreadCount()])
@@ -59,11 +70,66 @@ export function NotificationBell({ currentUserId }: Props) {
     return () => clearInterval(id);
   }, [fetchCount, cent?.enabled]);
 
-  // Live: refresh the instant anything lands on our user channel (chat mentions,
-  // DMs, task-comment mentions).
-  useChannel(cent && currentUserId ? userChannel(currentUserId) : null, () => {
-    if (open) refresh();
-    else fetchCount();
+  // Reconcile once whenever the realtime connection (re)establishes: history
+  // replay covers most missed events, but a fresh read after a gap guarantees
+  // the count/list are exactly right.
+  const wasConnected = useRef(false);
+  useEffect(() => {
+    const now = Boolean(cent?.connected);
+    if (now && !wasConnected.current) {
+      if (open) refresh();
+      else fetchCount();
+    }
+    wasConnected.current = now;
+  }, [cent?.connected, open, refresh, fetchCount]);
+
+  // Reconcile on focus / visibility so a device that was backgrounded (PWA) or
+  // asleep catches up on read-state changes made elsewhere.
+  useEffect(() => {
+    const reconcile = () => {
+      if (document.hidden) return;
+      if (open) refresh();
+      else fetchCount();
+    };
+    window.addEventListener("focus", reconcile);
+    document.addEventListener("visibilitychange", reconcile);
+    return () => {
+      window.removeEventListener("focus", reconcile);
+      document.removeEventListener("visibilitychange", reconcile);
+    };
+  }, [open, refresh, fetchCount]);
+
+  // Payload-driven live updates: prepend on new, mark items + set count on read.
+  useChannel(cent && currentUserId ? userChannel(currentUserId) : null, (data) => {
+    const payload = data as
+      | { type?: string; notification?: NotificationDTO; ids?: string[]; unread?: number }
+      | null;
+    if (!payload || typeof payload !== "object") return;
+
+    if (payload.type === NOTIFICATION_NEW && payload.notification) {
+      const incoming = payload.notification;
+      setItems((prev) => {
+        if (prev.some((x) => x.id === incoming.id)) return prev;
+        return [incoming, ...prev].slice(0, 30);
+      });
+      setCount((c) => c + 1);
+      return;
+    }
+
+    if (payload.type === NOTIFICATION_READ) {
+      const ids = new Set(payload.ids ?? []);
+      setItems((prev) =>
+        prev.map((x) => (ids.has(x.id) ? { ...x, read: true } : x)),
+      );
+      if (typeof payload.unread === "number") setCount(Math.max(0, payload.unread));
+      return;
+    }
+
+    if (payload.type === NOTIFICATION_READ_ALL) {
+      setItems((prev) => prev.map((x) => ({ ...x, read: true })));
+      setCount(typeof payload.unread === "number" ? Math.max(0, payload.unread) : 0);
+      return;
+    }
   });
 
   useEffect(() => {
@@ -89,6 +155,8 @@ export function NotificationBell({ currentUserId }: Props) {
   function handleClick(n: NotificationDTO) {
     if (!n.read) {
       startTransition(async () => {
+        // The action publishes notification.read to our other devices/tabs;
+        // this optimistic update keeps the current tab instant.
         await markNotificationRead(n.id);
         setItems((prev) =>
           prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)),

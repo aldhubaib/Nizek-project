@@ -53,11 +53,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { channel?: string };
+  const body = (await request.json().catch(() => ({}))) as {
+    channel?: string;
+    deviceId?: string;
+  };
   const channel = body.channel;
 
   if (!channel) {
-    return NextResponse.json({ token: connectionToken(memberId) });
+    // Embed deviceId in the connection info so presence can tell which of the
+    // user's devices is connected (foreground/active) for presence-aware push.
+    const info =
+      typeof body.deviceId === "string" && body.deviceId
+        ? { deviceId: body.deviceId }
+        : undefined;
+    return NextResponse.json({ token: connectionToken(memberId, info) });
   }
 
   const cacheKey = `${memberId}:${channel}`;

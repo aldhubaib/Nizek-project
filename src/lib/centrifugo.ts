@@ -55,13 +55,22 @@ function signJwt(payload: Record<string, unknown>): string {
   return `${data}.${base64url(sig)}`;
 }
 
-/** Connection token: authenticates the WebSocket connection as this member. */
-export function connectionToken(memberId: string): string {
+/**
+ * Connection token: authenticates the WebSocket connection as this member.
+ * `info` (e.g. `{ deviceId }`) is embedded as the client's connection info so
+ * it's returned by presence queries — used to tell which of a user's devices is
+ * currently connected (foreground/active) for presence-aware push.
+ */
+export function connectionToken(
+  memberId: string,
+  info?: Record<string, unknown>,
+): string {
   const now = Math.floor(Date.now() / 1000);
   return signJwt({
     sub: memberId,
     iat: now,
     exp: now + CONNECTION_TTL_SECONDS,
+    ...(info ? { info } : {}),
   });
 }
 
@@ -169,4 +178,67 @@ export async function broadcast(
   const unique = [...new Set(channels)].filter(Boolean);
   if (unique.length === 0) return;
   await apiCall("broadcast", { channels: unique, data });
+}
+
+// ─── Presence ──────────────────────────────────────────────────────────────────
+
+type PresenceResponse = {
+  result?: {
+    presence?: Record<
+      string,
+      { user?: string; conn_info?: { deviceId?: string } }
+    >;
+  };
+};
+
+/**
+ * Returns the set of device IDs currently connected on a channel (from each
+ * client's connection info). Best-effort: returns an empty set if Centrifugo is
+ * unavailable so callers fall back to their default behavior (e.g. send push).
+ */
+export async function getPresenceDeviceIds(
+  channel: string,
+): Promise<Set<string>> {
+  const devices = new Set<string>();
+  if (!isCentrifugoConfigured()) return devices;
+  await ensureKeepAliveDispatcher();
+  try {
+    const res = await fetch(`${API_URL}/api/presence`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
+      body: JSON.stringify({ channel }),
+      cache: "no-store",
+    });
+    if (!res.ok) return devices;
+    const data = (await res.json()) as PresenceResponse;
+    const clients = data.result?.presence ?? {};
+    for (const client of Object.values(clients)) {
+      const deviceId = client.conn_info?.deviceId;
+      if (deviceId) devices.add(deviceId);
+    }
+  } catch {
+    // Best-effort: on any failure we simply don't suppress push.
+  }
+  return devices;
+}
+
+/** True if the user has at least one connected client on their user channel. */
+export async function isUserOnline(memberId: string): Promise<boolean> {
+  if (!isCentrifugoConfigured()) return false;
+  await ensureKeepAliveDispatcher();
+  try {
+    const res = await fetch(`${API_URL}/api/presence_stats`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": API_KEY },
+      body: JSON.stringify({ channel: userChannel(memberId) }),
+      cache: "no-store",
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as {
+      result?: { num_clients?: number };
+    };
+    return (data.result?.num_clients ?? 0) > 0;
+  } catch {
+    return false;
+  }
 }

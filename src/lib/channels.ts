@@ -25,3 +25,10 @@ export function globalPresenceChannel(): string {
 // custom notification sound, so open clients swap it live. Defined here (not in
 // the "use server" action module, where only async functions may be exported).
 export const NOTIFICATION_SOUND_EVENT = "notification-sound-changed";
+
+// Notification events published on a user's channel. The bell consumes these
+// as payload-driven deltas (no refetch) and to keep read-state in sync across
+// every device/tab the user has open.
+export const NOTIFICATION_NEW = "notification.new";
+export const NOTIFICATION_READ = "notification.read";
+export const NOTIFICATION_READ_ALL = "notification.read-all";

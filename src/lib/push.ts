@@ -1,6 +1,7 @@
 import "server-only";
 import webpush from "web-push";
 import { prisma } from "@/lib/prisma";
+import { getPresenceDeviceIds, userChannel } from "@/lib/centrifugo";
 
 const VAPID_PUBLIC = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
@@ -44,6 +45,19 @@ export async function sendPush(
     });
     if (subscriptions.length === 0) return;
 
+    // Presence-aware push: for each recipient, find which of their devices are
+    // currently connected to Centrifugo (foreground/active). We skip OS push to
+    // those devices — they already get the in-app chime/bell — but still push to
+    // their other (backgrounded/closed) devices and to recipients with none
+    // connected. Best-effort: if presence is unavailable we push everywhere.
+    const connectedByRecipient = new Map<string, Set<string>>();
+    await Promise.all(
+      unique.map(async (rid) => {
+        const devices = await getPresenceDeviceIds(userChannel(rid));
+        if (devices.size > 0) connectedByRecipient.set(rid, devices);
+      }),
+    );
+
     // Per-recipient unread count powers the OS app badge.
     const grouped = await prisma.notification.groupBy({
       by: ["recipientId"],
@@ -54,8 +68,16 @@ export async function sendPush(
       grouped.map((g) => [g.recipientId, g._count._all]),
     );
 
+    // Drop subscriptions whose device is currently connected/active.
+    const targets = subscriptions.filter((sub) => {
+      if (!sub.deviceId) return true;
+      const connected = connectedByRecipient.get(sub.memberId);
+      return !connected?.has(sub.deviceId);
+    });
+    if (targets.length === 0) return;
+
     await Promise.allSettled(
-      subscriptions.map((sub) => {
+      targets.map((sub) => {
         const body = JSON.stringify({
           title: payload.title,
           body: payload.body || "",

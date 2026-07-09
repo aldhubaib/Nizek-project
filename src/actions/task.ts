@@ -12,6 +12,7 @@ import {
   canModifyInStage,
 } from "@/lib/permissions";
 import { publish, broadcast, broadcastTaskEvent, taskChannel, projectChannel, userChannel } from "@/lib/centrifugo";
+import { createAndPublishNotifications } from "@/lib/notify";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import { sendPush } from "@/lib/push";
 
@@ -705,10 +706,13 @@ export async function declineTask(data: {
       const title = `${user.name ?? "Someone"} declined "${task.title}"`;
       const notifBody = `#${task.taskNumber} ${task.title}: ${declineSnippet}`;
       const linkUrl = `/dashboard/projects/${task.projectId}/tasks/${task.id}`;
-      await prisma.notification.create({
-        data: { recipientId: submitterId, type: "rejection", title, body: notifBody, linkUrl },
+      await createAndPublishNotifications({
+        recipientIds: [submitterId],
+        type: "rejection",
+        title,
+        body: notifBody,
+        linkUrl,
       });
-      void broadcast([userChannel(submitterId)], { type: "notification.new" });
       void sendPush([submitterId], {
         title,
         body: notifBody,

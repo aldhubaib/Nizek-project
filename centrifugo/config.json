@@ -11,9 +11,11 @@
     "namespaces": [
       {
         "name": "user",
-        "presence": false,
-        "history_size": 0,
-        "history_ttl": "0s"
+        "presence": true,
+        "history_size": 50,
+        "history_ttl": "300s",
+        "force_recovery": true,
+        "allow_presence_for_subscriber": true
       },
       {
         "name": "task",

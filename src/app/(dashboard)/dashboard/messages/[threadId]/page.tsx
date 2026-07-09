@@ -7,7 +7,10 @@ import {
   projectChannel,
   conversationChannel,
   globalPresenceChannel,
+  userChannel,
+  NOTIFICATION_READ,
 } from "@/lib/channels";
+import { publish } from "@/lib/centrifugo";
 import { getThreadMessages } from "@/actions/messages";
 import { getActiveContract } from "@/lib/contract-rules";
 import { ThreadChat, type ThreadTarget } from "./thread-chat";
@@ -139,10 +142,25 @@ export default async function ThreadPage({
     : target.taskId
       ? `/dashboard/projects/${target.projectId}/tasks/${target.taskId}`
       : `/dashboard/messages/project-${target.projectId}`;
-  await prisma.notification.updateMany({
+  const toMark = await prisma.notification.findMany({
     where: { recipientId: user.id, read: false, linkUrl },
-    data: { read: true },
+    select: { id: true },
   });
+  if (toMark.length > 0) {
+    await prisma.notification.updateMany({
+      where: { recipientId: user.id, read: false, linkUrl },
+      data: { read: true, readAt: new Date() },
+    });
+    const unread = await prisma.notification.count({
+      where: { recipientId: user.id, read: false },
+    });
+    // Sync read-state to the user's other devices/tabs (bell + app badge).
+    void publish(userChannel(user.id), {
+      type: NOTIFICATION_READ,
+      ids: toMark.map((n) => n.id),
+      unread,
+    });
+  }
 
   return (
     <ThreadChat

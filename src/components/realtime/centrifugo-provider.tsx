@@ -12,6 +12,12 @@ import {
 } from "react";
 import { Centrifuge, Subscription } from "centrifuge";
 import { globalPresenceChannel } from "@/lib/channels";
+import { getDeviceId } from "@/lib/device-id";
+
+// How long the app can be backgrounded before we drop the WebSocket to save
+// battery/data on installed PWAs. History + recovery replay missed events on
+// resume, so this is transparent to the user.
+const BACKGROUND_GRACE_MS = 30_000;
 
 // Single shared WebSocket connection to Centrifugo. Components subscribe to
 // channels through this context; the provider dedupes subscriptions by channel
@@ -39,10 +45,13 @@ const CentrifugoContext = createContext<CentrifugoContextValue | null>(null);
 const WS_URL = process.env.NEXT_PUBLIC_CENTRIFUGO_WS ?? "";
 
 async function fetchToken(channel?: string): Promise<string> {
+  // For the connection token (no channel) we send this device's stable id so
+  // server-side presence can tell which device is connected (presence-aware push).
+  const body = channel ? { channel } : { deviceId: getDeviceId() };
   const res = await fetch("/api/centrifugo/token", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(channel ? { channel } : {}),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`token ${res.status}`);
   const data = (await res.json()) as { token: string };
@@ -68,6 +77,11 @@ export function CentrifugoProvider({
   // showing as "Offline" to everyone while still using the app.
   const pinnedRef = useRef<Set<string>>(new Set());
   const ensureSubRef = useRef<((channel: string) => unknown) | null>(null);
+  // Mirrors `connected` for use inside event listeners without stale closures.
+  const connectedRef = useRef(false);
+  // True while intentionally paused (backgrounded PWA) so the disconnect handler
+  // doesn't fight the visibility resume logic.
+  const pausedRef = useRef(false);
 
   useEffect(() => {
     if (!WS_URL) {
@@ -92,6 +106,8 @@ export function CentrifugoProvider({
 
       client.on("connected", () => {
         setConnected(true);
+        connectedRef.current = true;
+        pausedRef.current = false;
         // Join the global presence channel so this user counts as online for the
         // whole session (independent of which page/thread is open).
         const presenceChannel = globalPresenceChannel();
@@ -103,6 +119,7 @@ export function CentrifugoProvider({
       });
       client.on("disconnected", () => {
         setConnected(false);
+        connectedRef.current = false;
       });
       client.on("error", (ctx) => {
         console.warn("[realtime] client error:", ctx.error?.message ?? ctx);
@@ -139,6 +156,51 @@ export function CentrifugoProvider({
       clientRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // PWA/mobile power saving: drop the WebSocket after the app is backgrounded
+  // for a grace period, and reconnect the instant it returns to the foreground.
+  // Recovery (force_recovery on channels) replays anything missed while paused,
+  // so open views stay correct without a full refresh.
+  useEffect(() => {
+    if (!WS_URL) return;
+    let hideTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const clearHideTimer = () => {
+      if (hideTimer) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+      }
+    };
+
+    const handleVisibility = () => {
+      const client = clientRef.current;
+      if (document.hidden) {
+        clearHideTimer();
+        hideTimer = setTimeout(() => {
+          if (document.hidden && clientRef.current && connectedRef.current) {
+            pausedRef.current = true;
+            try {
+              clientRef.current.disconnect();
+            } catch {}
+          }
+        }, BACKGROUND_GRACE_MS);
+      } else {
+        clearHideTimer();
+        // Reconnect on resume if we paused (or dropped) while hidden.
+        if (client && !connectedRef.current) {
+          try {
+            client.connect();
+          } catch {}
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      clearHideTimer();
+    };
   }, []);
 
   const ensureSub = useCallback((channel: string) => {

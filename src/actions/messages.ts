@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { hasProjectAccess } from "@/lib/project-access";
 import { getActiveContract } from "@/lib/contract-rules";
 import { sendPush } from "@/lib/push";
+import { createAndPublishNotifications } from "@/lib/notify";
 import {
   broadcast,
   taskChannel,
@@ -456,14 +457,14 @@ export async function sendMessage(
 
     const uniqueRecipients = [...new Set(recipients)];
     if (uniqueRecipients.length > 0) {
-      await prisma.notification.createMany({
-        data: uniqueRecipients.map((rid) => ({
-          recipientId: rid,
-          type: notifyType,
-          title,
-          body: preview,
-          linkUrl: url,
-        })),
+      // Create rows + publish per-recipient `notification.new` so bells update
+      // live without a refetch.
+      await createAndPublishNotifications({
+        recipientIds: uniqueRecipients,
+        type: notifyType,
+        title,
+        body: preview,
+        linkUrl: url,
       });
       // OS-level web push on top of the in-app bell.
       void sendPush(uniqueRecipients, {
