@@ -189,13 +189,12 @@ export function KanbanBoard({
   const canSelfAssign = useCallback(
     (task: KanbanTask) => {
       if (!isProjectActive) return false;
-      if (task.assignee?.id === currentUserId) return false;
       if (userPermissions.isAdmin) return true;
       if (!userPermissions.canMoveTask) return false;
       const allowed = userPermissions.allowedTransitions?.[task.stage];
       return Array.isArray(allowed) && allowed.length > 0;
     },
-    [userPermissions, isProjectActive, currentUserId]
+    [userPermissions, isProjectActive]
   );
 
   const openSelfAssign = useCallback((task: KanbanTask) => {
