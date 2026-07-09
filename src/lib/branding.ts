@@ -72,3 +72,21 @@ export async function getNotificationSoundUrl(): Promise<string | null> {
     return null;
   }
 }
+
+/**
+ * A short token that changes whenever the notification sound changes. Read
+ * UNCACHED on purpose so every replica reports the same value the instant the
+ * sound is updated — it's folded into the app version to trip the update prompt,
+ * and a per-replica cache would cause the version to flap between instances.
+ */
+export async function getNotificationSoundToken(): Promise<string> {
+  try {
+    const row = await prisma.brandingAsset.findUnique({
+      where: { slot: NOTIFICATION_SOUND_SLOT },
+      select: { updatedAt: true },
+    });
+    return row ? String(row.updatedAt.getTime()) : "0";
+  } catch {
+    return "0";
+  }
+}

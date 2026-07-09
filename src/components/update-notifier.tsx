@@ -58,7 +58,7 @@ export function UpdateNotifier({ currentVersion }: { currentVersion: string }) {
 
   useEffect(() => {
     // Skip polling in local/dev where there is no real deploy version to compare.
-    if (currentVersion === "dev") return;
+    if (currentVersion === "dev" || currentVersion.startsWith("dev.")) return;
 
     check();
     const interval = setInterval(check, POLL_INTERVAL_MS);

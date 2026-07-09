@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { getAppVersion, getAppLogoUrl } from "@/lib/version";
+import { getAppVersion, getAppLogoUrl, getClientVersion } from "@/lib/version";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export function GET() {
-  const version = getAppVersion();
+export async function GET() {
+  const version = await getClientVersion();
   return NextResponse.json(
-    { version, logo: getAppLogoUrl(version) },
+    { version, logo: getAppLogoUrl(getAppVersion()) },
     { headers: { "Cache-Control": "no-store, max-age=0" } }
   );
 }

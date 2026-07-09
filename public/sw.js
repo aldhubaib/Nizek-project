@@ -9,10 +9,47 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// A pass-through fetch handler makes the app installable across browsers that
-// still require one. It intentionally does NOT cache — the in-app
-// UpdateNotifier owns versioning, so responses always come from the network.
-self.addEventListener("fetch", () => {});
+// Cache-first ONLY for the custom notification sound so it plays instantly and
+// works offline. Every other request passes through untouched (the in-app
+// UpdateNotifier owns app versioning, so app responses always hit the network).
+const SOUND_CACHE = "notif-sound-v1";
+
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET") return;
+
+  let url;
+  try {
+    url = new URL(req.url);
+  } catch {
+    return;
+  }
+
+  // Uploaded sounds live under a "notification_sound/" R2 prefix. Range requests
+  // (partial media) are skipped so we never cache a 206 partial response.
+  if (!url.pathname.includes("/notification_sound/")) return;
+  if (req.headers.has("range")) return;
+
+  event.respondWith(
+    caches.open(SOUND_CACHE).then(async (cache) => {
+      const cached = await cache.match(req);
+      if (cached) return cached;
+      try {
+        const res = await fetch(req);
+        // Keep only the current sound to bound cache size (URLs change per upload).
+        const keys = await cache.keys();
+        await Promise.all(
+          keys.filter((k) => k.url !== req.url).map((k) => cache.delete(k)),
+        );
+        cache.put(req, res.clone());
+        return res;
+      } catch {
+        const fallback = await cache.match(req, { ignoreSearch: true });
+        return fallback || Response.error();
+      }
+    }),
+  );
+});
 
 self.addEventListener("push", (event) => {
   if (!event.data) return;

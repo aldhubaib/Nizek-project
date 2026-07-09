@@ -35,6 +35,14 @@ export function setCustomNotificationSound(url: string | null): void {
   if (url) {
     customAudio = new Audio(url);
     customAudio.preload = "auto";
+    // Warm the service-worker / HTTP cache so playback is instant and works
+    // offline. no-cors keeps it a simple GET the SW can store as an opaque
+    // response; failures are harmless (we still preload via the Audio element).
+    try {
+      void fetch(url, { mode: "no-cors", cache: "force-cache" });
+    } catch {
+      /* ignore */
+    }
   } else {
     customAudio = null;
   }
