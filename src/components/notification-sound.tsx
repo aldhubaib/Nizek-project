@@ -1,9 +1,13 @@
 "use client";
 
+import { useEffect } from "react";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { useChannel } from "@/components/realtime/hooks";
 import { userChannel } from "@/lib/channels";
-import { playNotificationSound } from "@/lib/notification-sound";
+import {
+  playNotificationSound,
+  primeNotificationAudio,
+} from "@/lib/notification-sound";
 
 interface Props {
   currentUserId?: string;
@@ -16,6 +20,11 @@ interface Props {
  */
 export function NotificationSound({ currentUserId }: Props) {
   const cent = useCentrifugo();
+
+  // Unlock audio on the first interaction so later notifications can chime.
+  useEffect(() => {
+    primeNotificationAudio();
+  }, []);
 
   useChannel(
     cent && currentUserId ? userChannel(currentUserId) : null,

@@ -40,17 +40,8 @@ function getAudioContext(): AudioContext | null {
   }
 }
 
-/**
- * Plays a short two-tone chime using the Web Audio API (no asset needed).
- * Respects the user's per-device preference unless `force` is true (used for the
- * settings preview so the user can hear it even before toggling on).
- */
-export function playNotificationSound(force = false): void {
-  if (!force && !isNotificationSoundEnabled()) return;
-  const ctx = getAudioContext();
-  if (!ctx) return;
+function emitChime(ctx: AudioContext): void {
   try {
-    if (ctx.state === "suspended") void ctx.resume();
     const now = ctx.currentTime;
     const tones = [
       { freq: 880, start: 0, dur: 0.15 },
@@ -71,6 +62,60 @@ export function playNotificationSound(force = false): void {
       osc.stop(end + 0.02);
     }
   } catch {
-    /* autoplay blocked or audio unavailable — fail silently */
+    /* audio unavailable — fail silently */
   }
+}
+
+/**
+ * Plays a short two-tone chime using the Web Audio API (no asset needed).
+ * Respects the user's per-device preference unless `force` is true (used for the
+ * settings preview so the user can hear it even before toggling on).
+ *
+ * Browsers start an AudioContext "suspended" until a user gesture, and tones
+ * scheduled into a suspended context are silent — so we resume first, then emit.
+ */
+export function playNotificationSound(force = false): void {
+  if (!force && !isNotificationSoundEnabled()) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  if (ctx.state === "suspended") {
+    ctx.resume().then(() => emitChime(ctx)).catch(() => {});
+  } else {
+    emitChime(ctx);
+  }
+}
+
+// Unlocks audio on the first user gesture so later (non-gesture) notifications
+// can play. Autoplay policies only let us resume an AudioContext in response to
+// a real interaction; after that it stays running for the session.
+let unlockAttached = false;
+
+export function primeNotificationAudio(): void {
+  if (typeof window === "undefined" || unlockAttached) return;
+  unlockAttached = true;
+
+  const unlock = () => {
+    const ctx = getAudioContext();
+    if (!ctx) {
+      detach();
+      return;
+    }
+    if (ctx.state !== "running") {
+      void ctx.resume().then(() => {
+        if (ctx.state === "running") detach();
+      });
+    } else {
+      detach();
+    }
+  };
+
+  const detach = () => {
+    window.removeEventListener("pointerdown", unlock);
+    window.removeEventListener("keydown", unlock);
+    window.removeEventListener("touchstart", unlock);
+  };
+
+  window.addEventListener("pointerdown", unlock);
+  window.addEventListener("keydown", unlock);
+  window.addEventListener("touchstart", unlock);
 }
