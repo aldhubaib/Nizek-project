@@ -62,6 +62,8 @@ import {
   useLightbox,
   FilesPanel,
 } from "@/components/messages/chat-attachments";
+import { LinkPreviewCard } from "@/components/messages/link-preview";
+import { firstUrl } from "@/lib/link-preview";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
@@ -128,13 +130,14 @@ export type ChatMessage = {
 
 const fmtTaskNumber = (n: number) => `T-${String(n).padStart(3, "0")}`;
 
-// Renders "@Name" runs as highlighted chips.
-function renderBodyWithMentions(
+// Highlights "@Name" runs within a plain-text segment (no URLs) as chips.
+function highlightMentions(
   text: string,
   mentions: string[] | undefined,
   mine: boolean,
-) {
-  if (!mentions || mentions.length === 0) return text;
+  keyPrefix: string,
+): React.ReactNode[] {
+  if (!mentions || mentions.length === 0) return [text];
   const pattern = new RegExp(
     `@(${mentions
       .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
@@ -149,7 +152,7 @@ function renderBodyWithMentions(
     if (match.index > last) parts.push(text.slice(last, match.index));
     parts.push(
       <span
-        key={`mention-${key++}`}
+        key={`${keyPrefix}-mn-${key++}`}
         className={cn(
           "rounded px-1 font-medium",
           mine
@@ -163,6 +166,50 @@ function renderBodyWithMentions(
     last = match.index + match[0].length;
   }
   if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
+// Renders a message body with clickable links and highlighted @mentions.
+function renderMessageBody(
+  text: string,
+  mentions: string[] | undefined,
+  mine: boolean,
+) {
+  const parts: React.ReactNode[] = [];
+  const urlRe = /(https?:\/\/[^\s<]+)/gi;
+  let last = 0;
+  let key = 0;
+  let match: RegExpExecArray | null;
+  while ((match = urlRe.exec(text)) !== null) {
+    if (match.index > last) {
+      parts.push(
+        ...highlightMentions(text.slice(last, match.index), mentions, mine, `s${key}`),
+      );
+    }
+    let url = match[1];
+    const trailing = url.match(/[)\].,;:!?'"]+$/)?.[0] ?? "";
+    if (trailing) url = url.slice(0, url.length - trailing.length);
+    parts.push(
+      <a
+        key={`lnk-${key++}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className={cn(
+          "break-all underline underline-offset-2",
+          mine ? "text-primary-foreground" : "text-primary",
+        )}
+      >
+        {url}
+      </a>,
+    );
+    if (trailing) parts.push(trailing);
+    last = match.index + match[1].length;
+  }
+  if (last < text.length) {
+    parts.push(...highlightMentions(text.slice(last), mentions, mine, `s${key}`));
+  }
   return <>{parts}</>;
 }
 
@@ -308,6 +355,8 @@ export function ThreadChat({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [replyTo, setReplyTo] = useState<string | null>(null);
+  // URL the composer preview was dismissed for (X) — hides it until it changes.
+  const [dismissedPreview, setDismissedPreview] = useState<string | null>(null);
   // "#" task references (project channels only).
   const isProjectChannel =
     !!target.projectId && !target.taskId && !target.conversationId;
@@ -698,6 +747,7 @@ export function ThreadChat({
     setPending([]);
     setReplyTo(null);
     setPendingTaskRef(null);
+    setDismissedPreview(null);
 
     if (files.length === 0) {
       const entry: OutboxEntry = {
@@ -1045,6 +1095,12 @@ export function ThreadChat({
 
   const replyingTo = replyTo ? byId.get(replyTo) : null;
 
+  // First link in the draft — previewed above the composer until dismissed.
+  const composerUrl = useMemo(() => {
+    const u = firstUrl(draft);
+    return u && u !== dismissedPreview ? u : null;
+  }, [draft, dismissedPreview]);
+
   return (
     <div
       className="relative flex min-h-0 flex-1 flex-col"
@@ -1280,7 +1336,7 @@ export function ThreadChat({
                             ) : (
                               <div className={cn("flex items-end gap-2", notice && "px-0.5")}>
                                 <span className="whitespace-pre-wrap break-words">
-                                  {renderBodyWithMentions(m.body, m.mentions, blue)}
+                                  {renderMessageBody(m.body, m.mentions, blue)}
                                 </span>
                                 <span
                                   className={cn(
@@ -1304,6 +1360,12 @@ export function ThreadChat({
                         />
                       </div>
                       );
+                    })()}
+                    {m.kind !== "rejection" && (() => {
+                      const previewUrl = firstUrl(m.body);
+                      return previewUrl ? (
+                        <LinkPreviewCard url={previewUrl} mine={mine} />
+                      ) : null;
                     })()}
                     {imageAtts.length > 0 && (
                       <div
@@ -1566,6 +1628,13 @@ export function ThreadChat({
                 </div>
               ))}
             </div>
+          )}
+          {composerUrl && !recording && (
+            <LinkPreviewCard
+              url={composerUrl}
+              variant="composer"
+              onDismiss={() => setDismissedPreview(composerUrl)}
+            />
           )}
           {recordError && (
             <div className="mb-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -1962,6 +2031,11 @@ function OutboxBubble({
             <Clock className="ml-1 h-3 w-3 shrink-0 translate-y-0.5 opacity-70" />
           </div>
         )}
+        {entry.body &&
+          (() => {
+            const previewUrl = firstUrl(entry.body);
+            return previewUrl ? <LinkPreviewCard url={previewUrl} mine /> : null;
+          })()}
         {failed ? (
           <div className="flex items-center gap-2 text-xs text-destructive">
             <AlertCircle className="h-3.5 w-3.5" />
