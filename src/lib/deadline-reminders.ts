@@ -4,8 +4,10 @@ import { getActiveContract } from "@/lib/contract-rules";
 import { broadcast, projectChannel, userChannel } from "@/lib/centrifugo";
 import { createAndPublishNotifications } from "@/lib/notify";
 import { sendPush } from "@/lib/push";
-import type { DeadlineMilestone } from "@/lib/deadline-milestones";
-import { DEADLINE_MILESTONES } from "@/lib/deadline-milestones";
+import {
+  isDeadlineReminderDay,
+  milestoneLabel,
+} from "@/lib/deadline-milestones";
 import { getProjectMentionMembers } from "@/lib/project-mentions";
 import {
   encodeDeadlineReminderBody,
@@ -18,9 +20,15 @@ import { ALL_MENTION_NAME } from "@/lib/mentions";
 
 /** Days until due: positive = before due, 0 = due today, negative = overdue. */
 export {
+  BEFORE_DUE_MILESTONES,
+  DEADLINE_REMINDER_TEST_SCENARIOS,
+  OVERDUE_REMINDER_INTERVAL_DAYS,
+  isDeadlineReminderDay,
+  milestoneLabel,
+  type BeforeDueMilestone,
+  // Legacy alias for admin UI
   DEADLINE_MILESTONES,
   type DeadlineMilestone,
-  milestoneLabel,
 } from "@/lib/deadline-milestones";
 
 /** The project named exactly this (case-insensitive) is used for admin reminder tests. */
@@ -59,7 +67,7 @@ export function daysUntilDue(dueDate: Date, now = new Date()): number {
 
 export async function sendDeadlineReminderForNote(options: {
   noteId: string;
-  offsetDays: DeadlineMilestone;
+  offsetDays: number;
   authorId: string;
   force?: boolean;
   skipActiveContractCheck?: boolean;
@@ -262,14 +270,14 @@ export async function processDeadlineReminders(): Promise<{
     }
 
     const days = daysUntilDue(note.dueDate, now);
-    if (!DEADLINE_MILESTONES.includes(days as DeadlineMilestone)) {
+    if (!isDeadlineReminderDay(days)) {
       skipped++;
       continue;
     }
 
     const result = await sendDeadlineReminderForNote({
       noteId: note.id,
-      offsetDays: days as DeadlineMilestone,
+      offsetDays: days,
       authorId: note.authorId,
     });
 

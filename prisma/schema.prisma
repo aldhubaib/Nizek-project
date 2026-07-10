@@ -400,8 +400,8 @@ model MeetingNote {
 }
 
 // Tracks which deadline milestone reminders were already sent so we don't spam
-// project chat. offsetDays matches days-until-due (+30 = 30 days before, -10 =
-// 10 days overdue).
+// project chat. offsetDays = days until due (+30 before, 0 due today, -3/-6/…
+// every 3 days overdue until the note is completed).
 model DeadlineReminderLog {
   id         String      @id @default(cuid())
   noteId     String

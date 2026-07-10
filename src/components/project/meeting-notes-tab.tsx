@@ -23,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  DEADLINE_MILESTONES,
+  DEADLINE_REMINDER_TEST_SCENARIOS,
   type DeadlineMilestone,
   milestoneLabel,
 } from "@/lib/deadline-milestones";
@@ -601,7 +601,7 @@ function NoteFullScreenDetail({
                           <DropdownMenuLabel className="text-[10px] text-muted-foreground">
                             Post to project chat @ all
                           </DropdownMenuLabel>
-                          {DEADLINE_MILESTONES.map((offsetDays) => (
+                          {DEADLINE_REMINDER_TEST_SCENARIOS.map((offsetDays) => (
                             <DropdownMenuItem
                               key={offsetDays}
                               disabled={testingMilestone !== null}

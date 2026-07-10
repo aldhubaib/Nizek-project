@@ -3,7 +3,7 @@
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
-  DEADLINE_MILESTONES,
+  DEADLINE_REMINDER_TEST_SCENARIOS,
   type DeadlineMilestone,
   milestoneLabel,
 } from "@/lib/deadline-milestones";
@@ -116,7 +116,7 @@ export async function testDeadlineReminder(
 }
 
 export async function getDeadlineMilestoneOptions() {
-  return DEADLINE_MILESTONES.map((offsetDays) => ({
+  return DEADLINE_REMINDER_TEST_SCENARIOS.map((offsetDays) => ({
     offsetDays,
     label: milestoneLabel(offsetDays),
   }));

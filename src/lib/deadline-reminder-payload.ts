@@ -1,4 +1,3 @@
-import type { DeadlineMilestone } from "@/lib/deadline-milestones";
 import { format } from "date-fns";
 import { ALL_MENTION_TOKEN } from "@/lib/mentions";
 
@@ -13,7 +12,7 @@ export type DeadlineReminderPayload = {
   projectId: string;
   title: string;
   dueDate: string;
-  offsetDays: DeadlineMilestone;
+  offsetDays: number;
 };
 
 export type DeadlineReminderTheme = {
@@ -28,9 +27,7 @@ export type DeadlineReminderTheme = {
   statusLabel: string;
 };
 
-export function deadlineReminderTheme(
-  offsetDays: DeadlineMilestone,
-): DeadlineReminderTheme {
+export function deadlineReminderTheme(offsetDays: number): DeadlineReminderTheme {
   if (offsetDays < 0) {
     const days = Math.abs(offsetDays);
     return {
