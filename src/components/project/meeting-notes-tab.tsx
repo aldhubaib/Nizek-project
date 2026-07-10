@@ -4,10 +4,27 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, FileText, Trash2, Gavel, ArrowLeft, Clock, History, User, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle } from "lucide-react";
+import { Plus, FileText, Trash2, Gavel, ArrowLeft, Clock, History, User, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, MoreVertical } from "lucide-react";
 import { createMeetingNote, updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete } from "@/actions/meeting-note";
+import { testDeadlineReminder } from "@/actions/deadline-reminder";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { NotificationBell } from "@/components/notification-bell";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  DEADLINE_MILESTONES,
+  type DeadlineMilestone,
+  milestoneLabel,
+} from "@/lib/deadline-milestones";
 import { cn } from "@/lib/utils";
 
 type NoteType = "MEETING_NOTE" | "DECISION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
@@ -65,12 +82,21 @@ interface Props {
   projectId: string;
   canEdit: boolean;
   currentUserId?: string;
+  isSystemAdmin?: boolean;
+  isDeadlineTestProject?: boolean;
 }
 
 const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "DEADLINE", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
 const STANDALONE_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "DEADLINE"];
 
-export function MeetingNotesTab({ notes: initialNotes, projectId, canEdit, currentUserId }: Props) {
+export function MeetingNotesTab({
+  notes: initialNotes,
+  projectId,
+  canEdit,
+  currentUserId,
+  isSystemAdmin = false,
+  isDeadlineTestProject = false,
+}: Props) {
   const [notes, setNotes] = useState(initialNotes);
   const [filter, setFilter] = useState<NoteType | "ALL">("ALL");
   const [view, setView] = useState<"list" | "create" | "detail">("list");
@@ -123,6 +149,8 @@ export function MeetingNotesTab({ notes: initialNotes, projectId, canEdit, curre
       <NoteFullScreenDetail
         note={selectedNote}
         canEdit={canEdit}
+        isSystemAdmin={isSystemAdmin}
+        isDeadlineTestProject={isDeadlineTestProject}
         onBack={goBack}
         onToggleComplete={() => toggleComplete(selectedNote.id)}
         onDelete={async () => {
@@ -408,12 +436,16 @@ function NoteFullScreenCreate({
 function NoteFullScreenDetail({
   note,
   canEdit,
+  isSystemAdmin,
+  isDeadlineTestProject,
   onBack,
   onToggleComplete,
   onDelete,
 }: {
   note: MeetingNote;
   canEdit: boolean;
+  isSystemAdmin?: boolean;
+  isDeadlineTestProject?: boolean;
   onBack: () => void;
   onToggleComplete: () => Promise<void>;
   onDelete: () => Promise<void>;
@@ -425,6 +457,8 @@ function NoteFullScreenDetail({
     note.completedAt ?? null,
   );
   const [togglingComplete, setTogglingComplete] = useState(false);
+  const [testingMilestone, setTestingMilestone] = useState<number | null>(null);
+  const [testMessage, setTestMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -453,6 +487,22 @@ function NoteFullScreenDetail({
       setTogglingComplete(false);
     }
   }
+
+  async function handleTestReminder(offsetDays: DeadlineMilestone) {
+    setTestingMilestone(offsetDays);
+    setTestMessage(null);
+    try {
+      const result = await testDeadlineReminder(note.id, offsetDays);
+      setTestMessage(result.ok ? "Sent to project chat" : result.error);
+    } catch {
+      setTestMessage("Failed to send test reminder");
+    } finally {
+      setTestingMilestone(null);
+    }
+  }
+
+  const showReminderTests =
+    Boolean(isSystemAdmin && isDeadlineTestProject && isDeadline);
 
   async function handleSave() {
     setSaving(true);
@@ -486,7 +536,7 @@ function NoteFullScreenDetail({
           Back
         </button>
         <div className="flex items-center gap-2">
-          {(note.history?.length ?? 0) > 0 && (
+          {(note.history?.length ?? 0) > 0 && !isEditing && (
             <Button
               variant="ghost"
               size="sm"
@@ -499,38 +549,68 @@ function NoteFullScreenDetail({
             </Button>
           )}
           {canEdit && !isEditing && (
-            <>
-              {isDeadline && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleToggleComplete}
-                  disabled={togglingComplete}
-                  className={cn(
-                    completedAt && "text-emerald-400 hover:text-emerald-300",
-                  )}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Note options"
+                className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {isDeadline && (
+                  <DropdownMenuItem
+                    onClick={handleToggleComplete}
+                    disabled={togglingComplete}
+                    className={cn(completedAt && "text-emerald-400 focus:text-emerald-400")}
+                  >
+                    {completedAt ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      <Circle className="h-4 w-4" />
+                    )}
+                    <span className="flex-1">{completedAt ? "Mark incomplete" : "Mark complete"}</span>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                  <Pencil className="h-4 w-4" />
+                  <span className="flex-1">Edit</span>
+                </DropdownMenuItem>
+                {showReminderTests && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <CalendarClock className="h-4 w-4" />
+                        <span className="flex-1">Test reminders</span>
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent className="w-52">
+                        <DropdownMenuLabel className="text-[10px] text-muted-foreground">
+                          Post to project chat @ all
+                        </DropdownMenuLabel>
+                        {DEADLINE_MILESTONES.map((offsetDays) => (
+                          <DropdownMenuItem
+                            key={offsetDays}
+                            disabled={testingMilestone !== null}
+                            onClick={() => handleTestReminder(offsetDays)}
+                          >
+                            <span className="flex-1">{milestoneLabel(offsetDays)}</span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  </>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={deleting}
                 >
-                  {completedAt ? (
-                    <>
-                      <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
-                      Completed
-                    </>
-                  ) : (
-                    <>
-                      <Circle className="w-3.5 h-3.5 mr-1.5" />
-                      Mark complete
-                    </>
-                  )}
-                </Button>
-              )}
-              <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
-                <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                Edit
-              </Button>
-              <Button variant="ghost" size="sm" onClick={handleDelete} disabled={deleting} className="text-destructive hover:text-destructive">
-                <Trash2 className="w-3.5 h-3.5" />
-              </Button>
-            </>
+                  <Trash2 className="h-4 w-4" />
+                  <span className="flex-1">Delete</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           {isEditing && (
             <>
@@ -568,22 +648,27 @@ function NoteFullScreenDetail({
             </div>
 
             {isDeadline && canEdit && (
-              <button
-                onClick={handleToggleComplete}
-                disabled={togglingComplete}
-                className={cn(
-                  "mb-4 inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors disabled:opacity-50",
-                  completedAt
-                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                    : "border-border text-muted-foreground hover:border-primary/40 hover:text-primary"
+              <>
+                <button
+                  onClick={handleToggleComplete}
+                  disabled={togglingComplete}
+                  className={cn(
+                    "mb-4 inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors disabled:opacity-50",
+                    completedAt
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-primary"
+                  )}
+                >
+                  {completedAt ? (
+                    <><CheckCircle2 className="w-4 h-4" /> Completed</>
+                  ) : (
+                    <><Circle className="w-4 h-4" /> Mark as complete</>
+                  )}
+                </button>
+                {testMessage && (
+                  <p className="mb-4 text-[11px] text-muted-foreground">{testMessage}</p>
                 )}
-              >
-                {completedAt ? (
-                  <><CheckCircle2 className="w-4 h-4" /> Completed</>
-                ) : (
-                  <><Circle className="w-4 h-4" /> Mark as complete</>
-                )}
-              </button>
+              </>
             )}
 
             {/* Created by + timestamps + linked task */}

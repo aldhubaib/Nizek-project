@@ -162,6 +162,8 @@ interface Props {
   questions: TaskQuestion[];
   members: Member[];
   currentUserId: string;
+  isSystemAdmin?: boolean;
+  isDeadlineTestProject?: boolean;
   allowedTaskTypes?: string[];
   activeContractType?: string | null;
 }
@@ -183,6 +185,8 @@ export function ProjectDetailClient({
   questions,
   members,
   currentUserId,
+  isSystemAdmin = false,
+  isDeadlineTestProject = false,
   allowedTaskTypes,
   activeContractType,
 }: Props) {
@@ -354,6 +358,8 @@ export function ProjectDetailClient({
                 projectId={project.id}
                 canEdit={canEdit}
                 currentUserId={currentUserId}
+                isSystemAdmin={isSystemAdmin}
+                isDeadlineTestProject={isDeadlineTestProject}
               />
             )}
           </TabsContent>

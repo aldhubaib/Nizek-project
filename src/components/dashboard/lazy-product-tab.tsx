@@ -2,13 +2,19 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
-import { getLongestInStageByAssignee, getClientInputByAssignee } from "@/actions/dashboard";
+import {
+  getLongestInStageByAssignee,
+  getClientInputByAssignee,
+} from "@/actions/dashboard";
+import { getIncompleteDeadlines } from "@/actions/deadline-reminder";
 import { LongestInStageByAssignee } from "./longest-in-stage-by-assignee";
 import { ClientInputByAssignee } from "./client-input-by-assignee";
+import { IncompleteDeadlines } from "./incomplete-deadlines";
 
 type ProductData = {
   assigneeData: Awaited<ReturnType<typeof getLongestInStageByAssignee>>;
   clientInputAssignees: Awaited<ReturnType<typeof getClientInputByAssignee>>;
+  deadlines: Awaited<ReturnType<typeof getIncompleteDeadlines>>;
 };
 
 export function LazyProductTab() {
@@ -19,11 +25,12 @@ export function LazyProductTab() {
   useEffect(() => {
     startTransition(async () => {
       try {
-        const [assigneeData, clientInputAssignees] = await Promise.all([
-                getLongestInStageByAssignee(["INTERNAL_REVIEW", "CLIENT_REVIEW"], 1),
-                getClientInputByAssignee(),
-               ]);
-               setData({ assigneeData, clientInputAssignees });
+        const [assigneeData, clientInputAssignees, deadlines] = await Promise.all([
+          getLongestInStageByAssignee(["INTERNAL_REVIEW", "CLIENT_REVIEW"], 1),
+          getClientInputByAssignee(),
+          getIncompleteDeadlines(),
+        ]);
+        setData({ assigneeData, clientInputAssignees, deadlines });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load product data");
       }
@@ -48,6 +55,7 @@ export function LazyProductTab() {
   return (
     <>
       <LongestInStageByAssignee data={data.assigneeData} tab="product" thresholdDays={1} />
+      <IncompleteDeadlines data={data.deadlines} />
       <ClientInputByAssignee data={data.clientInputAssignees} tab="product" />
     </>
   );

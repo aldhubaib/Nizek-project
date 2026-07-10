@@ -387,7 +387,8 @@ model MeetingNote {
   taskId    String?
   task      Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
-  history NoteHistory[]
+  history         NoteHistory[]
+  reminderLogs    DeadlineReminderLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -395,6 +396,21 @@ model MeetingNote {
   @@index([projectId])
   @@index([taskId])
   @@index([projectId, date])
+  @@index([noteType, completedAt, dueDate])
+}
+
+// Tracks which deadline milestone reminders were already sent so we don't spam
+// project chat. offsetDays matches days-until-due (+30 = 30 days before, -10 =
+// 10 days overdue).
+model DeadlineReminderLog {
+  id         String      @id @default(cuid())
+  noteId     String
+  note       MeetingNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  offsetDays Int
+  sentAt     DateTime    @default(now())
+
+  @@unique([noteId, offsetDays])
+  @@index([noteId])
 }
 
 model NoteHistory {
