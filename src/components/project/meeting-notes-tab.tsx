@@ -507,8 +507,10 @@ function NoteFullScreenDetail({
     try {
       const result = await testDeadlineReminder(note.id, offsetDays);
       setTestMessage(result.ok ? "Sent to project chat" : result.error);
-    } catch {
-      setTestMessage("Failed to send test reminder");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to send test reminder";
+      setTestMessage(msg);
+      console.error(err);
     } finally {
       setTestingMilestone(null);
     }
@@ -605,7 +607,10 @@ function NoteFullScreenDetail({
                             <DropdownMenuItem
                               key={offsetDays}
                               disabled={testingMilestone !== null}
-                              onClick={() => handleTestReminder(offsetDays)}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                void handleTestReminder(offsetDays);
+                              }}
                             >
                               <span className="flex-1">{milestoneLabel(offsetDays)}</span>
                             </DropdownMenuItem>

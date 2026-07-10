@@ -5,7 +5,8 @@ export const NIZEK_BOT_NAME = "Nizek Bot";
 export const NIZEK_BOT_AUTHOR_ID = "nizek-bot";
 export const NIZEK_BOT_INITIALS = "NB";
 
-const PAYLOAD_PREFIX = "\x00deadline-reminder:";
+const PAYLOAD_PREFIX = "<!--deadline-reminder:";
+const LEGACY_PAYLOAD_PREFIX = "\x00deadline-reminder:";
 
 export type DeadlineReminderPayload = {
   noteId: string;
@@ -91,9 +92,16 @@ export function decodeDeadlineReminderPayload(
   body: string,
 ): DeadlineReminderPayload | null {
   const idx = body.indexOf(PAYLOAD_PREFIX);
-  if (idx === -1) return null;
+  const legacyIdx = body.indexOf(LEGACY_PAYLOAD_PREFIX);
+  const start =
+    idx !== -1
+      ? idx + PAYLOAD_PREFIX.length
+      : legacyIdx !== -1
+        ? legacyIdx + LEGACY_PAYLOAD_PREFIX.length
+        : -1;
+  if (start === -1) return null;
   try {
-    return JSON.parse(body.slice(idx + PAYLOAD_PREFIX.length)) as DeadlineReminderPayload;
+    return JSON.parse(body.slice(start)) as DeadlineReminderPayload;
   } catch {
     return null;
   }
