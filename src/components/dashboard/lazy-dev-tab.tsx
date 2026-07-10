@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { getLongestInPipeline, getLongestInStageByAssignee } from "@/actions/dashboard";
 import { LongestInPipeline } from "./longest-in-pipeline";
 import { LongestInStageByAssignee } from "./longest-in-stage-by-assignee";
+import { LazyIncompleteDeadlines } from "./lazy-incomplete-deadlines";
 
 type DevData = {
   pipelineTasks: Awaited<ReturnType<typeof getLongestInPipeline>>;
@@ -49,6 +50,7 @@ export function LazyDevTab() {
     <>
       <LongestInPipeline data={data.pipelineTasks} tab="dev" />
       <LongestInStageByAssignee data={data.assigneeData} tab="dev" />
+      <LazyIncompleteDeadlines />
     </>
   );
 }

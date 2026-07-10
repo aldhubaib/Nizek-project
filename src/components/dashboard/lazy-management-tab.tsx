@@ -10,6 +10,7 @@ import {
 import { ContractsHealth } from "./contracts-health";
 import { TeamProjects } from "./team-projects";
 import { MostRejected } from "./most-rejected";
+import { LazyIncompleteDeadlines } from "./lazy-incomplete-deadlines";
 
 type ManagementData = {
   contractsHealth: Awaited<ReturnType<typeof getContractsHealth>>;
@@ -58,6 +59,7 @@ export function LazyManagementTab() {
       <ContractsHealth data={data.contractsHealth} />
       <TeamProjects data={JSON.parse(JSON.stringify(data.teamProjects))} />
       <MostRejected data={data.rejectedTasks} />
+      <LazyIncompleteDeadlines />
     </>
   );
 }

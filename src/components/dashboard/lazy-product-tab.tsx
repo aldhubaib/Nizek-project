@@ -6,15 +6,13 @@ import {
   getLongestInStageByAssignee,
   getClientInputByAssignee,
 } from "@/actions/dashboard";
-import { getIncompleteDeadlines } from "@/actions/deadline-reminder";
 import { LongestInStageByAssignee } from "./longest-in-stage-by-assignee";
 import { ClientInputByAssignee } from "./client-input-by-assignee";
-import { IncompleteDeadlines } from "./incomplete-deadlines";
+import { LazyIncompleteDeadlines } from "./lazy-incomplete-deadlines";
 
 type ProductData = {
   assigneeData: Awaited<ReturnType<typeof getLongestInStageByAssignee>>;
   clientInputAssignees: Awaited<ReturnType<typeof getClientInputByAssignee>>;
-  deadlines: Awaited<ReturnType<typeof getIncompleteDeadlines>>;
 };
 
 export function LazyProductTab() {
@@ -25,12 +23,11 @@ export function LazyProductTab() {
   useEffect(() => {
     startTransition(async () => {
       try {
-        const [assigneeData, clientInputAssignees, deadlines] = await Promise.all([
+        const [assigneeData, clientInputAssignees] = await Promise.all([
           getLongestInStageByAssignee(["INTERNAL_REVIEW", "CLIENT_REVIEW"], 1),
           getClientInputByAssignee(),
-          getIncompleteDeadlines(),
         ]);
-        setData({ assigneeData, clientInputAssignees, deadlines });
+        setData({ assigneeData, clientInputAssignees });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load product data");
       }
@@ -55,7 +52,7 @@ export function LazyProductTab() {
   return (
     <>
       <LongestInStageByAssignee data={data.assigneeData} tab="product" thresholdDays={1} />
-      <IncompleteDeadlines data={data.deadlines} />
+      <LazyIncompleteDeadlines />
       <ClientInputByAssignee data={data.clientInputAssignees} tab="product" />
     </>
   );
