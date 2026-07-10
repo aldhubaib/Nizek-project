@@ -8,6 +8,14 @@ import { sendPush } from "@/lib/push";
 import { createAndPublishNotifications } from "@/lib/notify";
 import { resolveProjectMentionIds } from "@/lib/project-mentions";
 import {
+  decodeDeadlineReminderPayload,
+  isDeadlineReminderMessage,
+  NIZEK_BOT_AUTHOR_ID,
+  NIZEK_BOT_NAME,
+  type DeadlineReminderPayload,
+} from "@/lib/deadline-reminder-payload";
+import { ALL_MENTION_NAME } from "@/lib/mentions";
+import {
   broadcast,
   taskChannel,
   projectChannel,
@@ -62,6 +70,21 @@ function toDisplayBody(body: string): string {
   return body.replace(MENTION_RE, "@$1");
 }
 
+function mapDeadlineReminderMessage<T extends { kind: string; body: string; authorId: string; author: { name: string | null; email: string; imageUrl: string | null } }>(
+  c: T,
+) {
+  const payload = decodeDeadlineReminderPayload(c.body);
+  const isBot = isDeadlineReminderMessage(c.kind);
+  return {
+    authorId: isBot ? NIZEK_BOT_AUTHOR_ID : c.authorId,
+    authorName: isBot ? NIZEK_BOT_NAME : (c.author.name ?? c.author.email),
+    authorImageUrl: isBot ? null : (c.author.imageUrl ?? null),
+    body: isBot && payload ? `@${ALL_MENTION_NAME}` : toDisplayBody(c.body),
+    mentions: isBot && payload ? [ALL_MENTION_NAME] : parseMentionNames(c.body),
+    deadlineReminder: payload,
+  };
+}
+
 /** Names mentioned in a body — the client highlights "@Name" runs as chips. */
 function parseMentionNames(body: string): string[] {
   const names = new Set<string>();
@@ -114,6 +137,7 @@ export type MessageDTO = {
   replyToId?: string | null;
   task?: MessageTaskRef | null;
   mentions?: string[];
+  deadlineReminder?: DeadlineReminderPayload | null;
 };
 
 type AttachmentInput = {
@@ -150,6 +174,7 @@ export type ThreadMessage = {
   kind: string;
   task: MessageTaskRef | null;
   mentions: string[];
+  deadlineReminder?: DeadlineReminderPayload | null;
 };
 
 export type ThreadMessagesPage = {
@@ -222,12 +247,13 @@ export async function getThreadMessages(input: {
       list.push(r.memberId);
       byEmoji.set(r.emoji, list);
     }
+    const mapped = mapDeadlineReminderMessage(c);
     return {
       id: c.id,
-      authorId: c.authorId,
-      authorName: c.author.name ?? c.author.email,
-      authorImageUrl: c.author.imageUrl ?? null,
-      body: toDisplayBody(c.body),
+      authorId: mapped.authorId,
+      authorName: mapped.authorName,
+      authorImageUrl: mapped.authorImageUrl,
+      body: mapped.body,
       createdAt: c.createdAt.toISOString(),
       replyToId: c.replyToId ?? null,
       attachments: c.attachments.map((a) => ({
@@ -248,7 +274,8 @@ export async function getThreadMessages(input: {
             title: c.task.title,
           }
         : null,
-      mentions: parseMentionNames(c.body),
+      mentions: mapped.mentions,
+      deadlineReminder: mapped.deadlineReminder,
     };
   });
 

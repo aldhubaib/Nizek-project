@@ -1,5 +1,4 @@
 import "server-only";
-import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { getActiveContract } from "@/lib/contract-rules";
 import { broadcast, projectChannel, userChannel } from "@/lib/centrifugo";
@@ -8,6 +7,14 @@ import { sendPush } from "@/lib/push";
 import type { DeadlineMilestone } from "@/lib/deadline-milestones";
 import { DEADLINE_MILESTONES } from "@/lib/deadline-milestones";
 import { getProjectMentionMembers } from "@/lib/project-mentions";
+import {
+  encodeDeadlineReminderBody,
+  deadlineReminderNoteUrl,
+  deadlineReminderPreview,
+  NIZEK_BOT_AUTHOR_ID,
+  NIZEK_BOT_NAME,
+} from "@/lib/deadline-reminder-payload";
+import { ALL_MENTION_NAME } from "@/lib/mentions";
 
 /** Days until due: positive = before due, 0 = due today, negative = overdue. */
 export {
@@ -48,35 +55,6 @@ export function daysUntilDue(dueDate: Date, now = new Date()): number {
   const due = startOfUtcDay(dueDate);
   const today = startOfUtcDay(now);
   return Math.round((due.getTime() - today.getTime()) / 86_400_000);
-}
-
-function buildReminderText(
-  title: string,
-  dueDate: Date,
-  offsetDays: DeadlineMilestone,
-): string {
-  const dueStr = format(dueDate, "MMM d, yyyy");
-  if (offsetDays > 0) {
-    return `⏰ Deadline reminder: "${title}" is due in ${offsetDays} days (${dueStr}).`;
-  }
-  if (offsetDays === 0) {
-    return `⏰ Deadline reminder: "${title}" is due today (${dueStr}).`;
-  }
-  return `⚠️ Deadline overdue: "${title}" was due ${Math.abs(offsetDays)} days ago (${dueStr}).`;
-}
-
-function buildMentionBody(
-  members: { id: string; name: string | null; email: string }[],
-  text: string,
-): string {
-  const tokens = members
-    .map((m) => `@[${m.name ?? m.email}](${m.id})`)
-    .join(" ");
-  return `${tokens}\n\n${text}`;
-}
-
-function toDisplayBody(body: string): string {
-  return body.replace(/@\[([^\]]+)\]\([^)]+\)/g, "@$1");
 }
 
 export async function sendDeadlineReminderForNote(options: {
@@ -132,15 +110,15 @@ export async function sendDeadlineReminderForNote(options: {
   const members = await getProjectMentionMembers(note.projectId);
   if (members.length === 0) return { ok: false, reason: "No project members to mention" };
 
-  const text = buildReminderText(note.title, note.dueDate, options.offsetDays);
-  const body = buildMentionBody(members, text);
+  const payload = {
+    noteId: note.id,
+    projectId: note.projectId,
+    title: note.title,
+    dueDate: note.dueDate.toISOString(),
+    offsetDays: options.offsetDays,
+  };
+  const body = encodeDeadlineReminderBody(payload);
   const mentionIds = members.map((m) => m.id);
-
-  const author = await prisma.user.findUnique({
-    where: { id: options.authorId },
-    select: { id: true, name: true, email: true, imageUrl: true },
-  });
-  if (!author) return { ok: false, reason: "Author not found" };
 
   const message = await prisma.$transaction(async (tx) => {
     const created = await tx.message.create({
@@ -179,11 +157,9 @@ export async function sendDeadlineReminderForNote(options: {
     return created;
   });
 
-  const authorName = author.name ?? author.email ?? "System";
-  const displayBody = toDisplayBody(body);
-  const preview =
-    displayBody.length > 80 ? `${displayBody.slice(0, 80)}…` : displayBody;
-  const linkUrl = `/dashboard/messages/project-${note.projectId}`;
+  const displayBody = `@${ALL_MENTION_NAME}`;
+  const preview = deadlineReminderPreview(payload);
+  const linkUrl = deadlineReminderNoteUrl(note.projectId, note.id);
 
   const dto = {
     id: message.id,
@@ -191,15 +167,16 @@ export async function sendDeadlineReminderForNote(options: {
     projectId: note.projectId,
     conversationId: null,
     kind: "deadline_reminder",
-    authorId: options.authorId,
-    authorName,
-    authorImageUrl: author.imageUrl ?? null,
+    authorId: NIZEK_BOT_AUTHOR_ID,
+    authorName: NIZEK_BOT_NAME,
+    authorImageUrl: null,
     body: displayBody,
     createdAt: message.createdAt.toISOString(),
     attachments: [],
     replyToId: null,
     task: null,
-    mentions: members.map((m) => m.name ?? m.email),
+    mentions: [ALL_MENTION_NAME],
+    deadlineReminder: payload,
   };
 
   void broadcast([projectChannel(note.projectId)], {
@@ -207,7 +184,7 @@ export async function sendDeadlineReminderForNote(options: {
     message: dto,
   });
 
-  const recipients = mentionIds.filter((id) => id !== options.authorId);
+  const recipients = mentionIds;
   if (recipients.length > 0) {
     const title = `Deadline: ${note.title}`;
     await createAndPublishNotifications({
@@ -225,15 +202,15 @@ export async function sendDeadlineReminderForNote(options: {
     });
   }
 
-  const inboxTargets = [...new Set([options.authorId, ...mentionIds])];
+  const inboxTargets = [...new Set(mentionIds)];
   void broadcast(inboxTargets.map(userChannel), {
     type: "inbox",
     threadId: `project-${note.projectId}`,
     projectId: note.projectId,
     taskId: null,
     conversationId: null,
-    authorId: options.authorId,
-    lastAuthor: authorName,
+    authorId: NIZEK_BOT_AUTHOR_ID,
+    lastAuthor: NIZEK_BOT_NAME,
     lastMessage: preview,
     lastAt: new Date().toISOString(),
   });

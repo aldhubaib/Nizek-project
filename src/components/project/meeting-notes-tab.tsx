@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -102,10 +103,21 @@ export function MeetingNotesTab({
   const [filter, setFilter] = useState<NoteType | "ALL">("ALL");
   const [view, setView] = useState<"list" | "create" | "detail">("list");
   const [selectedNote, setSelectedNote] = useState<MeetingNote | null>(null);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     setNotes(initialNotes);
   }, [initialNotes]);
+
+  useEffect(() => {
+    const noteId = searchParams.get("noteId");
+    if (!noteId) return;
+    const note = notes.find((n) => n.id === noteId);
+    if (note) {
+      setSelectedNote(note);
+      setView("detail");
+    }
+  }, [searchParams, notes]);
 
   const toggleComplete = useCallback(async (noteId: string) => {
     const completedAt = await toggleDeadlineComplete(noteId);

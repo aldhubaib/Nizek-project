@@ -67,6 +67,11 @@ import { LinkPreviewCard } from "@/components/messages/link-preview";
 import { firstUrl } from "@/lib/link-preview";
 import { uploadFileToR2 } from "@/lib/upload";
 import {
+  DeadlineReminderCard,
+  NizekBotAvatar,
+} from "@/components/messages/deadline-reminder-card";
+import type { DeadlineReminderPayload } from "@/lib/deadline-reminder-payload";
+import {
   ALL_MENTION_ID,
   ALL_MENTION_NAME,
   ALL_MENTION_TEXT_RE,
@@ -175,6 +180,7 @@ export type ChatMessage = {
   task?: MessageTaskRef | null;
   /** Display names mentioned in the body, highlighted as @chips. */
   mentions?: string[];
+  deadlineReminder?: DeadlineReminderPayload | null;
 };
 
 const fmtTaskNumber = (n: number) => `T-${String(n).padStart(3, "0")}`;
@@ -402,6 +408,37 @@ const MessageRow = memo(function MessageRow({
 }) {
   const imageAtts = m.attachments.filter((a) => a.isImage);
   const fileAtts = m.attachments.filter((a) => !a.isImage);
+
+  if (m.deadlineReminder) {
+    return (
+      <div id={`msg-${m.id}`} className={cn("contents", dimmed && "opacity-30")}>
+        {showDay && (
+          <div className="my-2 flex items-center justify-center">
+            <span className="rounded-full bg-surface px-3 py-1 text-tiny font-medium text-muted-foreground">
+              {formatDay(m.createdAt)}
+            </span>
+          </div>
+        )}
+        <div
+          className={cn(
+            "flex gap-2 justify-start",
+            newGroup && !showDay && notFirst && "mt-3",
+          )}
+        >
+          <NizekBotAvatar show={showAuthor} />
+          <div className="flex min-w-0 max-w-[min(100%,420px)] flex-col gap-1">
+            {showAuthor && (
+              <div className="px-1 text-tiny text-muted-foreground">{m.authorName}</div>
+            )}
+            <DeadlineReminderCard
+              payload={m.deadlineReminder}
+              createdAt={m.createdAt}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div id={`msg-${m.id}`} className={cn("contents", dimmed && "opacity-30")}>
@@ -808,6 +845,7 @@ export function ThreadChat({
             kind: m.kind,
             task: m.task ?? null,
             mentions: m.mentions ?? [],
+            deadlineReminder: m.deadlineReminder ?? null,
           },
         ];
       });
@@ -1531,7 +1569,10 @@ export function ThreadChat({
             const prev = messages[i - 1];
             const showDay = !prev || !sameDay(prev.createdAt, m.createdAt);
             const newGroup = !prev || prev.authorId !== m.authorId || showDay;
-            const mine = m.authorId === currentMemberId;
+            const mine =
+              m.kind === "deadline_reminder"
+                ? false
+                : m.authorId === currentMemberId;
             return (
               <MessageRow
                 key={m.id}
