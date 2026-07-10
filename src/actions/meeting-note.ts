@@ -133,17 +133,37 @@ export async function deleteMeetingNote(noteId: string) {
   revalidatePath(`/dashboard/projects/${note.projectId}`);
 }
 
+const noteActivityInclude = {
+  author: true,
+  task: { select: { id: true, title: true, taskNumber: true, taskType: true } },
+  history: {
+    include: { user: true },
+    orderBy: { createdAt: "desc" as const },
+  },
+  reminderLogs: {
+    orderBy: { sentAt: "desc" as const },
+  },
+} as const;
+
 export async function getMeetingNotes(projectId: string) {
   await requireProjectMember(projectId);
 
   return prisma.meetingNote.findMany({
     where: { projectId },
-    include: {
-      author: true,
-      task: { select: { id: true, title: true, taskNumber: true, taskType: true } },
-    },
+    include: noteActivityInclude,
     orderBy: { date: "desc" },
   });
+}
+
+export async function getMeetingNote(noteId: string) {
+  const note = await prisma.meetingNote.findUnique({
+    where: { id: noteId },
+    include: noteActivityInclude,
+  });
+  if (!note) throw new Error("Note not found");
+
+  await requireProjectMember(note.projectId);
+  return note;
 }
 
 export async function getTaskNotes(taskId: string) {
@@ -157,23 +177,22 @@ export async function getTaskNotes(taskId: string) {
 
   return prisma.meetingNote.findMany({
     where: { taskId },
-    include: { author: true },
+    include: {
+      author: true,
+      history: {
+        include: { user: true },
+        orderBy: { createdAt: "desc" },
+      },
+      reminderLogs: {
+        orderBy: { sentAt: "desc" },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
 }
 
+/** @deprecated Prefer getMeetingNote for full timeline data. */
 export async function getNoteHistory(noteId: string) {
-  const note = await prisma.meetingNote.findUnique({
-    where: { id: noteId },
-    select: { projectId: true },
-  });
-  if (!note) throw new Error("Note not found");
-
-  await requireProjectMember(note.projectId);
-
-  return prisma.noteHistory.findMany({
-    where: { noteId },
-    include: { user: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const note = await getMeetingNote(noteId);
+  return note.history;
 }

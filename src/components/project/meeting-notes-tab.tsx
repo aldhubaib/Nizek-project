@@ -6,7 +6,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, FileText, Trash2, Gavel, ArrowLeft, Clock, History, User, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, MoreVertical } from "lucide-react";
-import { createMeetingNote, updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete } from "@/actions/meeting-note";
+import { createMeetingNote, updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete, getMeetingNote } from "@/actions/meeting-note";
 import { testDeadlineReminder } from "@/actions/deadline-reminder";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { NotificationBell } from "@/components/notification-bell";
@@ -27,6 +27,10 @@ import {
   type DeadlineMilestone,
   milestoneLabel,
 } from "@/lib/deadline-milestones";
+import {
+  buildNoteTimeline,
+} from "@/lib/note-timeline";
+import { NoteTimelineSidebar } from "@/components/project/note-timeline-sidebar";
 import { cn } from "@/lib/utils";
 
 type NoteType = "MEETING_NOTE" | "DECISION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
@@ -64,6 +68,12 @@ interface NoteHistoryEntry {
   user: { id: string; name: string | null; imageUrl: string | null };
 }
 
+interface ReminderLogEntry {
+  id: string;
+  offsetDays: number;
+  sentAt: Date;
+}
+
 interface MeetingNote {
   id: string;
   title: string;
@@ -77,6 +87,7 @@ interface MeetingNote {
   author: { id: string; name: string | null; imageUrl: string | null };
   task: { id: string; title: string; taskNumber: number; taskType: string } | null;
   history?: NoteHistoryEntry[];
+  reminderLogs?: ReminderLogEntry[];
 }
 
 interface Props {
@@ -118,6 +129,16 @@ export function MeetingNotesTab({
       setView("detail");
     }
   }, [searchParams, notes]);
+
+  const refreshNote = useCallback(async (noteId: string) => {
+    const fresh = await getMeetingNote(noteId);
+    setNotes((prev) =>
+      prev.map((n) => (n.id === noteId ? (fresh as unknown as MeetingNote) : n)),
+    );
+    setSelectedNote((prev) =>
+      prev?.id === noteId ? (fresh as unknown as MeetingNote) : prev,
+    );
+  }, []);
 
   const toggleComplete = useCallback(async (noteId: string) => {
     const completedAt = await toggleDeadlineComplete(noteId);
@@ -166,6 +187,7 @@ export function MeetingNotesTab({
         isDeadlineTestProject={isDeadlineTestProject}
         onBack={goBack}
         onToggleComplete={() => toggleComplete(selectedNote.id)}
+        onRefresh={() => refreshNote(selectedNote.id)}
         onDelete={async () => {
           await deleteMeetingNote(selectedNote.id);
           goBack();
@@ -453,6 +475,7 @@ function NoteFullScreenDetail({
   isDeadlineTestProject,
   onBack,
   onToggleComplete,
+  onRefresh,
   onDelete,
 }: {
   note: MeetingNote;
@@ -461,6 +484,7 @@ function NoteFullScreenDetail({
   isDeadlineTestProject?: boolean;
   onBack: () => void;
   onToggleComplete: () => Promise<void>;
+  onRefresh: () => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -475,6 +499,19 @@ function NoteFullScreenDetail({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+
+  const timeline = useMemo(
+    () =>
+      buildNoteTimeline({
+        id: note.id,
+        noteType: note.noteType,
+        createdAt: note.createdAt,
+        author: note.author,
+        history: note.history,
+        reminderLogs: note.reminderLogs,
+      }),
+    [note],
+  );
 
   useEffect(() => {
     setTitle(note.title);
@@ -507,6 +544,9 @@ function NoteFullScreenDetail({
     try {
       const result = await testDeadlineReminder(note.id, offsetDays);
       setTestMessage(result.ok ? "Sent to project chat" : result.error);
+      if (result.ok) {
+        await onRefresh();
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to send test reminder";
       setTestMessage(msg);
@@ -523,6 +563,7 @@ function NoteFullScreenDetail({
     setSaving(true);
     try {
       await updateMeetingNote({ noteId: note.id, title: title.trim(), content });
+      await onRefresh();
       setIsEditing(false);
     } catch (err) {
       console.error(err);
@@ -551,7 +592,7 @@ function NoteFullScreenDetail({
           Back
         </button>
         <div className="flex items-center gap-2">
-          {(note.history?.length ?? 0) > 0 && !isEditing && (
+          {!isEditing && (
             <Button
               variant="ghost"
               size="sm"
@@ -560,7 +601,6 @@ function NoteFullScreenDetail({
             >
               <History className="w-3.5 h-3.5 mr-1.5" />
               History
-              <span className="ml-1 text-[10px] text-muted-foreground">({note.history!.length})</span>
             </Button>
           )}
           {canEdit && !isEditing && (
@@ -589,6 +629,10 @@ function NoteFullScreenDetail({
                 <DropdownMenuItem onClick={() => setIsEditing(true)}>
                   <Pencil className="h-4 w-4" />
                   <span className="flex-1">Edit</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowHistory(true)}>
+                  <History className="h-4 w-4" />
+                  <span className="flex-1">History</span>
                 </DropdownMenuItem>
                 {showReminderTests && (
                   <>
@@ -756,55 +800,7 @@ function NoteFullScreenDetail({
         </div>
 
         {/* History sidebar */}
-        {showHistory && (note.history?.length ?? 0) > 0 && (
-          <div className="w-72 border-l border-border bg-card/50 overflow-y-auto shrink-0">
-            <div className="p-4">
-              <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-                <History className="w-4 h-4" />
-                Edit History
-              </h3>
-              <div className="space-y-0">
-                {note.history!.map((entry, idx) => (
-                  <div key={entry.id} className="relative pl-5">
-                    {idx < note.history!.length - 1 && (
-                      <div className="absolute left-[7px] top-5 bottom-0 w-px bg-border" />
-                    )}
-                    {/* Timeline dot */}
-                    <div className="absolute left-0 top-1.5 w-[15px] h-[15px] rounded-full border-2 border-border bg-background flex items-center justify-center">
-                      <Pencil className="w-2 h-2 text-muted-foreground" />
-                    </div>
-                    <div className="pb-5">
-                      <p className="text-[12px] font-medium text-foreground">
-                        {entry.user.name ?? "Unknown"}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {entry.field === "title" ? (
-                          <>
-                            Changed title
-                            {entry.oldValue && (
-                              <span className="block mt-0.5">
-                                <span className="line-through text-muted-foreground/40">{entry.oldValue}</span>
-                                {" → "}
-                                <span className="text-foreground/80">{entry.newValue}</span>
-                              </span>
-                            )}
-                          </>
-                        ) : entry.field === "content" ? (
-                          "Updated content"
-                        ) : (
-                          `Changed ${entry.field}`
-                        )}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground/50 mt-1">
-                        {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+        {showHistory && <NoteTimelineSidebar events={timeline} />}
       </div>
     </div>
   );

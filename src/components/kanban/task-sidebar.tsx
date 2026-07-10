@@ -1,18 +1,20 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Gauge, Timer, FileText, Plus, Maximize2, Trash2 } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, getTaskStageLogs, deleteTask } from "@/actions/task";
-import { createMeetingNote, updateMeetingNote, getTaskNotes } from "@/actions/meeting-note";
+import { createMeetingNote, updateMeetingNote, getTaskNotes, getMeetingNote } from "@/actions/meeting-note";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { QuestionField, type TaskQuestion } from "./question-field";
 import { ActivityTimeline } from "./activity-timeline";
 import { CommentSection } from "./comment-section";
+import { NoteTimelineSidebar } from "@/components/project/note-timeline-sidebar";
+import { buildNoteTimeline } from "@/lib/note-timeline";
 import { useKanbanStore, type KanbanTask, type Stage } from "@/store/kanban";
 import { cn } from "@/lib/utils";
 
@@ -94,7 +96,23 @@ function AttachedNotesSection({
   projectId: string;
   onCreateNote: () => void;
 }) {
-  const [notes, setNotes] = useState<{ id: string; title: string; content: string; createdAt: Date; author: { name: string | null } }[]>([]);
+  const [notes, setNotes] = useState<{
+    id: string;
+    title: string;
+    content: string;
+    noteType: string;
+    createdAt: Date;
+    author: { id: string; name: string | null; imageUrl?: string | null };
+    history?: {
+      id: string;
+      field: string;
+      oldValue: string | null;
+      newValue: string | null;
+      createdAt: Date;
+      user: { id: string; name: string | null; imageUrl: string | null };
+    }[];
+    reminderLogs?: { id: string; offsetDays: number; sentAt: Date }[];
+  }[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewingNote, setViewingNote] = useState<typeof notes[number] | null>(null);
 
@@ -168,9 +186,12 @@ function AttachedNotesSection({
           task={task}
           taskTypeMeta={{ prefix: TASK_TYPE_META[task.taskType]?.prefix ?? "F", label: TASK_TYPE_META[task.taskType]?.label ?? "Task", color: TASK_TYPE_META[task.taskType]?.color ?? "text-primary" }}
           onClose={() => setViewingNote(null)}
-          onUpdated={(updated) => {
-            setNotes((prev) => prev.map((n) => n.id === updated.id ? { ...n, title: updated.title, content: updated.content } : n));
-            setViewingNote((prev) => prev ? { ...prev, title: updated.title, content: updated.content } : null);
+          onUpdated={async (updated) => {
+            const fresh = await getMeetingNote(updated.id);
+            setNotes((prev) =>
+              prev.map((n) => (n.id === updated.id ? (fresh as typeof notes[number]) : n)),
+            );
+            setViewingNote(fresh as typeof notes[number]);
           }}
         />,
         document.body
@@ -186,22 +207,56 @@ function NoteFullScreenViewer({
   onClose,
   onUpdated,
 }: {
-  note: { id: string; title: string; content: string; createdAt: Date; author: { name: string | null } };
+  note: {
+    id: string;
+    title: string;
+    content: string;
+    noteType: string;
+    createdAt: Date;
+    author: { id: string; name: string | null; imageUrl?: string | null };
+    history?: {
+      id: string;
+      field: string;
+      oldValue: string | null;
+      newValue: string | null;
+      createdAt: Date;
+      user: { id: string; name: string | null; imageUrl: string | null };
+    }[];
+    reminderLogs?: { id: string; offsetDays: number; sentAt: Date }[];
+  };
   task: KanbanTask;
   taskTypeMeta: { prefix: string; label: string; color: string };
   onClose: () => void;
-  onUpdated: (updated: { id: string; title: string; content: string }) => void;
+  onUpdated: (updated: { id: string; title: string; content: string }) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(note.title);
   const [editContent, setEditContent] = useState(note.content);
   const [saving, setSaving] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const timeline = useMemo(
+    () =>
+      buildNoteTimeline({
+        id: note.id,
+        noteType: note.noteType,
+        createdAt: note.createdAt,
+        author: {
+          id: note.author.id,
+          name: note.author.name,
+          imageUrl: note.author.imageUrl ?? null,
+        },
+        history: note.history,
+        reminderLogs: note.reminderLogs,
+      }),
+    [note],
+  );
 
   async function handleSave() {
     setSaving(true);
     try {
       await updateMeetingNote({ noteId: note.id, title: editTitle.trim(), content: editContent });
-      onUpdated({ id: note.id, title: editTitle.trim(), content: editContent });
+      await onUpdated({ id: note.id, title: editTitle.trim(), content: editContent });
       setEditing(false);
     } catch (err) {
       console.error(err);
@@ -227,6 +282,17 @@ function NoteFullScreenViewer({
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {!editing && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowHistory(!showHistory)}
+              className={cn(showHistory && "bg-accent")}
+            >
+              <History className="w-3 h-3 mr-1" />
+              History
+            </Button>
+          )}
           {editing ? (
             <>
               <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setEditTitle(note.title); setEditContent(note.content); }}>
@@ -244,43 +310,46 @@ function NoteFullScreenViewer({
           )}
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
-          {editing ? (
-            <>
-              <input
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-4"
-                autoFocus
-              />
-              <div className="text-[12px] text-muted-foreground mb-8">
-                by {note.author.name ?? "Unknown"} · {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
-              </div>
-              <RichTextEditor
-                content={editContent}
-                onChange={setEditContent}
-                placeholder="Write your note... (type / for commands)"
-                borderless
-              />
-            </>
-          ) : (
-            <>
-              <h1 className="text-4xl font-bold mb-4">{note.title}</h1>
-              <div className="text-[12px] text-muted-foreground mb-8">
-                by {note.author.name ?? "Unknown"} · {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
-              </div>
-              {note.content ? (
-                <div
-                  className="prose prose-invert prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: note.content }}
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
+            {editing ? (
+              <>
+                <input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-4"
+                  autoFocus
                 />
-              ) : (
-                <p className="text-sm text-muted-foreground/50 italic">No content</p>
-              )}
-            </>
-          )}
+                <div className="text-[12px] text-muted-foreground mb-8">
+                  by {note.author.name ?? "Unknown"} · {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
+                </div>
+                <RichTextEditor
+                  content={editContent}
+                  onChange={setEditContent}
+                  placeholder="Write your note... (type / for commands)"
+                  borderless
+                />
+              </>
+            ) : (
+              <>
+                <h1 className="text-4xl font-bold mb-4">{note.title}</h1>
+                <div className="text-[12px] text-muted-foreground mb-8">
+                  by {note.author.name ?? "Unknown"} · {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
+                </div>
+                {note.content ? (
+                  <div
+                    className="prose prose-invert prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: note.content }}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground/50 italic">No content</p>
+                )}
+              </>
+            )}
+          </div>
         </div>
+        {showHistory && <NoteTimelineSidebar events={timeline} />}
       </div>
     </div>
   );
