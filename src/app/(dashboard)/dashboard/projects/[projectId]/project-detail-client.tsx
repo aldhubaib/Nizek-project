@@ -112,6 +112,8 @@ interface MeetingNote {
   content: string;
   date: Date;
   noteType: string;
+  dueDate?: Date | string | null;
+  completedAt?: Date | string | null;
   createdAt: Date;
   updatedAt: Date;
   author: { id: string; name: string | null; imageUrl: string | null };
@@ -351,6 +353,7 @@ export function ProjectDetailClient({
                 notes={notes as unknown as MeetingNote[]}
                 projectId={project.id}
                 canEdit={canEdit}
+                currentUserId={currentUserId}
               />
             )}
           </TabsContent>

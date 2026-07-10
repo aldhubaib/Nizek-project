@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, FileText, Trash2, Gavel, ArrowLeft, Clock, History, User, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle } from "lucide-react";
 import { createMeetingNote, updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete } from "@/actions/meeting-note";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
+import { NotificationBell } from "@/components/notification-bell";
 import { cn } from "@/lib/utils";
 
 type NoteType = "MEETING_NOTE" | "DECISION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
@@ -63,15 +64,31 @@ interface Props {
   notes: MeetingNote[];
   projectId: string;
   canEdit: boolean;
+  currentUserId?: string;
 }
 
 const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "DEADLINE", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
 const STANDALONE_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "DEADLINE"];
 
-export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
+export function MeetingNotesTab({ notes: initialNotes, projectId, canEdit, currentUserId }: Props) {
+  const [notes, setNotes] = useState(initialNotes);
   const [filter, setFilter] = useState<NoteType | "ALL">("ALL");
   const [view, setView] = useState<"list" | "create" | "detail">("list");
   const [selectedNote, setSelectedNote] = useState<MeetingNote | null>(null);
+
+  useEffect(() => {
+    setNotes(initialNotes);
+  }, [initialNotes]);
+
+  const toggleComplete = useCallback(async (noteId: string) => {
+    const completedAt = await toggleDeadlineComplete(noteId);
+    setNotes((prev) =>
+      prev.map((n) => (n.id === noteId ? { ...n, completedAt } : n)),
+    );
+    setSelectedNote((prev) =>
+      prev?.id === noteId ? { ...prev, completedAt } : prev,
+    );
+  }, []);
 
   const filtered = useMemo(() => {
     if (filter === "ALL") return notes;
@@ -98,7 +115,7 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
   }
 
   if (view === "create") {
-    return <NoteFullScreenCreate projectId={projectId} onBack={goBack} />;
+    return <NoteFullScreenCreate projectId={projectId} currentUserId={currentUserId} onBack={goBack} />;
   }
 
   if (view === "detail" && selectedNote) {
@@ -107,6 +124,7 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
         note={selectedNote}
         canEdit={canEdit}
         onBack={goBack}
+        onToggleComplete={() => toggleComplete(selectedNote.id)}
         onDelete={async () => {
           await deleteMeetingNote(selectedNote.id);
           goBack();
@@ -158,8 +176,11 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
           {filtered.map((note) => {
             const cfg = NOTE_TYPE_CONFIG[(note.noteType as NoteType) ?? "MEETING_NOTE"];
             const Icon = cfg?.icon ?? FileText;
-            const isDeadline = note.noteType === "DEADLINE" && note.dueDate;
-            const deadlineStatus = isDeadline ? getDeadlineStatus(note.dueDate!, note.completedAt ?? null) : null;
+            const isDeadline = note.noteType === "DEADLINE";
+            const deadlineStatus =
+              isDeadline && note.dueDate
+                ? getDeadlineStatus(note.dueDate, note.completedAt ?? null)
+                : null;
 
             return (
               <div
@@ -171,11 +192,11 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                    {isDeadline && (
+                    {isDeadline && canEdit && (
                       <button
                         onClick={async (e) => {
                           e.stopPropagation();
-                          await toggleDeadlineComplete(note.id);
+                          await toggleComplete(note.id);
                         }}
                         className="shrink-0"
                         title={note.completedAt ? "Mark incomplete" : "Mark complete"}
@@ -239,7 +260,15 @@ export function MeetingNotesTab({ notes, projectId, canEdit }: Props) {
 
 /* ─── Full-screen create ─── */
 
-function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack: () => void }) {
+function NoteFullScreenCreate({
+  projectId,
+  currentUserId,
+  onBack,
+}: {
+  projectId: string;
+  currentUserId?: string;
+  onBack: () => void;
+}) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
@@ -288,14 +317,14 @@ function NoteFullScreenCreate({ projectId, onBack }: { projectId: string; onBack
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col">
+    <div className="fixed inset-0 z-[110] bg-background flex flex-col">
       <div className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0">
         <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="w-4 h-4" />
           Back
         </button>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={onBack}>Cancel</Button>
+          <NotificationBell currentUserId={currentUserId} />
           <Button size="sm" onClick={handleSave} disabled={saving || !title.trim()}>
             {saving ? "Saving..." : "Save"}
           </Button>
@@ -380,24 +409,50 @@ function NoteFullScreenDetail({
   note,
   canEdit,
   onBack,
+  onToggleComplete,
   onDelete,
 }: {
   note: MeetingNote;
   canEdit: boolean;
   onBack: () => void;
+  onToggleComplete: () => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(note.title);
   const [content, setContent] = useState(note.content);
+  const [completedAt, setCompletedAt] = useState<Date | string | null>(
+    note.completedAt ?? null,
+  );
+  const [togglingComplete, setTogglingComplete] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
+  useEffect(() => {
+    setTitle(note.title);
+    setContent(note.content);
+    setCompletedAt(note.completedAt ?? null);
+  }, [note]);
+
   const config = NOTE_TYPE_CONFIG[(note.noteType as NoteType) ?? "MEETING_NOTE"];
   const Icon = config?.icon ?? FileText;
-  const isDeadline = note.noteType === "DEADLINE" && note.dueDate;
-  const deadlineStatus = isDeadline ? getDeadlineStatus(note.dueDate!, note.completedAt ?? null) : null;
+  const isDeadline = note.noteType === "DEADLINE";
+  const deadlineStatus =
+    isDeadline && note.dueDate
+      ? getDeadlineStatus(note.dueDate, completedAt)
+      : null;
+
+  async function handleToggleComplete() {
+    setTogglingComplete(true);
+    try {
+      await onToggleComplete();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTogglingComplete(false);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -423,7 +478,7 @@ function NoteFullScreenDetail({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col">
+    <div className="fixed inset-0 z-[110] bg-background flex flex-col">
       {/* Top bar */}
       <div className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0">
         <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -445,6 +500,29 @@ function NoteFullScreenDetail({
           )}
           {canEdit && !isEditing && (
             <>
+              {isDeadline && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleToggleComplete}
+                  disabled={togglingComplete}
+                  className={cn(
+                    completedAt && "text-emerald-400 hover:text-emerald-300",
+                  )}
+                >
+                  {completedAt ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                      Completed
+                    </>
+                  ) : (
+                    <>
+                      <Circle className="w-3.5 h-3.5 mr-1.5" />
+                      Mark complete
+                    </>
+                  )}
+                </Button>
+              )}
               <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
                 <Pencil className="w-3.5 h-3.5 mr-1.5" />
                 Edit
@@ -489,17 +567,18 @@ function NoteFullScreenDetail({
               </span>
             </div>
 
-            {isDeadline && (
+            {isDeadline && canEdit && (
               <button
-                onClick={async () => { await toggleDeadlineComplete(note.id); }}
+                onClick={handleToggleComplete}
+                disabled={togglingComplete}
                 className={cn(
-                  "mb-4 inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors",
-                  note.completedAt
+                  "mb-4 inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors disabled:opacity-50",
+                  completedAt
                     ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
                     : "border-border text-muted-foreground hover:border-primary/40 hover:text-primary"
                 )}
               >
-                {note.completedAt ? (
+                {completedAt ? (
                   <><CheckCircle2 className="w-4 h-4" /> Completed</>
                 ) : (
                   <><Circle className="w-4 h-4" /> Mark as complete</>
@@ -554,7 +633,9 @@ function NoteFullScreenDetail({
                 autoFocus
               />
             ) : (
-              <h1 className="text-4xl font-bold mb-8">{note.title}</h1>
+              <h1 className={cn("text-4xl font-bold mb-8", completedAt && "line-through opacity-60")}>
+                {note.title}
+              </h1>
             )}
 
             {/* Content */}

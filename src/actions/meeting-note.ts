@@ -48,19 +48,21 @@ export async function createMeetingNote(data: {
   return note;
 }
 
-export async function toggleDeadlineComplete(noteId: string) {
+export async function toggleDeadlineComplete(noteId: string): Promise<Date | null> {
   const note = await prisma.meetingNote.findUnique({ where: { id: noteId } });
   if (!note) throw new Error("Note not found");
   if (note.noteType !== "DEADLINE") throw new Error("Not a deadline");
 
   await requireProjectMember(note.projectId);
 
+  const completedAt = note.completedAt ? null : new Date();
   await prisma.meetingNote.update({
     where: { id: noteId },
-    data: { completedAt: note.completedAt ? null : new Date() },
+    data: { completedAt },
   });
 
   revalidatePath(`/dashboard/projects/${note.projectId}`);
+  return completedAt;
 }
 
 export async function updateMeetingNote(data: {
