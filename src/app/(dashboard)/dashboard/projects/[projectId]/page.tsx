@@ -4,7 +4,7 @@ import { getTaskQuestions } from "@/actions/task-question";
 import { requireProjectMember } from "@/lib/auth";
 import { getPermissionsFromRole, getAdminPermissions } from "@/lib/permissions";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
-import { isDeadlineTestProject } from "@/lib/deadline-reminders";
+import { isDeadlineTestProjectByName } from "@/lib/deadline-reminders";
 import { isProjectAccessError } from "@/lib/project-access";
 import { notFound } from "next/navigation";
 import { ProjectDetailClient } from "./project-detail-client";
@@ -71,7 +71,7 @@ export default async function ProjectDetailPage({ params }: Props) {
       members={project.members}
       currentUserId={user.id}
       isSystemAdmin={isSystemAdmin}
-      isDeadlineTestProject={isDeadlineTestProject(project.id)}
+      isDeadlineTestProject={isDeadlineTestProjectByName(project.name)}
       allowedTaskTypes={allowedTaskTypes}
       activeContractType={activeContract?.contractType ?? null}
     />

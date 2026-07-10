@@ -15,14 +15,28 @@ export {
   milestoneLabel,
 } from "@/lib/deadline-milestones";
 
-export function getDeadlineTestProjectId(): string | null {
+/** The project named exactly this (case-insensitive) is used for admin reminder tests. */
+export const DEADLINE_TEST_PROJECT_NAME = "test";
+
+export function isDeadlineTestProjectByName(name: string): boolean {
+  return name.trim().toLowerCase() === DEADLINE_TEST_PROJECT_NAME;
+}
+
+/** Optional env override if you ever need a different project by id. */
+export function getDeadlineTestProjectIdOverride(): string | null {
   const id = process.env.DEADLINE_REMINDER_TEST_PROJECT_ID?.trim();
   return id || null;
 }
 
-export function isDeadlineTestProject(projectId: string): boolean {
-  const testId = getDeadlineTestProjectId();
-  return Boolean(testId && testId === projectId);
+export async function isDeadlineTestProject(projectId: string): Promise<boolean> {
+  const override = getDeadlineTestProjectIdOverride();
+  if (override && override === projectId) return true;
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { name: true },
+  });
+  return project ? isDeadlineTestProjectByName(project.name) : false;
 }
 
 export function startOfUtcDay(d: Date): Date {

@@ -96,10 +96,10 @@ export async function testDeadlineReminder(
     select: { projectId: true },
   });
   if (!note) return { ok: false, error: "Note not found" };
-  if (!isDeadlineTestProject(note.projectId)) {
+  if (!(await isDeadlineTestProject(note.projectId))) {
     return {
       ok: false,
-      error: "Test reminders are only allowed on the configured test project",
+      error: 'Test reminders are only allowed on the project named "test"',
     };
   }
 
