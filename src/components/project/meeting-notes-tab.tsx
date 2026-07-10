@@ -12,6 +12,7 @@ import { NotificationBell } from "@/components/notification-bell";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -584,18 +585,20 @@ function NoteFullScreenDetail({
                         <span className="flex-1">Test reminders</span>
                       </DropdownMenuSubTrigger>
                       <DropdownMenuSubContent className="w-52">
-                        <DropdownMenuLabel className="text-[10px] text-muted-foreground">
-                          Post to project chat @ all
-                        </DropdownMenuLabel>
-                        {DEADLINE_MILESTONES.map((offsetDays) => (
-                          <DropdownMenuItem
-                            key={offsetDays}
-                            disabled={testingMilestone !== null}
-                            onClick={() => handleTestReminder(offsetDays)}
-                          >
-                            <span className="flex-1">{milestoneLabel(offsetDays)}</span>
-                          </DropdownMenuItem>
-                        ))}
+                        <DropdownMenuGroup>
+                          <DropdownMenuLabel className="text-[10px] text-muted-foreground">
+                            Post to project chat @ all
+                          </DropdownMenuLabel>
+                          {DEADLINE_MILESTONES.map((offsetDays) => (
+                            <DropdownMenuItem
+                              key={offsetDays}
+                              disabled={testingMilestone !== null}
+                              onClick={() => handleTestReminder(offsetDays)}
+                            >
+                              <span className="flex-1">{milestoneLabel(offsetDays)}</span>
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuGroup>
                       </DropdownMenuSubContent>
                     </DropdownMenuSub>
                   </>
