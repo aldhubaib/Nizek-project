@@ -6,6 +6,7 @@ import { hasProjectAccess } from "@/lib/project-access";
 import { getActiveContract } from "@/lib/contract-rules";
 import { sendPush } from "@/lib/push";
 import { createAndPublishNotifications } from "@/lib/notify";
+import { resolveProjectMentionIds } from "@/lib/project-mentions";
 import {
   broadcast,
   taskChannel,
@@ -356,7 +357,7 @@ export async function sendMessage(
       throw new Error("No thread specified");
     }
 
-    const mentionedIds = parseMentions(body);
+    const mentionedIds = await resolveProjectMentionIds(body, projectId);
 
     const message = await prisma.message.create({
       data: {

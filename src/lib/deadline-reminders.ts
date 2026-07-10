@@ -7,6 +7,7 @@ import { createAndPublishNotifications } from "@/lib/notify";
 import { sendPush } from "@/lib/push";
 import type { DeadlineMilestone } from "@/lib/deadline-milestones";
 import { DEADLINE_MILESTONES } from "@/lib/deadline-milestones";
+import { getProjectMentionMembers } from "@/lib/project-mentions";
 
 /** Days until due: positive = before due, 0 = due today, negative = overdue. */
 export {
@@ -62,26 +63,6 @@ function buildReminderText(
     return `⏰ Deadline reminder: "${title}" is due today (${dueStr}).`;
   }
   return `⚠️ Deadline overdue: "${title}" was due ${Math.abs(offsetDays)} days ago (${dueStr}).`;
-}
-
-async function getProjectMentionMembers(projectId: string) {
-  const [members, admins] = await Promise.all([
-    prisma.projectMember.findMany({
-      where: { projectId },
-      include: {
-        user: { select: { id: true, name: true, email: true } },
-      },
-    }),
-    prisma.user.findMany({
-      where: { systemRole: "ADMIN" },
-      select: { id: true, name: true, email: true },
-    }),
-  ]);
-
-  const map = new Map<string, { id: string; name: string | null; email: string }>();
-  for (const m of members) map.set(m.user.id, m.user);
-  for (const a of admins) map.set(a.id, a);
-  return [...map.values()];
 }
 
 function buildMentionBody(

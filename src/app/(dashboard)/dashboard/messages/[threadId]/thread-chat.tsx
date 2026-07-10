@@ -30,6 +30,7 @@ import {
   AlertOctagon,
   ArrowUpRight,
   CheckSquare,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -65,6 +66,12 @@ import {
 import { LinkPreviewCard } from "@/components/messages/link-preview";
 import { firstUrl } from "@/lib/link-preview";
 import { uploadFileToR2 } from "@/lib/upload";
+import {
+  ALL_MENTION_ID,
+  ALL_MENTION_NAME,
+  ALL_MENTION_TEXT_RE,
+  ALL_MENTION_TOKEN,
+} from "@/lib/mentions";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
@@ -882,21 +889,30 @@ export function ThreadChat({
   // Detect a trailing "@query" token in the draft — opens the member picker.
   // Mentions display as plain "@Name" while typing; on send each picked name
   // becomes the "@[Name](userId)" token that sendMessage parses to notify them.
+  const canMentionAll = !!target.projectId;
   const mentionToken = useMemo(() => {
-    if (mentionables.length === 0) return null;
+    if (mentionables.length === 0 && !canMentionAll) return null;
     const m = /(^|\s)@([^\s@]*)$/.exec(draft);
     if (!m) return null;
     return { start: m.index + m[1].length, query: m[2].toLowerCase() };
-  }, [draft, mentionables.length]);
+  }, [draft, mentionables.length, canMentionAll]);
 
   const mentionResults = useMemo(() => {
     if (!mentionToken) return [];
     const q = mentionToken.query;
-    const filtered = q
+    const results: { id: string; name: string; isAll?: boolean }[] = [];
+    if (canMentionAll && (!q || ALL_MENTION_NAME.startsWith(q))) {
+      results.push({ id: ALL_MENTION_ID, name: ALL_MENTION_NAME, isAll: true });
+    }
+    const people = q
       ? mentionables.filter((m) => m.name.toLowerCase().includes(q))
       : mentionables;
-    return filtered.slice(0, 6);
-  }, [mentionToken, mentionables]);
+    for (const m of people) {
+      if (results.length >= 6) break;
+      results.push(m);
+    }
+    return results;
+  }, [mentionToken, mentionables, canMentionAll]);
   const mentionPickerOpen = !!mentionToken && mentionResults.length > 0;
   const [mentionIndex, setMentionIndex] = useState(0);
 
@@ -908,9 +924,16 @@ export function ThreadChat({
     if (!mentionToken) return;
     const before = draft.slice(0, mentionToken.start);
     const after = draft.slice(mentionToken.start + 1 + mentionToken.query.length);
-    setDraft(`${before}@${m.name} ${after}`.replace(/ {2,}/g, " "));
+    const label = m.id === ALL_MENTION_ID ? ALL_MENTION_NAME : m.name;
+    setDraft(`${before}@${label} ${after}`.replace(/ {2,}/g, " "));
     setTimeout(() => composerRef.current?.focus(), 0);
   };
+
+  const composerMentionNames = useMemo(() => {
+    const names = mentionables.map((m) => m.name);
+    if (canMentionAll) names.push(ALL_MENTION_NAME);
+    return names;
+  }, [mentionables, canMentionAll]);
 
   // Files wait locally (no upload) until the user presses Send.
   const pickFiles = (files: FileList | null) => {
@@ -1081,9 +1104,8 @@ export function ThreadChat({
   const send = () => {
     let text = draft.trim();
     if (!text && pending.length === 0) return;
-    // Convert any "@Full Name" that matches a project member into the
-    // @[Name](id) token the server parses. Longest names first so
-    // "@Adham Ali" isn't clobbered by "@Adham".
+    // Convert @all first, then any "@Full Name" that matches a project member.
+    text = text.replace(ALL_MENTION_TEXT_RE, ALL_MENTION_TOKEN);
     const sortedMentions = [...mentionables].sort(
       (a, b) => b.name.length - a.name.length,
     );
@@ -1614,10 +1636,23 @@ export function ThreadChat({
                           i === mentionIndex ? "bg-surface" : "hover:bg-surface/60",
                         )}
                       >
-                        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary">
-                          {m.name.slice(0, 1).toUpperCase()}
+                        {m.isAll ? (
+                          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/15 text-primary">
+                            <Users className="h-3.5 w-3.5" />
+                          </span>
+                        ) : (
+                          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary">
+                            {m.name.slice(0, 1).toUpperCase()}
+                          </span>
+                        )}
+                        <span className="min-w-0 flex-1 truncate">
+                          {m.isAll ? "@all" : m.name}
                         </span>
-                        <span className="min-w-0 flex-1 truncate">{m.name}</span>
+                        {m.isAll && (
+                          <span className="shrink-0 text-[10px] text-muted-foreground">
+                            Everyone
+                          </span>
+                        )}
                       </button>
                     </li>
                   ))}
@@ -1803,10 +1838,7 @@ export function ThreadChat({
                 ref={mirrorRef}
                 className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words p-2 text-sm text-foreground"
               >
-                {renderComposerHighlight(
-                  draft,
-                  mentionables.map((m) => m.name),
-                )}
+                {renderComposerHighlight(draft, composerMentionNames)}
                 {"\u200b"}
               </div>
             <Textarea
