@@ -12,9 +12,9 @@ export default async function MessagesLayout({
   const threads = await getInboxThreads();
 
   // Normal page inside the dashboard shell (app sidebar stays visible). The
-  // shell's mobile header is 3rem tall and fixed, hence the reduced height there.
+  // shell hides its mobile header on inbox routes, so full height everywhere.
   return (
-    <div className="flex h-[calc(100dvh-3rem)] min-h-0 bg-background text-foreground lg:h-dvh">
+    <div className="flex h-dvh min-h-0 bg-background text-foreground">
       <ThreadSidebar threads={threads} />
       <MessagesMain>{children}</MessagesMain>
     </div>

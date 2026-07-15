@@ -70,14 +70,10 @@ export function DashboardShell({ children, isAdmin = false, currentUserId, notif
         </div>
       )}
 
-      {/* Mobile header — navigation lives in the bottom bar */}
-      {!isDesktop && (
+      {/* Mobile header — just the bell; the inbox has its own header */}
+      {!isDesktop && !onInbox && (
         <div className="fixed top-0 left-0 right-0 h-12 flex items-center justify-end px-4 border-b border-border bg-background z-[100]">
-          {onInbox ? (
-            <div className="w-8 h-8" />
-          ) : (
-            <NotificationBell currentUserId={currentUserId} />
-          )}
+          <NotificationBell currentUserId={currentUserId} />
         </div>
       )}
 
@@ -104,7 +100,7 @@ export function DashboardShell({ children, isAdmin = false, currentUserId, notif
       {/* Main content — pushed by sidebar, rounded corner */}
       <main
         className={`flex-1 min-w-0 bg-background relative z-10 ${
-          isDesktop ? "rounded-l-2xl" : "pt-12"
+          isDesktop ? "rounded-l-2xl" : onInbox ? "" : "pt-12"
         } ${showBottomNav && !onInbox ? "pb-[calc(4rem+env(safe-area-inset-bottom))]" : ""}`}
       >
         {isDesktop && !onInbox && (
