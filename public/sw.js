@@ -1,5 +1,9 @@
-// Minimal service worker: Web Push only. Intentionally does NOT cache fetches
-// or drive app updates — the in-app UpdateNotifier already handles new versions.
+// Service worker: Web Push + notification-sound caching. Intentionally does NOT
+// cache app fetches or drive app updates — the in-app UpdateNotifier owns that.
+// Decision logic lives in sw-lib.js so it can be unit tested.
+
+/* global NizekSwLib */
+importScripts("/sw-lib.js");
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -51,33 +55,84 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
+/**
+ * Shared push-display path for real pushes and simulated ones (diagnostics /
+ * E2E). WhatsApp behavior: show the OS banner (with the OS sound) unless the
+ * app is focused AND visible on this device — the in-app chime covers that case.
+ */
+async function handlePushData(data, opts) {
+  const force = opts && opts.forceShow === true;
+
+  let show = true;
+  if (!force) {
+    const windowClients = await self.clients.matchAll({
+      type: "window",
+      includeUncontrolled: true,
+    });
+    const infos = windowClients.map((c) => ({
+      focused: c.focused,
+      visibilityState: c.visibilityState,
+    }));
+    show = NizekSwLib.shouldShowPushNotification(infos);
+  }
+
+  const jobs = [];
+  if (show) {
+    jobs.push(
+      self.registration.showNotification(
+        data.title,
+        NizekSwLib.notificationOptionsFor(data),
+      ),
+    );
+  }
+  if (data.badge != null && navigator.setAppBadge) {
+    jobs.push(navigator.setAppBadge(data.badge).catch(() => {}));
+  }
+  await Promise.all(jobs);
+}
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
+  const data = NizekSwLib.parsePushPayload(event.data.text());
+  if (!data) return;
+  event.waitUntil(handlePushData(data, {}));
+});
 
-  let data = {};
-  try {
-    data = event.data.json();
-  } catch {
-    return;
+// Simulated push from the page (diagnostics panel "Test banner" + E2E tests).
+// Runs the exact same display path as a real push event.
+self.addEventListener("message", (event) => {
+  const msg = event.data;
+  if (!msg || typeof msg !== "object") return;
+  if (msg.type === "simulate-push") {
+    const data = NizekSwLib.parsePushPayload(JSON.stringify(msg.data ?? {}));
+    if (!data) return;
+    event.waitUntil(
+      handlePushData(data, { forceShow: msg.forceShow === true }),
+    );
   }
-  const { title, body, url, badge, icon, tag } = data;
-  if (!title) return;
+});
+
+// The push service rotated/expired this device's subscription. Re-subscribe
+// with the same key and sync the new endpoint so the device keeps receiving
+// pushes without waiting for the next app open.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  const oldSub = event.oldSubscription;
+  const appServerKey =
+    (oldSub && oldSub.options && oldSub.options.applicationServerKey) || null;
+  if (!appServerKey) return;
 
   event.waitUntil(
-    Promise.all([
-      self.registration.showNotification(title, {
-        body: body || "",
-        icon: icon || "/favicon.ico",
-        badge: "/favicon.ico",
-        data: { url: url || "/dashboard" },
-        vibrate: [200, 100, 200],
-        tag: tag || undefined,
-        renotify: !!tag,
-      }),
-      badge != null && navigator.setAppBadge
-        ? navigator.setAppBadge(badge)
-        : Promise.resolve(),
-    ]),
+    self.registration.pushManager
+      .subscribe({ userVisibleOnly: true, applicationServerKey: appServerKey })
+      .then((newSub) => {
+        const json = newSub.toJSON();
+        return fetch("/api/push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+        });
+      })
+      .catch(() => {}),
   );
 });
 

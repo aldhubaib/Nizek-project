@@ -17,6 +17,12 @@ import {
   setNotificationSoundEnabled,
   playNotificationSound,
 } from "@/lib/notification-sound";
+import {
+  getMyNotificationPreferences,
+  updateMyNotificationPreferences,
+} from "@/actions/notification-preferences";
+import { NotificationPreferencesSection } from "@/components/notification-preferences-section";
+import { NotificationDiagnostics } from "@/components/notification-diagnostics";
 
 export function AccountClient({
   name: initialName,
@@ -40,7 +46,8 @@ export function AccountClient({
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
 
-  // In-app notification sound (per-device, default on).
+  // In-app notification sound. Server-stored (follows the user across
+  // devices); localStorage mirrors it as the synchronous fast-path.
   const [soundOn, setSoundOn] = useState(true);
 
   useEffect(() => {
@@ -51,11 +58,18 @@ export function AccountClient({
 
   useEffect(() => {
     setSoundOn(isNotificationSoundEnabled());
+    getMyNotificationPreferences()
+      .then((p) => {
+        setSoundOn(p.soundEnabled);
+        setNotificationSoundEnabled(p.soundEnabled);
+      })
+      .catch(() => {});
   }, []);
 
   const toggleSound = (next: boolean) => {
     setNotificationSoundEnabled(next);
     setSoundOn(next);
+    void updateMyNotificationPreferences({ soundEnabled: next }).catch(() => {});
     // Preview the chime when turning it on so the choice is audible.
     if (next) playNotificationSound(true);
   };
@@ -254,6 +268,12 @@ export function AccountClient({
           aria-label="Toggle notification sound"
         />
       </section>
+
+      {/* Per-type notification preferences (server-stored, all devices) */}
+      <NotificationPreferencesSection />
+
+      {/* Troubleshooting: device/server health checks + test notification */}
+      <NotificationDiagnostics />
     </div>
   );
 }

@@ -706,19 +706,22 @@ export async function declineTask(data: {
       const title = `${user.name ?? "Someone"} declined "${task.title}"`;
       const notifBody = `#${task.taskNumber} ${task.title}: ${declineSnippet}`;
       const linkUrl = `/dashboard/projects/${task.projectId}/tasks/${task.id}`;
-      await createAndPublishNotifications({
+      const pushTag = `thread-task-${task.id}`;
+      const rows = await createAndPublishNotifications({
         recipientIds: [submitterId],
         type: "rejection",
         title,
         body: notifBody,
         linkUrl,
+        tag: pushTag,
+        threadKey: `task-${task.id}`,
       });
-      void sendPush([submitterId], {
-        title,
-        body: notifBody,
-        url: linkUrl,
-        tag: `task-${task.id}`,
-      });
+      if (rows.length > 0) {
+        void sendPush(
+          rows.map((r) => r.recipientId),
+          { title, body: notifBody, url: linkUrl, tag: pushTag, type: "rejection" },
+        );
+      }
     }
 
     // Bump the project thread in the inbox sidebar for the people involved.

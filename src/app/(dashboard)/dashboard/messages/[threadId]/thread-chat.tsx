@@ -31,6 +31,8 @@ import {
   ArrowUpRight,
   CheckSquare,
   Users,
+  Bell,
+  BellOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -55,6 +57,10 @@ import {
   type ReactionSummary,
   type TaskPickerItem,
 } from "@/actions/messages";
+import {
+  isThreadMuted,
+  setThreadMuted,
+} from "@/actions/notification-preferences";
 import { useChannel, usePresence, useTyping } from "@/components/realtime/hooks";
 import {
   AttachmentBubble,
@@ -738,6 +744,26 @@ export function ThreadChat({
   const [dragging, setDragging] = useState(false);
   const [view, setView] = useState<"chat" | "files">("chat");
   const [searchOpen, setSearchOpen] = useState(false);
+  // Thread mute: server-stored, all devices. Muted threads produce no
+  // notification row, push, or chime — the thread itself still updates live.
+  const threadKey = target.conversationId
+    ? `conv-${target.conversationId}`
+    : target.taskId
+      ? `task-${target.taskId}`
+      : target.projectId
+        ? `project-${target.projectId}`
+        : null;
+  const [muted, setMuted] = useState(false);
+  useEffect(() => {
+    if (!threadKey) return;
+    isThreadMuted(threadKey).then(setMuted).catch(() => {});
+  }, [threadKey]);
+  const toggleMute = useCallback(() => {
+    if (!threadKey) return;
+    const next = !muted;
+    setMuted(next);
+    void setThreadMuted(threadKey, next).catch(() => setMuted(!next));
+  }, [threadKey, muted]);
   const [searchQuery, setSearchQuery] = useState("");
   const [replyTo, setReplyTo] = useState<string | null>(null);
   // URL the composer preview was dismissed for (X) — hides it until it changes.
@@ -1510,6 +1536,9 @@ export function ThreadChat({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-semibold">{title}</span>
+            {muted && (
+              <BellOff className="h-3 w-3 shrink-0 text-muted-foreground/70" aria-label="Muted" />
+            )}
             {peerMemberIds.length > 0 && (
               <span
                 className={cn(
@@ -1545,6 +1574,16 @@ export function ThreadChat({
               <FilesIcon className="h-4 w-4" />
               <span className="flex-1">Files</span>
             </DropdownMenuItem>
+            {threadKey && (
+              <DropdownMenuItem onClick={toggleMute}>
+                {muted ? (
+                  <Bell className="h-4 w-4" />
+                ) : (
+                  <BellOff className="h-4 w-4" />
+                )}
+                <span className="flex-1">{muted ? "Unmute" : "Mute"}</span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

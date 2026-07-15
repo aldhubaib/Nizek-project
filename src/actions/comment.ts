@@ -56,19 +56,28 @@ export async function createComment(data: {
       // Feed the notification bell (Notification table) so task-comment
       // mentions live alongside chat/DM notifications.
       const snippet = data.content.replace(/\s+/g, " ").trim().slice(0, 140);
-      await createAndPublishNotifications({
+      const pushTag = `thread-task-${data.taskId}`;
+      const rows = await createAndPublishNotifications({
         recipientIds: mentionRecipients,
         type: "mention",
         title: `${comment.user.name ?? "Someone"} mentioned you`,
         body: `#${task.taskNumber} ${task.title}: ${snippet}`,
         linkUrl: `/dashboard/projects/${task.projectId}/tasks/${data.taskId}`,
+        tag: pushTag,
+        threadKey: `task-${data.taskId}`,
       });
-      void sendPush(mentionRecipients, {
-        title: `${comment.user.name ?? "Someone"} mentioned you`,
-        body: `#${task.taskNumber} ${task.title}: ${snippet}`,
-        url: `/dashboard/projects/${task.projectId}/tasks/${data.taskId}`,
-        tag: `task-${data.taskId}`,
-      });
+      if (rows.length > 0) {
+        void sendPush(
+          rows.map((r) => r.recipientId),
+          {
+            title: `${comment.user.name ?? "Someone"} mentioned you`,
+            body: `#${task.taskNumber} ${task.title}: ${snippet}`,
+            url: `/dashboard/projects/${task.projectId}/tasks/${data.taskId}`,
+            tag: pushTag,
+            type: "mention",
+          },
+        );
+      }
     }
 
     // Live-stream the new comment to anyone viewing this task (Centrifugo).

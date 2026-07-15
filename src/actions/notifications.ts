@@ -11,6 +11,7 @@ export type NotificationDTO = {
   title: string;
   body: string | null;
   linkUrl: string | null;
+  tag: string | null;
   read: boolean;
   createdAt: Date;
 };
@@ -33,6 +34,10 @@ export async function getUnreadCount(): Promise<number> {
 
 export async function markNotificationRead(id: string): Promise<number> {
   const user = await requireUser();
+  const row = await prisma.notification.findFirst({
+    where: { id, recipientId: user.id },
+    select: { tag: true, read: true },
+  });
   const res = await prisma.notification.updateMany({
     where: { id, recipientId: user.id, read: false },
     data: { read: true, readAt: new Date() },
@@ -40,11 +45,13 @@ export async function markNotificationRead(id: string): Promise<number> {
   const unread = await prisma.notification.count({
     where: { recipientId: user.id, read: false },
   });
-  // Sync read-state to every other device/tab this user has open.
+  // Sync read-state to every other device/tab this user has open. Tags let
+  // open clients close the matching OS banner (cross-device dismissal).
   if (res.count > 0) {
     void publish(userChannel(user.id), {
       type: NOTIFICATION_READ,
       ids: [id],
+      tags: row?.tag ? [row.tag] : [],
       unread,
     });
   }
@@ -53,12 +60,20 @@ export async function markNotificationRead(id: string): Promise<number> {
 
 export async function markAllNotificationsRead(): Promise<number> {
   const user = await requireUser();
+  const unreadRows = await prisma.notification.findMany({
+    where: { recipientId: user.id, read: false },
+    select: { tag: true },
+  });
   await prisma.notification.updateMany({
     where: { recipientId: user.id, read: false },
     data: { read: true, readAt: new Date() },
   });
+  const tags = [
+    ...new Set(unreadRows.map((r) => r.tag).filter((t): t is string => !!t)),
+  ];
   void publish(userChannel(user.id), {
     type: NOTIFICATION_READ_ALL,
+    tags,
     unread: 0,
   });
   return 0;

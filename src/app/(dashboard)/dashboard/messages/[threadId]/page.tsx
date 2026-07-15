@@ -144,7 +144,7 @@ export default async function ThreadPage({
       : `/dashboard/messages/project-${target.projectId}`;
   const toMark = await prisma.notification.findMany({
     where: { recipientId: user.id, read: false, linkUrl },
-    select: { id: true },
+    select: { id: true, tag: true },
   });
   if (toMark.length > 0) {
     await prisma.notification.updateMany({
@@ -154,10 +154,16 @@ export default async function ThreadPage({
     const unread = await prisma.notification.count({
       where: { recipientId: user.id, read: false },
     });
-    // Sync read-state to the user's other devices/tabs (bell + app badge).
+    // Sync read-state to the user's other devices/tabs (bell + app badge) and
+    // let them close the matching OS push banners by tag.
     void publish(userChannel(user.id), {
       type: NOTIFICATION_READ,
       ids: toMark.map((n) => n.id),
+      tags: [
+        ...new Set(
+          toMark.map((n) => n.tag).filter((t): t is string => !!t),
+        ),
+      ],
       unread,
     });
   }

@@ -13,6 +13,7 @@ import {
   Image as ImageIcon,
   LogIn,
   Volume2,
+  Activity,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { TeamsManager } from "@/components/settings/teams-manager";
@@ -23,6 +24,7 @@ import { DefaultQuestionsManager } from "@/components/settings/default-questions
 import { AppLogoClient } from "./app-logo-client";
 import { LoginSettingsClient } from "./login-settings-client";
 import { NotificationSoundClient } from "./notification-sound-client";
+import { PushHealthClient } from "./push-health-client";
 import type { BrandingAssetDTO } from "@/actions/branding";
 import type { LoginPhotoDTO } from "@/actions/login-photos";
 import type { NotificationSoundDTO } from "@/actions/notification-sound-settings";
@@ -36,7 +38,8 @@ type TabId =
   | "questions"
   | "app-logo"
   | "login"
-  | "notification-sound";
+  | "notification-sound"
+  | "push-health";
 
 type SettingsItem = {
   id: TabId;
@@ -106,6 +109,17 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         label: "Notification Sound",
         icon: Volume2,
         desc: "Upload a custom sound played when people receive notifications.",
+      },
+    ],
+  },
+  {
+    group: "Monitoring",
+    items: [
+      {
+        id: "push-health",
+        label: "Push Health",
+        icon: Activity,
+        desc: "Delivery success, device coverage, and recent push failures.",
       },
     ],
   },
@@ -210,6 +224,7 @@ export function AdminPageClient({
         {active.id === "notification-sound" && (
           <NotificationSoundClient sound={notificationSound} />
         )}
+        {active.id === "push-health" && <PushHealthClient />}
       </div>
     </div>
   );

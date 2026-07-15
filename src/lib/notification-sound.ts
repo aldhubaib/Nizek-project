@@ -127,6 +127,18 @@ export function playNotificationSound(force = false): void {
   playChime();
 }
 
+export type AudioReadiness = "unlocked" | "suspended" | "unavailable";
+
+/**
+ * How ready the audio pipeline is to actually produce sound right now. Used by
+ * the account diagnostics panel to explain "why didn't I hear a chime".
+ */
+export function getAudioReadiness(): AudioReadiness {
+  const ctx = getAudioContext();
+  if (!ctx) return "unavailable";
+  return ctx.state === "running" ? "unlocked" : "suspended";
+}
+
 // Unlocks audio on the first user gesture so later (non-gesture) notifications
 // can play. Autoplay policies only let us resume an AudioContext in response to
 // a real interaction; after that it stays running for the session.

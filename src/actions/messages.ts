@@ -485,22 +485,29 @@ export async function sendMessage(
 
     const uniqueRecipients = [...new Set(recipients)];
     if (uniqueRecipients.length > 0) {
+      // Thread-scoped tag: successive messages in the same thread replace the
+      // OS banner (WhatsApp behavior) and reading the thread dismisses it
+      // everywhere via NotificationSync.
+      const pushTag = `thread-${threadId}`;
       // Create rows + publish per-recipient `notification.new` so bells update
-      // live without a refetch.
-      await createAndPublishNotifications({
+      // live without a refetch. Returns only recipients who pass preference /
+      // thread-mute filtering — push MUST use the same filtered list.
+      const rows = await createAndPublishNotifications({
         recipientIds: uniqueRecipients,
         type: notifyType,
         title,
         body: preview,
         linkUrl: url,
+        tag: pushTag,
+        threadKey: threadId,
       });
       // OS-level web push on top of the in-app bell.
-      void sendPush(uniqueRecipients, {
-        title,
-        body: preview,
-        url,
-        tag: `msg-${message.id}`,
-      });
+      if (rows.length > 0) {
+        void sendPush(
+          rows.map((r) => r.recipientId),
+          { title, body: preview, url, tag: pushTag, type: notifyType },
+        );
+      }
     }
 
     // Live delivery: thread channels for open views, user channels for inbox.

@@ -88,8 +88,10 @@ export function InstallPrompt() {
           <Download className="h-5 w-5" />
         </div>
         {showIosHint ? (
+          // iOS only delivers push notifications to installed (home-screen)
+          // apps, so the install step IS the notification-enable step here.
           <span className="min-w-0 flex-1 text-sm">
-            Install this app: tap{" "}
+            To get notifications, install this app: tap{" "}
             <Share className="inline h-3.5 w-3.5 -translate-y-0.5" /> then{" "}
             <span className="font-semibold">
               Add to Home Screen <Plus className="inline h-3.5 w-3.5 -translate-y-0.5" />

@@ -1,7 +1,16 @@
 import "server-only";
 import webpush from "web-push";
 import { prisma } from "@/lib/prisma";
-import { getPresenceDeviceIds, userChannel } from "@/lib/centrifugo";
+import {
+  buildPushBody,
+  endpointHost,
+  isGoneStatus,
+  sendWithRetry,
+  PUSH_TTL_SECONDS,
+  type PushPayload,
+} from "@/lib/push-core";
+
+export type { PushPayload };
 
 const VAPID_PUBLIC = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
@@ -14,22 +23,23 @@ if (configured) {
     VAPID_PUBLIC!,
     VAPID_PRIVATE!,
   );
+} else {
+  console.warn(
+    "[push] VAPID keys missing (NEXT_PUBLIC_VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY) — web push is DISABLED",
+  );
 }
 
-export interface PushPayload {
-  title: string;
-  body?: string;
-  url?: string;
-  tag?: string;
-  /** Notification icon: sender avatar or project thumbnail. */
-  icon?: string;
+export function isPushConfigured(): boolean {
+  return configured;
 }
 
 /**
- * Deliver an OS-level web-push to every device registered by the given
- * recipients. Best-effort and fire-and-forget: the in-app notification bell is
- * fed separately via the `Notification` table + Centrifugo, so this only adds
- * the browser/mobile push on top. Never throws.
+ * Deliver an OS-level web-push to EVERY device registered by the given
+ * recipients. Whether a banner is actually shown is decided per-device by the
+ * service worker (it suppresses the banner when the app is focused and visible
+ * there — WhatsApp behavior). Sends use Urgency: high + a 24h TTL, retry once
+ * on transient failures, and record every attempt to PushDeliveryLog. Never
+ * throws; push is best-effort on top of the in-app bell.
  */
 export async function sendPush(
   recipientIds: string[],
@@ -45,19 +55,6 @@ export async function sendPush(
     });
     if (subscriptions.length === 0) return;
 
-    // Presence-aware push: for each recipient, find which of their devices are
-    // currently connected to Centrifugo (foreground/active). We skip OS push to
-    // those devices — they already get the in-app chime/bell — but still push to
-    // their other (backgrounded/closed) devices and to recipients with none
-    // connected. Best-effort: if presence is unavailable we push everywhere.
-    const connectedByRecipient = new Map<string, Set<string>>();
-    await Promise.all(
-      unique.map(async (rid) => {
-        const devices = await getPresenceDeviceIds(userChannel(rid));
-        if (devices.size > 0) connectedByRecipient.set(rid, devices);
-      }),
-    );
-
     // Per-recipient unread count powers the OS app badge.
     const grouped = await prisma.notification.groupBy({
       by: ["recipientId"],
@@ -68,43 +65,68 @@ export async function sendPush(
       grouped.map((g) => [g.recipientId, g._count._all]),
     );
 
-    // Drop subscriptions whose device is currently connected/active.
-    const targets = subscriptions.filter((sub) => {
-      if (!sub.deviceId) return true;
-      const connected = connectedByRecipient.get(sub.memberId);
-      return !connected?.has(sub.deviceId);
-    });
-    if (targets.length === 0) return;
-
-    await Promise.allSettled(
-      targets.map((sub) => {
-        const body = JSON.stringify({
-          title: payload.title,
-          body: payload.body || "",
-          url: payload.url || APP_URL || "/dashboard",
+    const results = await Promise.allSettled(
+      subscriptions.map(async (sub) => {
+        const body = buildPushBody(payload, {
           badge: unreadByRecipient.get(sub.memberId) ?? 0,
-          tag: payload.tag,
-          icon: payload.icon,
+          fallbackUrl: APP_URL || "/dashboard",
         });
-        return webpush
-          .sendNotification(
-            {
-              endpoint: sub.endpoint,
-              keys: { p256dh: sub.p256dh, auth: sub.auth },
+
+        const startedAt = Date.now();
+        const outcome = await sendWithRetry(() =>
+          webpush
+            .sendNotification(
+              {
+                endpoint: sub.endpoint,
+                keys: { p256dh: sub.p256dh, auth: sub.auth },
+              },
+              body,
+              { TTL: PUSH_TTL_SECONDS, urgency: "high" },
+            )
+            .then(() => undefined),
+        );
+        const latencyMs = Date.now() - startedAt;
+
+        if (!outcome.ok && isGoneStatus(outcome.statusCode)) {
+          // Endpoint gone / unsubscribed — drop the stale subscription.
+          await prisma.pushSubscription
+            .delete({ where: { id: sub.id } })
+            .catch(() => {});
+        }
+
+        await prisma.pushDeliveryLog
+          .create({
+            data: {
+              recipientId: sub.memberId,
+              subscriptionId: sub.id,
+              endpointHost: endpointHost(sub.endpoint),
+              type: payload.type ?? null,
+              tag: payload.tag ?? null,
+              ok: outcome.ok,
+              statusCode: outcome.statusCode ?? null,
+              error: outcome.error?.slice(0, 500) ?? null,
+              latencyMs,
             },
-            body,
-          )
-          .catch(async (err: { statusCode?: number }) => {
-            // Endpoint gone / unsubscribed — drop the stale subscription.
-            if (err?.statusCode === 410 || err?.statusCode === 404) {
-              await prisma.pushSubscription
-                .delete({ where: { id: sub.id } })
-                .catch(() => {});
-            }
-          });
+          })
+          .catch(() => {});
+
+        return outcome;
       }),
     );
-  } catch {
-    // Push is best-effort; swallow all errors so callers are never affected.
+
+    const failed = results.filter(
+      (r) => r.status === "fulfilled" && !r.value.ok,
+    ).length;
+    if (failed > 0) {
+      console.error(
+        `[push] ${failed}/${subscriptions.length} sends failed (tag=${payload.tag ?? "-"})`,
+      );
+    }
+  } catch (err) {
+    // Push is best-effort; log and swallow so callers are never affected.
+    console.error(
+      "[push] sendPush failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
 }

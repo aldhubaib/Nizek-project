@@ -195,19 +195,21 @@ export async function sendDeadlineReminderForNote(options: {
   const recipients = mentionIds;
   if (recipients.length > 0) {
     const title = `Deadline: ${note.title}`;
-    await createAndPublishNotifications({
+    const pushTag = `deadline-${note.id}-${options.offsetDays}`;
+    const rows = await createAndPublishNotifications({
       recipientIds: recipients,
-      type: "mention",
+      type: "deadline",
       title,
       body: preview,
       linkUrl,
+      tag: pushTag,
     });
-    void sendPush(recipients, {
-      title,
-      body: preview,
-      url: linkUrl,
-      tag: `deadline-${note.id}-${options.offsetDays}`,
-    });
+    if (rows.length > 0) {
+      void sendPush(
+        rows.map((r) => r.recipientId),
+        { title, body: preview, url: linkUrl, tag: pushTag, type: "deadline" },
+      );
+    }
   }
 
   const inboxTargets = [...new Set(mentionIds)];

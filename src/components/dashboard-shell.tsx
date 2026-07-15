@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { NotificationBell } from "@/components/notification-bell";
 import { NotificationSound } from "@/components/notification-sound";
+import { NotificationSync } from "@/components/notification-sync";
 import { PushNotifier } from "@/components/push-notifier";
 import { InstallPrompt } from "@/components/install-prompt";
 import { OfflineNotice } from "@/components/offline-notice";
@@ -122,6 +123,7 @@ export function DashboardShell({ children, isAdmin = false, currentUserId, notif
         {children}
       </main>
       <NotificationSound currentUserId={currentUserId} soundUrl={notificationSoundUrl} />
+      <NotificationSync currentUserId={currentUserId} />
       <PushNotifier />
       <InstallPrompt />
       <OfflineNotice />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { useChannel } from "@/components/realtime/hooks";
 import {
@@ -9,11 +10,17 @@ import {
   NOTIFICATION_SOUND_EVENT,
 } from "@/lib/channels";
 import { getActiveNotificationSoundUrl } from "@/actions/notification-sound-settings";
+import { getMyNotificationPreferences } from "@/actions/notification-preferences";
 import {
   playNotificationSound,
   primeNotificationAudio,
   setCustomNotificationSound,
+  setNotificationSoundEnabled,
 } from "@/lib/notification-sound";
+import {
+  shouldPlayNotificationSound,
+  type SoundEventPayload,
+} from "@/lib/notification-sound-policy";
 
 interface Props {
   currentUserId?: string;
@@ -21,12 +28,14 @@ interface Props {
 }
 
 /**
- * Plays a chime whenever a new notification lands on the user channel while the
- * app is open. Mounted once app-wide (including the inbox route, where the
- * notification bell is hidden) so coverage is consistent everywhere.
+ * Plays a chime for `notification.new` events while the app is focused and the
+ * user isn't already viewing the linked thread. Backgrounded/closed states are
+ * covered by OS push instead (the service worker only suppresses banners for
+ * focused-visible clients). Mounted once app-wide, including the inbox route.
  */
 export function NotificationSound({ currentUserId, soundUrl }: Props) {
   const cent = useCentrifugo();
+  const pathname = usePathname();
 
   // Seed with the server-rendered URL immediately so the first notification uses
   // the right sound even before the fresh refetch below resolves.
@@ -40,6 +49,11 @@ export function NotificationSound({ currentUserId, soundUrl }: Props) {
   const refresh = useCallback(() => {
     getActiveNotificationSoundUrl()
       .then((url) => setCustomNotificationSound(url))
+      .catch(() => {});
+    // Server-stored sound preference follows the user across devices; mirror it
+    // into the localStorage fast-path used by playNotificationSound.
+    getMyNotificationPreferences()
+      .then((prefs) => setNotificationSoundEnabled(prefs.soundEnabled))
       .catch(() => {});
   }, []);
 
@@ -72,12 +86,14 @@ export function NotificationSound({ currentUserId, soundUrl }: Props) {
   useChannel(
     cent && currentUserId ? userChannel(currentUserId) : null,
     (data) => {
-      const payload = data as { type?: string; authorId?: string } | null;
-      if (!payload || typeof payload !== "object") return;
-      // Don't chime for our own outgoing messages (the inbox delta is broadcast
-      // back to the author too so their sidebar updates).
-      if (payload.type === "inbox" && payload.authorId === currentUserId) return;
-      playNotificationSound();
+      const payload = data as SoundEventPayload | null;
+      const play = shouldPlayNotificationSound(payload, {
+        currentUserId,
+        appFocused:
+          document.visibilityState === "visible" && document.hasFocus(),
+        pathname,
+      });
+      if (play) playNotificationSound();
     },
   );
 
