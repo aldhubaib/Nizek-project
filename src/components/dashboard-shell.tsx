@@ -72,15 +72,7 @@ export function DashboardShell({ children, isAdmin = false, currentUserId, notif
 
       {/* Mobile header — navigation lives in the bottom bar */}
       {!isDesktop && (
-        <div className="fixed top-0 left-0 right-0 h-12 flex items-center justify-between px-4 border-b border-border bg-background z-[100]">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-[9px] font-semibold text-primary">
-              N
-            </div>
-            <span className="font-semibold text-[13px] text-foreground">
-              Nizek Project
-            </span>
-          </div>
+        <div className="fixed top-0 left-0 right-0 h-12 flex items-center justify-end px-4 border-b border-border bg-background z-[100]">
           {onInbox ? (
             <div className="w-8 h-8" />
           ) : (
