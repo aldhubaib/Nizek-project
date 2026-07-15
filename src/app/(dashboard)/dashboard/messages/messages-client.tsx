@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
@@ -78,6 +78,20 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
   const [tab, setTab] = useState<"all" | "project" | "direct">("all");
   const [composeOpen, setComposeOpen] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
+  // On mobile/tablet the search field is collapsed behind a header icon.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const toggleSearch = () => {
+    setSearchOpen((open) => {
+      if (open) setQ("");
+      return !open;
+    });
+  };
+
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
 
   const cent = useCentrifugo();
   const online = usePresence(cent ? globalPresenceChannel() : null);
@@ -168,12 +182,24 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
         onThread ? "hidden lg:flex" : "flex w-full",
       )}
     >
-      <div className="flex h-14 items-center gap-2 border-b border-border/60 px-4">
+      <div className="flex h-14 items-center gap-1 border-b border-border/60 px-4">
         <div className="text-sm font-semibold">Inbox</div>
         <Button
           variant="ghost"
           size="icon"
-          className="ml-auto rounded-full"
+          className={cn(
+            "ml-auto rounded-full lg:hidden",
+            searchOpen && "text-foreground bg-surface/80",
+          )}
+          aria-label="Search conversations"
+          onClick={toggleSearch}
+        >
+          <Search className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-full max-lg:ml-0 lg:ml-auto"
           aria-label="New message"
           onClick={() => setComposeOpen(true)}
         >
@@ -182,9 +208,11 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
       </div>
 
       <div className="border-b border-border/60 p-3">
-        <div className="relative">
+        {/* Always shown on desktop; on mobile/tablet only when toggled open. */}
+        <div className={cn("relative", !searchOpen && "max-lg:hidden")}>
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
+            ref={searchInputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search conversations"
