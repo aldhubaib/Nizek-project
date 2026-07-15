@@ -216,7 +216,8 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
         </div>
       </div>
 
-      <ul className="min-h-0 flex-1 overflow-y-auto">
+      {/* Bottom padding clears the mobile bottom navigation bar. */}
+      <ul className="min-h-0 flex-1 overflow-y-auto max-lg:pb-[calc(4rem+env(safe-area-inset-bottom))]">
         {rows.length === 0 && !showInactiveSection && (
           <li className="p-6 text-center text-xs text-muted-foreground">
             No conversations

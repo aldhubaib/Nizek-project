@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
+import { BottomNav } from "@/components/bottom-nav";
 import { NotificationBell } from "@/components/notification-bell";
 import { NotificationSound } from "@/components/notification-sound";
 import { NotificationSync } from "@/components/notification-sync";
@@ -10,7 +11,6 @@ import { PushNotifier } from "@/components/push-notifier";
 import { InstallPrompt } from "@/components/install-prompt";
 import { OfflineNotice } from "@/components/offline-notice";
 import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
-import { Menu } from "lucide-react";
 
 const DESKTOP_BREAKPOINT = 1024;
 
@@ -20,9 +20,15 @@ export function DashboardShell({ children, isAdmin = false, currentUserId, notif
   const [hovered, setHovered] = useState(false);
   const [isDesktop, setIsDesktop] = useState(true);
   const pathname = usePathname();
-  // The inbox is a full-screen overlay with its own header — hide the global
-  // notification bell there so it doesn't float over the conversation.
+  // The inbox has its own header — hide the global notification bell there so
+  // it doesn't float over the conversation.
   const onInbox = pathname.startsWith("/dashboard/messages");
+  // Inside an open chat thread the composer owns the bottom edge, so the
+  // bottom navigation gets out of the way (WhatsApp behavior).
+  const onThread =
+    pathname.startsWith("/dashboard/messages/") &&
+    pathname !== "/dashboard/messages";
+  const showBottomNav = !isDesktop && !onThread;
 
   useEffect(() => {
     const handleResize = () =>
@@ -64,15 +70,9 @@ export function DashboardShell({ children, isAdmin = false, currentUserId, notif
         </div>
       )}
 
-      {/* Mobile header */}
+      {/* Mobile header — navigation lives in the bottom bar */}
       {!isDesktop && (
         <div className="fixed top-0 left-0 right-0 h-12 flex items-center justify-between px-4 border-b border-border bg-background z-[100]">
-          <button
-            onClick={() => setDrawerOpen(true)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-card transition-colors"
-          >
-            <Menu className="w-4 h-4" />
-          </button>
           <div className="flex items-center gap-2">
             <div className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-[9px] font-semibold text-primary">
               N
@@ -113,7 +113,7 @@ export function DashboardShell({ children, isAdmin = false, currentUserId, notif
       <main
         className={`flex-1 min-w-0 bg-background relative z-10 ${
           isDesktop ? "rounded-l-2xl" : "pt-12"
-        }`}
+        } ${showBottomNav && !onInbox ? "pb-[calc(4rem+env(safe-area-inset-bottom))]" : ""}`}
       >
         {isDesktop && !onInbox && (
           <div className="fixed top-3 right-4 z-[100]">
@@ -122,6 +122,11 @@ export function DashboardShell({ children, isAdmin = false, currentUserId, notif
         )}
         {children}
       </main>
+
+      {/* Mobile/tablet bottom navigation — same permission rules as the sidebar */}
+      {showBottomNav && (
+        <BottomNav isAdmin={isAdmin} onOpenMenu={() => setDrawerOpen(true)} />
+      )}
       <NotificationSound currentUserId={currentUserId} soundUrl={notificationSoundUrl} />
       <NotificationSync currentUserId={currentUserId} />
       <PushNotifier />
