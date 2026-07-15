@@ -30,7 +30,7 @@ import {
 import {
   buildNoteTimeline,
 } from "@/lib/note-timeline";
-import { NoteTimelineSidebar } from "@/components/project/note-timeline-sidebar";
+import { NoteHistoryDialog } from "@/components/project/note-history-dialog";
 import { cn } from "@/lib/utils";
 
 type NoteType = "MEETING_NOTE" | "DECISION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
@@ -593,17 +593,6 @@ function NoteFullScreenDetail({
         </button>
         <div className="flex items-center gap-2">
           {!isEditing && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowHistory(!showHistory)}
-              className={cn(showHistory && "bg-accent")}
-            >
-              <History className="w-3.5 h-3.5 mr-1.5" />
-              History
-            </Button>
-          )}
-          {canEdit && !isEditing && (
             <DropdownMenu>
               <DropdownMenuTrigger
                 aria-label="Note options"
@@ -612,67 +601,71 @@ function NoteFullScreenDetail({
                 <MoreVertical className="h-4 w-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                {isDeadline && (
-                  <DropdownMenuItem
-                    onClick={handleToggleComplete}
-                    disabled={togglingComplete}
-                    className={cn(completedAt && "text-emerald-400 focus:text-emerald-400")}
-                  >
-                    {completedAt ? (
-                      <CheckCircle2 className="h-4 w-4" />
-                    ) : (
-                      <Circle className="h-4 w-4" />
-                    )}
-                    <span className="flex-1">{completedAt ? "Mark incomplete" : "Mark complete"}</span>
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem onClick={() => setIsEditing(true)}>
-                  <Pencil className="h-4 w-4" />
-                  <span className="flex-1">Edit</span>
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setShowHistory(true)}>
                   <History className="h-4 w-4" />
                   <span className="flex-1">History</span>
                 </DropdownMenuItem>
-                {showReminderTests && (
+                {canEdit && (
                   <>
+                    {isDeadline && (
+                      <DropdownMenuItem
+                        onClick={handleToggleComplete}
+                        disabled={togglingComplete}
+                        className={cn(completedAt && "text-emerald-400 focus:text-emerald-400")}
+                      >
+                        {completedAt ? (
+                          <CheckCircle2 className="h-4 w-4" />
+                        ) : (
+                          <Circle className="h-4 w-4" />
+                        )}
+                        <span className="flex-1">{completedAt ? "Mark incomplete" : "Mark complete"}</span>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                      <Pencil className="h-4 w-4" />
+                      <span className="flex-1">Edit</span>
+                    </DropdownMenuItem>
+                    {showReminderTests && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <CalendarClock className="h-4 w-4" />
+                            <span className="flex-1">Test reminders</span>
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="w-52">
+                            <DropdownMenuGroup>
+                              <DropdownMenuLabel className="text-[10px] text-muted-foreground">
+                                Post to project chat @ all
+                              </DropdownMenuLabel>
+                              {DEADLINE_REMINDER_TEST_SCENARIOS.map((offsetDays) => (
+                                <DropdownMenuItem
+                                  key={offsetDays}
+                                  disabled={testingMilestone !== null}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    void handleTestReminder(offsetDays);
+                                  }}
+                                >
+                                  <span className="flex-1">{milestoneLabel(offsetDays)}</span>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuGroup>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      </>
+                    )}
                     <DropdownMenuSeparator />
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger>
-                        <CalendarClock className="h-4 w-4" />
-                        <span className="flex-1">Test reminders</span>
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent className="w-52">
-                        <DropdownMenuGroup>
-                          <DropdownMenuLabel className="text-[10px] text-muted-foreground">
-                            Post to project chat @ all
-                          </DropdownMenuLabel>
-                          {DEADLINE_REMINDER_TEST_SCENARIOS.map((offsetDays) => (
-                            <DropdownMenuItem
-                              key={offsetDays}
-                              disabled={testingMilestone !== null}
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                void handleTestReminder(offsetDays);
-                              }}
-                            >
-                              <span className="flex-1">{milestoneLabel(offsetDays)}</span>
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuGroup>
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={handleDelete}
+                      disabled={deleting}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="flex-1">Delete</span>
+                    </DropdownMenuItem>
                   </>
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={handleDelete}
-                  disabled={deleting}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span className="flex-1">Delete</span>
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -687,10 +680,8 @@ function NoteFullScreenDetail({
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Main content */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
             {/* Type badge + meta */}
             <div className="flex flex-wrap items-center gap-3 mb-2">
               {config && (
@@ -796,12 +787,12 @@ function NoteFullScreenDetail({
                 dangerouslySetInnerHTML={{ __html: note.content }}
               />
             )}
-          </div>
         </div>
-
-        {/* History sidebar */}
-        {showHistory && <NoteTimelineSidebar events={timeline} />}
       </div>
+
+      {showHistory && (
+        <NoteHistoryDialog events={timeline} onClose={() => setShowHistory(false)} />
+      )}
     </div>
   );
 }

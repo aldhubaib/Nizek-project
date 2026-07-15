@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Gauge, Timer, FileText, Plus, Maximize2, Trash2 } from "lucide-react";
+import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Gauge, Timer, FileText, Plus, Maximize2, Trash2, MoreVertical } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, getTaskStageLogs, deleteTask } from "@/actions/task";
 import { createMeetingNote, updateMeetingNote, getTaskNotes, getMeetingNote } from "@/actions/meeting-note";
@@ -13,8 +13,14 @@ import { formatDistanceToNow } from "date-fns";
 import { QuestionField, type TaskQuestion } from "./question-field";
 import { ActivityTimeline } from "./activity-timeline";
 import { CommentSection } from "./comment-section";
-import { NoteTimelineSidebar } from "@/components/project/note-timeline-sidebar";
+import { NoteHistoryDialog } from "@/components/project/note-history-dialog";
 import { buildNoteTimeline } from "@/lib/note-timeline";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useKanbanStore, type KanbanTask, type Stage } from "@/store/kanban";
 import { cn } from "@/lib/utils";
 
@@ -283,17 +289,28 @@ function NoteFullScreenViewer({
         </div>
         <div className="flex items-center gap-2">
           {!editing && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setShowHistory(!showHistory)}
-              className={cn(showHistory && "bg-accent")}
-            >
-              <History className="w-3 h-3 mr-1" />
-              History
-            </Button>
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label="Note options"
+                  className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={() => setShowHistory(true)}>
+                    <History className="h-4 w-4" />
+                    <span className="flex-1">History</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setEditing(true)}>
+                    <Pencil className="h-4 w-4" />
+                    <span className="flex-1">Edit</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
           )}
-          {editing ? (
+          {editing && (
             <>
               <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setEditTitle(note.title); setEditContent(note.content); }}>
                 Cancel
@@ -302,17 +319,11 @@ function NoteFullScreenViewer({
                 {saving ? "Saving..." : "Save"}
               </Button>
             </>
-          ) : (
-            <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
-              <Pencil className="w-3 h-3 mr-1" />
-              Edit
-            </Button>
           )}
         </div>
       </div>
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
             {editing ? (
               <>
                 <input
@@ -347,10 +358,12 @@ function NoteFullScreenViewer({
                 )}
               </>
             )}
-          </div>
         </div>
-        {showHistory && <NoteTimelineSidebar events={timeline} />}
       </div>
+
+      {showHistory && (
+        <NoteHistoryDialog events={timeline} onClose={() => setShowHistory(false)} />
+      )}
     </div>
   );
 }
