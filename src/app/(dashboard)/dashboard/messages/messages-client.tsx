@@ -9,7 +9,6 @@ import {
   Users,
   Folder,
   MessageSquare,
-  X,
   PenSquare,
   Archive,
   ChevronDown,
@@ -169,16 +168,7 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
         onThread ? "hidden lg:flex" : "flex w-full",
       )}
     >
-      <div className="flex h-14 items-center gap-2 border-b border-border/60 px-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="rounded-full"
-          aria-label="Close"
-          onClick={() => router.push("/dashboard")}
-        >
-          <X className="h-4 w-4" />
-        </Button>
+      <div className="flex h-14 items-center gap-2 border-b border-border/60 px-4">
         <div className="text-sm font-semibold">Inbox</div>
         <Button
           variant="ghost"
