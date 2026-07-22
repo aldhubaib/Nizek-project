@@ -136,7 +136,11 @@ export function RolesManager({ roles }: Props) {
         name: newName.trim(),
         canCreateTask: newStagePerms.createStages.length > 0,
         canModifyTask: newStagePerms.modifyStages.length > 0,
-        canMoveTask: newPerms.canMoveTask,
+        // Derived like create/modify: any configured transition means the
+        // role can move tasks. The standalone flag only matters when no
+        // transitions are set.
+        canMoveTask:
+          newPerms.canMoveTask || Object.keys(newStagePerms.transitions).length > 0,
         canDeleteTask: newPerms.canDeleteTask,
         canDeclineTask: newPerms.canDeclineTask,
         allowedTransitions: serializeAllData(newStagePerms),
@@ -177,7 +181,8 @@ export function RolesManager({ roles }: Props) {
         name: editName.trim() || undefined,
         canCreateTask: editStagePerms.createStages.length > 0,
         canModifyTask: editStagePerms.modifyStages.length > 0,
-        canMoveTask: editPerms.canMoveTask,
+        canMoveTask:
+          editPerms.canMoveTask || Object.keys(editStagePerms.transitions).length > 0,
         canDeleteTask: editPerms.canDeleteTask,
         canDeclineTask: editPerms.canDeclineTask,
         allowedTransitions: serializeAllData(editStagePerms),
@@ -351,10 +356,12 @@ export function RolesManager({ roles }: Props) {
   );
 }
 
-function RoleStageSummary({ parsed, canMoveTask }: { parsed: StagePerms; canMoveTask: boolean }) {
+function RoleStageSummary({ parsed }: { parsed: StagePerms; canMoveTask?: boolean }) {
   const hasCreate = parsed.createStages.length > 0;
   const hasModify = parsed.modifyStages.length > 0;
-  const hasTransitions = canMoveTask && Object.keys(parsed.transitions).length > 0;
+  // Transitions imply move permission (same rule as getPermissionsFromRole),
+  // so always show them.
+  const hasTransitions = Object.keys(parsed.transitions).length > 0;
 
   if (!hasCreate && !hasModify && !hasTransitions) return null;
 

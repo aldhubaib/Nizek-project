@@ -89,6 +89,11 @@ export function getPermissionsFromRole(role: {
 
   const hasCreateStages = createStages.length > 0;
   const hasModifyStages = modifyStages.length > 0;
+  // Having any configured transition implies move permission. The roles UI
+  // has no explicit "can move" toggle — it only sets the flag as a side
+  // effect of checking a Forward/Rollback box — so roles saved with
+  // transitions but canMoveTask=false would otherwise deny every move.
+  const hasTransitions = Object.keys(transitions).length > 0;
 
   return {
     isAdmin: role.isAdmin,
@@ -96,7 +101,7 @@ export function getPermissionsFromRole(role: {
     canModifyTask: hasModifyStages || role.canModifyTask,
     canDeleteTask: role.canDeleteTask ?? false,
     canDeclineTask: role.canDeclineTask ?? false,
-    canMoveTask: role.canMoveTask,
+    canMoveTask: hasTransitions || role.canMoveTask,
     allowedTransitions: transitions,
     createStages: hasCreateStages ? createStages : (role.canCreateTask ? ALL_STAGE_IDS : []),
     modifyStages: hasModifyStages ? modifyStages : (role.canModifyTask ? ALL_STAGE_IDS : []),
