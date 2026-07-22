@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Zap, Sparkles, Bug, AlertCircle, Palette, ChevronDown, ChevronUp } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Zap, Sparkles, Bug, AlertCircle, Palette, X, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface UpNextEntry {
   project: { id: string; name: string; logoUrl: string | null };
+  /** The project's single Up Next task — same slot as the board. */
   task: {
     id: string;
     title: string;
@@ -15,7 +17,6 @@ interface UpNextEntry {
     priority: number | null;
     assignee: { id: string; name: string | null; imageUrl: string | null } | null;
   };
-  moreReady: number;
 }
 
 const TASK_TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string; label: string }> = {
@@ -35,6 +36,17 @@ function priorityColor(priority: number | null) {
   return "text-muted-foreground";
 }
 
+function ProjectAvatar({ project, size = "w-6 h-6" }: { project: UpNextEntry["project"]; size?: string }) {
+  return project.logoUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={project.logoUrl} alt="" className={cn(size, "rounded object-cover shrink-0")} />
+  ) : (
+    <div className={cn(size, "rounded bg-primary/15 flex items-center justify-center text-[10px] font-semibold text-primary shrink-0")}>
+      {project.name[0]?.toUpperCase()}
+    </div>
+  );
+}
+
 const PREVIEW_COUNT = 5;
 
 function Row({ entry }: { entry: UpNextEntry }) {
@@ -47,18 +59,7 @@ function Row({ entry }: { entry: UpNextEntry }) {
       target="_blank"
       className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors group"
     >
-      {entry.project.logoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={entry.project.logoUrl}
-          alt=""
-          className="w-6 h-6 rounded object-cover shrink-0"
-        />
-      ) : (
-        <div className="w-6 h-6 rounded bg-primary/15 flex items-center justify-center text-[10px] font-semibold text-primary shrink-0">
-          {entry.project.name[0]?.toUpperCase()}
-        </div>
-      )}
+      <ProjectAvatar project={entry.project} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[10px] font-semibold text-muted-foreground truncate">
@@ -82,88 +83,148 @@ function Row({ entry }: { entry: UpNextEntry }) {
           <span className="font-mono">{fmtTaskNumber(entry.task.taskNumber)}</span>
           <span>·</span>
           <span className="truncate">{entry.task.assignee?.name ?? "Unassigned"}</span>
-          {entry.moreReady > 0 && (
-            <>
-              <span>·</span>
-              <span className="text-cyan-400/80">+{entry.moreReady} more ready</span>
-            </>
-          )}
         </div>
       </div>
     </Link>
   );
 }
 
-// One row per active project: the top-priority Clarification task that is
-// ready to be pulled into development — the board's "Up Next" slot, across
-// every project at once.
-export function UpNextByProject({ data }: { data: UpNextEntry[] }) {
-  const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? data : data.slice(0, PREVIEW_COUNT);
+function FullRow({ entry }: { entry: UpNextEntry }) {
+  const typeInfo = TASK_TYPE_ICONS[entry.task.taskType];
+  const TypeIcon = typeInfo?.icon ?? Sparkles;
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col h-full">
-      {/* Header */}
-      <div className="px-4 py-3.5 border-b border-border">
-        <div className="flex items-center justify-between mb-2.5">
-          <h2 className="text-[14px] font-semibold flex items-center gap-2">
-            <Zap className="w-4 h-4 text-cyan-400" />
-            Up Next By Project
-          </h2>
-          {data.length > 0 && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 rounded-full px-2 py-0.5">
-              {data.length} project{data.length !== 1 ? "s" : ""}
+    <Link
+      href={`/dashboard/projects/${entry.project.id}/tasks/${entry.task.id}`}
+      target="_blank"
+      className="grid grid-cols-[150px_24px_1fr_120px_50px] gap-3 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <ProjectAvatar project={entry.project} />
+        <span className="text-[12px] font-semibold truncate">{entry.project.name}</span>
+      </div>
+      <div className={cn("w-6 h-6 rounded flex items-center justify-center border shrink-0", typeInfo?.color ?? "text-muted-foreground bg-muted border-border")}>
+        <TypeIcon className="w-3.5 h-3.5" />
+      </div>
+      <p className="text-[13px] font-medium truncate group-hover:text-primary transition-colors min-w-0">
+        <span className="text-muted-foreground/50 font-mono mr-1.5 text-[11px]">{fmtTaskNumber(entry.task.taskNumber)}</span>
+        {entry.task.title}
+      </p>
+      <span className="text-[11px] text-muted-foreground truncate">
+        {entry.task.assignee?.name ?? "Unassigned"}
+      </span>
+      <span className={cn("text-[12px] font-bold tabular-nums text-right", priorityColor(entry.task.priority))}>
+        {entry.task.priority != null ? `P${entry.task.priority}` : "—"}
+      </span>
+    </Link>
+  );
+}
+
+// One row per active project: the project's single Up Next task — the same
+// task the board surfaces in the cyan Up Next slot. View All opens a
+// fullscreen popup listing every project's Up Next.
+export function UpNextByProject({ data }: { data: UpNextEntry[] }) {
+  const [showAll, setShowAll] = useState(false);
+
+  const preview = data.slice(0, PREVIEW_COUNT);
+
+  return (
+    <>
+      <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col h-full">
+        {/* Header */}
+        <div className="px-4 py-3.5 border-b border-border">
+          <div className="flex items-center justify-between mb-2.5">
+            <h2 className="text-[14px] font-semibold flex items-center gap-2">
+              <Zap className="w-4 h-4 text-cyan-400" />
+              Up Next By Project
+            </h2>
+            {data.length > 0 && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 rounded-full px-2 py-0.5">
+                {data.length} project{data.length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 text-[11px]">
+            <span className="text-muted-foreground">
+              {data.length === 0
+                ? "Nothing is ready to pull"
+                : "The Up Next task in each project"}
             </span>
+          </div>
+        </div>
+
+        {/* Rows */}
+        <div className="flex-1 min-h-[260px]">
+          {data.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <Zap className="w-7 h-7 text-muted-foreground/20 mb-2" strokeWidth={1.5} />
+              <p className="text-[12px] text-muted-foreground">No tasks ready to start</p>
+              <p className="text-[10px] text-muted-foreground/60 mt-1 max-w-56">
+                A task shows here once its required questions are answered and a priority is set.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border/50">
+              {preview.map((entry) => (
+                <Row key={entry.project.id} entry={entry} />
+              ))}
+            </div>
           )}
         </div>
-        <div className="flex items-center gap-3 text-[11px]">
-          <span className="text-muted-foreground">
-            {data.length === 0
-              ? "Nothing is ready to pull"
-              : "Next task ready to start in each project"}
-          </span>
-        </div>
-      </div>
 
-      {/* Rows */}
-      <div className="flex-1 min-h-[260px]">
-        {data.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <Zap className="w-7 h-7 text-muted-foreground/20 mb-2" strokeWidth={1.5} />
-            <p className="text-[12px] text-muted-foreground">No tasks ready to start</p>
-            <p className="text-[10px] text-muted-foreground/60 mt-1 max-w-56">
-              A task shows here once its required questions are answered and a priority is set.
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y divide-border/50">
-            {visible.map((entry) => (
-              <Row key={entry.project.id} entry={entry} />
-            ))}
-          </div>
+        {/* View All */}
+        {data.length > PREVIEW_COUNT && (
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5 mt-auto"
+          >
+            <ExternalLink className="w-3 h-3" />
+            View All ({data.length})
+          </button>
         )}
       </div>
 
-      {/* Expand / collapse */}
-      {data.length > PREVIEW_COUNT && (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5 mt-auto"
-        >
-          {expanded ? (
-            <>
-              <ChevronUp className="w-3 h-3" />
-              Show Less
-            </>
-          ) : (
-            <>
-              <ChevronDown className="w-3 h-3" />
-              Show All ({data.length})
-            </>
-          )}
-        </button>
+      {showAll && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-background/95 backdrop-blur-sm flex flex-col">
+          <div className="h-12 flex items-center justify-between px-6 border-b border-border shrink-0">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowAll(false)}
+                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-[13px]"
+              >
+                <X className="w-4 h-4" />
+                Close
+              </button>
+              <span className="text-border">|</span>
+              <h2 className="text-[13px] font-semibold flex items-center gap-2">
+                <Zap className="w-4 h-4 text-cyan-400" />
+                Up Next By Project
+                <span className="text-[11px] font-normal text-muted-foreground">
+                  ({data.length} project{data.length !== 1 ? "s" : ""})
+                </span>
+              </h2>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-4xl mx-auto py-4">
+              <div className="rounded-xl border border-border bg-card divide-y divide-border">
+                <div className="grid grid-cols-[150px_24px_1fr_120px_50px] gap-3 px-5 py-2.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+                  <span>Project</span>
+                  <span />
+                  <span>Up Next Task</span>
+                  <span>Assignee</span>
+                  <span className="text-right">Prio</span>
+                </div>
+                {data.map((entry) => (
+                  <FullRow key={entry.project.id} entry={entry} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }

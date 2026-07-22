@@ -1460,14 +1460,15 @@ export async function getUpNextByProject() {
     byProject.set(t.project.id, list);
   }
 
+  // Only the single Up Next task per project — same as the board, which
+  // surfaces exactly one task in the Up Next slot (MAX_UP_NEXT = 1).
   return [...byProject.values()]
     .map((list) => {
-      const sorted = list.sort(
+      const top = list.sort(
         (a, b) =>
           (b.priority ?? 0) - (a.priority ?? 0) ||
           a.updatedAt.getTime() - b.updatedAt.getTime(),
-      );
-      const top = sorted[0];
+      )[0];
       return {
         project: top.project,
         task: {
@@ -1478,7 +1479,6 @@ export async function getUpNextByProject() {
           priority: top.priority,
           assignee: top.assignee,
         },
-        moreReady: sorted.length - 1,
       };
     })
     .sort(
