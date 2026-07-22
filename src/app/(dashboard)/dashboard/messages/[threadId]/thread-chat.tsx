@@ -1000,7 +1000,7 @@ export function ThreadChat({
   }, [mentionables, canMentionAll]);
 
   // Files wait locally (no upload) until the user presses Send.
-  const pickFiles = (files: FileList | null) => {
+  const pickFiles = (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
     const picked: PendingFile[] = Array.from(files)
       .filter((f) => f.size > 0)
@@ -1934,6 +1934,34 @@ export function ThreadChat({
               onChange={(e) => {
                 setDraft(e.target.value);
                 notifyTyping();
+              }}
+              onPaste={(e) => {
+                // Pasted images/screenshots (and copied files) go through the
+                // same pending-attachment flow as drag-and-drop.
+                const items = e.clipboardData?.items;
+                if (!items) return;
+                const files: File[] = [];
+                for (const item of Array.from(items)) {
+                  if (item.kind !== "file") continue;
+                  const file = item.getAsFile();
+                  if (!file) continue;
+                  // Clipboard screenshots arrive as a generic "image.png" —
+                  // give them a distinct, dated name.
+                  if (file.type.startsWith("image/") && (!file.name || file.name === "image.png")) {
+                    const ext = file.type.split("/")[1]?.split("+")[0] || "png";
+                    const stamp = new Date()
+                      .toISOString()
+                      .replace(/[:T]/g, "-")
+                      .slice(0, 19);
+                    files.push(new File([file], `Pasted image ${stamp}.${ext}`, { type: file.type }));
+                  } else {
+                    files.push(file);
+                  }
+                }
+                if (files.length > 0) {
+                  e.preventDefault();
+                  pickFiles(files);
+                }
               }}
               onKeyDown={(e) => {
                 if (mentionPickerOpen) {
