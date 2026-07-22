@@ -75,19 +75,27 @@ export async function updateRole(data: {
   return updated;
 }
 
-export async function deleteRole(roleId: string) {
+// Returns { error } instead of throwing: thrown server-action errors are
+// masked in production ("An error occurred in the Server Components render"),
+// so the user would never see the reason.
+export async function deleteRole(roleId: string): Promise<{ error?: string }> {
   const user = await requireUser();
-  if (user.systemRole !== "ADMIN") throw new Error("Only admins can manage roles");
+  if (user.systemRole !== "ADMIN") return { error: "Only admins can manage roles" };
 
   const role = await prisma.projectRole.findUnique({
     where: { id: roleId },
     include: { _count: { select: { members: true } } },
   });
-  if (!role) throw new Error("Role not found");
-  if (role.isAdmin) throw new Error("Cannot delete the Admin role");
-  if (role._count.members > 0) throw new Error("Cannot delete a role that has members assigned");
+  if (!role) return { error: "Role not found" };
+  if (role.isAdmin) return { error: "Cannot delete the Admin role" };
+  if (role._count.members > 0) {
+    return {
+      error: `Cannot delete "${role.name}" — ${role._count.members} member${role._count.members !== 1 ? "s" : ""} still ${role._count.members !== 1 ? "have" : "has"} this role. Reassign them first.`,
+    };
+  }
 
   await prisma.projectRole.delete({ where: { id: roleId } });
 
   revalidatePath("/dashboard/roles");
+  return {};
 }

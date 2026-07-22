@@ -196,7 +196,8 @@ export function RolesManager({ roles }: Props) {
   async function handleDelete(roleId: string) {
     if (!confirm("Delete this role?")) return;
     try {
-      await deleteRole(roleId);
+      const res = await deleteRole(roleId);
+      if (res?.error) alert(res.error);
     } catch (err) {
       alert((err as Error).message);
     }
