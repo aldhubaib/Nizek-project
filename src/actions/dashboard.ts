@@ -1380,6 +1380,114 @@ export async function getTasksNeedingClientInput(assigneeId?: string) {
     .sort((a, b) => b.waitingMs - a.waitingMs);
 }
 
+// "What's next" across all projects: for every active project the user can
+// see, the top-priority Clarification task that is ready to move (all required
+// non-client questions answered, priority set, not waiting on client input) —
+// the same rule as the board's "Up Next" slot.
+export async function getUpNextByProject() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  const whereClause = user.systemRole === "ADMIN"
+    ? {}
+    : user.systemRole === "PM" || user.systemRole === "TECH_LEAD"
+      ? {
+          OR: [
+            { members: { some: { userId: user.id } } },
+            { team: { members: { some: { userId: user.id } } } },
+          ],
+        }
+      : { members: { some: { userId: user.id } } };
+
+  const [tasks, requiredQuestions] = await Promise.all([
+    prisma.task.findMany({
+      where: {
+        stage: "CLARIFICATION",
+        archivedAt: null,
+        project: { ...whereClause, ...activeProjectFilter() },
+      },
+      select: {
+        id: true,
+        title: true,
+        taskNumber: true,
+        taskType: true,
+        priority: true,
+        updatedAt: true,
+        assignee: { select: { id: true, name: true, imageUrl: true } },
+        project: { select: { id: true, name: true, logoUrl: true } },
+        answers: {
+          select: {
+            questionId: true,
+            answer: true,
+            question: { select: { type: true } },
+          },
+        },
+      },
+      take: 1000,
+    }),
+    prisma.defaultQuestion.findMany({
+      where: { required: true, type: { not: "client" } },
+      select: { id: true, taskType: true },
+    }),
+  ]);
+
+  const requiredByType = buildRequiredByType(requiredQuestions);
+
+  const ready = tasks.filter((t) => {
+    const reqIds = requiredByType.get(t.taskType) ?? [];
+    const answeredIds = new Set(
+      t.answers.filter((a) => a.answer && a.answer.trim()).map((a) => a.questionId),
+    );
+    const hasAllRequired = reqIds.every((id) => answeredIds.has(id)) && t.priority != null;
+    if (!hasAllRequired) return false;
+
+    const waitingOnClient = t.answers.some((a) => {
+      if (a.question.type !== "client") return false;
+      try {
+        const parsed = JSON.parse(a.answer);
+        return parsed.needed === true && !parsed.completed;
+      } catch {
+        return false;
+      }
+    });
+    return !waitingOnClient;
+  });
+
+  const byProject = new Map<string, typeof ready>();
+  for (const t of ready) {
+    const list = byProject.get(t.project.id) ?? [];
+    list.push(t);
+    byProject.set(t.project.id, list);
+  }
+
+  return [...byProject.values()]
+    .map((list) => {
+      const sorted = list.sort(
+        (a, b) =>
+          (b.priority ?? 0) - (a.priority ?? 0) ||
+          a.updatedAt.getTime() - b.updatedAt.getTime(),
+      );
+      const top = sorted[0];
+      return {
+        project: top.project,
+        task: {
+          id: top.id,
+          title: top.title,
+          taskNumber: top.taskNumber,
+          taskType: top.taskType,
+          priority: top.priority,
+          assignee: top.assignee,
+        },
+        moreReady: sorted.length - 1,
+      };
+    })
+    .sort(
+      (a, b) =>
+        (b.task.priority ?? 0) - (a.task.priority ?? 0) ||
+        a.project.name.localeCompare(b.project.name),
+    );
+}
+
 export async function getClientInputByAssignee() {
   const tasks = await getTasksNeedingClientInput();
 
