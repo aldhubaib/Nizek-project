@@ -2,19 +2,9 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
-
-function notLatePaymentFilter() {
-  const now = new Date();
-  return {
-    contracts: {
-      none: {
-        latePayment: true,
-        startDate: { lte: now },
-        endDate: { gte: now },
-      },
-    },
-  };
-}
+// Expired and late-payment projects are excluded from every task-level
+// dashboard monitor (same rule as the Expired badge on project cards).
+import { activeProjectFilter } from "@/lib/project-filters";
 
 export async function getDashboardData(projectId: string) {
   const { user, member } = await requireProjectMember(projectId);
@@ -349,7 +339,7 @@ export async function getLongestInPipeline(stages?: string[], assigneeId?: strin
     where: {
       stage: { in: activeStages as any },
       startedAt: { not: null },
-      project: { ...whereClause, ...notLatePaymentFilter() },
+      project: { ...whereClause, ...activeProjectFilter() },
       ...(assigneeId ? { assigneeId } : {}),
     },
     select: {
@@ -434,7 +424,7 @@ export async function getLongestInStageByAssignee(stages?: string[], thresholdDa
       stage: { in: activeStages as any },
       startedAt: { not: null },
       assigneeId: { not: null },
-      project: { ...whereClause, ...notLatePaymentFilter() },
+      project: { ...whereClause, ...activeProjectFilter() },
     },
     select: {
       id: true,
@@ -500,7 +490,7 @@ export async function getShippedSummary() {
   const doneTasks = await prisma.task.findMany({
     where: {
       stage: "DONE",
-      project: { ...whereClause, ...notLatePaymentFilter() },
+      project: { ...whereClause, ...activeProjectFilter() },
     },
     select: {
       id: true,
@@ -560,7 +550,7 @@ export async function getMostRejectedTasks() {
   const declineActivities = await prisma.taskActivity.findMany({
     where: {
       action: "declined",
-      task: { stage: { not: "DONE" }, project: { ...whereClause, ...notLatePaymentFilter() } },
+      task: { stage: { not: "DONE" }, project: { ...whereClause, ...activeProjectFilter() } },
     },
     select: {
       id: true,
@@ -804,7 +794,7 @@ export async function getClientDependencies() {
       question: { type: "client" },
       task: {
         stage: { not: "DONE" },
-        project: { ...whereClause, ...notLatePaymentFilter() },
+        project: { ...whereClause, ...activeProjectFilter() },
       },
     },
     select: {
@@ -957,7 +947,7 @@ export async function getMyTasks() {
       assigneeId: user.id,
       archivedAt: null,
       stage: { not: "DONE" },
-      project: notLatePaymentFilter(),
+      project: activeProjectFilter(),
     },
     select: {
       id: true,
@@ -1019,7 +1009,7 @@ export async function getDevQueue() {
         projectId: { in: projectIds },
         archivedAt: null,
         stage: { in: ["READY_FOR_DEV", "IN_DEVELOPMENT"] },
-        project: notLatePaymentFilter(),
+        project: activeProjectFilter(),
       },
       select: {
         id: true,
@@ -1042,7 +1032,7 @@ export async function getDevQueue() {
         archivedAt: null,
         stage: "CLARIFICATION",
         priority: { not: null },
-        project: notLatePaymentFilter(),
+        project: activeProjectFilter(),
       },
       select: {
         id: true,
@@ -1112,7 +1102,7 @@ export async function getPmQueue() {
       projectId: { in: projectIds },
       archivedAt: null,
       stage: "INTERNAL_REVIEW",
-      project: notLatePaymentFilter(),
+      project: activeProjectFilter(),
     },
     select: {
       id: true,
@@ -1168,7 +1158,7 @@ function funnelProjectFilter(systemRole: string, userId: string) {
     : systemRole === "PM" || systemRole === "TECH_LEAD"
       ? { OR: [{ members: { some: { userId } } }, { team: { members: { some: { userId } } } }] }
       : { members: { some: { userId } } };
-  return { ...wh, ...notLatePaymentFilter() };
+  return { ...wh, ...activeProjectFilter() };
 }
 
 function buildRequiredByType(questions: { id: string; taskType: string }[]) {
@@ -1333,7 +1323,7 @@ export async function getTasksNeedingClientInput(assigneeId?: string) {
       task: {
         stage: { in: ["NEW_REQUEST", "CLARIFICATION"] },
         archivedAt: null,
-        project: { ...whereClause, ...notLatePaymentFilter() },
+        project: { ...whereClause, ...activeProjectFilter() },
         ...(assigneeId ? { assigneeId } : {}),
       },
     },

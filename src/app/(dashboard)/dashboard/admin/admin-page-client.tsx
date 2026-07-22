@@ -14,6 +14,7 @@ import {
   LogIn,
   Volume2,
   Activity,
+  ClipboardCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { TeamsManager } from "@/components/settings/teams-manager";
@@ -25,6 +26,7 @@ import { AppLogoClient } from "./app-logo-client";
 import { LoginSettingsClient } from "./login-settings-client";
 import { NotificationSoundClient } from "./notification-sound-client";
 import { PushHealthClient } from "./push-health-client";
+import { AuditAccessManager } from "@/components/settings/audit-access-manager";
 import type { BrandingAssetDTO } from "@/actions/branding";
 import type { LoginPhotoDTO } from "@/actions/login-photos";
 import type { NotificationSoundDTO } from "@/actions/notification-sound-settings";
@@ -39,7 +41,8 @@ type TabId =
   | "app-logo"
   | "login"
   | "notification-sound"
-  | "push-health";
+  | "push-health"
+  | "audit-access";
 
 type SettingsItem = {
   id: TabId;
@@ -120,6 +123,12 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         label: "Push Health",
         icon: Activity,
         desc: "Delivery success, device coverage, and recent push failures.",
+      },
+      {
+        id: "audit-access",
+        label: "Audit Access",
+        icon: ClipboardCheck,
+        desc: "Choose who can audit which teams' flagged tasks.",
       },
     ],
   },
@@ -225,6 +234,7 @@ export function AdminPageClient({
           <NotificationSoundClient sound={notificationSound} />
         )}
         {active.id === "push-health" && <PushHealthClient />}
+        {active.id === "audit-access" && <AuditAccessManager />}
       </div>
     </div>
   );

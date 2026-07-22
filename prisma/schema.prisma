@@ -109,6 +109,9 @@ model User {
   pushDeliveryLogs  PushDeliveryLog[]         @relation("PushDeliveryLogRecipient")
   notificationPreference NotificationPreference? @relation("UserNotificationPreference")
   mutedThreads      MutedThread[]             @relation("UserMutedThreads")
+  auditPermissions  AuditPermission[]         @relation("UserAuditPermissions")
+  taskAudits        TaskAudit[]               @relation("AuditCreator")
+  auditBlames       TaskAuditItem[]           @relation("AuditBlamedUser")
 
   @@index([systemRole])
   @@index([blocked])
@@ -122,6 +125,7 @@ model Team {
 
   projects Project[]
   members  TeamMember[]
+  auditPermissions AuditPermission[] @relation("TeamAuditPermissions")
 }
 
 model TeamMember {
@@ -686,6 +690,92 @@ model MutedThread {
 
   @@unique([userId, threadKey])
   @@index([userId])
+}
+
+// ─── Task Audit module ──────────────────────────────────
+// A manager with an AuditPermission grant reviews flagged tasks daily and
+// assigns responsibility. Admins implicitly have every team.
+
+// Grants a user the right to audit one team's projects.
+model AuditPermission {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("UserAuditPermissions", fields: [userId], references: [id], onDelete: Cascade)
+  teamId      String
+  team        Team     @relation("TeamAuditPermissions", fields: [teamId], references: [id], onDelete: Cascade)
+  grantedById String?
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, teamId])
+  @@index([userId])
+}
+
+// One daily report per auditor. Items are snapshotted at creation so the
+// report stays stable even as the live board changes during the day.
+model TaskAudit {
+  id          String    @id @default(cuid())
+  // Calendar day of the report, stored at UTC midnight. Reports can only be
+  // created for "today"; reopening the same day resumes the draft.
+  auditDate   DateTime
+  createdById String
+  createdBy   User      @relation("AuditCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  // Teams the auditor selected for this report (subset of their grants).
+  teamIds     String[]
+  teamNames   String[]
+  status      String    @default("draft") // draft | submitted
+  submittedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items TaskAuditItem[]
+
+  @@unique([createdById, auditDate])
+  @@index([auditDate])
+}
+
+// One flagged task (or overdue deadline note) inside a report, with the
+// manager's verdict. Snapshot columns freeze what the auditor saw.
+model TaskAuditItem {
+  id      String    @id @default(cuid())
+  auditId String
+  audit   TaskAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  // Exactly one of taskId / noteId is set.
+  taskId String?
+  noteId String?
+
+  flagType String // critical_late | rejected | deadline_overdue | warn_late | client_input
+  severity Int
+
+  // Snapshot of the flagged state at report-creation time.
+  title        String
+  taskNumber   Int?
+  projectId    String
+  projectName  String
+  teamName     String?
+  stage        String?
+  stageLabel   String?
+  stageHours   Int?
+  declineCount Int?
+  dueInDays    Int?
+  assigneeId   String?
+  assigneeName String?
+
+  // True when the same task/note already received a verdict in an earlier
+  // report — shown as "carried over, still unresolved" instead of asking for
+  // a fresh verdict.
+  carriedOver Boolean @default(false)
+
+  verdict      String    @default("pending") // pending | blamed | excused | skipped
+  blamedUserId String?
+  blamedUser   User?     @relation("AuditBlamedUser", fields: [blamedUserId], references: [id], onDelete: SetNull)
+  reasonNote   String?
+  decidedAt    DateTime?
+
+  @@index([auditId])
+  @@index([taskId])
+  @@index([noteId])
+  @@index([blamedUserId])
 }
 
 model BrandingAsset {

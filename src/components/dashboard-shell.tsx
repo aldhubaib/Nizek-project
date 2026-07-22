@@ -14,7 +14,7 @@ import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
 
 const DESKTOP_BREAKPOINT = 1024;
 
-export function DashboardShell({ children, isAdmin = false, currentUserId, notificationSoundUrl }: { children: React.ReactNode; isAdmin?: boolean; currentUserId?: string; notificationSoundUrl?: string | null }) {
+export function DashboardShell({ children, isAdmin = false, canAudit = false, currentUserId, notificationSoundUrl }: { children: React.ReactNode; isAdmin?: boolean; canAudit?: boolean; currentUserId?: string; notificationSoundUrl?: string | null }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -66,6 +66,7 @@ export function DashboardShell({ children, isAdmin = false, currentUserId, notif
             pinned={pinned}
             onTogglePin={() => setPinned(!pinned)}
             isAdmin={isAdmin}
+            canAudit={canAudit}
           />
         </div>
       )}
@@ -93,7 +94,7 @@ export function DashboardShell({ children, isAdmin = false, currentUserId, notif
             drawerOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <Sidebar isAdmin={isAdmin} />
+          <Sidebar isAdmin={isAdmin} canAudit={canAudit} />
         </div>
       )}
 
@@ -113,7 +114,7 @@ export function DashboardShell({ children, isAdmin = false, currentUserId, notif
 
       {/* Mobile/tablet bottom navigation — same permission rules as the sidebar */}
       {showBottomNav && (
-        <BottomNav isAdmin={isAdmin} onOpenMenu={() => setDrawerOpen(true)} />
+        <BottomNav isAdmin={isAdmin} canAudit={canAudit} onOpenMenu={() => setDrawerOpen(true)} />
       )}
       <NotificationSound currentUserId={currentUserId} soundUrl={notificationSoundUrl} />
       <NotificationSync currentUserId={currentUserId} />

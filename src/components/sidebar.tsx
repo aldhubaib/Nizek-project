@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Inbox,
   FolderKanban,
+  ClipboardCheck,
   Settings,
   Pin,
   PinOff,
@@ -19,10 +20,11 @@ import {
 import { cn } from "@/lib/utils";
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false },
-  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false },
-  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false },
-  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false },
+  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false, auditOnly: false },
+  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, auditOnly: false },
+  { name: "Audit", href: "/dashboard/audit", icon: ClipboardCheck, adminOnly: false, auditOnly: true },
+  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, auditOnly: false },
 ];
 
 interface SidebarProps {
@@ -30,6 +32,7 @@ interface SidebarProps {
   pinned?: boolean;
   onTogglePin?: () => void;
   isAdmin?: boolean;
+  canAudit?: boolean;
 }
 
 export function Sidebar({
@@ -37,6 +40,7 @@ export function Sidebar({
   pinned = false,
   onTogglePin,
   isAdmin = false,
+  canAudit = false,
 }: SidebarProps) {
   const pathname = usePathname();
 
@@ -101,7 +105,9 @@ export function Sidebar({
 
       {/* Nav */}
       <nav className="flex-1 py-1.5 px-2 overflow-y-auto">
-        {navigation.filter((item) => !item.adminOnly || isAdmin).map((item) => {
+        {navigation
+          .filter((item) => (!item.adminOnly || isAdmin) && (!item.auditOnly || canAudit))
+          .map((item) => {
           const active = isActive(item.href);
           const linkContent = (
             <Link

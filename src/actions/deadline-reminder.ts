@@ -12,6 +12,7 @@ import {
   isDeadlineTestProject,
   sendDeadlineReminderForNote,
 } from "@/lib/deadline-reminders";
+import { activeProjectFilter } from "@/lib/project-filters";
 
 function projectScopeWhere(user: { id: string; systemRole: string }) {
   if (user.systemRole === "ADMIN") return {};
@@ -26,18 +27,6 @@ function projectScopeWhere(user: { id: string; systemRole: string }) {
   return { members: { some: { userId: user.id } } };
 }
 
-function notLatePaymentFilter() {
-  const now = new Date();
-  return {
-    contracts: {
-      none: {
-        latePayment: true,
-        startDate: { lte: now },
-        endDate: { gte: now },
-      },
-    },
-  };
-}
 
 export type IncompleteDeadlineRow = {
   id: string;
@@ -57,7 +46,7 @@ export async function getIncompleteDeadlines(): Promise<IncompleteDeadlineRow[]>
       noteType: "DEADLINE",
       completedAt: null,
       dueDate: { not: null },
-      project: { ...projectScopeWhere(user), ...notLatePaymentFilter() },
+      project: { ...projectScopeWhere(user), ...activeProjectFilter() },
     },
     select: {
       id: true,

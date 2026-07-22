@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Inbox,
   FolderKanban,
+  ClipboardCheck,
   Settings,
   Menu,
 } from "lucide-react";
@@ -13,10 +14,11 @@ import { cn } from "@/lib/utils";
 
 // Same items + permission flags as the desktop sidebar.
 const NAV_ITEMS = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false },
-  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false },
-  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false },
-  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false },
+  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false, auditOnly: false },
+  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, auditOnly: false },
+  { name: "Audit", href: "/dashboard/audit", icon: ClipboardCheck, adminOnly: false, auditOnly: true },
+  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, auditOnly: false },
 ];
 
 // Tabs shown at once, including the trailing Menu tab.
@@ -24,6 +26,7 @@ const MAX_TABS = 5;
 
 interface BottomNavProps {
   isAdmin?: boolean;
+  canAudit?: boolean;
   /** Opens the drawer with the full sidebar (account, plus any overflow items). */
   onOpenMenu: () => void;
 }
@@ -33,10 +36,12 @@ interface BottomNavProps {
  * the sidebar. The Inbox tab is always kept visible; if there are ever more
  * items than tab slots, the extras stay reachable through the Menu drawer.
  */
-export function BottomNav({ isAdmin = false, onOpenMenu }: BottomNavProps) {
+export function BottomNav({ isAdmin = false, canAudit = false, onOpenMenu }: BottomNavProps) {
   const pathname = usePathname();
 
-  const allowed = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
+  const allowed = NAV_ITEMS.filter(
+    (item) => (!item.adminOnly || isAdmin) && (!item.auditOnly || canAudit),
+  );
   let visible = allowed.slice(0, MAX_TABS - 1);
   const inbox = allowed.find((item) => item.name === "Inbox");
   if (inbox && !visible.includes(inbox)) {

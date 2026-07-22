@@ -4,6 +4,7 @@ import { SignOutButton } from "@clerk/nextjs";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { getCurrentUser } from "@/lib/auth";
 import { getNotificationSoundUrl } from "@/lib/branding";
+import { prisma } from "@/lib/prisma";
 
 export default async function DashboardLayout({
   children,
@@ -39,5 +40,13 @@ export default async function DashboardLayout({
 
   const notificationSoundUrl = await getNotificationSoundUrl();
 
-  return <DashboardShell isAdmin={user?.systemRole === "ADMIN"} currentUserId={user?.id} notificationSoundUrl={notificationSoundUrl}>{children}</DashboardShell>;
+  // Audit module visibility: admins always, others need an AuditPermission grant.
+  const isAdmin = user?.systemRole === "ADMIN";
+  const canAudit =
+    isAdmin ||
+    (user
+      ? (await prisma.auditPermission.count({ where: { userId: user.id } })) > 0
+      : false);
+
+  return <DashboardShell isAdmin={isAdmin} canAudit={canAudit} currentUserId={user?.id} notificationSoundUrl={notificationSoundUrl}>{children}</DashboardShell>;
 }
