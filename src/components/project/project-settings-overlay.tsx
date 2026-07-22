@@ -81,6 +81,7 @@ export function ProjectSettingsOverlay({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<"general" | "archive">("general");
 
@@ -122,20 +123,24 @@ export function ProjectSettingsOverlay({
 
   async function handleSave() {
     setSaving(true);
+    setSaveError(null);
     try {
       const parsedMax = parseInt(maxPipelineTasks, 10);
       await updateProject({
         projectId: project.id,
         name: name.trim(),
         description,
-        ...(teamId && { teamId }),
+        // Empty string = "No team" — send null so the team can be cleared.
+        teamId: teamId || null,
         defaultClientReviewerId: clientReviewerId || null,
         ...(Number.isFinite(parsedMax) && parsedMax > 0 && { maxPipelineTasks: parsedMax }),
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      // Refresh server components so the page reflects the change right away.
+      router.refresh();
     } catch (err) {
-      console.error(err);
+      setSaveError(err instanceof Error ? err.message : "Failed to save changes");
     } finally {
       setSaving(false);
     }
@@ -184,10 +189,15 @@ export function ProjectSettingsOverlay({
           </div>
         </div>
         {activeTab === "general" && (
-          <Button size="sm" onClick={handleSave} disabled={saving}>
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
-            {saved ? "Saved!" : saving ? "Saving..." : "Save Changes"}
-          </Button>
+          <div className="flex items-center gap-3">
+            {saveError && (
+              <span className="text-[12px] text-destructive">{saveError}</span>
+            )}
+            <Button size="sm" onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+              {saved ? "Saved!" : saving ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
         )}
       </div>
 

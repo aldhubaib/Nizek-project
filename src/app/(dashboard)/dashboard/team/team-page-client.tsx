@@ -1,16 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, Trash2, ShieldCheck, Shield, AlertTriangle, ArrowRightLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, Trash2, ShieldCheck, Shield, AlertTriangle, ArrowRightLeft, ChevronDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { updateUserAdmin, inviteToTeam, toggleBlockUser, cancelTeamInvite, resendTeamInvite, getUserTaskSummary } from "@/actions/team";
+import { updateMemberRole } from "@/actions/project";
 
 interface MemberProject {
   id: string;
   name: string;
   role: string;
   roleName: string;
+  /** ProjectMember row id — needed to change the role from this page. */
+  memberId: string;
+  roleId: string | null;
 }
 
 interface Member {
@@ -481,17 +486,21 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
                   <div className="flex items-center gap-1.5 mt-1">
                     <FolderKanban className="w-3 h-3 text-muted-foreground/50" />
                     <div className="flex flex-wrap gap-1">
-                      {member.projects.map((p) => (
-                        <span
-                          key={p.id}
-                          className="text-[10px] px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground"
-                        >
-                          {p.name}
-                          {p.roleName && (
-                            <span className="text-muted-foreground/50 ml-0.5">({p.roleName})</span>
-                          )}
-                        </span>
-                      ))}
+                      {member.projects.map((p) =>
+                        isAdmin ? (
+                          <ProjectRoleChip key={p.id} project={p} roles={roles} />
+                        ) : (
+                          <span
+                            key={p.id}
+                            className="text-[10px] px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground"
+                          >
+                            {p.name}
+                            {p.roleName && (
+                              <span className="text-muted-foreground/50 ml-0.5">({p.roleName})</span>
+                            )}
+                          </span>
+                        ),
+                      )}
                     </div>
                   </div>
                 )}
@@ -596,6 +605,86 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
             ))}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A project chip that admins can click to change the member's role in that
+ * project, without leaving the settings page.
+ */
+function ProjectRoleChip({ project, roles }: { project: MemberProject; roles: GlobalRole[] }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  async function handlePick(roleId: string) {
+    if (roleId === project.roleId) {
+      setOpen(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateMemberRole({ projectId: project.id, memberId: project.memberId, roleId });
+      router.refresh();
+      setOpen(false);
+    } catch (err) {
+      alert((err as Error).message || "Failed to update role");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={saving}
+        className={cn(
+          "text-[10px] px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground",
+          "inline-flex items-center gap-0.5 hover:border-muted-foreground/40 hover:text-foreground transition-colors",
+          saving && "opacity-50",
+        )}
+      >
+        {project.name}
+        {project.roleName && (
+          <span className="text-muted-foreground/50">({project.roleName})</span>
+        )}
+        <ChevronDown className="w-2.5 h-2.5 text-muted-foreground/50" />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full mt-1 z-50 min-w-[160px] rounded-lg border border-border bg-sidebar shadow-xl py-1">
+            <p className="px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/50 truncate">
+              {project.name}
+            </p>
+            {roles.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => handlePick(r.id)}
+                disabled={saving}
+                className={cn(
+                  "w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left text-[11px] transition-colors",
+                  r.id === project.roleId
+                    ? "text-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-card",
+                )}
+              >
+                <Shield className="w-3 h-3 text-muted-foreground/50 shrink-0" strokeWidth={1.5} />
+                <span className="flex-1 truncate">{r.name}</span>
+                {r.id === project.roleId && <Check className="w-3 h-3 text-primary shrink-0" />}
+              </button>
+            ))}
+            {roles.length === 0 && (
+              <p className="px-2.5 py-1.5 text-[11px] text-muted-foreground/60">No roles defined.</p>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

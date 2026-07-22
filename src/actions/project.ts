@@ -117,6 +117,9 @@ export async function getProject(projectId: string) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: {
+      // The settings overlay initializes its Team dropdown from this —
+      // without it the dropdown always showed "No team".
+      team: { select: { id: true, name: true } },
       contracts: { orderBy: { startDate: "desc" } },
       members: { include: { user: { select: { id: true, name: true, imageUrl: true, email: true, systemRole: true } }, projectRole: true } },
       _count: { select: { tasks: true, meetingNotes: true, assets: true } },
@@ -133,7 +136,8 @@ export async function updateProject(data: {
   name?: string;
   description?: string;
   logoUrl?: string | null;
-  teamId?: string;
+  // null clears the team ("No team"); undefined leaves it unchanged.
+  teamId?: string | null;
   defaultClientReviewerId?: string | null;
   maxPipelineTasks?: number;
 }) {
@@ -145,7 +149,7 @@ export async function updateProject(data: {
       ...(data.name && { name: data.name }),
       ...(data.description !== undefined && { description: data.description }),
       ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
-      ...(data.teamId && { teamId: data.teamId }),
+      ...(data.teamId !== undefined && { teamId: data.teamId || null }),
       ...(data.defaultClientReviewerId !== undefined && { defaultClientReviewerId: data.defaultClientReviewerId }),
       ...(data.maxPipelineTasks !== undefined && {
         maxPipelineTasks: Math.max(1, Math.min(50, Math.round(data.maxPipelineTasks))),

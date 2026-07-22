@@ -162,6 +162,9 @@ export async function getTeamMembers() {
       name: p.project.name,
       role: p.role,
       roleName: p.projectRole?.name ?? p.role,
+      // For editing the project role straight from the admin Members page.
+      memberId: p.id,
+      roleId: p.roleId,
     })),
   }));
 }
