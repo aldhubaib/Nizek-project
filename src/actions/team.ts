@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireUser, acceptPendingInvitations } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { cache } from "react";
 import type { SystemRole, TeamRole } from "@/generated/prisma/client";
 
 async function requireAdmin() {
@@ -201,8 +202,117 @@ export async function updateUserAdmin(userId: string, isAdmin: boolean) {
   revalidatePath("/dashboard/team");
 }
 
+interface ClerkUserLite {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  image_url: string | null;
+  email_addresses: { email_address: string }[];
+}
+
+// Invited people sometimes sign in with a different email than the one they
+// were invited on (e.g. invited on gmail, signed up with their work email), or
+// create their Clerk account without ever clicking the invite link. The local
+// email match can't see those, so their invites sit in the admin list forever.
+// This reconciler asks Clerk which invited emails already belong to an account
+// and consumes the matching invites: it links/creates the local user, accepts
+// their project invitations, and deletes used-up team invites.
+// Wrapped in cache() so the admin page (which loads several invite lists in
+// one request) only hits Clerk once.
+const reconcileSignedUpInvites = cache(async () => {
+  if (!process.env.CLERK_SECRET_KEY) return;
+  try {
+    const [invitations, teamInvites] = await Promise.all([
+      prisma.invitation.findMany({ where: { status: "PENDING" }, select: { email: true } }),
+      prisma.pendingTeamInvite.findMany({ select: { email: true } }),
+    ]);
+    const invitedEmails = [...new Set(
+      [...invitations, ...teamInvites].map((i) => i.email.toLowerCase()),
+    )];
+    if (invitedEmails.length === 0) return;
+
+    // Emails that already have a local user are handled by the existing
+    // cleanup in the list functions — only ask Clerk about the rest.
+    const localUsers = await prisma.user.findMany({
+      where: {
+        OR: invitedEmails.map((email) => ({
+          email: { equals: email, mode: "insensitive" as const },
+        })),
+      },
+      select: { email: true },
+    });
+    const localEmails = new Set(localUsers.map((u) => u.email.toLowerCase()));
+    const unknownEmails = invitedEmails.filter((e) => !localEmails.has(e));
+    if (unknownEmails.length === 0) return;
+
+    // Clerk supports repeated email_address params; chunk to keep URLs sane.
+    const clerkUsers: ClerkUserLite[] = [];
+    for (let i = 0; i < unknownEmails.length; i += 20) {
+      const chunk = unknownEmails.slice(i, i + 20);
+      const params = chunk.map((e) => `email_address=${encodeURIComponent(e)}`).join("&");
+      const res = await fetch(`https://api.clerk.com/v1/users?${params}&limit=100`, {
+        headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (Array.isArray(data)) clerkUsers.push(...data);
+    }
+
+    const invitedSet = new Set(invitedEmails);
+    for (const cu of clerkUsers) {
+      const accountEmails = (cu.email_addresses ?? [])
+        .map((e) => e.email_address?.toLowerCase())
+        .filter((e): e is string => !!e);
+      const matchedInvited = accountEmails.filter((e) => invitedSet.has(e));
+      if (matchedInvited.length === 0) continue;
+
+      let localUser = await prisma.user.findUnique({ where: { clerkId: cu.id } });
+      if (!localUser) {
+        // They signed up with Clerk but never landed in the app — materialize
+        // the same user row their first visit would create.
+        const teamInvite = await prisma.pendingTeamInvite.findFirst({
+          where: { email: { in: accountEmails } },
+        });
+        const invitedName = teamInvite
+          ? `${teamInvite.firstName ?? ""} ${teamInvite.lastName ?? ""}`.trim()
+          : "";
+        const clerkName = `${cu.first_name ?? ""} ${cu.last_name ?? ""}`.trim();
+        const primaryEmail = accountEmails[0];
+        if (!primaryEmail) continue;
+        try {
+          localUser = await prisma.user.upsert({
+            where: { clerkId: cu.id },
+            update: {},
+            create: {
+              clerkId: cu.id,
+              email: primaryEmail,
+              name: invitedName || clerkName || null,
+              imageUrl: cu.image_url,
+              ...(teamInvite && { systemRole: teamInvite.systemRole }),
+            },
+          });
+        } catch {
+          continue;
+        }
+        await assignUserToDefaultTeam(localUser.id, localUser.systemRole === "CLIENT").catch(() => {});
+      }
+
+      for (const email of matchedInvited) {
+        await acceptPendingInvitations(localUser.id, email).catch(() => {});
+      }
+      await prisma.pendingTeamInvite
+        .deleteMany({ where: { email: { in: accountEmails } } })
+        .catch(() => {});
+    }
+  } catch {
+    // Reconciliation is best-effort — never break the admin page over it.
+  }
+});
+
 export async function getPendingInvitations() {
   await requireUser();
+  await reconcileSignedUpInvites();
 
   const invitations = await prisma.invitation.findMany({
     where: { status: "PENDING" },
@@ -326,6 +436,7 @@ export async function inviteToTeam(data: {
 
 export async function getPendingTeamInvites() {
   await requireUser();
+  await reconcileSignedUpInvites();
   const invites = await prisma.pendingTeamInvite.findMany({
     orderBy: { createdAt: "desc" },
   });

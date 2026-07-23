@@ -53,9 +53,14 @@ export const getRealUser = cache(async () => {
     if (!clerkUser) return null;
 
     const email = (clerkUser.emailAddresses[0]?.emailAddress ?? "").toLowerCase();
+    // Match invites against every email on the Clerk account — people are
+    // often invited on one address but sign up with another.
+    const allEmails = [...new Set(
+      clerkUser.emailAddresses.map((e) => e.emailAddress.toLowerCase()).filter(Boolean),
+    )];
 
-    const pendingInvite = await prisma.pendingTeamInvite.findUnique({
-      where: { email },
+    const pendingInvite = await prisma.pendingTeamInvite.findFirst({
+      where: { email: { in: allEmails.length > 0 ? allEmails : [email] } },
     });
 
     const invitedName = pendingInvite
@@ -82,14 +87,16 @@ export const getRealUser = cache(async () => {
 
     if (pendingInvite) {
       await prisma.pendingTeamInvite
-        .delete({ where: { email } })
+        .deleteMany({ where: { email: { in: allEmails.length > 0 ? allEmails : [email] } } })
         .catch(() => {});
     }
 
     const { assignUserToDefaultTeam } = await import("@/actions/team");
     assignUserToDefaultTeam(user.id, user.systemRole === "CLIENT").catch(() => {});
 
-    await acceptPendingInvitations(user.id, user.email);
+    for (const em of allEmails.length > 0 ? allEmails : [user.email]) {
+      await acceptPendingInvitations(user.id, em);
+    }
   }
   // NOTE: For existing users we intentionally do NOT run invitation acceptance or
   // pendingTeamInvite cleanup here — that used to run on every dashboard request.
