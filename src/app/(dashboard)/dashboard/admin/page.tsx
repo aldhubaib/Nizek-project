@@ -44,6 +44,7 @@ export default async function AdminPage() {
         branding={branding}
         loginPhotos={loginPhotos}
         notificationSound={notificationSound}
+        currentUserId={user.id}
       />
     </Suspense>
   );

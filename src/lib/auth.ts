@@ -1,6 +1,9 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { cache } from "react";
+
+export const IMPERSONATE_COOKIE = "impersonate_user_id";
 
 export async function acceptPendingInvitations(userId: string, email: string) {
   const pending = await prisma.invitation.findMany({
@@ -38,7 +41,8 @@ export async function acceptPendingInvitations(userId: string, email: string) {
   ]);
 }
 
-export const getCurrentUser = cache(async () => {
+// The user actually signed in with Clerk — never affected by impersonation.
+export const getRealUser = cache(async () => {
   const { userId: clerkId } = await auth();
   if (!clerkId) return null;
 
@@ -93,6 +97,36 @@ export const getCurrentUser = cache(async () => {
   // (the projects list entry point) via acceptPendingInvitations().
 
   return user;
+});
+
+// Effective user for the request. If a system admin has an active
+// "sign in as" cookie, this resolves to the impersonated user, so every
+// query/permission check in the app behaves exactly as it would for them.
+// The cookie is only honored when the real Clerk session belongs to an
+// admin, so a tampered cookie does nothing for regular users.
+export const getCurrentUser = cache(async () => {
+  const real = await getRealUser();
+  if (!real) return null;
+  if (real.systemRole !== "ADMIN") return real;
+
+  const targetId = (await cookies()).get(IMPERSONATE_COOKIE)?.value;
+  if (!targetId || targetId === real.id) return real;
+
+  const target = await prisma.user.findUnique({ where: { id: targetId } });
+  if (!target || target.blocked) return real;
+  return target;
+});
+
+// Impersonation state for the banner: null unless an admin is actively
+// viewing the app as someone else.
+export const getImpersonation = cache(async () => {
+  const [real, effective] = await Promise.all([getRealUser(), getCurrentUser()]);
+  if (!real || !effective || real.id === effective.id) return null;
+  return {
+    realName: real.name ?? real.email,
+    targetId: effective.id,
+    targetName: effective.name ?? effective.email,
+  };
 });
 
 export async function requireUser() {

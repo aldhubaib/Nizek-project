@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth";
+import { requireUser, getImpersonation } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser();
+
+    // While an admin is viewing the app as another user, never register the
+    // admin's browser as one of that user's push devices — the member's
+    // notifications would otherwise start arriving on the admin's machine.
+    if (await getImpersonation()) {
+      return NextResponse.json({ ok: true, skipped: "impersonating" });
+    }
+
     const { endpoint, keys, deviceId, userAgent } = await req.json();
 
     if (!endpoint || !keys?.p256dh || !keys?.auth) {

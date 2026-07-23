@@ -148,6 +148,7 @@ interface Props {
   branding: Partial<Record<BrandingSlotId, BrandingAssetDTO>>;
   loginPhotos: LoginPhotoDTO[];
   notificationSound: NotificationSoundDTO;
+  currentUserId?: string;
 }
 
 export function AdminPageClient({
@@ -162,6 +163,7 @@ export function AdminPageClient({
   branding,
   loginPhotos,
   notificationSound,
+  currentUserId,
 }: Props) {
   const searchParams = useSearchParams();
   const activeTab = searchParams.get("tab") as TabId | null;
@@ -217,6 +219,7 @@ export function AdminPageClient({
             teamInvites={teamInvites}
             roles={roles}
             isAdmin={true}
+            currentUserId={currentUserId}
           />
         )}
         {active.id === "roles" && <RolesManager roles={roles} />}

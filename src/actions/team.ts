@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth";
+import { requireUser, acceptPendingInvitations } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import type { SystemRole, TeamRole } from "@/generated/prisma/client";
 
@@ -146,6 +146,9 @@ export async function getTeamMembers() {
           projectRole: { select: { id: true, name: true } },
         },
       },
+      teams: {
+        select: { team: { select: { id: true, name: true } } },
+      },
     },
   });
 
@@ -166,6 +169,7 @@ export async function getTeamMembers() {
       memberId: p.id,
       roleId: p.roleId,
     })),
+    teams: u.teams.map((t) => ({ id: t.team.id, name: t.team.name })),
   }));
 }
 
@@ -212,39 +216,29 @@ export async function getPendingInvitations() {
 
   if (invitations.length === 0) return [];
 
+  // Users who signed up without clicking the invite link never triggered
+  // acceptance, so their invitations sat in "pending" forever. If the invited
+  // email now belongs to an account, accept on their behalf: create the
+  // project membership (with the invited role) and mark the row ACCEPTED.
+  const emails = [...new Set(invitations.map((i) => i.email.toLowerCase()))];
   const users = await prisma.user.findMany({
-    where: { email: { in: invitations.map((i) => i.email), mode: "insensitive" } },
+    where: {
+      OR: emails.map((email) => ({
+        email: { equals: email, mode: "insensitive" as const },
+      })),
+    },
     select: { id: true, email: true },
   });
-  const userIdByEmail = new Map(users.map((u) => [u.email.toLowerCase(), u.id]));
 
-  // Single query for all relevant memberships instead of one findUnique per invitation.
-  const memberships = users.length
-    ? await prisma.projectMember.findMany({
-        where: {
-          userId: { in: users.map((u) => u.id) },
-          projectId: { in: invitations.map((i) => i.projectId) },
-        },
-        select: { userId: true, projectId: true },
-      })
-    : [];
-  const memberSet = new Set(memberships.map((m) => `${m.userId}|${m.projectId}`));
-
-  const staleIds: string[] = [];
-  for (const inv of invitations) {
-    const userId = userIdByEmail.get(inv.email.toLowerCase());
-    if (!userId) continue;
-    if (memberSet.has(`${userId}|${inv.projectId}`)) staleIds.push(inv.id);
+  if (users.length > 0) {
+    await Promise.all(
+      users.map((u) => acceptPendingInvitations(u.id, u.email).catch(() => {})),
+    );
+    const existingEmails = new Set(users.map((u) => u.email.toLowerCase()));
+    return invitations.filter((i) => !existingEmails.has(i.email.toLowerCase()));
   }
 
-  if (staleIds.length > 0) {
-    prisma.invitation.updateMany({
-      where: { id: { in: staleIds } },
-      data: { status: "ACCEPTED" },
-    }).catch(() => {});
-  }
-
-  return invitations.filter((i) => !staleIds.includes(i.id));
+  return invitations;
 }
 
 export async function inviteToTeam(data: {
@@ -338,8 +332,14 @@ export async function getPendingTeamInvites() {
 
   if (invites.length === 0) return [];
 
+  // Insensitive equals per email — `in` + insensitive mode is not reliably
+  // applied, which left invites visible for users who had already signed up.
   const existingUsers = await prisma.user.findMany({
-    where: { email: { in: invites.map((i) => i.email), mode: "insensitive" } },
+    where: {
+      OR: invites.map((i) => ({
+        email: { equals: i.email, mode: "insensitive" as const },
+      })),
+    },
     select: { email: true },
   });
   const existingEmails = new Set(existingUsers.map((u) => u.email.toLowerCase()));

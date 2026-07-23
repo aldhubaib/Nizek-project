@@ -2,7 +2,8 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { SignOutButton } from "@clerk/nextjs";
 import { DashboardShell } from "@/components/dashboard-shell";
-import { getCurrentUser } from "@/lib/auth";
+import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { getCurrentUser, getImpersonation } from "@/lib/auth";
 import { getNotificationSoundUrl } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 
@@ -38,7 +39,10 @@ export default async function DashboardLayout({
     );
   }
 
-  const notificationSoundUrl = await getNotificationSoundUrl();
+  const [notificationSoundUrl, impersonation] = await Promise.all([
+    getNotificationSoundUrl(),
+    getImpersonation(),
+  ]);
 
   // Audit module visibility: admins always, others need an AuditPermission grant.
   const isAdmin = user?.systemRole === "ADMIN";
@@ -48,5 +52,10 @@ export default async function DashboardLayout({
       ? (await prisma.auditPermission.count({ where: { userId: user.id } })) > 0
       : false);
 
-  return <DashboardShell isAdmin={isAdmin} canAudit={canAudit} currentUserId={user?.id} notificationSoundUrl={notificationSoundUrl}>{children}</DashboardShell>;
+  return (
+    <DashboardShell isAdmin={isAdmin} canAudit={canAudit} currentUserId={user?.id} notificationSoundUrl={notificationSoundUrl}>
+      {children}
+      {impersonation && <ImpersonationBanner targetName={impersonation.targetName} />}
+    </DashboardShell>
+  );
 }

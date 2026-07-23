@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, Trash2, ShieldCheck, Shield, AlertTriangle, ArrowRightLeft, ChevronDown, Check } from "lucide-react";
+import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, Trash2, ShieldCheck, Shield, AlertTriangle, ArrowRightLeft, ChevronDown, Check, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { updateUserAdmin, inviteToTeam, toggleBlockUser, cancelTeamInvite, resendTeamInvite, getUserTaskSummary } from "@/actions/team";
 import { updateMemberRole, removeMember } from "@/actions/project";
+import { startImpersonation } from "@/actions/impersonation";
 
 interface MemberProject {
   id: string;
@@ -27,6 +28,7 @@ interface Member {
   blocked: boolean;
   createdAt: Date;
   projects: MemberProject[];
+  teams: { id: string; name: string }[];
 }
 
 interface Invitation {
@@ -60,10 +62,12 @@ interface Props {
   teamInvites: TeamInvite[];
   roles: GlobalRole[];
   isAdmin: boolean;
+  currentUserId?: string;
 }
 
-export function TeamPageClient({ members, invitations, teamInvites, roles, isAdmin }: Props) {
+export function TeamPageClient({ members, invitations, teamInvites, roles, isAdmin, currentUserId }: Props) {
   const [search, setSearch] = useState("");
+  const [teamFilter, setTeamFilter] = useState<string>("all");
   const [changingRole, setChangingRole] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteFirstName, setInviteFirstName] = useState("");
@@ -217,10 +221,38 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
     }
   }
 
+  // Admin "sign in as user" — temporary cookie, exits via the banner.
+  async function handleSignInAs(member: Member) {
+    setActionLoading(member.id);
+    try {
+      const res = await startImpersonation(member.id);
+      if (res?.error) {
+        alert(res.error);
+        setActionLoading(null);
+        return;
+      }
+      // Full reload so every cache and realtime subscription belongs to them.
+      window.location.href = "/dashboard";
+    } catch (err) {
+      alert((err as Error).message || "Failed to sign in as user");
+      setActionLoading(null);
+    }
+  }
+
+  // All teams that at least one member belongs to, for the filter pills.
+  const allTeams = (() => {
+    const map = new Map<string, string>();
+    for (const m of members) for (const t of m.teams) map.set(t.id, t.name);
+    return [...map.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
   const filteredMembers = members.filter(
     (m) =>
-      m.name?.toLowerCase().includes(search.toLowerCase()) ||
-      m.email.toLowerCase().includes(search.toLowerCase())
+      (m.name?.toLowerCase().includes(search.toLowerCase()) ||
+        m.email.toLowerCase().includes(search.toLowerCase())) &&
+      (teamFilter === "all" || m.teams.some((t) => t.id === teamFilter))
   );
 
   const filteredInvitations = invitations.filter((inv) =>
@@ -442,6 +474,45 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
         />
       </div>
 
+      {/* Team filter */}
+      {allTeams.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap -mt-2">
+          <button
+            type="button"
+            onClick={() => setTeamFilter("all")}
+            className={cn(
+              "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
+              teamFilter === "all"
+                ? "bg-primary/15 border-primary/40 text-primary"
+                : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
+            )}
+          >
+            All teams
+          </button>
+          {allTeams.map((t) => {
+            const count = members.filter((m) => m.teams.some((mt) => mt.id === t.id)).length;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTeamFilter(teamFilter === t.id ? "all" : t.id)}
+                className={cn(
+                  "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors flex items-center gap-1",
+                  teamFilter === t.id
+                    ? "bg-primary/15 border-primary/40 text-primary"
+                    : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
+                )}
+              >
+                {t.name}
+                <span className={cn("text-[10px]", teamFilter === t.id ? "text-primary/70" : "text-muted-foreground/50")}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Members */}
       <div>
         <h2 className="text-[13px] font-semibold text-foreground mb-3">Members</h2>
@@ -515,6 +586,16 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
               <div className="flex items-center gap-2 shrink-0">
                 {isAdmin && (
                   <>
+                    {member.id !== currentUserId && !member.blocked && (
+                      <button
+                        onClick={() => handleSignInAs(member)}
+                        disabled={actionLoading === member.id}
+                        title={`Sign in as ${member.name ?? member.email}`}
+                        className="w-7 h-7 rounded-md flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button
                       onClick={() => handleAdminToggle(member.id, member.systemRole !== "ADMIN")}
                       disabled={changingRole === member.id}
