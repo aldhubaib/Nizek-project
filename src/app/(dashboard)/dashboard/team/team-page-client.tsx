@@ -6,7 +6,7 @@ import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, T
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { updateUserAdmin, inviteToTeam, toggleBlockUser, cancelTeamInvite, resendTeamInvite, getUserTaskSummary } from "@/actions/team";
-import { updateMemberRole } from "@/actions/project";
+import { updateMemberRole, removeMember } from "@/actions/project";
 
 interface MemberProject {
   id: string;
@@ -488,7 +488,13 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
                     <div className="flex flex-wrap gap-1">
                       {member.projects.map((p) =>
                         isAdmin ? (
-                          <ProjectRoleChip key={p.id} project={p} roles={roles} />
+                          <ProjectRoleChip
+                            key={p.id}
+                            project={p}
+                            roles={roles}
+                            userId={member.id}
+                            userName={member.name ?? member.email}
+                          />
                         ) : (
                           <span
                             key={p.id}
@@ -612,12 +618,29 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
 
 /**
  * A project chip that admins can click to change the member's role in that
- * project, without leaving the settings page.
+ * project — or remove them from the project — without leaving the settings
+ * page. If the member still owns tasks in the project, removal asks for a
+ * transfer target first (same rule as the project team tab).
  */
-function ProjectRoleChip({ project, roles }: { project: MemberProject; roles: GlobalRole[] }) {
+function ProjectRoleChip({
+  project,
+  roles,
+  userId,
+  userName,
+}: {
+  project: MemberProject;
+  roles: GlobalRole[];
+  userId: string;
+  userName: string;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [transfer, setTransfer] = useState<{
+    taskCount: number;
+    targets: { id: string; name: string | null; systemRole: string }[];
+    transferToUserId: string;
+  } | null>(null);
 
   async function handlePick(roleId: string) {
     if (roleId === project.roleId) {
@@ -631,6 +654,41 @@ function ProjectRoleChip({ project, roles }: { project: MemberProject; roles: Gl
       setOpen(false);
     } catch (err) {
       alert((err as Error).message || "Failed to update role");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRemove(transferToUserId?: string) {
+    setSaving(true);
+    try {
+      const result = await removeMember({
+        projectId: project.id,
+        memberId: project.memberId,
+        transferToUserId,
+      });
+      if (result.success) {
+        setTransfer(null);
+        setOpen(false);
+        router.refresh();
+        return;
+      }
+      const match = result.error.match(/^TRANSFER_REQUIRED:(\d+)$/);
+      if (match) {
+        // The member still owns tasks here — load who they can hand over to.
+        const summary = await getUserTaskSummary(userId);
+        const entry = summary.find((p) => p.id === project.id);
+        setTransfer({
+          taskCount: parseInt(match[1], 10),
+          targets: entry?.eligibleTransferTargets ?? [],
+          transferToUserId: "",
+        });
+        setOpen(false);
+      } else {
+        alert(result.error || "Failed to remove member");
+      }
+    } catch (err) {
+      alert((err as Error).message || "Failed to remove member");
     } finally {
       setSaving(false);
     }
@@ -658,7 +716,7 @@ function ProjectRoleChip({ project, roles }: { project: MemberProject; roles: Gl
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full mt-1 z-50 min-w-[160px] rounded-lg border border-border bg-sidebar shadow-xl py-1">
+          <div className="absolute left-0 top-full mt-1 z-50 min-w-[180px] rounded-lg border border-border bg-sidebar shadow-xl py-1">
             <p className="px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/50 truncate">
               {project.name}
             </p>
@@ -683,8 +741,84 @@ function ProjectRoleChip({ project, roles }: { project: MemberProject; roles: Gl
             {roles.length === 0 && (
               <p className="px-2.5 py-1.5 text-[11px] text-muted-foreground/60">No roles defined.</p>
             )}
+            <div className="border-t border-border/60 my-1" />
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm(`Remove ${userName} from ${project.name}?`)) {
+                  void handleRemove();
+                }
+              }}
+              disabled={saving}
+              className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left text-[11px] text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              <Trash2 className="w-3 h-3 shrink-0" strokeWidth={1.5} />
+              Remove from project
+            </button>
           </div>
         </>
+      )}
+
+      {transfer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-[14px] font-semibold text-foreground">Transfer Tasks Required</h3>
+                <p className="text-[12px] text-muted-foreground mt-0.5">
+                  <strong>{userName}</strong> has <strong>{transfer.taskCount}</strong> task
+                  {transfer.taskCount !== 1 ? "s" : ""} in <strong>{project.name}</strong>.
+                  Select a member to transfer them to before removal.
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">Transfer tasks to</label>
+              <select
+                value={transfer.transferToUserId}
+                onChange={(e) =>
+                  setTransfer((s) => (s ? { ...s, transferToUserId: e.target.value } : s))
+                }
+                className="w-full h-9 px-2 rounded-lg border border-border bg-background text-[13px] text-foreground"
+              >
+                <option value="">Select a member...</option>
+                {transfer.targets.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name ?? t.id} ({t.systemRole})
+                  </option>
+                ))}
+              </select>
+              {transfer.targets.length === 0 && (
+                <p className="text-[11px] text-destructive mt-1.5">
+                  No other members in this project to transfer tasks to.
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setTransfer(null)}
+                disabled={saving}
+                className="px-3 py-1.5 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleRemove(transfer.transferToUserId)}
+                disabled={!transfer.transferToUserId || saving}
+                className="px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-[12px] font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50"
+              >
+                {saving ? "Transferring..." : "Transfer & Remove"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
