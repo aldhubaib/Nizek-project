@@ -68,6 +68,7 @@ interface Member {
   roleId: string | null;
   canInviteMembers: boolean;
   canInviteClients: boolean;
+  isTeamLead: boolean;
   projectRole: {
     id: string;
     name: string;

@@ -185,6 +185,7 @@ model ProjectMember {
 
   canInviteMembers Boolean @default(false)
   canInviteClients Boolean @default(false)
+  isTeamLead       Boolean @default(false)
 
   createdAt DateTime @default(now())
 

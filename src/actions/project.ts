@@ -729,6 +729,7 @@ export async function updateMemberInvitePerms(data: {
   memberId: string;
   canInviteMembers?: boolean;
   canInviteClients?: boolean;
+  isTeamLead?: boolean;
 }) {
   const { user, member } = await requireProjectMember(data.projectId);
   const isSystemAdmin = user.systemRole === "ADMIN";
@@ -740,6 +741,7 @@ export async function updateMemberInvitePerms(data: {
     data: {
       ...(data.canInviteMembers !== undefined && { canInviteMembers: data.canInviteMembers }),
       ...(data.canInviteClients !== undefined && { canInviteClients: data.canInviteClients }),
+      ...(data.isTeamLead !== undefined && { isTeamLead: data.isTeamLead }),
     },
   });
 

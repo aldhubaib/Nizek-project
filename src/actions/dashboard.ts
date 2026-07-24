@@ -310,6 +310,28 @@ const STAGE_LABELS: Record<string, string> = {
   DONE: "Done",
 };
 
+// Task-level visibility for the dashboard task monitors: admins, PMs and tech
+// leads see every task in the projects they can access; everyone else sees
+// only tasks they're working on — unless they're marked Team Lead on a
+// project (ProjectMember.isTeamLead), which reveals all of that project's
+// tasks and late items to them.
+function taskVisibilityFilter(user: { id: string; systemRole: string }) {
+  if (
+    user.systemRole === "ADMIN" ||
+    user.systemRole === "PM" ||
+    user.systemRole === "TECH_LEAD"
+  ) {
+    return {};
+  }
+  return {
+    OR: [
+      { assigneeId: user.id },
+      { developerId: user.id },
+      { project: { members: { some: { userId: user.id, isTeamLead: true } } } },
+    ],
+  };
+}
+
 export async function getLongestInPipeline(stages?: string[], assigneeId?: string) {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
@@ -341,6 +363,7 @@ export async function getLongestInPipeline(stages?: string[], assigneeId?: strin
       startedAt: { not: null },
       project: { ...whereClause, ...activeProjectFilter() },
       ...(assigneeId ? { assigneeId } : {}),
+      ...taskVisibilityFilter(user),
     },
     select: {
       id: true,
@@ -425,6 +448,7 @@ export async function getLongestInStageByAssignee(stages?: string[], thresholdDa
       startedAt: { not: null },
       assigneeId: { not: null },
       project: { ...whereClause, ...activeProjectFilter() },
+      ...taskVisibilityFilter(user),
     },
     select: {
       id: true,
@@ -1325,6 +1349,7 @@ export async function getTasksNeedingClientInput(assigneeId?: string) {
         archivedAt: null,
         project: { ...whereClause, ...activeProjectFilter() },
         ...(assigneeId ? { assigneeId } : {}),
+        ...taskVisibilityFilter(user),
       },
     },
     select: {
@@ -1405,6 +1430,7 @@ export async function getUpNextByProject() {
         stage: "CLARIFICATION",
         archivedAt: null,
         project: { ...whereClause, ...activeProjectFilter() },
+        ...taskVisibilityFilter(user),
       },
       select: {
         id: true,
