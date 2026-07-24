@@ -553,6 +553,9 @@ export async function declineTask(data: {
         taskNumber: true,
         assigneeId: true,
         assignee: { select: { id: true, name: true } },
+        createdById: true,
+        developerId: true,
+        clientReviewerId: true,
       },
     });
     if (!task) return { success: false, error: "Task not found" };
@@ -571,6 +574,16 @@ export async function declineTask(data: {
       }
     }
 
+    // Hand the task back to whoever owns the target stage's track (e.g. the
+    // developer on an Internal Review decline). The sticky developer / client
+    // reviewer fields are rewritten when a member's tasks are transferred on
+    // removal, so this resumes onto the new owner instead of pointing at
+    // whoever historically held the task.
+    const autoAssigneeId = await resolveAutoAssignee(targetStage, task, user.id, task.projectId);
+    const autoAssignee = autoAssigneeId
+      ? await prisma.user.findUnique({ where: { id: autoAssigneeId }, select: { id: true, name: true } })
+      : null;
+
     // Find who moved this task into the stage it's being declined from, so we
     // can @mention them (the "previous owner") on the decline comment.
     const entryActivity = await prisma.taskActivity.findFirst({
@@ -585,14 +598,26 @@ export async function declineTask(data: {
     });
 
     // Resolve who to @mention (and notify) on the rejection. Primary: whoever
-    // moved the task into the stage it's being declined from. Fallback: the
-    // current assignee, so a rejection always has someone to notify.
+    // moved the task into the stage it's being declined from — but only if they
+    // are still a member (ownership may have been transferred since). Fallbacks:
+    // the track owner the task is being handed to, then the current assignee.
     let submitterId: string | null = null;
     let submitterName: string | null = null;
     if (entryActivity?.user && entryActivity.userId !== user.id) {
-      submitterId = entryActivity.userId;
-      submitterName = entryActivity.user.name ?? null;
-    } else if (task.assignee && task.assigneeId !== user.id) {
+      const stillMember = await prisma.projectMember.findFirst({
+        where: { projectId: task.projectId, userId: entryActivity.userId },
+        select: { id: true },
+      });
+      if (stillMember) {
+        submitterId = entryActivity.userId;
+        submitterName = entryActivity.user.name ?? null;
+      }
+    }
+    if (!submitterId && autoAssignee && autoAssignee.id !== user.id) {
+      submitterId = autoAssignee.id;
+      submitterName = autoAssignee.name ?? null;
+    }
+    if (!submitterId && task.assignee && task.assigneeId !== user.id) {
       submitterId = task.assignee.id;
       submitterName = task.assignee.name ?? null;
     }
@@ -739,9 +764,23 @@ export async function declineTask(data: {
       where: { projectId: task.projectId, stage: targetStage },
     });
 
+    const declineSticky: Record<string, string> = {};
+    const targetTrack = STAGE_ROLE_MAP[targetStage];
+    if (targetTrack === "developer" && !task.developerId && autoAssigneeId) {
+      declineSticky.developerId = autoAssigneeId;
+    }
+    if (targetTrack === "client" && !task.clientReviewerId && autoAssigneeId) {
+      declineSticky.clientReviewerId = autoAssigneeId;
+    }
+
     await prisma.task.update({
       where: { id: task.id },
-      data: { stage: targetStage, order: tasksInTarget },
+      data: {
+        stage: targetStage,
+        order: tasksInTarget,
+        ...(autoAssigneeId && { assigneeId: autoAssigneeId }),
+        ...declineSticky,
+      },
     });
 
     await prisma.stageLog.updateMany({
@@ -761,6 +800,17 @@ export async function declineTask(data: {
       oldValue: oldStage,
       newValue: targetStage,
     });
+
+    if (autoAssigneeId && autoAssigneeId !== task.assigneeId) {
+      await logTaskActivity({
+        taskId: task.id,
+        userId: user.id,
+        action: "assigned",
+        field: "assignee",
+        oldValue: task.assignee?.name ?? null,
+        newValue: autoAssignee?.name ?? null,
+      });
+    }
 
     revalidatePath(`/dashboard/projects/${task.projectId}`);
     broadcastTaskEvent(task.projectId, { type: "task-declined", taskId: task.id, userId: user.id });

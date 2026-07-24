@@ -156,7 +156,7 @@ export function buildOwnershipTimeline(
         break;
       case "transferred":
         label = a.newValue
-          ? `Ownership transferred to ${a.newValue}`
+          ? `Removed ${a.oldValue ?? "a member"} → assigned ${a.newValue}`
           : "Ownership transferred";
         break;
       default:

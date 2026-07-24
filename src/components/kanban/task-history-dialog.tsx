@@ -138,7 +138,7 @@ function describeActivity(a: Activity): string {
     case "note_created":
       return `${name} added a note${a.newValue ? `: ${a.newValue}` : ""}`;
     case "transferred":
-      return `${name} transferred this task from ${a.oldValue ?? "a removed member"} to ${a.newValue ?? "another member"}`;
+      return `${name} removed ${a.oldValue ?? "a member"} → assigned ${a.newValue ?? "another member"}`;
     default:
       return `${name} ${a.action}`;
   }
