@@ -3,9 +3,10 @@
 import { type ReactNode, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { BarChart3, Package, Code } from "lucide-react";
+import { BarChart3, Package, Code, LayoutDashboard } from "lucide-react";
 
 const TABS = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "product", label: "PM", icon: Package },
   { id: "dev", label: "Dev", icon: Code },
   { id: "management", label: "Management", icon: BarChart3 },
@@ -16,12 +17,13 @@ type TabId = (typeof TABS)[number]["id"];
 const VALID_TABS = new Set<string>(TABS.map((t) => t.id));
 
 interface Props {
+  dashboard: ReactNode;
   management: ReactNode;
   product: ReactNode;
   dev: ReactNode;
 }
 
-export function DashboardTabs({ management, product, dev }: Props) {
+export function DashboardTabs({ dashboard, management, product, dev }: Props) {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -42,7 +44,7 @@ export function DashboardTabs({ management, product, dev }: Props) {
     [searchParams, router],
   );
 
-  const content: Record<TabId, ReactNode> = { management, product, dev };
+  const content: Record<TabId, ReactNode> = { dashboard, management, product, dev };
 
   return (
     <div>

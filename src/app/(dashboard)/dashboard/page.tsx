@@ -3,6 +3,7 @@ import { DashboardTabs } from "@/components/dashboard/dashboard-tabs";
 import { LazyManagementTab } from "@/components/dashboard/lazy-management-tab";
 import { LazyProductTab } from "@/components/dashboard/lazy-product-tab";
 import { LazyDevTab } from "@/components/dashboard/lazy-dev-tab";
+import { DashboardOverview } from "@/components/dashboard/dashboard-overview";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -18,6 +19,7 @@ export default async function DashboardPage() {
           Welcome back, {user.name || "there"}.
         </p>
         <DashboardTabs
+          dashboard={<DashboardOverview />}
           management={<LazyManagementTab />}
           product={<LazyProductTab />}
           dev={<LazyDevTab />}

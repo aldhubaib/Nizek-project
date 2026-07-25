@@ -1514,6 +1514,80 @@ export async function getUpNextByProject() {
     );
 }
 
+/**
+ * "Awaiting Development" card on the Dashboard tab: every open task sitting in
+ * Clarification or Ready for Dev (i.e. cleared intake but not yet picked up by
+ * development) across the projects the viewer can access. `mine` counts the
+ * ones the viewer is responsible for (assignee or sticky developer).
+ */
+export async function getAwaitingDevelopment() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  const AWAITING_STAGES = ["CLARIFICATION", "READY_FOR_DEV"];
+
+  const whereClause = user.systemRole === "ADMIN"
+    ? {}
+    : user.systemRole === "PM" || user.systemRole === "TECH_LEAD"
+      ? {
+          OR: [
+            { members: { some: { userId: user.id } } },
+            { team: { members: { some: { userId: user.id } } } },
+          ],
+        }
+      : { members: { some: { userId: user.id } } };
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      stage: { in: AWAITING_STAGES as any },
+      archivedAt: null,
+      project: { ...whereClause, ...activeProjectFilter() },
+    },
+    select: {
+      id: true,
+      title: true,
+      taskNumber: true,
+      taskType: true,
+      stage: true,
+      priority: true,
+      assigneeId: true,
+      developerId: true,
+      assignee: { select: { id: true, name: true, imageUrl: true } },
+      project: { select: { id: true, name: true } },
+    },
+    orderBy: [{ stage: "asc" }, { updatedAt: "asc" }],
+    take: 300,
+  });
+
+  const stageLogs = tasks.length > 0
+    ? await prisma.stageLog.findMany({
+        where: { taskId: { in: tasks.map((t) => t.id) }, exitedAt: null },
+        select: { taskId: true, enteredAt: true },
+      })
+    : [];
+  const enteredMap = new Map(stageLogs.map((l) => [l.taskId, l.enteredAt]));
+
+  const items = tasks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    taskNumber: t.taskNumber,
+    taskType: t.taskType,
+    stage: t.stage,
+    stageLabel: STAGE_LABELS[t.stage] ?? t.stage,
+    priority: t.priority,
+    mine: t.assigneeId === user.id || t.developerId === user.id,
+    enteredAt: enteredMap.get(t.id) ?? null,
+    assignee: t.assignee,
+    project: t.project,
+  }));
+
+  return {
+    mine: items.filter((t) => t.mine).length,
+    total: items.length,
+    tasks: items,
+  };
+}
+
 export async function getClientInputByAssignee() {
   const tasks = await getTasksNeedingClientInput();
 
