@@ -11,6 +11,7 @@ import {
   Check,
   X,
   Users,
+  Crown,
 } from "lucide-react";
 import { createRole, updateRole, deleteRole } from "@/actions/role";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,7 @@ interface WorkspaceRole {
   canMoveTask: boolean;
   canDeleteTask: boolean;
   canDeclineTask: boolean;
+  isTeamLead: boolean;
   allowedStages: string | null;
   allowedTransitions: string | null;
   _count: { members: number };
@@ -106,6 +108,7 @@ export function RolesManager({ roles }: Props) {
     canMoveTask: false,
     canDeleteTask: false,
     canDeclineTask: false,
+    isTeamLead: false,
   });
   const [newStagePerms, setNewStagePerms] = useState<StagePerms>({
     transitions: {},
@@ -120,6 +123,7 @@ export function RolesManager({ roles }: Props) {
     canMoveTask: false,
     canDeleteTask: false,
     canDeclineTask: false,
+    isTeamLead: false,
   });
   const [editStagePerms, setEditStagePerms] = useState<StagePerms>({
     transitions: {},
@@ -143,10 +147,11 @@ export function RolesManager({ roles }: Props) {
           newPerms.canMoveTask || Object.keys(newStagePerms.transitions).length > 0,
         canDeleteTask: newPerms.canDeleteTask,
         canDeclineTask: newPerms.canDeclineTask,
+        isTeamLead: newPerms.isTeamLead,
         allowedTransitions: serializeAllData(newStagePerms),
       });
       setNewName("");
-      setNewPerms({ canMoveTask: false, canDeleteTask: false, canDeclineTask: false });
+      setNewPerms({ canMoveTask: false, canDeleteTask: false, canDeclineTask: false, isTeamLead: false });
       setNewStagePerms({ transitions: {}, createStages: [], modifyStages: [] });
       setShowCreate(false);
     } catch (err) {
@@ -163,6 +168,7 @@ export function RolesManager({ roles }: Props) {
       canMoveTask: role.canMoveTask,
       canDeleteTask: role.canDeleteTask,
       canDeclineTask: role.canDeclineTask,
+      isTeamLead: role.isTeamLead,
     });
     const parsed = parseAllData(role.allowedTransitions);
     if (parsed.createStages.length === 0 && role.canCreateTask) {
@@ -185,6 +191,7 @@ export function RolesManager({ roles }: Props) {
           editPerms.canMoveTask || Object.keys(editStagePerms.transitions).length > 0,
         canDeleteTask: editPerms.canDeleteTask,
         canDeclineTask: editPerms.canDeclineTask,
+        isTeamLead: editPerms.isTeamLead,
         allowedTransitions: serializeAllData(editStagePerms),
       });
       setEditingId(null);
@@ -235,6 +242,7 @@ export function RolesManager({ roles }: Props) {
           <div className="flex flex-wrap gap-3">
             <PermToggle label="Delete tasks" checked={newPerms.canDeleteTask} onChange={(v) => setNewPerms((p) => ({ ...p, canDeleteTask: v }))} />
             <PermToggle label="Decline tasks" checked={newPerms.canDeclineTask} onChange={(v) => setNewPerms((p) => ({ ...p, canDeclineTask: v }))} />
+            <PermToggle label="Team Lead" checked={newPerms.isTeamLead} onChange={(v) => setNewPerms((p) => ({ ...p, isTeamLead: v }))} />
           </div>
 
           <StagePermissionsTable
@@ -284,6 +292,7 @@ export function RolesManager({ roles }: Props) {
                     <div className="flex flex-wrap gap-3">
                       <PermToggle label="Delete tasks" checked={editPerms.canDeleteTask} onChange={(v) => setEditPerms((p) => ({ ...p, canDeleteTask: v }))} />
                       <PermToggle label="Decline tasks" checked={editPerms.canDeclineTask} onChange={(v) => setEditPerms((p) => ({ ...p, canDeclineTask: v }))} />
+                      <PermToggle label="Team Lead" checked={editPerms.isTeamLead} onChange={(v) => setEditPerms((p) => ({ ...p, isTeamLead: v }))} />
                     </div>
 
                     <StagePermissionsTable
@@ -308,6 +317,12 @@ export function RolesManager({ roles }: Props) {
                       <div className="flex items-center gap-2">
                         <Shield className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
                         <span className="text-[13px] font-medium">{role.name}</span>
+                        {role.isTeamLead && (
+                          <span className="text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1">
+                            <Crown className="w-2.5 h-2.5" strokeWidth={2} />
+                            Team Lead
+                          </span>
+                        )}
                         {role.isAdmin && (
                           <span className="text-[10px] bg-purple-500/15 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded-full font-medium">
                             Admin

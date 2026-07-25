@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Trash2, Shield, RefreshCw, X, Clock, Mail, UserPlus, Users, AlertTriangle, ArrowRightLeft, Crown } from "lucide-react";
+import { Trash2, Shield, RefreshCw, X, Clock, Mail, UserPlus, Users, AlertTriangle, ArrowRightLeft } from "lucide-react";
 import { removeMember, updateMemberRole, resendInvitation, cancelInvitation, updateMemberInvitePerms } from "@/actions/project";
 
 interface WorkspaceRole {
@@ -28,7 +28,6 @@ interface Member {
   projectRole: WorkspaceRole | null;
   canInviteMembers: boolean;
   canInviteClients: boolean;
-  isTeamLead: boolean;
   user: {
     id: string;
     name: string | null;
@@ -154,7 +153,7 @@ export function MemberList({
     }
   }
 
-  async function handleToggleInvitePerm(memberId: string, field: "canInviteMembers" | "canInviteClients" | "isTeamLead", value: boolean) {
+  async function handleToggleInvitePerm(memberId: string, field: "canInviteMembers" | "canInviteClients", value: boolean) {
     try {
       await updateMemberInvitePerms({ projectId, memberId, [field]: value });
     } catch (err) {
@@ -328,12 +327,6 @@ export function MemberList({
                     onChange={(v) => handleToggleInvitePerm(member.id, "canInviteClients", v)}
                     icon={<UserPlus className="w-3 h-3" strokeWidth={1.5} />}
                     label="Clients"
-                  />
-                  <InviteToggle
-                    checked={member.isTeamLead}
-                    onChange={(v) => handleToggleInvitePerm(member.id, "isTeamLead", v)}
-                    icon={<Crown className="w-3 h-3" strokeWidth={1.5} />}
-                    label="Team Lead"
                   />
                 </div>
               )}

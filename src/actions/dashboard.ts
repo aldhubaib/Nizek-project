@@ -312,9 +312,9 @@ const STAGE_LABELS: Record<string, string> = {
 
 // Task-level visibility for the dashboard task monitors: admins, PMs and tech
 // leads see every task in the projects they can access; everyone else sees
-// only tasks they're working on — unless they're marked Team Lead on a
-// project (ProjectMember.isTeamLead), which reveals all of that project's
-// tasks and late items to them.
+// only tasks they're working on — unless their project role is flagged Team
+// Lead (ProjectRole.isTeamLead), which reveals all of that project's tasks
+// and late items to them.
 function taskVisibilityFilter(user: { id: string; systemRole: string }) {
   if (
     user.systemRole === "ADMIN" ||
@@ -327,7 +327,7 @@ function taskVisibilityFilter(user: { id: string; systemRole: string }) {
     OR: [
       { assigneeId: user.id },
       { developerId: user.id },
-      { project: { members: { some: { userId: user.id, isTeamLead: true } } } },
+      { project: { members: { some: { userId: user.id, projectRole: { is: { isTeamLead: true } } } } } },
     ],
   };
 }
@@ -1589,15 +1589,15 @@ export async function getAwaitingDevelopment() {
 }
 
 /**
- * "My Supervision" card on the Dashboard tab: the projects where the viewer is
- * a member flagged as Team Lead (ProjectMember.isTeamLead).
+ * "My Supervision" card on the Dashboard tab: the projects where the viewer's
+ * project role is flagged Team Lead (ProjectRole.isTeamLead).
  */
 export async function getSupervisedProjects() {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
 
   const memberships = await prisma.projectMember.findMany({
-    where: { userId: user.id, isTeamLead: true, project: activeProjectFilter() },
+    where: { userId: user.id, projectRole: { is: { isTeamLead: true } }, project: activeProjectFilter() },
     select: {
       project: {
         select: {

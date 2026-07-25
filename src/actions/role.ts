@@ -20,6 +20,7 @@ export async function createRole(data: {
   canMoveTask: boolean;
   canDeleteTask?: boolean;
   canDeclineTask?: boolean;
+  isTeamLead?: boolean;
   allowedTransitions?: Record<string, string[]>;
 }) {
   const user = await requireUser();
@@ -35,6 +36,7 @@ export async function createRole(data: {
       canMoveTask: data.canMoveTask,
       canDeleteTask: data.canDeleteTask ?? false,
       canDeclineTask: data.canDeclineTask ?? false,
+      isTeamLead: data.isTeamLead ?? false,
       allowedTransitions: data.allowedTransitions ? JSON.stringify(data.allowedTransitions) : null,
     },
   });
@@ -52,6 +54,7 @@ export async function updateRole(data: {
   canMoveTask?: boolean;
   canDeleteTask?: boolean;
   canDeclineTask?: boolean;
+  isTeamLead?: boolean;
   allowedTransitions?: Record<string, string[]>;
 }) {
   const user = await requireUser();
@@ -67,6 +70,7 @@ export async function updateRole(data: {
       ...(data.canMoveTask !== undefined && { canMoveTask: data.canMoveTask }),
       ...(data.canDeleteTask !== undefined && { canDeleteTask: data.canDeleteTask }),
       ...(data.canDeclineTask !== undefined && { canDeclineTask: data.canDeclineTask }),
+      ...(data.isTeamLead !== undefined && { isTeamLead: data.isTeamLead }),
       ...(data.allowedTransitions !== undefined && { allowedTransitions: JSON.stringify(data.allowedTransitions) }),
     },
   });
