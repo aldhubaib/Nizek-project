@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { Hourglass, X, Loader2 } from "lucide-react";
+import { Hourglass, X, Loader2, Crown, Users, ListTodo } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getAwaitingDevelopment } from "@/actions/dashboard";
+import { getAwaitingDevelopment, getSupervisedProjects } from "@/actions/dashboard";
 
 type AwaitingData = Awaited<ReturnType<typeof getAwaitingDevelopment>>;
 type AwaitingTask = AwaitingData["tasks"][number];
+type SupervisedProjects = Awaited<ReturnType<typeof getSupervisedProjects>>;
 
 const STAGE_STYLE: Record<string, { label: string; text: string; dot: string }> = {
   CLARIFICATION: { label: "Clarification", text: "text-violet-400", dot: "bg-violet-400" },
@@ -32,14 +33,21 @@ function initials(name: string | null): string {
 
 export function DashboardOverview() {
   const [data, setData] = useState<AwaitingData | null>(null);
+  const [supervised, setSupervised] = useState<SupervisedProjects | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [showSupervision, setShowSupervision] = useState(false);
   const [, startTransition] = useTransition();
 
   useEffect(() => {
     startTransition(async () => {
       try {
-        setData(await getAwaitingDevelopment());
+        const [awaiting, supervisedProjects] = await Promise.all([
+          getAwaitingDevelopment(),
+          getSupervisedProjects(),
+        ]);
+        setData(awaiting);
+        setSupervised(supervisedProjects);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load dashboard data");
       }
@@ -93,8 +101,35 @@ export function DashboardOverview() {
           <p className="mt-2 text-[11px] text-muted-foreground">Yours / all open before development</p>
         </button>
 
+        {/* My Supervision */}
+        <button
+          onClick={() => supervised && setShowSupervision(true)}
+          disabled={!supervised}
+          className="rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-muted-foreground/30 hover:bg-accent/20 disabled:cursor-default"
+        >
+          <div className="flex items-start justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              My Supervision
+            </span>
+            <Crown className="w-4 h-4 text-muted-foreground/60 shrink-0" strokeWidth={1.5} />
+          </div>
+          <div className="mt-2 min-h-[32px]">
+            {error ? (
+              <span className="text-[11px] text-destructive">{error}</span>
+            ) : supervised ? (
+              <span className="text-[26px] font-bold leading-none tabular-nums">
+                {supervised.length}
+                <span className="text-muted-foreground/60 font-semibold text-[15px]"> project{supervised.length === 1 ? "" : "s"}</span>
+              </span>
+            ) : (
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/50" />
+            )}
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">Projects you lead as Team Lead</p>
+        </button>
+
         {/* Empty slots */}
-        {[1, 2, 3].map((i) => (
+        {[1, 2].map((i) => (
           <div
             key={i}
             className="rounded-xl border border-dashed border-border/70 bg-card/40 p-4 flex flex-col"
@@ -198,6 +233,62 @@ export function DashboardOverview() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Supervision popup */}
+      {showSupervision && supervised && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] bg-background/80 backdrop-blur-sm flex items-start justify-center overflow-y-auto py-10 px-4"
+          onClick={() => setShowSupervision(false)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl border border-border bg-card shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 pt-5 pb-4">
+              <h2 className="text-[16px] font-semibold flex items-center gap-2">
+                <Crown className="w-4 h-4 text-amber-400" strokeWidth={1.5} />
+                My supervision · {supervised.length}
+                <span className="text-muted-foreground font-medium">project{supervised.length === 1 ? "" : "s"}</span>
+              </h2>
+              <button
+                onClick={() => setShowSupervision(false)}
+                className="w-7 h-7 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="px-6 pb-6 space-y-2">
+              {supervised.length === 0 && (
+                <p className="py-8 text-center text-[12px] text-muted-foreground">
+                  You are not marked as Team Lead on any project yet.
+                </p>
+              )}
+              {supervised.map((project) => (
+                <Link
+                  key={project.id}
+                  href={`/dashboard/projects/${project.id}`}
+                  className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/30"
+                >
+                  <span className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[12px] font-bold flex items-center justify-center shrink-0">
+                    {project.name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <p className="flex-1 min-w-0 text-[13px] font-medium truncate">{project.name}</p>
+                  <span className="flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums shrink-0">
+                    <ListTodo className="w-3 h-3" />
+                    {project.openTasks} open
+                  </span>
+                  <span className="flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums shrink-0">
+                    <Users className="w-3 h-3" />
+                    {project.memberCount}
+                  </span>
+                </Link>
+              ))}
             </div>
           </div>
         </div>,

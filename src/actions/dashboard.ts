@@ -1588,6 +1588,41 @@ export async function getAwaitingDevelopment() {
   };
 }
 
+/**
+ * "My Supervision" card on the Dashboard tab: the projects where the viewer is
+ * a member flagged as Team Lead (ProjectMember.isTeamLead).
+ */
+export async function getSupervisedProjects() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  const memberships = await prisma.projectMember.findMany({
+    where: { userId: user.id, isTeamLead: true, project: activeProjectFilter() },
+    select: {
+      project: {
+        select: {
+          id: true,
+          name: true,
+          _count: {
+            select: {
+              members: true,
+              tasks: { where: { archivedAt: null, stage: { not: "DONE" } } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { project: { name: "asc" } },
+  });
+
+  return memberships.map((m) => ({
+    id: m.project.id,
+    name: m.project.name,
+    memberCount: m.project._count.members,
+    openTasks: m.project._count.tasks,
+  }));
+}
+
 export async function getClientInputByAssignee() {
   const tasks = await getTasksNeedingClientInput();
 
