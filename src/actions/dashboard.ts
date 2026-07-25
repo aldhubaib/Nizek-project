@@ -1589,15 +1589,17 @@ export async function getAwaitingDevelopment() {
 }
 
 /**
- * "My Supervision" card on the Dashboard tab: the projects where the viewer's
- * project role is flagged Team Lead (ProjectRole.isTeamLead).
+ * "My Supervision" card on the Dashboard tab: every project the viewer is
+ * assigned to with a role flagged Team Lead (ProjectRole.isTeamLead) —
+ * including projects without an active contract, since supervision is about
+ * membership, not contract status.
  */
 export async function getSupervisedProjects() {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
 
   const memberships = await prisma.projectMember.findMany({
-    where: { userId: user.id, projectRole: { is: { isTeamLead: true } }, project: activeProjectFilter() },
+    where: { userId: user.id, projectRole: { is: { isTeamLead: true } } },
     select: {
       project: {
         select: {
