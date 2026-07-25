@@ -7,7 +7,7 @@ import { Hourglass, X, Loader2, Crown, Users, ListTodo } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getAwaitingDevelopment, getSupervisedProjects } from "@/actions/dashboard";
 
-type AwaitingData = Awaited<ReturnType<typeof getAwaitingDevelopment>>;
+type AwaitingData = NonNullable<Awaited<ReturnType<typeof getAwaitingDevelopment>>>;
 type AwaitingTask = AwaitingData["tasks"][number];
 type SupervisedProjects = Awaited<ReturnType<typeof getSupervisedProjects>>;
 
@@ -25,6 +25,17 @@ function waitingLabel(enteredAt: Date | string | null): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
+function EmptySlot() {
+  return (
+    <div className="rounded-xl border border-dashed border-border/70 bg-card/40 p-4 flex flex-col">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/40">
+        Coming soon
+      </span>
+      <span className="mt-2 text-[26px] font-bold leading-none text-muted-foreground/20">—</span>
+    </div>
+  );
+}
+
 function initials(name: string | null): string {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);
@@ -32,7 +43,8 @@ function initials(name: string | null): string {
 }
 
 export function DashboardOverview() {
-  const [data, setData] = useState<AwaitingData | null>(null);
+  // undefined = loading; null = hidden (viewer is not a developer)
+  const [data, setData] = useState<AwaitingData | null | undefined>(undefined);
   const [supervised, setSupervised] = useState<SupervisedProjects | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -74,32 +86,36 @@ export function DashboardOverview() {
   return (
     <div className="lg:col-span-2">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Awaiting Development */}
-        <button
-          onClick={() => data && setShowDetails(true)}
-          disabled={!data}
-          className="rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-muted-foreground/30 hover:bg-accent/20 disabled:cursor-default"
-        >
-          <div className="flex items-start justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-              Awaiting Development
-            </span>
-            <Hourglass className="w-4 h-4 text-muted-foreground/60 shrink-0" strokeWidth={1.5} />
-          </div>
-          <div className="mt-2 min-h-[32px]">
-            {error ? (
-              <span className="text-[11px] text-destructive">{error}</span>
-            ) : data ? (
-              <span className="text-[26px] font-bold leading-none tabular-nums">
-                {data.mine}
-                <span className="text-muted-foreground/60 font-semibold"> / {data.total}</span>
+        {/* Awaiting Development — developers only; others get a placeholder slot */}
+        {data === null ? (
+          <EmptySlot />
+        ) : (
+          <button
+            onClick={() => data && setShowDetails(true)}
+            disabled={!data}
+            className="rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-muted-foreground/30 hover:bg-accent/20 disabled:cursor-default"
+          >
+            <div className="flex items-start justify-between">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                Awaiting Development
               </span>
-            ) : (
-              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/50" />
-            )}
-          </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">Yours / all open before development</p>
-        </button>
+              <Hourglass className="w-4 h-4 text-muted-foreground/60 shrink-0" strokeWidth={1.5} />
+            </div>
+            <div className="mt-2 min-h-[32px]">
+              {error ? (
+                <span className="text-[11px] text-destructive">{error}</span>
+              ) : data ? (
+                <span className="text-[26px] font-bold leading-none tabular-nums">
+                  {data.mine}
+                  <span className="text-muted-foreground/60 font-semibold"> / {data.total}</span>
+                </span>
+              ) : (
+                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/50" />
+              )}
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">Yours / all open before development</p>
+          </button>
+        )}
 
         {/* My Supervision */}
         <button
@@ -129,17 +145,8 @@ export function DashboardOverview() {
         </button>
 
         {/* Empty slots */}
-        {[1, 2].map((i) => (
-          <div
-            key={i}
-            className="rounded-xl border border-dashed border-border/70 bg-card/40 p-4 flex flex-col"
-          >
-            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/40">
-              Coming soon
-            </span>
-            <span className="mt-2 text-[26px] font-bold leading-none text-muted-foreground/20">—</span>
-          </div>
-        ))}
+        <EmptySlot />
+        <EmptySlot />
       </div>
 
       {/* Details popup */}

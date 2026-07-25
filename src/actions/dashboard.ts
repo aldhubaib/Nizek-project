@@ -1519,23 +1519,20 @@ export async function getUpNextByProject() {
  * Clarification or Ready for Dev (i.e. cleared intake but not yet picked up by
  * development) across the projects the viewer can access. `mine` counts the
  * ones the viewer is responsible for (assignee or sticky developer).
+ *
+ * Developer-only: for everyone else it returns null and the card is hidden —
+ * admins/PMs would otherwise see a workspace-wide count that isn't their queue.
  */
 export async function getAwaitingDevelopment() {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
 
+  if (user.systemRole !== "DEVELOPER") return null;
+
   const AWAITING_STAGES = ["CLARIFICATION", "READY_FOR_DEV"];
 
-  const whereClause = user.systemRole === "ADMIN"
-    ? {}
-    : user.systemRole === "PM" || user.systemRole === "TECH_LEAD"
-      ? {
-          OR: [
-            { members: { some: { userId: user.id } } },
-            { team: { members: { some: { userId: user.id } } } },
-          ],
-        }
-      : { members: { some: { userId: user.id } } };
+  // Only developers reach this point, so scope to the projects they're on.
+  const whereClause = { members: { some: { userId: user.id } } };
 
   const tasks = await prisma.task.findMany({
     where: {
