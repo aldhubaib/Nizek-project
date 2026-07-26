@@ -25,6 +25,82 @@ function waitingLabel(enteredAt: Date | string | null): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
+// Shared stat-card layout: title top-left, info button top-right, value in the
+// middle, description bottom-left and the card's symbol icon bottom-right.
+function StatCard({
+  label,
+  icon: Icon,
+  description,
+  disabled,
+  onOpen,
+  info,
+  children,
+}: {
+  label: string;
+  icon: typeof Hourglass;
+  description: string;
+  disabled?: boolean;
+  onOpen: () => void;
+  info: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const [showInfo, setShowInfo] = useState(false);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => !disabled && onOpen()}
+      onKeyDown={(e) => e.key === "Enter" && !disabled && onOpen()}
+      className="relative flex flex-col rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-muted-foreground/30 hover:bg-accent/20 cursor-pointer"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+          {label}
+        </span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowInfo((v) => !v);
+          }}
+          title="What is this?"
+          className="text-muted-foreground/60 hover:text-foreground transition-colors shrink-0"
+        >
+          <Info className="w-4 h-4" strokeWidth={1.5} />
+        </button>
+      </div>
+
+      <div className="mt-2 min-h-[32px]">{children}</div>
+
+      <div className="mt-2 flex items-end justify-between gap-2">
+        <p className="text-[11px] text-muted-foreground">{description}</p>
+        <Icon className="w-4 h-4 text-muted-foreground/60 shrink-0" strokeWidth={1.5} />
+      </div>
+
+      {showInfo && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-2 top-10 z-20 w-72 rounded-lg border border-border bg-popover p-3 shadow-xl cursor-default"
+        >
+          <div className="flex items-start justify-between gap-2 mb-1.5">
+            <span className="text-[11px] font-semibold text-foreground">About this card</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowInfo(false);
+              }}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+          {info}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EmptySlot() {
   return (
     <div className="rounded-xl border border-dashed border-border/70 bg-card/40 p-4 flex flex-col">
@@ -49,7 +125,6 @@ export function DashboardOverview() {
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showSupervision, setShowSupervision] = useState(false);
-  const [showInfo, setShowInfo] = useState(false);
   const [, startTransition] = useTransition();
 
   useEffect(() => {
@@ -91,104 +166,78 @@ export function DashboardOverview() {
         {data === null ? (
           <EmptySlot />
         ) : (
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => data && setShowDetails(true)}
-            onKeyDown={(e) => e.key === "Enter" && data && setShowDetails(true)}
-            className="relative rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-muted-foreground/30 hover:bg-accent/20 cursor-pointer"
-          >
-            <div className="flex items-start justify-between">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                Awaiting Development
-              </span>
-              <span className="flex items-center gap-1.5 shrink-0">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowInfo((v) => !v);
-                  }}
-                  title="What is this?"
-                  className="text-muted-foreground/60 hover:text-foreground transition-colors"
-                >
-                  <Info className="w-4 h-4" strokeWidth={1.5} />
-                </button>
-                <Hourglass className="w-4 h-4 text-muted-foreground/60" strokeWidth={1.5} />
-              </span>
-            </div>
-            <div className="mt-2 min-h-[32px]">
-              {error ? (
-                <span className="text-[11px] text-destructive">{error}</span>
-              ) : data ? (
-                <span className="text-[26px] font-bold leading-none tabular-nums">
-                  {data.mine}
-                  <span className="text-muted-foreground/60 font-semibold"> / {data.total}</span>
-                </span>
-              ) : (
-                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/50" />
-              )}
-            </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">Yours / all open before development</p>
-
-            {showInfo && (
-              <div
-                onClick={(e) => e.stopPropagation()}
-                className="absolute right-2 top-10 z-20 w-72 rounded-lg border border-border bg-popover p-3 shadow-xl cursor-default"
-              >
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <span className="text-[11px] font-semibold text-foreground">About this card</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowInfo(false);
-                    }}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
+          <StatCard
+            label="Awaiting Development"
+            icon={Hourglass}
+            description="Yours / all open before development"
+            disabled={!data}
+            onOpen={() => setShowDetails(true)}
+            info={
+              <>
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  Tasks waiting to enter development — everything open in{" "}
-                  <strong className="text-foreground">Clarification</strong> and{" "}
-                  <strong className="text-foreground">Ready for Dev</strong> across the projects
-                  you&apos;re assigned to as a developer (projects you supervise aren&apos;t counted).
-                  The first number is tasks you own; the second is the total. Click the card for
-                  the full list.
+                  You are assigned to projects as a <strong className="text-foreground">Developer</strong> —
+                  this card shows the work heading your way: every open task in{" "}
+                  <strong className="text-foreground">Clarification</strong> or{" "}
+                  <strong className="text-foreground">Ready for Dev</strong> on those projects.
+                  Projects you supervise are not counted.
+                </p>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                  The first number is tasks assigned to you, the second is everything waiting.
+                  Click the card for the full list.
                 </p>
                 <p className="mt-1.5 text-[10px] text-muted-foreground/60">
-                  Visible to Developer accounts only.
+                  Only users with the Developer role see this card.
                 </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* My Supervision */}
-        <button
-          onClick={() => supervised && setShowSupervision(true)}
-          disabled={!supervised}
-          className="rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-muted-foreground/30 hover:bg-accent/20 disabled:cursor-default"
-        >
-          <div className="flex items-start justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-              My Supervision
-            </span>
-            <Crown className="w-4 h-4 text-muted-foreground/60 shrink-0" strokeWidth={1.5} />
-          </div>
-          <div className="mt-2 min-h-[32px]">
+              </>
+            }
+          >
             {error ? (
               <span className="text-[11px] text-destructive">{error}</span>
-            ) : supervised ? (
+            ) : data ? (
               <span className="text-[26px] font-bold leading-none tabular-nums">
-                {supervised.length}
-                <span className="text-muted-foreground/60 font-semibold text-[15px]"> project{supervised.length === 1 ? "" : "s"}</span>
+                {data.mine}
+                <span className="text-muted-foreground/60 font-semibold"> / {data.total}</span>
               </span>
             ) : (
               <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/50" />
             )}
-          </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">Projects you lead as Team Lead</p>
-        </button>
+          </StatCard>
+        )}
+
+        {/* My Supervision */}
+        <StatCard
+          label="My Supervision"
+          icon={Crown}
+          description="Projects you lead as Team Lead"
+          disabled={!supervised}
+          onOpen={() => setShowSupervision(true)}
+          info={
+            <>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                You hold a role with <strong className="text-foreground">Team Lead</strong> enabled
+                on these projects, which lets you see all of their members&apos; tasks and late items
+                on the dashboard.
+              </p>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                Click the card to list your projects with their open task and member counts.
+              </p>
+              <p className="mt-1.5 text-[10px] text-muted-foreground/60">
+                Shows 0 if none of your roles have Team Lead enabled.
+              </p>
+            </>
+          }
+        >
+          {error ? (
+            <span className="text-[11px] text-destructive">{error}</span>
+          ) : supervised ? (
+            <span className="text-[26px] font-bold leading-none tabular-nums">
+              {supervised.length}
+              <span className="text-muted-foreground/60 font-semibold text-[15px]"> project{supervised.length === 1 ? "" : "s"}</span>
+            </span>
+          ) : (
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/50" />
+          )}
+        </StatCard>
 
         {/* Empty slots */}
         <EmptySlot />
