@@ -1531,8 +1531,21 @@ export async function getAwaitingDevelopment() {
 
   const AWAITING_STAGES = ["CLARIFICATION", "READY_FOR_DEV"];
 
-  // Only developers reach this point, so scope to the projects they're on.
-  const whereClause = { members: { some: { userId: user.id } } };
+  // Count only projects where the viewer is on the team as a developer:
+  // their membership has no custom role, or a role that isn't Admin / Team
+  // Lead. Projects they merely supervise or administer stay out of their
+  // development queue.
+  const whereClause = {
+    members: {
+      some: {
+        userId: user.id,
+        OR: [
+          { roleId: null },
+          { projectRole: { is: { isAdmin: false, isTeamLead: false } } },
+        ],
+      },
+    },
+  };
 
   const tasks = await prisma.task.findMany({
     where: {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { Hourglass, X, Loader2, Crown, Users, ListTodo } from "lucide-react";
+import { Hourglass, X, Loader2, Crown, Users, ListTodo, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getAwaitingDevelopment, getSupervisedProjects } from "@/actions/dashboard";
 
@@ -49,6 +49,7 @@ export function DashboardOverview() {
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showSupervision, setShowSupervision] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const [, startTransition] = useTransition();
 
   useEffect(() => {
@@ -90,16 +91,30 @@ export function DashboardOverview() {
         {data === null ? (
           <EmptySlot />
         ) : (
-          <button
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => data && setShowDetails(true)}
-            disabled={!data}
-            className="rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-muted-foreground/30 hover:bg-accent/20 disabled:cursor-default"
+            onKeyDown={(e) => e.key === "Enter" && data && setShowDetails(true)}
+            className="relative rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-muted-foreground/30 hover:bg-accent/20 cursor-pointer"
           >
             <div className="flex items-start justify-between">
               <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                 Awaiting Development
               </span>
-              <Hourglass className="w-4 h-4 text-muted-foreground/60 shrink-0" strokeWidth={1.5} />
+              <span className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowInfo((v) => !v);
+                  }}
+                  title="What is this?"
+                  className="text-muted-foreground/60 hover:text-foreground transition-colors"
+                >
+                  <Info className="w-4 h-4" strokeWidth={1.5} />
+                </button>
+                <Hourglass className="w-4 h-4 text-muted-foreground/60" strokeWidth={1.5} />
+              </span>
             </div>
             <div className="mt-2 min-h-[32px]">
               {error ? (
@@ -114,7 +129,38 @@ export function DashboardOverview() {
               )}
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground">Yours / all open before development</p>
-          </button>
+
+            {showInfo && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute right-2 top-10 z-20 w-72 rounded-lg border border-border bg-popover p-3 shadow-xl cursor-default"
+              >
+                <div className="flex items-start justify-between gap-2 mb-1.5">
+                  <span className="text-[11px] font-semibold text-foreground">About this card</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowInfo(false);
+                    }}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Tasks waiting to enter development — everything open in{" "}
+                  <strong className="text-foreground">Clarification</strong> and{" "}
+                  <strong className="text-foreground">Ready for Dev</strong> across the projects
+                  you&apos;re assigned to as a developer (projects you supervise aren&apos;t counted).
+                  The first number is tasks you own; the second is the total. Click the card for
+                  the full list.
+                </p>
+                <p className="mt-1.5 text-[10px] text-muted-foreground/60">
+                  Visible to Developer accounts only.
+                </p>
+              </div>
+            )}
+          </div>
         )}
 
         {/* My Supervision */}
