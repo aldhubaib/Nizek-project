@@ -6,16 +6,20 @@ import {
   getContractsHealth,
   getTeamProjects,
   getMostRejectedTasks,
+  getProjectStageDistribution,
 } from "@/actions/dashboard";
 import { ContractsHealth } from "./contracts-health";
 import { TeamProjects } from "./team-projects";
 import { MostRejected } from "./most-rejected";
 import { LazyIncompleteDeadlines } from "./lazy-incomplete-deadlines";
+import { ProjectStageChart } from "./project-stage-chart";
+import { OverallStageBar } from "./overall-stage-bar";
 
 type ManagementData = {
   contractsHealth: Awaited<ReturnType<typeof getContractsHealth>>;
   teamProjects: Awaited<ReturnType<typeof getTeamProjects>>;
   rejectedTasks: Awaited<ReturnType<typeof getMostRejectedTasks>>;
+  stageDistribution: Awaited<ReturnType<typeof getProjectStageDistribution>>;
 };
 
 export function LazyManagementTab() {
@@ -26,13 +30,14 @@ export function LazyManagementTab() {
   useEffect(() => {
     startTransition(async () => {
       try {
-        const [contractsHealth, teamProjects, rejectedTasks] =
+        const [contractsHealth, teamProjects, rejectedTasks, stageDistribution] =
           await Promise.all([
             getContractsHealth(),
             getTeamProjects(),
             getMostRejectedTasks(),
+            getProjectStageDistribution("all"),
           ]);
-        setData({ contractsHealth, teamProjects, rejectedTasks });
+        setData({ contractsHealth, teamProjects, rejectedTasks, stageDistribution });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load management data");
       }
@@ -56,6 +61,24 @@ export function LazyManagementTab() {
 
   return (
     <>
+      {data.stageDistribution && (
+        <>
+          <div className="lg:col-span-2">
+            <ProjectStageChart
+              data={data.stageDistribution}
+              className=""
+              audienceNote="Management view — every active project, visible to Admins."
+            />
+          </div>
+          <div className="lg:col-span-2">
+            <OverallStageBar
+              data={data.stageDistribution}
+              className=""
+              audienceNote="Management view — every active project, visible to Admins."
+            />
+          </div>
+        </>
+      )}
       <ContractsHealth data={data.contractsHealth} />
       <TeamProjects data={JSON.parse(JSON.stringify(data.teamProjects))} />
       <MostRejected data={data.rejectedTasks} />

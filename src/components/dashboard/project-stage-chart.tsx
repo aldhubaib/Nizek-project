@@ -44,12 +44,20 @@ function initials(name: string | null): string {
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
 }
 
-export function ProjectStageChart({ data }: { data: Distribution }) {
+export function ProjectStageChart({
+  data,
+  audienceNote,
+  className,
+}: {
+  data: Distribution;
+  audienceNote?: string;
+  className?: string;
+}) {
   const [showInfo, setShowInfo] = useState(false);
   const [selected, setSelected] = useState<{ project: ProjectEntry; group: GroupKey } | null>(null);
 
   return (
-    <div className="relative mt-4 rounded-xl border border-border bg-card p-4">
+    <div className={cn("relative rounded-xl border border-border bg-card p-4", className ?? "mt-4")}>
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-4">
         <div className="flex items-center gap-2.5">
@@ -95,7 +103,7 @@ export function ProjectStageChart({ data }: { data: Distribution }) {
             Click any segment to open the project&apos;s breakdown with the tasks in that group.
           </p>
           <p className="mt-1.5 text-[10px] text-muted-foreground/60">
-            Visible to Developers, PMs and Team Lead role holders.
+            {audienceNote ?? "Visible to Developers, PMs and Team Lead role holders."}
           </p>
         </div>
       )}

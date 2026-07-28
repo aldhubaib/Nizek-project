@@ -743,6 +743,7 @@ export async function getUnreadMentions() {
     where: {
       userId: user.id,
       readAt: null,
+      comment: { task: { project: activeProjectFilter() } },
     },
     include: {
       comment: {
@@ -784,7 +785,11 @@ export async function getUnreadMentionCount() {
   const user = await requireUser();
 
   return prisma.taskCommentMention.count({
-    where: { userId: user.id, readAt: null },
+    where: {
+      userId: user.id,
+      readAt: null,
+      comment: { task: { project: activeProjectFilter() } },
+    },
   });
 }
 
@@ -937,25 +942,27 @@ export async function getTeamProjects() {
     });
   }
 
+  // Closed projects (no valid contract) are hidden from the Teams module
+  // entirely, matching every other dashboard monitor.
   const result = teams.map((team) => {
-    const projects = mapProjects(team.projects);
+    const projects = mapProjects(team.projects).filter((p) => p.isActive);
     return {
       id: team.id,
       name: team.name,
       projectCount: projects.length,
-      activeCount: projects.filter((p) => p.isActive).length,
+      activeCount: projects.length,
       projects,
     };
   });
 
-  if (unassignedProjects.length > 0) {
-    const projects = mapProjects(unassignedProjects);
+  const unassigned = mapProjects(unassignedProjects).filter((p) => p.isActive);
+  if (unassigned.length > 0) {
     result.push({
       id: "__none__",
       name: "No Team",
-      projectCount: projects.length,
-      activeCount: projects.filter((p) => p.isActive).length,
-      projects,
+      projectCount: unassigned.length,
+      activeCount: unassigned.length,
+      projects: unassigned,
     });
   }
 
@@ -1599,17 +1606,16 @@ export async function getAwaitingDevelopment() {
 }
 
 /**
- * "My Supervision" card on the Dashboard tab: every project the viewer is
- * assigned to with a role flagged Team Lead (ProjectRole.isTeamLead) —
- * including projects without an active contract, since supervision is about
- * membership, not contract status.
+ * "My Supervision" card on the Dashboard tab: every active project the viewer
+ * is assigned to with a role flagged Team Lead (ProjectRole.isTeamLead).
+ * Closed projects (no valid contract) are hidden like everywhere else.
  */
 export async function getSupervisedProjects() {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
 
   const memberships = await prisma.projectMember.findMany({
-    where: { userId: user.id, projectRole: { is: { isTeamLead: true } } },
+    where: { userId: user.id, projectRole: { is: { isTeamLead: true } }, project: activeProjectFilter() },
     select: {
       project: {
         select: {
@@ -1641,22 +1647,28 @@ export async function getSupervisedProjects() {
  * Clarification, Development (Ready for Dev + In Development) and Review
  * (Internal Review + Client Review + Ready for Release).
  *
- * Visible to Developers, PMs / Tech Leads, and anyone holding a Team Lead
- * role; returns null for everyone else.
+ * Default "member" scope: the viewer's projects, visible to Developers,
+ * PMs / Tech Leads, and anyone holding a Team Lead role. "all" scope (the
+ * Management tab): every active project, Admins only. Returns null when the
+ * viewer doesn't qualify.
  */
-export async function getProjectStageDistribution() {
+export async function getProjectStageDistribution(scope: "member" | "all" = "member") {
   const { requireUser } = await import("@/lib/auth");
   const user = await requireUser();
 
-  let visible = ["DEVELOPER", "PM", "TECH_LEAD"].includes(user.systemRole);
-  if (!visible) {
-    const leadMembership = await prisma.projectMember.findFirst({
-      where: { userId: user.id, projectRole: { is: { isTeamLead: true } } },
-      select: { id: true },
-    });
-    visible = leadMembership !== null;
+  if (scope === "all") {
+    if (user.systemRole !== "ADMIN") return null;
+  } else {
+    let visible = ["DEVELOPER", "PM", "TECH_LEAD"].includes(user.systemRole);
+    if (!visible) {
+      const leadMembership = await prisma.projectMember.findFirst({
+        where: { userId: user.id, projectRole: { is: { isTeamLead: true } } },
+        select: { id: true },
+      });
+      visible = leadMembership !== null;
+    }
+    if (!visible) return null;
   }
-  if (!visible) return null;
 
   const STAGE_GROUP: Record<string, "clarification" | "development" | "review"> = {
     CLARIFICATION: "clarification",
@@ -1671,10 +1683,9 @@ export async function getProjectStageDistribution() {
     where: {
       archivedAt: null,
       stage: { in: Object.keys(STAGE_GROUP) as any },
-      project: {
-        members: { some: { userId: user.id } },
-        ...activeProjectFilter(),
-      },
+      project: scope === "all"
+        ? { ...activeProjectFilter() }
+        : { members: { some: { userId: user.id } }, ...activeProjectFilter() },
     },
     select: {
       id: true,

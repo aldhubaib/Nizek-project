@@ -22,7 +22,15 @@ function initials(name: string | null): string {
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
 }
 
-export function OverallStageBar({ data }: { data: Distribution }) {
+export function OverallStageBar({
+  data,
+  audienceNote,
+  className,
+}: {
+  data: Distribution;
+  audienceNote?: string;
+  className?: string;
+}) {
   const [showInfo, setShowInfo] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<GroupKey | null>(null);
 
@@ -58,7 +66,7 @@ export function OverallStageBar({ data }: { data: Distribution }) {
   }, [data]);
 
   return (
-    <div className="relative mt-4 rounded-xl border border-border bg-card p-4">
+    <div className={cn("relative rounded-xl border border-border bg-card p-4", className ?? "mt-4")}>
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-4">
         <div className="flex items-center gap-2.5">
@@ -105,7 +113,7 @@ export function OverallStageBar({ data }: { data: Distribution }) {
             Click a segment to list its tasks across all projects.
           </p>
           <p className="mt-1.5 text-[10px] text-muted-foreground/60">
-            Visible to Developers, PMs and Team Lead role holders.
+            {audienceNote ?? "Visible to Developers, PMs and Team Lead role holders."}
           </p>
         </div>
       )}
