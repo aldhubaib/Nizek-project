@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, Trash2, ShieldCheck, Shield, AlertTriangle, ArrowRightLeft, ChevronDown, Check, Eye } from "lucide-react";
+import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, Trash2, ShieldCheck, Shield, AlertTriangle, ArrowRightLeft, ChevronDown, Check, Eye, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { updateUserAdmin, inviteToTeam, toggleBlockUser, cancelTeamInvite, resendTeamInvite, getUserTaskSummary } from "@/actions/team";
@@ -80,8 +80,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteIsAdmin, setInviteIsAdmin] = useState(false);
   const [inviteTeamId, setInviteTeamId] = useState("");
-  const [inviteProjectId, setInviteProjectId] = useState("");
-  const [inviteRoleId, setInviteRoleId] = useState("");
+  const [inviteProjects, setInviteProjects] = useState<{ projectId: string; roleId: string }[]>([]);
   const [inviting, setInviting] = useState(false);
 
   function resetInviteForm() {
@@ -90,8 +89,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
     setInviteEmail("");
     setInviteIsAdmin(false);
     setInviteTeamId("");
-    setInviteProjectId("");
-    setInviteRoleId("");
+    setInviteProjects([]);
   }
 
   async function handleAdminToggle(userId: string, makeAdmin: boolean) {
@@ -108,8 +106,8 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
     if (!inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim()) return;
-    if (inviteProjectId && !inviteRoleId) {
-      alert("Select a role for the chosen project.");
+    if (inviteProjects.some((p) => !p.projectId || !p.roleId)) {
+      alert("Select a project and role for every row, or remove the empty rows.");
       return;
     }
     setInviting(true);
@@ -120,8 +118,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
         lastName: inviteLastName.trim(),
         systemRole: inviteIsAdmin ? "ADMIN" : "DEVELOPER",
         teamId: inviteTeamId || undefined,
-        projectId: inviteProjectId || undefined,
-        roleId: inviteRoleId || undefined,
+        projects: inviteProjects.length > 0 ? inviteProjects : undefined,
       });
       setShowInvite(false);
       resetInviteForm();
@@ -379,36 +376,65 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                   ))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Project</label>
-                  <select
-                    value={inviteProjectId}
-                    onChange={(e) => {
-                      setInviteProjectId(e.target.value);
-                      if (!e.target.value) setInviteRoleId("");
-                    }}
-                    className="w-full h-9 px-2 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Projects</label>
+                <div className="space-y-2">
+                  {inviteProjects.map((row, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <select
+                        value={row.projectId}
+                        onChange={(e) =>
+                          setInviteProjects((rows) =>
+                            rows.map((r, i) => (i === idx ? { ...r, projectId: e.target.value } : r)),
+                          )
+                        }
+                        className="flex-1 min-w-0 h-9 px-2 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                      >
+                        <option value="">Select project...</option>
+                        {projectOptions
+                          .filter(
+                            (p) =>
+                              p.id === row.projectId ||
+                              !inviteProjects.some((r) => r.projectId === p.id),
+                          )
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                      </select>
+                      <select
+                        value={row.roleId}
+                        onChange={(e) =>
+                          setInviteProjects((rows) =>
+                            rows.map((r, i) => (i === idx ? { ...r, roleId: e.target.value } : r)),
+                          )
+                        }
+                        disabled={!row.projectId}
+                        className="flex-1 min-w-0 h-9 px-2 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50"
+                      >
+                        <option value="">Select role...</option>
+                        {roles.map((r) => (
+                          <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setInviteProjects((rows) => rows.filter((_, i) => i !== idx))}
+                        className="w-7 h-9 shrink-0 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        title="Remove project"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setInviteProjects((rows) => [...rows, { projectId: "", roleId: "" }])}
+                    disabled={inviteProjects.length >= projectOptions.length}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-border text-[12px] text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
                   >
-                    <option value="">No project</option>
-                    {projectOptions.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Project role</label>
-                  <select
-                    value={inviteRoleId}
-                    onChange={(e) => setInviteRoleId(e.target.value)}
-                    disabled={!inviteProjectId}
-                    className="w-full h-9 px-2 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50"
-                  >
-                    <option value="">Select role...</option>
-                    {roles.map((r) => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                  </select>
+                    <Plus className="w-3 h-3" />
+                    Add project
+                  </button>
                 </div>
               </div>
               <div>
@@ -446,7 +472,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                 </button>
                 <button
                   type="submit"
-                  disabled={inviting || !inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim() || (!!inviteProjectId && !inviteRoleId)}
+                  disabled={inviting || !inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim() || inviteProjects.some((p) => !p.projectId || !p.roleId)}
                   className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {inviting ? "Sending..." : "Send Invite"}

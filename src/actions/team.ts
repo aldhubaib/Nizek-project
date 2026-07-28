@@ -361,8 +361,8 @@ export async function inviteToTeam(data: {
   firstName: string;
   lastName: string;
   teamId?: string;
-  projectId?: string;
-  roleId?: string;
+  /** Projects the invitee joins on first sign-in, each with its role. */
+  projects?: { projectId: string; roleId: string }[];
 }) {
   const currentUser = await requireUser();
   if (currentUser.systemRole !== "ADMIN") {
@@ -383,34 +383,33 @@ export async function inviteToTeam(data: {
     create: { email, systemRole: data.systemRole, firstName, lastName, teamId },
   });
 
-  if (data.systemRole === "CLIENT" && data.projectId && data.roleId) {
+  const assignments = (data.projects ?? []).filter((p) => p.projectId && p.roleId);
+
+  if (data.systemRole === "CLIENT" && assignments.length > 0) {
     const { inviteMember } = await import("@/actions/project");
-    await inviteMember({
-      projectId: data.projectId,
-      email,
-      roleId: data.roleId,
-    });
+    for (const a of assignments) {
+      await inviteMember({ projectId: a.projectId, email, roleId: a.roleId });
+    }
   } else {
-    // Pre-assign the project membership: a pending Invitation row is accepted
+    // Pre-assign the project memberships: pending Invitation rows are accepted
     // automatically on first sign-in (acceptPendingInvitations), so the member
-    // lands in the project with the chosen role. No extra email — the single
-    // workspace invite below covers it.
-    if (data.projectId && data.roleId) {
-      const pRole = await prisma.projectRole.findUnique({ where: { id: data.roleId } });
+    // lands in each project with the chosen role.
+    for (const a of assignments) {
+      const pRole = await prisma.projectRole.findUnique({ where: { id: a.roleId } });
       if (!pRole) throw new Error("Invalid project role");
       await prisma.invitation.upsert({
-        where: { email_projectId: { email, projectId: data.projectId } },
+        where: { email_projectId: { email, projectId: a.projectId } },
         update: {
           role: pRole.isAdmin ? "ADMIN" : "MEMBER",
-          roleId: data.roleId,
+          roleId: a.roleId,
           status: "PENDING",
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
         create: {
           email,
           role: pRole.isAdmin ? "ADMIN" : "MEMBER",
-          roleId: data.roleId,
-          projectId: data.projectId,
+          roleId: a.roleId,
+          projectId: a.projectId,
           invitedById: currentUser.id,
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
