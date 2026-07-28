@@ -106,10 +106,10 @@ export function ProjectStageChart({ data }: { data: Distribution }) {
           No open tasks in the pipeline across your projects.
         </p>
       ) : (
-        <div className="flex items-end gap-5 overflow-x-auto pb-1 px-1">
+        <div className="flex items-end gap-3 px-1">
           {data.projects.map((project) => (
-            <div key={project.id} className="flex flex-col items-center gap-2 shrink-0">
-              <div className="h-40 w-10 flex flex-col justify-end rounded-lg overflow-hidden bg-muted/20">
+            <div key={project.id} className="flex flex-col items-center gap-2 flex-1 min-w-0">
+              <div className="h-40 w-full max-w-16 flex flex-col justify-end rounded-lg overflow-hidden bg-muted/20">
                 {GROUPS.map(({ key, label, bar }) => {
                   const count = project.groups[key];
                   if (count === 0) return null;
@@ -124,14 +124,14 @@ export function ProjectStageChart({ data }: { data: Distribution }) {
                   );
                 })}
               </div>
-              <div className="flex flex-col items-center gap-0.5">
-                <span
-                  title={project.name}
-                  className="w-6 h-6 rounded-full bg-muted border border-border text-[10px] font-bold text-muted-foreground flex items-center justify-center"
-                >
+              <div className="relative group flex flex-col items-center gap-0.5">
+                <span className="w-6 h-6 rounded-full bg-muted border border-border text-[10px] font-bold text-muted-foreground flex items-center justify-center">
                   {project.name.trim().slice(0, 1).toUpperCase()}
                 </span>
                 <span className="text-[10px] text-muted-foreground tabular-nums">{project.total}</span>
+                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-10 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] font-medium text-foreground shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                  {project.name.trim()}
+                </span>
               </div>
             </div>
           ))}
