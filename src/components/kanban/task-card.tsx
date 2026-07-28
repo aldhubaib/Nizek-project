@@ -49,6 +49,37 @@ function liveDuration(isoDate: string | null | undefined): string | null {
   return formatDuration(Date.now() - new Date(isoDate).getTime());
 }
 
+/** Timer badge with a styled hover popup explaining what the number means. */
+function TimeBadge({
+  icon: Icon,
+  value,
+  label,
+  explanation,
+}: {
+  icon: typeof Clock;
+  value: string;
+  label: string;
+  explanation: string;
+}) {
+  return (
+    <span className="group/time relative flex items-center gap-1">
+      <Icon className="w-3 h-3" />
+      {value}
+      <span
+        className={cn(
+          "pointer-events-none absolute bottom-full left-0 mb-1.5 z-50 w-52",
+          "rounded-lg border border-border bg-sidebar p-2.5 shadow-xl",
+          "opacity-0 group-hover/time:opacity-100 transition-opacity duration-150",
+          "font-sans normal-nums whitespace-normal",
+        )}
+      >
+        <span className="block text-[11px] font-semibold text-foreground mb-0.5">{label}</span>
+        <span className="block text-[10px] leading-relaxed text-muted-foreground">{explanation}</span>
+      </span>
+    </span>
+  );
+}
+
 function UserAvatar({ name, imageUrl, size = 5 }: { name: string | null; imageUrl: string | null; size?: number }) {
   const initials = name?.split(" ").map((n) => n[0]).join("") ?? "?";
   const sizeClass = size === 5 ? "w-5 h-5 text-[9px]" : "w-4 h-4 text-[8px]";
@@ -256,19 +287,24 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
         {(totalTime || stageTime) && (
           <div className="mt-2 flex items-center gap-3 text-[10px] font-mono tabular-nums text-muted-foreground/60">
             {totalTime && (
-              <span
-                className="flex items-center gap-1"
-                title={task.stage === "DONE" ? "Delivery time (Ready for Dev → Done)" : "Total time since Ready for Dev"}
-              >
-                <Clock className="w-3 h-3" />
-                {totalTime}
-              </span>
+              <TimeBadge
+                icon={Clock}
+                value={totalTime}
+                label={task.stage === "DONE" ? "Delivery time" : "Delivery clock"}
+                explanation={
+                  task.stage === "DONE"
+                    ? "Total time from Ready for Dev until the task was completed. Frozen — it no longer counts."
+                    : "Counts from the moment the task entered Ready for Dev until it reaches Done. Keeps running through development, reviews and rework — declines don't reset it."
+                }
+              />
             )}
             {stageTime && (
-              <span className="flex items-center gap-1" title="Time in current stage">
-                <Timer className="w-3 h-3" />
-                {stageTime}
-              </span>
+              <TimeBadge
+                icon={Timer}
+                value={stageTime}
+                label="Time in current stage"
+                explanation="How long the task has been sitting in this column. Resets every time the task moves to another stage — useful for spotting stuck tasks."
+              />
             )}
           </div>
         )}

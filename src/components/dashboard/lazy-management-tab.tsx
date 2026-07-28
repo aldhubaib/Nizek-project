@@ -26,7 +26,8 @@ type ManagementData = {
 export function LazyManagementTab() {
   const [data, setData] = useState<ManagementData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [teamFilter, setTeamFilter] = useState<string>("all");
+  // Selected team ids; empty means "All". "__none__" = projects without a team.
+  const [teamFilter, setTeamFilter] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -46,12 +47,12 @@ export function LazyManagementTab() {
     });
   }, []);
 
-  // "all" | team id | "__none__" (projects without a team). Everything below is
-  // filtered client-side so switching teams is instant.
+  // Everything below is filtered client-side so switching teams is instant.
+  // Multiple teams can be selected at once; an empty selection means "All".
   const matchesTeam = useMemo(() => {
     return (teamId: string | null) =>
-      teamFilter === "all" ||
-      (teamFilter === "__none__" ? teamId === null : teamId === teamFilter);
+      teamFilter.length === 0 ||
+      teamFilter.some((f) => (f === "__none__" ? teamId === null : teamId === f));
   }, [teamFilter]);
 
   const filtered = useMemo(() => {
@@ -59,9 +60,9 @@ export function LazyManagementTab() {
     return {
       contractsHealth: data.contractsHealth.filter((p) => matchesTeam(p.teamId)),
       teamProjects:
-        teamFilter === "all"
+        teamFilter.length === 0
           ? data.teamProjects
-          : data.teamProjects.filter((t) => t.id === teamFilter),
+          : data.teamProjects.filter((t) => teamFilter.includes(t.id)),
       rejectedTasks: data.rejectedTasks.filter((t) => matchesTeam(t.task.project.teamId)),
       stageDistribution: data.stageDistribution
         ? { projects: data.stageDistribution.projects.filter((p) => matchesTeam(p.teamId)) }
@@ -84,23 +85,38 @@ export function LazyManagementTab() {
     );
   }
 
-  const teamOptions = [
-    { id: "all", name: "All" },
-    ...data.teamProjects.map((t) => ({ id: t.id, name: t.name })),
-  ];
+  const teamOptions = data.teamProjects.map((t) => ({ id: t.id, name: t.name }));
+
+  function toggleTeam(id: string) {
+    setTeamFilter((prev) =>
+      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id],
+    );
+  }
 
   return (
     <>
-      {/* Team filter — applies to every module below */}
+      {/* Team filter — applies to every module below. Click to toggle;
+          multiple teams can be active at once, "All" clears the selection. */}
       <div className="lg:col-span-2 flex items-center gap-1.5 flex-wrap">
         <Users className="w-3.5 h-3.5 text-muted-foreground/60 mr-1" strokeWidth={1.5} />
+        <button
+          onClick={() => setTeamFilter([])}
+          className={cn(
+            "rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
+            teamFilter.length === 0
+              ? "bg-primary/15 border-primary/40 text-primary"
+              : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40",
+          )}
+        >
+          All
+        </button>
         {teamOptions.map((team) => (
           <button
             key={team.id}
-            onClick={() => setTeamFilter(team.id)}
+            onClick={() => toggleTeam(team.id)}
             className={cn(
               "rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
-              teamFilter === team.id
+              teamFilter.includes(team.id)
                 ? "bg-primary/15 border-primary/40 text-primary"
                 : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40",
             )}
