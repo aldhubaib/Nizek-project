@@ -5,11 +5,13 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 import { Hourglass, X, Loader2, Crown, Users, ListTodo, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getAwaitingDevelopment, getSupervisedProjects } from "@/actions/dashboard";
+import { getAwaitingDevelopment, getSupervisedProjects, getProjectStageDistribution } from "@/actions/dashboard";
+import { ProjectStageChart } from "./project-stage-chart";
 
 type AwaitingData = NonNullable<Awaited<ReturnType<typeof getAwaitingDevelopment>>>;
 type AwaitingTask = AwaitingData["tasks"][number];
 type SupervisedProjects = Awaited<ReturnType<typeof getSupervisedProjects>>;
+type StageDistribution = Awaited<ReturnType<typeof getProjectStageDistribution>>;
 
 const STAGE_STYLE: Record<string, { label: string; text: string; dot: string }> = {
   CLARIFICATION: { label: "Clarification", text: "text-violet-400", dot: "bg-violet-400" },
@@ -122,6 +124,7 @@ export function DashboardOverview() {
   // undefined = loading; null = hidden (viewer is not a developer)
   const [data, setData] = useState<AwaitingData | null | undefined>(undefined);
   const [supervised, setSupervised] = useState<SupervisedProjects | null>(null);
+  const [distribution, setDistribution] = useState<StageDistribution>(null);
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showSupervision, setShowSupervision] = useState(false);
@@ -130,12 +133,14 @@ export function DashboardOverview() {
   useEffect(() => {
     startTransition(async () => {
       try {
-        const [awaiting, supervisedProjects] = await Promise.all([
+        const [awaiting, supervisedProjects, stageDistribution] = await Promise.all([
           getAwaitingDevelopment(),
           getSupervisedProjects(),
+          getProjectStageDistribution(),
         ]);
         setData(awaiting);
         setSupervised(supervisedProjects);
+        setDistribution(stageDistribution);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load dashboard data");
       }
@@ -243,6 +248,9 @@ export function DashboardOverview() {
         <EmptySlot />
         <EmptySlot />
       </div>
+
+      {/* Tasks by stage — developers, PMs and team leads */}
+      {distribution && <ProjectStageChart data={distribution} />}
 
       {/* Details popup */}
       {showDetails && data && typeof document !== "undefined" && createPortal(

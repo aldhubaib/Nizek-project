@@ -1635,6 +1635,109 @@ export async function getSupervisedProjects() {
   }));
 }
 
+/**
+ * "Tasks by stage" module on the Dashboard tab: for every project the viewer
+ * is a member of, the open tasks bucketed into three groups —
+ * Clarification, Development (Ready for Dev + In Development) and Review
+ * (Internal Review + Client Review + Ready for Release).
+ *
+ * Visible to Developers, PMs / Tech Leads, and anyone holding a Team Lead
+ * role; returns null for everyone else.
+ */
+export async function getProjectStageDistribution() {
+  const { requireUser } = await import("@/lib/auth");
+  const user = await requireUser();
+
+  let visible = ["DEVELOPER", "PM", "TECH_LEAD"].includes(user.systemRole);
+  if (!visible) {
+    const leadMembership = await prisma.projectMember.findFirst({
+      where: { userId: user.id, projectRole: { is: { isTeamLead: true } } },
+      select: { id: true },
+    });
+    visible = leadMembership !== null;
+  }
+  if (!visible) return null;
+
+  const STAGE_GROUP: Record<string, "clarification" | "development" | "review"> = {
+    CLARIFICATION: "clarification",
+    READY_FOR_DEV: "development",
+    IN_DEVELOPMENT: "development",
+    INTERNAL_REVIEW: "review",
+    CLIENT_REVIEW: "review",
+    READY_FOR_RELEASE: "review",
+  };
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      archivedAt: null,
+      stage: { in: Object.keys(STAGE_GROUP) as any },
+      project: {
+        members: { some: { userId: user.id } },
+        ...activeProjectFilter(),
+      },
+    },
+    select: {
+      id: true,
+      title: true,
+      taskNumber: true,
+      taskType: true,
+      stage: true,
+      project: { select: { id: true, name: true } },
+      assignee: { select: { id: true, name: true, imageUrl: true } },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 1000,
+  });
+
+  const byProject = new Map<string, {
+    id: string;
+    name: string;
+    total: number;
+    groups: { clarification: number; development: number; review: number };
+    tasks: {
+      id: string;
+      title: string;
+      taskNumber: number;
+      taskType: string;
+      stage: string;
+      stageLabel: string;
+      group: "clarification" | "development" | "review";
+      assignee: { id: string; name: string | null; imageUrl: string | null } | null;
+    }[];
+  }>();
+
+  for (const t of tasks) {
+    let entry = byProject.get(t.project.id);
+    if (!entry) {
+      entry = {
+        id: t.project.id,
+        name: t.project.name,
+        total: 0,
+        groups: { clarification: 0, development: 0, review: 0 },
+        tasks: [],
+      };
+      byProject.set(t.project.id, entry);
+    }
+    const group = STAGE_GROUP[t.stage];
+    entry.total += 1;
+    entry.groups[group] += 1;
+    entry.tasks.push({
+      id: t.id,
+      title: t.title,
+      taskNumber: t.taskNumber,
+      taskType: t.taskType,
+      stage: t.stage,
+      stageLabel: STAGE_LABELS[t.stage] ?? t.stage,
+      group,
+      assignee: t.assignee,
+    });
+  }
+
+  return {
+    projects: [...byProject.values()].sort((a, b) => b.total - a.total),
+  };
+}
+
 export async function getClientInputByAssignee() {
   const tasks = await getTasksNeedingClientInput();
 
