@@ -33,7 +33,7 @@ export type IncompleteDeadlineRow = {
   title: string;
   dueDate: Date;
   daysUntil: number;
-  project: { id: string; name: string };
+  project: { id: string; name: string; teamId: string | null };
   author: { id: string; name: string | null; imageUrl: string | null };
 };
 
@@ -52,7 +52,7 @@ export async function getIncompleteDeadlines(): Promise<IncompleteDeadlineRow[]>
       id: true,
       title: true,
       dueDate: true,
-      project: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true, teamId: true } },
       author: { select: { id: true, name: true, imageUrl: true } },
     },
     orderBy: { dueDate: "asc" },

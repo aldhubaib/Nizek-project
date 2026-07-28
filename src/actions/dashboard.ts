@@ -589,7 +589,7 @@ export async function getMostRejectedTasks() {
           taskType: true,
           stage: true,
           projectId: true,
-          project: { select: { id: true, name: true } },
+          project: { select: { id: true, name: true, teamId: true } },
           assignee: { select: { id: true, name: true, imageUrl: true } },
         },
       },
@@ -674,6 +674,7 @@ export async function getContractsHealth() {
       id: true,
       name: true,
       logoUrl: true,
+      teamId: true,
       contracts: {
         where: { endDate: { not: null }, startDate: { not: null } },
         select: {
@@ -725,6 +726,7 @@ export async function getContractsHealth() {
       id: p.id,
       name: p.name,
       logoUrl: p.logoUrl,
+      teamId: p.teamId,
       daysLeft,
       endDate: lastEndDate?.toISOString() ?? null,
       currentType: activeContract?.contractType ?? lastContract?.contractType ?? null,
@@ -1657,7 +1659,9 @@ export async function getProjectStageDistribution(scope: "member" | "all" = "mem
   const user = await requireUser();
 
   if (scope === "all") {
-    if (user.systemRole !== "ADMIN") return null;
+    // Management view: admins plus PMs and tech leads. The tab's team filter
+    // lets them narrow it down, so we no longer gate this behind ADMIN only.
+    if (!["ADMIN", "PM", "TECH_LEAD"].includes(user.systemRole)) return null;
   } else {
     let visible = ["DEVELOPER", "PM", "TECH_LEAD"].includes(user.systemRole);
     if (!visible) {
@@ -1693,7 +1697,7 @@ export async function getProjectStageDistribution(scope: "member" | "all" = "mem
       taskNumber: true,
       taskType: true,
       stage: true,
-      project: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true, teamId: true } },
       assignee: { select: { id: true, name: true, imageUrl: true } },
     },
     orderBy: { updatedAt: "desc" },
@@ -1703,6 +1707,7 @@ export async function getProjectStageDistribution(scope: "member" | "all" = "mem
   const byProject = new Map<string, {
     id: string;
     name: string;
+    teamId: string | null;
     total: number;
     groups: { clarification: number; development: number; review: number };
     tasks: {
@@ -1723,6 +1728,7 @@ export async function getProjectStageDistribution(scope: "member" | "all" = "mem
       entry = {
         id: t.project.id,
         name: t.project.name,
+        teamId: t.project.teamId,
         total: 0,
         groups: { clarification: 0, development: 0, review: 0 },
         tasks: [],

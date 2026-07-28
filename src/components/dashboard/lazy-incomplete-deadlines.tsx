@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { getIncompleteDeadlines } from "@/actions/deadline-reminder";
 import { IncompleteDeadlines } from "./incomplete-deadlines";
 
-export function LazyIncompleteDeadlines() {
+export function LazyIncompleteDeadlines({ teamFilter }: { teamFilter?: string } = {}) {
   const [data, setData] = useState<Awaited<
     ReturnType<typeof getIncompleteDeadlines>
   > | null>(null);
@@ -37,5 +37,13 @@ export function LazyIncompleteDeadlines() {
     );
   }
 
-  return <IncompleteDeadlines data={data} />;
+  const filtered = !teamFilter || teamFilter === "all"
+    ? data
+    : data.filter((row) =>
+        teamFilter === "__none__"
+          ? row.project.teamId === null
+          : row.project.teamId === teamFilter,
+      );
+
+  return <IncompleteDeadlines data={filtered} />;
 }
