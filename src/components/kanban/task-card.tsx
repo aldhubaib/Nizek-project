@@ -109,7 +109,14 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
   // One shared minute clock drives all cards' live durations (re-render once/min
   // only while this card actually shows a duration).
   useMinuteTick(Boolean(task.startedAt || task.stageEnteredAt));
-  const totalTime = liveDuration(task.startedAt);
+  // The delivery clock (Ready for Dev → completed) freezes once the task hits
+  // Done — the Done stage log's enteredAt is the completion moment.
+  const totalTime =
+    task.stage === "DONE"
+      ? task.startedAt && task.stageEnteredAt
+        ? formatDuration(new Date(task.stageEnteredAt).getTime() - new Date(task.startedAt).getTime())
+        : null
+      : liveDuration(task.startedAt);
   const stageTime = liveDuration(task.stageEnteredAt);
 
   return (
@@ -249,7 +256,10 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
         {(totalTime || stageTime) && (
           <div className="mt-2 flex items-center gap-3 text-[10px] font-mono tabular-nums text-muted-foreground/60">
             {totalTime && (
-              <span className="flex items-center gap-1" title="Total time since Ready for Dev">
+              <span
+                className="flex items-center gap-1"
+                title={task.stage === "DONE" ? "Delivery time (Ready for Dev → Done)" : "Total time since Ready for Dev"}
+              >
                 <Clock className="w-3 h-3" />
                 {totalTime}
               </span>
