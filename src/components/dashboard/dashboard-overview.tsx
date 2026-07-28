@@ -7,6 +7,7 @@ import { Hourglass, X, Loader2, Crown, Users, ListTodo, Info } from "lucide-reac
 import { cn } from "@/lib/utils";
 import { getAwaitingDevelopment, getSupervisedProjects, getProjectStageDistribution } from "@/actions/dashboard";
 import { ProjectStageChart } from "./project-stage-chart";
+import { OverallStageBar } from "./overall-stage-bar";
 
 type AwaitingData = NonNullable<Awaited<ReturnType<typeof getAwaitingDevelopment>>>;
 type AwaitingTask = AwaitingData["tasks"][number];
@@ -251,6 +252,9 @@ export function DashboardOverview() {
 
       {/* Tasks by stage — developers, PMs and team leads */}
       {distribution && <ProjectStageChart data={distribution} />}
+
+      {/* Overall pipeline — same audience, all projects combined */}
+      {distribution && <OverallStageBar data={distribution} />}
 
       {/* Details popup */}
       {showDetails && data && typeof document !== "undefined" && createPortal(
