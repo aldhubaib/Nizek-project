@@ -47,6 +47,7 @@ interface TeamInvite {
   email: string;
   systemRole: string;
   createdAt: Date;
+  team?: { id: string; name: string } | null;
 }
 
 interface GlobalRole {
@@ -61,11 +62,15 @@ interface Props {
   invitations: Invitation[];
   teamInvites: TeamInvite[];
   roles: GlobalRole[];
+  /** Non-default workspace teams (Iran, Pakistan, ...) for the invite dialog. */
+  workspaceTeams?: { id: string; name: string }[];
+  /** All projects, for pre-assigning the invitee to one. */
+  projectOptions?: { id: string; name: string }[];
   isAdmin: boolean;
   currentUserId?: string;
 }
 
-export function TeamPageClient({ members, invitations, teamInvites, roles, isAdmin, currentUserId }: Props) {
+export function TeamPageClient({ members, invitations, teamInvites, roles, workspaceTeams = [], projectOptions = [], isAdmin, currentUserId }: Props) {
   const [search, setSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [changingRole, setChangingRole] = useState<string | null>(null);
@@ -74,7 +79,20 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
   const [inviteLastName, setInviteLastName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteIsAdmin, setInviteIsAdmin] = useState(false);
+  const [inviteTeamId, setInviteTeamId] = useState("");
+  const [inviteProjectId, setInviteProjectId] = useState("");
+  const [inviteRoleId, setInviteRoleId] = useState("");
   const [inviting, setInviting] = useState(false);
+
+  function resetInviteForm() {
+    setInviteFirstName("");
+    setInviteLastName("");
+    setInviteEmail("");
+    setInviteIsAdmin(false);
+    setInviteTeamId("");
+    setInviteProjectId("");
+    setInviteRoleId("");
+  }
 
   async function handleAdminToggle(userId: string, makeAdmin: boolean) {
     setChangingRole(userId);
@@ -90,6 +108,10 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
     if (!inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim()) return;
+    if (inviteProjectId && !inviteRoleId) {
+      alert("Select a role for the chosen project.");
+      return;
+    }
     setInviting(true);
     try {
       await inviteToTeam({
@@ -97,12 +119,12 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
         firstName: inviteFirstName.trim(),
         lastName: inviteLastName.trim(),
         systemRole: inviteIsAdmin ? "ADMIN" : "DEVELOPER",
+        teamId: inviteTeamId || undefined,
+        projectId: inviteProjectId || undefined,
+        roleId: inviteRoleId || undefined,
       });
       setShowInvite(false);
-      setInviteFirstName("");
-      setInviteLastName("");
-      setInviteEmail("");
-      setInviteIsAdmin(false);
+      resetInviteForm();
     } catch (err) {
       alert((err as Error).message);
     } finally {
@@ -345,6 +367,51 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
                 />
               </div>
               <div>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Team</label>
+                <select
+                  value={inviteTeamId}
+                  onChange={(e) => setInviteTeamId(e.target.value)}
+                  className="w-full h-9 px-2 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                >
+                  <option value="">No team</option>
+                  {workspaceTeams.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Project</label>
+                  <select
+                    value={inviteProjectId}
+                    onChange={(e) => {
+                      setInviteProjectId(e.target.value);
+                      if (!e.target.value) setInviteRoleId("");
+                    }}
+                    className="w-full h-9 px-2 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                  >
+                    <option value="">No project</option>
+                    {projectOptions.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Project role</label>
+                  <select
+                    value={inviteRoleId}
+                    onChange={(e) => setInviteRoleId(e.target.value)}
+                    disabled={!inviteProjectId}
+                    className="w-full h-9 px-2 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50"
+                  >
+                    <option value="">Select role...</option>
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
                 <button
                   type="button"
                   onClick={() => setInviteIsAdmin(!inviteIsAdmin)}
@@ -379,7 +446,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
                 </button>
                 <button
                   type="submit"
-                  disabled={inviting || !inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim()}
+                  disabled={inviting || !inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim() || (!!inviteProjectId && !inviteRoleId)}
                   className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {inviting ? "Sending..." : "Send Invite"}
@@ -648,6 +715,9 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, isAdm
                   <div className="flex items-center gap-2 mt-0.5">
                     {inv.systemRole === "ADMIN" && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full border font-medium text-purple-400 bg-purple-500/15 border-purple-500/30">Admin</span>
+                    )}
+                    {inv.team && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground">{inv.team.name}</span>
                     )}
                     <span className="text-[11px] text-muted-foreground/50">
                       Invited {formatDistanceToNow(new Date(inv.createdAt), { addSuffix: true })}

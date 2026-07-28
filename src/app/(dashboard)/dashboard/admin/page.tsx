@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getTeams, ensureDefaultTeams, getPendingInvitesForTeam, getTeamMembers, getPendingInvitations, getPendingTeamInvites } from "@/actions/team";
 import { getRoles } from "@/actions/role";
+import { getProjectOptions } from "@/actions/project";
 import { getContractPrefixes } from "@/actions/contract-prefix";
 import { getDefaultQuestions } from "@/actions/default-question";
 import { getBrandingAssets } from "@/actions/branding";
@@ -16,7 +17,7 @@ export default async function AdminPage() {
 
   await ensureDefaultTeams();
 
-  const [teams, pendingInvites, members, invitations, teamInvites, roles, prefixes, questions, branding, loginPhotos, notificationSound] = await Promise.all([
+  const [teams, pendingInvites, members, invitations, teamInvites, roles, prefixes, questions, branding, loginPhotos, notificationSound, projectOptions] = await Promise.all([
     getTeams(),
     getPendingInvitesForTeam(),
     getTeamMembers(),
@@ -28,6 +29,7 @@ export default async function AdminPage() {
     getBrandingAssets(),
     getLoginPhotos(),
     getNotificationSound(),
+    getProjectOptions(),
   ]);
 
   return (
@@ -44,6 +46,7 @@ export default async function AdminPage() {
         branding={branding}
         loginPhotos={loginPhotos}
         notificationSound={notificationSound}
+        projectOptions={projectOptions}
         currentUserId={user.id}
       />
     </Suspense>

@@ -268,12 +268,12 @@ const reconcileSignedUpInvites = cache(async () => {
       if (matchedInvited.length === 0) continue;
 
       let localUser = await prisma.user.findUnique({ where: { clerkId: cu.id } });
+      const teamInvite = await prisma.pendingTeamInvite.findFirst({
+        where: { email: { in: accountEmails } },
+      });
       if (!localUser) {
         // They signed up with Clerk but never landed in the app — materialize
         // the same user row their first visit would create.
-        const teamInvite = await prisma.pendingTeamInvite.findFirst({
-          where: { email: { in: accountEmails } },
-        });
         const invitedName = teamInvite
           ? `${teamInvite.firstName ?? ""} ${teamInvite.lastName ?? ""}`.trim()
           : "";
@@ -296,6 +296,10 @@ const reconcileSignedUpInvites = cache(async () => {
           continue;
         }
         await assignUserToDefaultTeam(localUser.id, localUser.systemRole === "CLIENT").catch(() => {});
+      }
+
+      if (teamInvite?.teamId) {
+        await assignUserToInvitedTeam(localUser.id, teamInvite.teamId).catch(() => {});
       }
 
       for (const email of matchedInvited) {
@@ -356,6 +360,7 @@ export async function inviteToTeam(data: {
   systemRole: SystemRole;
   firstName: string;
   lastName: string;
+  teamId?: string;
   projectId?: string;
   roleId?: string;
 }) {
@@ -371,10 +376,11 @@ export async function inviteToTeam(data: {
     throw new Error("First name and last name are required");
   }
 
+  const teamId = data.teamId || null;
   await prisma.pendingTeamInvite.upsert({
     where: { email },
-    update: { systemRole: data.systemRole, firstName, lastName },
-    create: { email, systemRole: data.systemRole, firstName, lastName },
+    update: { systemRole: data.systemRole, firstName, lastName, teamId },
+    create: { email, systemRole: data.systemRole, firstName, lastName, teamId },
   });
 
   if (data.systemRole === "CLIENT" && data.projectId && data.roleId) {
@@ -385,6 +391,34 @@ export async function inviteToTeam(data: {
       roleId: data.roleId,
     });
   } else {
+    // Pre-assign the project membership: a pending Invitation row is accepted
+    // automatically on first sign-in (acceptPendingInvitations), so the member
+    // lands in the project with the chosen role. No extra email — the single
+    // workspace invite below covers it.
+    if (data.projectId && data.roleId) {
+      const pRole = await prisma.projectRole.findUnique({ where: { id: data.roleId } });
+      if (!pRole) throw new Error("Invalid project role");
+      await prisma.invitation.upsert({
+        where: { email_projectId: { email, projectId: data.projectId } },
+        update: {
+          role: pRole.isAdmin ? "ADMIN" : "MEMBER",
+          roleId: data.roleId,
+          status: "PENDING",
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+        create: {
+          email,
+          role: pRole.isAdmin ? "ADMIN" : "MEMBER",
+          roleId: data.roleId,
+          projectId: data.projectId,
+          invitedById: currentUser.id,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      });
+    }
+
+    // No invite email — the admin tells people to join directly. The allowlist
+    // entry is what lets them sign in with this address.
     try {
       await fetch("https://api.clerk.com/v1/allowlist_identifiers", {
         method: "POST",
@@ -397,38 +431,6 @@ export async function inviteToTeam(data: {
     } catch {
       // Non-blocking
     }
-
-    const { Resend } = await import("resend");
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://amused-wonder-production-c7e9.up.railway.app";
-    const inviterName = currentUser.name || currentUser.email;
-    const roleLabel = data.systemRole.replace("_", " ");
-
-    try {
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      await resend.emails.send({
-        from: "Nizek Project <onboarding@resend.dev>",
-        to: email,
-        subject: "You've been invited to Nizek Project",
-        html: `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-            <div style="background: #1a1a2e; border-radius: 12px; padding: 32px; color: #e0e0e0;">
-              <h2 style="margin: 0 0 8px; color: #ffffff; font-size: 20px;">You're invited!</h2>
-              <p style="margin: 0 0 24px; color: #a0a0b0; font-size: 14px; line-height: 1.5;">
-                <strong style="color: #ffffff;">${inviterName}</strong> has invited you to join
-                <strong style="color: #4ade80;">Nizek Project</strong> as
-                <strong style="color: #c084fc;">${roleLabel}</strong>.
-              </p>
-              <a href="${appUrl}/sign-in"
-                 style="display: inline-block; background: #4ade80; color: #0a0a0a; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
-                Get Started
-              </a>
-            </div>
-          </div>
-        `,
-      });
-    } catch (err) {
-      console.error("[Resend] Failed to send invite email:", err);
-    }
   }
 
   revalidatePath("/dashboard/team");
@@ -438,6 +440,7 @@ export async function getPendingTeamInvites() {
   await requireUser();
   await reconcileSignedUpInvites();
   const invites = await prisma.pendingTeamInvite.findMany({
+    include: { team: { select: { id: true, name: true } } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -755,6 +758,17 @@ export async function getAvailableUsersForTeam(teamId: string) {
 }
 
 export { getPendingTeamInvites as getPendingInvitesForTeam };
+
+// Puts a freshly signed-up user into the team chosen on their invite.
+export async function assignUserToInvitedTeam(userId: string, teamId: string) {
+  const team = await prisma.team.findUnique({ where: { id: teamId }, select: { id: true } });
+  if (!team) return;
+  await prisma.teamMember.upsert({
+    where: { userId_teamId: { userId, teamId } },
+    update: {},
+    create: { userId, teamId, role: "MEMBER" },
+  });
+}
 
 export async function assignUserToDefaultTeam(userId: string, isClient: boolean = false) {
   const teamName = isClient ? "Clients" : "Nizek";

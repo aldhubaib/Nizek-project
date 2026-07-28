@@ -95,6 +95,16 @@ export async function createProject(data: {
   return project;
 }
 
+// Lean id+name list for admin dropdowns (e.g. the invite dialog).
+export async function getProjectOptions() {
+  const user = await requireUser();
+  if (user.systemRole !== "ADMIN") return [];
+  return prisma.project.findMany({
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
 export async function getProjects() {
   const user = await requireUser();
   // Reconcile any invitations that arrived after signup (moved out of the

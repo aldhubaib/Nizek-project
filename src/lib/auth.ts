@@ -91,8 +91,11 @@ export const getRealUser = cache(async () => {
         .catch(() => {});
     }
 
-    const { assignUserToDefaultTeam } = await import("@/actions/team");
+    const { assignUserToDefaultTeam, assignUserToInvitedTeam } = await import("@/actions/team");
     assignUserToDefaultTeam(user.id, user.systemRole === "CLIENT").catch(() => {});
+    if (pendingInvite?.teamId) {
+      assignUserToInvitedTeam(user.id, pendingInvite.teamId).catch(() => {});
+    }
 
     for (const em of allEmails.length > 0 ? allEmails : [user.email]) {
       await acceptPendingInvitations(user.id, em);

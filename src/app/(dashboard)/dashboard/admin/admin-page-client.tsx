@@ -148,6 +148,7 @@ interface Props {
   branding: Partial<Record<BrandingSlotId, BrandingAssetDTO>>;
   loginPhotos: LoginPhotoDTO[];
   notificationSound: NotificationSoundDTO;
+  projectOptions: { id: string; name: string }[];
   currentUserId?: string;
 }
 
@@ -163,6 +164,7 @@ export function AdminPageClient({
   branding,
   loginPhotos,
   notificationSound,
+  projectOptions,
   currentUserId,
 }: Props) {
   const searchParams = useSearchParams();
@@ -218,6 +220,10 @@ export function AdminPageClient({
             invitations={invitations}
             teamInvites={teamInvites}
             roles={roles}
+            workspaceTeams={(teams ?? [])
+              .filter((t: { isDefault: boolean }) => !t.isDefault)
+              .map((t: { id: string; name: string }) => ({ id: t.id, name: t.name }))}
+            projectOptions={projectOptions}
             isAdmin={true}
             currentUserId={currentUserId}
           />

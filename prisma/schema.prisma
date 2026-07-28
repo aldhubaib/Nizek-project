@@ -126,6 +126,7 @@ model Team {
   projects Project[]
   members  TeamMember[]
   auditPermissions AuditPermission[] @relation("TeamAuditPermissions")
+  pendingInvites   PendingTeamInvite[] @relation("PendingInviteTeam")
 }
 
 model TeamMember {
@@ -495,6 +496,9 @@ model PendingTeamInvite {
   firstName  String?
   lastName   String?
   systemRole SystemRole
+  // Team the person joins automatically once they sign up.
+  teamId     String?
+  team       Team?      @relation("PendingInviteTeam", fields: [teamId], references: [id], onDelete: SetNull)
   createdAt  DateTime   @default(now())
 }
 
