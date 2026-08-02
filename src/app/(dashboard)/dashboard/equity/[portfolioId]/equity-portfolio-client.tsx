@@ -5,9 +5,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
+  BarChart3,
+  CalendarRange,
   Trash2,
   Plus,
   Layers,
+  LifeBuoy,
   FileSignature,
   FileText,
   Pencil,
@@ -15,7 +18,10 @@ import {
   Paperclip,
   Upload,
   TrendingUp,
+  Users,
+  Wallet,
   MoreVertical,
+  type LucideIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -40,19 +46,29 @@ import {
   addEquityValuation,
   updateEquityValuation,
   deleteEquityValuation,
+  addEquityFinancialReport,
+  updateEquityFinancialReport,
+  deleteEquityFinancialReport,
   type EquityPortfolioDTO,
 } from "@/actions/equity";
 import {
   EQUITY_FREQUENCY,
   EQUITY_LENGTH_UNIT,
+  EQUITY_PERIOD_TYPE,
   EQUITY_STRUCTURE,
   FEE_STATUS,
   computeVestedPct,
   computePortfolioEquity,
   computeContractEndDate,
+  computeProfit,
   equityLabel,
   feeStatus,
   formatContractLength,
+  formatPeriodLabel,
+  formatRunway,
+  netCustomerChange,
+  periodStartFor,
+  quarterOf,
   formatPct,
   formatValuation,
   isTrancheDiluted,
@@ -61,8 +77,11 @@ import {
   valuationChangePct,
 } from "@/lib/equity-math";
 
+// The spin-button rules strip the steppers from every type="number" field here.
+// They're a poor fit for figures typed in full — the arrows sit over the text,
+// invite a stray scroll-wheel edit, and nudge by 1 on values in the thousands.
 const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 [&::-webkit-outer-spin-button]:m-0";
 const selectCls =
   "w-full h-9 px-2 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
 const labelCls = "text-[11px] font-medium text-muted-foreground mb-1 block";
@@ -266,6 +285,12 @@ export function EquityPortfolioClient({
 
       {/* Company valuation over time — what the equity above is actually worth */}
       <ValuationsTable
+        portfolio={portfolio}
+        currency={portfolio.valuationCurrency}
+      />
+
+      {/* Periodic P&L, cash and operations as reported by the startup */}
+      <FinancialsTable
         portfolio={portfolio}
         currency={portfolio.valuationCurrency}
       />
@@ -1751,6 +1776,718 @@ function valuationPayload(draft: ValuationDraft) {
     amount: parseAmount(draft.amount),
     notes: draft.notes || null,
   };
+}
+
+type FinancialReportDraft = {
+  periodType: string;
+  year: string;
+  quarter: string;
+  audited: boolean;
+  revenue: string;
+  cost: string;
+  cashInBank: string;
+  monthlyBurn: string;
+  customersGained: string;
+  customersLost: string;
+  teamSize: string;
+  // "" is a genuine third state here — the question wasn't answered — so this
+  // can't be a boolean.
+  raisingNextQuarter: string;
+  risks: string;
+  wins: string;
+  needsHelp: boolean;
+  helpNotes: string;
+};
+
+/** Built fresh per open so the period defaults to the quarter you're actually in. */
+function emptyFinancialReport(): FinancialReportDraft {
+  const now = new Date();
+  return {
+    periodType: "QUARTERLY",
+    year: String(now.getUTCFullYear()),
+    quarter: String(quarterOf(now)),
+    audited: false,
+    revenue: "",
+    cost: "",
+    cashInBank: "",
+    monthlyBurn: "",
+    customersGained: "",
+    customersLost: "",
+    teamSize: "",
+    raisingNextQuarter: "",
+    risks: "",
+    wins: "",
+    needsHelp: false,
+    helpNotes: "",
+  };
+}
+
+function reportToDraft(
+  r: EquityPortfolioDTO["financialReports"][number]
+): FinancialReportDraft {
+  return {
+    periodType: r.periodType,
+    year: String(new Date(r.periodStart).getUTCFullYear()),
+    quarter: String(quarterOf(r.periodStart)),
+    audited: r.audited,
+    revenue: r.revenue?.toLocaleString("en-US") ?? "",
+    cost: r.cost?.toLocaleString("en-US") ?? "",
+    cashInBank: r.cashInBank?.toLocaleString("en-US") ?? "",
+    monthlyBurn: r.monthlyBurn?.toLocaleString("en-US") ?? "",
+    customersGained: r.customersGained?.toString() ?? "",
+    customersLost: r.customersLost?.toString() ?? "",
+    teamSize: r.teamSize?.toString() ?? "",
+    raisingNextQuarter:
+      r.raisingNextQuarter == null ? "" : r.raisingNextQuarter ? "yes" : "no",
+    risks: r.risks ?? "",
+    wins: r.wins ?? "",
+    needsHelp: r.needsHelp,
+    helpNotes: r.helpNotes ?? "",
+  };
+}
+
+/** Blank means "not reported", which is distinct from zero. */
+function optionalAmount(raw: string): number | null {
+  if (!raw.trim()) return null;
+  const parsed = parseAmount(raw);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function optionalInt(raw: string): number | null {
+  if (!raw.trim()) return null;
+  const parsed = parseInt(raw.replace(/,/g, ""), 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function financialReportPayload(draft: FinancialReportDraft) {
+  return {
+    periodType: draft.periodType,
+    periodStart: periodStartFor(
+      parseInt(draft.year, 10),
+      draft.periodType === "YEARLY" ? null : parseInt(draft.quarter, 10)
+    ),
+    audited: draft.audited,
+    revenue: optionalAmount(draft.revenue),
+    cost: optionalAmount(draft.cost),
+    cashInBank: optionalAmount(draft.cashInBank),
+    monthlyBurn: optionalAmount(draft.monthlyBurn),
+    customersGained: optionalInt(draft.customersGained),
+    customersLost: optionalInt(draft.customersLost),
+    teamSize: optionalInt(draft.teamSize),
+    raisingNextQuarter:
+      draft.raisingNextQuarter === ""
+        ? null
+        : draft.raisingNextQuarter === "yes",
+    risks: draft.risks.trim() || null,
+    wins: draft.wins.trim() || null,
+    needsHelp: draft.needsHelp,
+    helpNotes: draft.helpNotes.trim() || null,
+  };
+}
+
+function FinancialsTable({
+  portfolio,
+  currency,
+}: {
+  portfolio: EquityPortfolioDTO;
+  currency: string;
+}) {
+  const router = useRouter();
+  const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reports = portfolio.financialReports;
+
+  async function handleAdd(draft: FinancialReportDraft) {
+    setBusy(true);
+    try {
+      await addEquityFinancialReport(
+        portfolio.id,
+        financialReportPayload(draft)
+      );
+      setAdding(false);
+      router.refresh();
+    } catch (err) {
+      alert((err as Error).message || "Failed to add report");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUpdate(reportId: string, draft: FinancialReportDraft) {
+    setBusy(true);
+    try {
+      await updateEquityFinancialReport(
+        reportId,
+        financialReportPayload(draft)
+      );
+      setEditingId(null);
+      router.refresh();
+    } catch (err) {
+      alert((err as Error).message || "Failed to save report");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete(reportId: string) {
+    if (!confirm("Delete this report?")) return;
+    setBusy(true);
+    try {
+      await deleteEquityFinancialReport(reportId);
+      router.refresh();
+    } catch (err) {
+      alert((err as Error).message || "Failed to delete report");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card/50 p-5 mb-6">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <BarChart3
+            className="w-4 h-4 text-muted-foreground"
+            strokeWidth={1.5}
+          />
+          <h2 className="text-[13px] font-semibold text-foreground">
+            Financials
+          </h2>
+          {reports.length > 0 && (
+            <span className="text-[11px] text-muted-foreground/60 tabular-nums">
+              {reports.length}
+            </span>
+          )}
+        </div>
+        {!adding && (
+          <button
+            onClick={() => {
+              setAdding(true);
+              setEditingId(null);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add report
+          </button>
+        )}
+      </div>
+      <p className="text-[11px] text-muted-foreground mb-4">
+        What the startup reported for a quarter or a year — P&amp;L, cash,
+        operations. Profit and runway are worked out from the figures, not
+        entered.
+      </p>
+
+      {reports.length > 0 && (
+        <div className="space-y-1.5 mb-3">
+          {reports.map((r) =>
+            editingId === r.id ? (
+              <FinancialReportForm
+                key={r.id}
+                initial={reportToDraft(r)}
+                currency={currency}
+                busy={busy}
+                submitLabel="Save"
+                onSubmit={(draft) => handleUpdate(r.id, draft)}
+                onCancel={() => setEditingId(null)}
+              />
+            ) : (
+              <FinancialReportRow
+                key={r.id}
+                report={r}
+                currency={currency}
+                busy={busy}
+                onEdit={() => {
+                  setEditingId(r.id);
+                  setAdding(false);
+                }}
+                onDelete={() => handleDelete(r.id)}
+              />
+            )
+          )}
+        </div>
+      )}
+
+      {adding && (
+        <FinancialReportForm
+          initial={emptyFinancialReport()}
+          currency={currency}
+          busy={busy}
+          submitLabel="Add report"
+          onSubmit={handleAdd}
+          onCancel={() => setAdding(false)}
+        />
+      )}
+
+      {reports.length === 0 && !adding && (
+        <p className="text-[12px] text-muted-foreground py-2">
+          No financial reports yet.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "positive" | "negative";
+}) {
+  return (
+    <div>
+      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p
+        className={cn(
+          "text-[12px] tabular-nums",
+          tone === "positive" ? "text-emerald-400"
+          : tone === "negative" ? "text-rose-400"
+          : "text-foreground"
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function FinancialReportRow({
+  report: r,
+  currency,
+  busy,
+  onEdit,
+  onDelete,
+}: {
+  report: EquityPortfolioDTO["financialReports"][number];
+  currency: string;
+  busy: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const profit = computeProfit(r.revenue, r.cost);
+  const net = netCustomerChange(r.customersGained, r.customersLost);
+
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[13px] font-semibold text-foreground">
+            {formatPeriodLabel(r.periodType, r.periodStart)}
+          </span>
+          <span
+            className={cn(
+              "text-[10px] px-1.5 py-0.5 rounded-full border font-medium",
+              r.audited
+                ? "text-emerald-400 bg-emerald-500/15 border-emerald-500/30"
+                : "text-muted-foreground bg-muted/40 border-border"
+            )}
+          >
+            {r.audited ? "Audited" : "Unaudited"}
+          </span>
+          {r.raisingNextQuarter && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full border font-medium text-violet-400 bg-violet-500/15 border-violet-500/30">
+              Raising
+            </span>
+          )}
+          {r.needsHelp && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full border font-medium text-amber-400 bg-amber-500/15 border-amber-500/30">
+              Needs help
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 mt-2">
+          <Stat label="Revenue" value={formatValuation(r.revenue, currency)} />
+          <Stat label="Cost" value={formatValuation(r.cost, currency)} />
+          <Stat
+            label="Profit"
+            value={formatValuation(profit, currency)}
+            tone={
+              profit == null ? undefined
+              : profit >= 0 ? "positive"
+              : "negative"
+            }
+          />
+          <Stat
+            label="Runway"
+            value={formatRunway(r.cashInBank, r.monthlyBurn)}
+          />
+          <Stat
+            label="Cash in bank"
+            value={formatValuation(r.cashInBank, currency)}
+          />
+          <Stat
+            label="Monthly burn"
+            value={formatValuation(r.monthlyBurn, currency)}
+          />
+          <Stat
+            label="Net customers"
+            value={net == null ? "—" : net >= 0 ? `+${net}` : String(net)}
+            tone={
+              net == null ? undefined
+              : net >= 0 ? "positive"
+              : "negative"
+            }
+          />
+          <Stat
+            label="Team size"
+            value={r.teamSize?.toString() ?? "—"}
+          />
+        </div>
+
+        {r.wins && (
+          <p className="text-[11px] text-muted-foreground/70 mt-2 whitespace-pre-wrap">
+            <span className="text-emerald-400/80 font-medium">Wins: </span>
+            {r.wins}
+          </p>
+        )}
+        {r.risks && (
+          <p className="text-[11px] text-muted-foreground/70 mt-1 whitespace-pre-wrap">
+            <span className="text-rose-400/80 font-medium">Risks: </span>
+            {r.risks}
+          </p>
+        )}
+        {r.needsHelp && r.helpNotes && (
+          <p className="text-[11px] text-muted-foreground/70 mt-1 whitespace-pre-wrap">
+            <span className="text-amber-400/80 font-medium">Help: </span>
+            {r.helpNotes}
+          </p>
+        )}
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <RowActions
+          label="Report options"
+          disabled={busy}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One titled panel of the report form. The form is long enough that flat
+ * headings read as a single wall of fields, so each group gets its own border
+ * and header strip to show where one topic ends and the next begins.
+ */
+function FieldGroup({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  icon: LucideIcon;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-background/40 overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/30">
+        <Icon className="w-3.5 h-3.5 text-muted-foreground" strokeWidth={1.5} />
+        <span className="text-[11px] font-semibold text-foreground tracking-wide">
+          {title}
+        </span>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3">{children}</div>
+    </div>
+  );
+}
+
+/** Read-only box for a figure the form works out rather than accepts. */
+function DerivedField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <label className={labelCls}>{label}</label>
+      <div className="flex h-9 items-center rounded-lg border border-dashed border-border bg-muted/30 px-3 text-[13px] text-foreground tabular-nums">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function FinancialReportForm({
+  initial,
+  currency,
+  busy,
+  submitLabel,
+  onSubmit,
+  onCancel,
+}: {
+  initial: FinancialReportDraft;
+  currency: string;
+  busy: boolean;
+  submitLabel: string;
+  onSubmit: (draft: FinancialReportDraft) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState<FinancialReportDraft>(initial);
+
+  function set<K extends keyof FinancialReportDraft>(
+    key: K,
+    value: FinancialReportDraft[K]
+  ) {
+    setDraft((d) => ({ ...d, [key]: value }));
+  }
+
+  // Mirrors what the row will show, so figures can be sanity-checked on entry.
+  const profit = computeProfit(
+    optionalAmount(draft.revenue),
+    optionalAmount(draft.cost)
+  );
+  const runway = formatRunway(
+    optionalAmount(draft.cashInBank),
+    optionalAmount(draft.monthlyBurn)
+  );
+
+  const year = parseInt(draft.year, 10);
+  const valid = Number.isFinite(year) && year > 1900 && year < 3000;
+
+  return (
+    <div className="rounded-lg border border-primary/30 bg-card p-3.5 space-y-4">
+      <FieldGroup title="Period" icon={CalendarRange}>
+        <div>
+          <label className={labelCls}>Reporting period</label>
+          <div className="flex items-center gap-2">
+            <select
+              value={draft.periodType}
+              onChange={(e) => set("periodType", e.target.value)}
+              className={cn(selectCls, "flex-1 min-w-0")}
+            >
+              {Object.entries(EQUITY_PERIOD_TYPE).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+            {draft.periodType === "QUARTERLY" && (
+              <select
+                value={draft.quarter}
+                onChange={(e) => set("quarter", e.target.value)}
+                className={cn(selectCls, "w-[84px] shrink-0")}
+              >
+                {[1, 2, 3, 4].map((q) => (
+                  <option key={q} value={q}>
+                    Q{q}
+                  </option>
+                ))}
+              </select>
+            )}
+            <input
+              type="number"
+              step="1"
+              value={draft.year}
+              onChange={(e) => set("year", e.target.value)}
+              placeholder="Year"
+              className={cn(inputCls, "w-[92px] shrink-0")}
+            />
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>Audited</label>
+          <select
+            value={draft.audited ? "yes" : "no"}
+            onChange={(e) => set("audited", e.target.value === "yes")}
+            className={cn(
+              selectCls,
+              draft.audited &&
+                "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+            )}
+          >
+            <option value="no">Not audited</option>
+            <option value="yes">Audited</option>
+          </select>
+        </div>
+      </FieldGroup>
+
+      <FieldGroup title="P&amp;L" icon={TrendingUp}>
+        <div>
+          <label className={labelCls}>Revenue ({currency})</label>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={draft.revenue}
+            onChange={(e) => set("revenue", sanitizeAmount(e.target.value))}
+            placeholder="e.g. 120,000"
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Cost ({currency})</label>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={draft.cost}
+            onChange={(e) => set("cost", sanitizeAmount(e.target.value))}
+            placeholder="e.g. 90,000"
+            className={inputCls}
+          />
+        </div>
+        <div className="md:col-span-2">
+          <DerivedField
+            label="Profit — calculated"
+            value={
+              profit == null ?
+                "Enter revenue and cost"
+              : formatValuation(profit, currency)
+            }
+          />
+        </div>
+      </FieldGroup>
+
+      <FieldGroup title="Cash" icon={Wallet}>
+        <div>
+          <label className={labelCls}>Cash in bank ({currency})</label>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={draft.cashInBank}
+            onChange={(e) => set("cashInBank", sanitizeAmount(e.target.value))}
+            placeholder="e.g. 250,000"
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Monthly burn ({currency})</label>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={draft.monthlyBurn}
+            onChange={(e) => set("monthlyBurn", sanitizeAmount(e.target.value))}
+            placeholder="e.g. 30,000"
+            className={inputCls}
+          />
+        </div>
+        <div className="md:col-span-2">
+          <DerivedField label="Runway — calculated" value={runway} />
+        </div>
+      </FieldGroup>
+
+      <FieldGroup title="Operations" icon={Users}>
+        <div>
+          <label className={labelCls}>Customers gained</label>
+          <input
+            type="number"
+            step="1"
+            min="0"
+            value={draft.customersGained}
+            onChange={(e) => set("customersGained", e.target.value)}
+            placeholder="e.g. 12"
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Customers lost</label>
+          <input
+            type="number"
+            step="1"
+            min="0"
+            value={draft.customersLost}
+            onChange={(e) => set("customersLost", e.target.value)}
+            placeholder="e.g. 3"
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Team size (full-time)</label>
+          <input
+            type="number"
+            step="1"
+            min="0"
+            value={draft.teamSize}
+            onChange={(e) => set("teamSize", e.target.value)}
+            placeholder="e.g. 8"
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Raising next quarter?</label>
+          <select
+            value={draft.raisingNextQuarter}
+            onChange={(e) => set("raisingNextQuarter", e.target.value)}
+            className={selectCls}
+          >
+            <option value="">Not answered</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+        <div className="md:col-span-2">
+          <label className={labelCls}>Wins</label>
+          <textarea
+            value={draft.wins}
+            onChange={(e) => set("wins", e.target.value)}
+            rows={2}
+            placeholder="e.g. closed two enterprise contracts"
+            className={cn(inputCls, "h-auto py-2 resize-y")}
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className={labelCls}>Risks</label>
+          <textarea
+            value={draft.risks}
+            onChange={(e) => set("risks", e.target.value)}
+            rows={2}
+            placeholder="e.g. main customer contract up for renewal"
+            className={cn(inputCls, "h-auto py-2 resize-y")}
+          />
+        </div>
+      </FieldGroup>
+
+      <FieldGroup title="Help" icon={LifeBuoy}>
+        <div>
+          <label className={labelCls}>Do they need help?</label>
+          <select
+            value={draft.needsHelp ? "yes" : "no"}
+            onChange={(e) => set("needsHelp", e.target.value === "yes")}
+            className={cn(
+              selectCls,
+              draft.needsHelp &&
+                "bg-amber-500/15 border-amber-500/30 text-amber-400"
+            )}
+          >
+            <option value="no">No</option>
+            <option value="yes">Yes</option>
+          </select>
+        </div>
+        {draft.needsHelp && (
+          <div className="md:col-span-2">
+            <label className={labelCls}>What do they need?</label>
+            <textarea
+              value={draft.helpNotes}
+              onChange={(e) => set("helpNotes", e.target.value)}
+              rows={2}
+              placeholder="e.g. intros to investors, hiring a senior backend engineer"
+              className={cn(inputCls, "h-auto py-2 resize-y")}
+            />
+          </div>
+        )}
+      </FieldGroup>
+
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className="px-3 py-1.5 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => onSubmit(draft)}
+          disabled={busy || !valid}
+          className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+        >
+          {busy ? "Saving…" : submitLabel}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function ValuationsTable({

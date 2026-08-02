@@ -23,6 +23,8 @@ const PORTFOLIO_INCLUDE = {
   },
   // Newest first: the current valuation is the one people look for.
   valuations: { orderBy: { valuedAt: "desc" as const } },
+  // Newest period first, for the same reason.
+  financialReports: { orderBy: { periodStart: "desc" as const } },
 };
 
 function serialize(p: {
@@ -77,6 +79,24 @@ function serialize(p: {
     amount: number;
     notes: string | null;
   }[];
+  financialReports: {
+    id: string;
+    periodType: string;
+    periodStart: Date;
+    audited: boolean;
+    revenue: number | null;
+    cost: number | null;
+    cashInBank: number | null;
+    monthlyBurn: number | null;
+    customersGained: number | null;
+    customersLost: number | null;
+    teamSize: number | null;
+    raisingNextQuarter: boolean | null;
+    risks: string | null;
+    wins: string | null;
+    needsHelp: boolean;
+    helpNotes: string | null;
+  }[];
 }) {
   return {
     ...p,
@@ -124,6 +144,10 @@ function serialize(p: {
       valuedAt: v.valuedAt.toISOString(),
       amount: v.amount,
       notes: v.notes,
+    })),
+    financialReports: p.financialReports.map((r) => ({
+      ...r,
+      periodStart: r.periodStart.toISOString(),
     })),
   };
 }
@@ -571,6 +595,109 @@ export async function deleteEquityValuation(valuationId: string) {
   const valuation = await prisma.equityValuation.delete({ where: { id: valuationId } });
   revalidatePath("/dashboard/equity");
   revalidatePath(`/dashboard/equity/${valuation.portfolioId}`);
+}
+
+// ─── Financial reports ──────────────────────────────────
+
+type FinancialReportInput = {
+  periodType: string;
+  periodStart: string;
+  audited: boolean;
+  revenue: number | null;
+  cost: number | null;
+  cashInBank: number | null;
+  monthlyBurn: number | null;
+  customersGained: number | null;
+  customersLost: number | null;
+  teamSize: number | null;
+  raisingNextQuarter: boolean | null;
+  risks: string | null;
+  wins: string | null;
+  needsHelp: boolean;
+  helpNotes: string | null;
+};
+
+function financialReportData(data: FinancialReportInput) {
+  const periodStart = new Date(data.periodStart);
+  if (Number.isNaN(periodStart.getTime())) throw new Error("Invalid period");
+  return {
+    periodType: data.periodType === "YEARLY" ? "YEARLY" : "QUARTERLY",
+    periodStart,
+    audited: data.audited,
+    revenue: data.revenue,
+    cost: data.cost,
+    cashInBank: data.cashInBank,
+    monthlyBurn: data.monthlyBurn,
+    customersGained: data.customersGained,
+    customersLost: data.customersLost,
+    teamSize: data.teamSize,
+    raisingNextQuarter: data.raisingNextQuarter,
+    risks: data.risks,
+    wins: data.wins,
+    needsHelp: data.needsHelp,
+    // Dropping the note when the answer flips back to "no" stops a stale ask
+    // from lingering invisibly behind a collapsed field.
+    helpNotes: data.needsHelp ? data.helpNotes : null,
+  };
+}
+
+/**
+ * The unique constraint on (portfolio, type, period) is what stops the same
+ * quarter being filed twice; this turns Prisma's P2002 into something a person
+ * can act on.
+ */
+function asDuplicatePeriodError(err: unknown): Error {
+  const code = (err as { code?: string })?.code;
+  if (code === "P2002") {
+    return new Error("A report for that period already exists — edit it instead.");
+  }
+  return err as Error;
+}
+
+export async function addEquityFinancialReport(
+  portfolioId: string,
+  data: FinancialReportInput
+) {
+  await requireEquityAccess();
+  try {
+    const report = await prisma.equityFinancialReport.create({
+      data: { portfolioId, ...financialReportData(data) },
+    });
+    revalidatePath("/dashboard/equity");
+    revalidatePath(`/dashboard/equity/${portfolioId}`);
+    return { id: report.id };
+  } catch (err) {
+    throw asDuplicatePeriodError(err);
+  }
+}
+
+export async function updateEquityFinancialReport(
+  reportId: string,
+  data: FinancialReportInput
+) {
+  await requireEquityAccess();
+  const existing = await prisma.equityFinancialReport.findUnique({
+    where: { id: reportId },
+  });
+  if (!existing) throw new Error("Report not found");
+
+  try {
+    await prisma.equityFinancialReport.update({
+      where: { id: reportId },
+      data: financialReportData(data),
+    });
+  } catch (err) {
+    throw asDuplicatePeriodError(err);
+  }
+  revalidatePath("/dashboard/equity");
+  revalidatePath(`/dashboard/equity/${existing.portfolioId}`);
+}
+
+export async function deleteEquityFinancialReport(reportId: string) {
+  await requireEquityAccess();
+  const report = await prisma.equityFinancialReport.delete({ where: { id: reportId } });
+  revalidatePath("/dashboard/equity");
+  revalidatePath(`/dashboard/equity/${report.portfolioId}`);
 }
 
 // ─── Admin: permission management ───────────────────────

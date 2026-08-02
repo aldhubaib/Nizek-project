@@ -83,6 +83,80 @@ export function computeContractEndDate(
   return target.toISOString().slice(0, 10);
 }
 
+export const EQUITY_PERIOD_TYPE = {
+  QUARTERLY: "Quarterly",
+  YEARLY: "Yearly",
+} as const;
+
+/**
+ * UTC midnight on the first day of the period. Reports are keyed by this, so
+ * every quarter has exactly one representation and a report can't be filed
+ * twice under slightly different dates.
+ */
+export function periodStartFor(year: number, quarter: number | null): string {
+  const month = quarter && quarter >= 1 && quarter <= 4 ? (quarter - 1) * 3 : 0;
+  return new Date(Date.UTC(year, month, 1)).toISOString();
+}
+
+/** Which quarter a period start falls in, 1-4. */
+export function quarterOf(periodStart: string | Date): number {
+  return Math.floor(new Date(periodStart).getUTCMonth() / 3) + 1;
+}
+
+/** "Q3 2026" / "FY 2026". */
+export function formatPeriodLabel(
+  periodType: string | null | undefined,
+  periodStart: string | Date | null | undefined,
+): string {
+  if (!periodStart) return "—";
+  const date = new Date(periodStart);
+  if (Number.isNaN(date.getTime())) return "—";
+  const year = date.getUTCFullYear();
+  return periodType === "YEARLY" ? `FY ${year}` : `Q${quarterOf(date)} ${year}`;
+}
+
+/** Revenue minus cost. Null unless both sides are known. */
+export function computeProfit(
+  revenue: number | null | undefined,
+  cost: number | null | undefined,
+): number | null {
+  if (revenue == null || cost == null) return null;
+  return revenue - cost;
+}
+
+/**
+ * Months of cash left at the current burn. Null when there's nothing to divide
+ * by — a company that isn't burning has unbounded runway, which is not a number
+ * and must never reach the UI as Infinity.
+ */
+export function computeRunwayMonths(
+  cashInBank: number | null | undefined,
+  monthlyBurn: number | null | undefined,
+): number | null {
+  if (cashInBank == null || monthlyBurn == null || monthlyBurn <= 0) return null;
+  return cashInBank / monthlyBurn;
+}
+
+/** Runway for display, spelling out the two cases that aren't a duration. */
+export function formatRunway(
+  cashInBank: number | null | undefined,
+  monthlyBurn: number | null | undefined,
+): string {
+  if (cashInBank == null || monthlyBurn == null) return "—";
+  if (monthlyBurn <= 0) return "Not burning";
+  const months = cashInBank / monthlyBurn;
+  return `${Math.round(months * 10) / 10} months`;
+}
+
+/** Customers gained minus lost. Null unless both sides are known. */
+export function netCustomerChange(
+  gained: number | null | undefined,
+  lost: number | null | undefined,
+): number | null {
+  if (gained == null || lost == null) return null;
+  return gained - lost;
+}
+
 export const FEE_STATUS = {
   ESTIMATED: "Estimated",
   ACTUAL: "Actual",

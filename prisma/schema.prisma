@@ -534,11 +534,53 @@ model EquityPortfolio {
   grants     EquityGrant[]
   tranches   EquityTranche[]
   valuations EquityValuation[]
+  financialReports EquityFinancialReport[]
 }
 
 // A dated company valuation. Kept as history rather than a single number on the
 // portfolio so the trend is visible and tranche thresholds can be checked
 // against the valuation that was current at any point in time.
+// A periodic financial check-in on the startup, entered by Nizek from figures
+// the founders report. Every figure is nullable so a partly-known period still
+// saves; profit and runway are absent on purpose, being derived from the fields
+// below rather than stored where they could drift out of step.
+model EquityFinancialReport {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // periodType is the shape of the period, periodStart pins it to a specific
+  // one — Q3 2026 rather than just "a quarter". Held at UTC midnight on the
+  // first day, like TaskAudit.auditDate, so a stray time-of-day can't slip a
+  // duplicate past the unique constraint below.
+  periodType  String   // QUARTERLY | YEARLY
+  periodStart DateTime
+  audited     Boolean  @default(false)
+
+  // P&L and cash, in the portfolio's valuationCurrency — same reasoning as
+  // EquityValuation, the figures aren't comparable across currencies.
+  revenue     Float?
+  cost        Float?
+  cashInBank  Float?
+  monthlyBurn Float?
+
+  customersGained    Int?
+  customersLost      Int?
+  teamSize           Int? // full-time employees
+  raisingNextQuarter Boolean?
+  risks              String?
+  wins               String?
+
+  needsHelp Boolean @default(false)
+  helpNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([portfolioId, periodType, periodStart])
+  @@index([portfolioId, periodStart])
+}
+
 model EquityValuation {
   id          String          @id @default(cuid())
   portfolioId String
