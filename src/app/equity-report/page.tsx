@@ -99,10 +99,20 @@ function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
   const vestedWorth = equityValueAt(vested, current?.amount ?? null);
 
   return (
-    <section className="mt-6 break-inside-avoid">
-      <h2 className="text-[19px] font-bold text-white tracking-tight mb-2.5">
-        {portfolio.project.name}
-      </h2>
+    // The rule sits above every project rather than between them, so the first
+    // one is separated from the overview table by the same line and spacing as
+    // each subsequent project gets from the one before it.
+    <section className="mt-10 pt-8 border-t border-white/15 break-inside-avoid">
+      <div className="mb-2.5">
+        <h2 className="text-[19px] font-bold text-white tracking-tight">
+          {portfolio.project.name}
+        </h2>
+        {portfolio.project.description && (
+          <p className="text-[11px] text-white/50 leading-relaxed mt-1 whitespace-pre-wrap">
+            {portfolio.project.description}
+          </p>
+        )}
+      </div>
 
       <div
         className="grid grid-cols-4 gap-2.5 mb-4"
