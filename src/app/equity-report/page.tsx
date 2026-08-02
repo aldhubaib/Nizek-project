@@ -24,6 +24,12 @@ import {
   valuationAsOf,
 } from "@/lib/equity-math";
 import { PrintButton } from "./print-button";
+import { ReportVariantPicker } from "./report-variant-picker";
+import {
+  REPORT_VARIANT,
+  parseReportVariant,
+  type ReportVariant,
+} from "./report-variant";
 
 export const metadata = { title: "Equity status report" };
 
@@ -36,6 +42,16 @@ const tdCls = "py-1.5 pr-4 text-[11px] text-white align-top";
 
 function formatDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString() : "—";
+}
+
+/**
+ * The equity structures in play, deduped. A project can hold several grants and
+ * a contract can carry more than one, so this is a list rather than one value.
+ */
+function structureLabel(grants: { structureType: string }[]): string {
+  const kinds = [...new Set(grants.map((g) => g.structureType))];
+  if (kinds.length === 0) return "—";
+  return kinds.map((k) => equityLabel(EQUITY_STRUCTURE, k)).join(", ");
 }
 
 function contractLabel(
@@ -91,7 +107,16 @@ function Stat({
   );
 }
 
-function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
+function PortfolioSection({
+  portfolio,
+  variant,
+}: {
+  portfolio: EquityPortfolioDTO;
+  variant: ReportVariant;
+}) {
+  // Whether a contract has been signed yet is a negotiating position, not
+  // something an investor is shown.
+  const showContractStatus = variant === "nizek";
   const currency = portfolio.valuationCurrency;
   const { granted, vested } = computePortfolioEquity(portfolio);
   const current = valuationAsOf(portfolio.valuations);
@@ -148,7 +173,8 @@ function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
           <thead>
             <tr className="border-b border-white/15">
               <th className={thCls}>Contract</th>
-              <th className={thCls}>Status</th>
+              <th className={thCls}>Type</th>
+              {showContractStatus && <th className={thCls}>Status</th>}
               <th className={thCls}>Term</th>
               <th className={thCls}>Length</th>
             </tr>
@@ -157,7 +183,16 @@ function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
             {portfolio.contracts.map((c, i) => (
               <tr key={c.id} className="border-b border-white/[0.07]">
                 <td className={tdCls}>{c.title || `Contract ${i + 1}`}</td>
-                <td className={tdCls}>{c.signed ? "Signed" : "Not signed"}</td>
+                <td className={tdCls}>
+                  {structureLabel(
+                    portfolio.grants.filter((g) => g.contractId === c.id)
+                  )}
+                </td>
+                {showContractStatus && (
+                  <td className={tdCls}>
+                    {c.signed ? "Signed" : "Not signed"}
+                  </td>
+                )}
                 <td className={tdCls}>
                   {formatDate(c.startDate)} → {formatDate(c.endDate)}
                 </td>
@@ -270,10 +305,17 @@ function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
   );
 }
 
-export default async function EquityReportPage() {
+export default async function EquityReportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
   const user = await requireUser();
   if (!(await canAccessEquity(user.id))) redirect("/dashboard");
 
+  const { view } = await searchParams;
+  const variant = parseReportVariant(view);
+  const showContractStatus = variant === "nizek";
   const portfolios = await getEquityPortfolios();
   const generatedAt = new Date();
 
@@ -298,14 +340,20 @@ export default async function EquityReportPage() {
         <header>
           <div className="flex items-start justify-between gap-4 mb-5">
             <Wordmark className="text-[26px]" />
-            <PrintButton />
+            <div className="flex items-center gap-2">
+              <ReportVariantPicker variant={variant} />
+              <PrintButton />
+            </div>
           </div>
           <h1 className="text-[26px] font-bold text-white tracking-tight">
             Equity status report
           </h1>
+          {/* Named on the page itself, since the picker is hidden when printing
+              and a printed copy would otherwise be impossible to tell apart. */}
           <p className="text-[10px] text-white/40 mt-1">
-            {portfolios.length} project{portfolios.length === 1 ? "" : "s"} ·
-            generated {generatedAt.toLocaleString()}
+            {REPORT_VARIANT[variant]} · {portfolios.length} project
+            {portfolios.length === 1 ? "" : "s"} · generated{" "}
+            {generatedAt.toLocaleString()}
           </p>
         </header>
 
@@ -321,10 +369,11 @@ export default async function EquityReportPage() {
                 <thead>
                   <tr className="border-b border-white/15">
                     <th className={thCls}>Project</th>
+                    <th className={thCls}>Type</th>
                     <th className={thCls}>Equity</th>
                     <th className={thCls}>Vested</th>
                     <th className={thCls}>Contracts</th>
-                    <th className={thCls}>Signed</th>
+                    {showContractStatus && <th className={thCls}>Signed</th>}
                     <th className={thCls}>Valuation</th>
                   </tr>
                 </thead>
@@ -335,12 +384,15 @@ export default async function EquityReportPage() {
                     return (
                       <tr key={p.id} className="border-b border-white/[0.07]">
                         <td className={tdCls}>{p.project.name}</td>
+                        <td className={tdCls}>{structureLabel(p.grants)}</td>
                         <td className={tdCls}>{formatPct(granted)}</td>
                         <td className={tdCls}>{formatPct(vested)}</td>
                         <td className={tdCls}>{p.contracts.length || "—"}</td>
-                        <td className={tdCls}>
-                          {p.contracts.filter((c) => c.signed).length || "—"}
-                        </td>
+                        {showContractStatus && (
+                          <td className={tdCls}>
+                            {p.contracts.filter((c) => c.signed).length || "—"}
+                          </td>
+                        )}
                         <td className={tdCls}>
                           {current
                             ? formatValuation(
@@ -357,7 +409,7 @@ export default async function EquityReportPage() {
             </div>
 
             {portfolios.map((p) => (
-              <PortfolioSection key={p.id} portfolio={p} />
+              <PortfolioSection key={p.id} portfolio={p} variant={variant} />
             ))}
           </>
         )}
