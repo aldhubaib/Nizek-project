@@ -169,6 +169,7 @@ model Project {
   assets       Asset[]
   invitations  Invitation[]
   messages     Message[]
+  equityPortfolio EquityPortfolio?
   @@index([teamId])
 }
 
@@ -488,6 +489,140 @@ model Invitation {
   @@unique([email, projectId])
   @@index([email, status])
   @@index([projectId, status])
+}
+
+// ── Equity module ────────────────────────────────────────────────────────────
+// Private tracker for equity deals with startups (one portfolio per project).
+// Access is restricted in code to specific users — see src/lib/equity-access.ts.
+
+model EquityPortfolio {
+  id        String  @id @default(cuid())
+  projectId String  @unique
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  confidence   String? // CONTRACT_SIGNED | VERBAL_PROMISE | NEEDS_VERIFICATION
+  moaStatus    String? // NOT_STARTED | PENDING_MOA | COMPLETED | NOT_APPLICABLE
+  equityStatus String? // VERBAL_PROMISED | PENDING_MOA | CONFIRMED | NEEDS_VERIFICATION
+
+  vestingStartDate DateTime?
+  vestingEndDate   DateTime?
+  vestingFrequency String? // MONTHLY | QUARTERLY | YEARLY
+  totalEquityPct   Float?
+
+  dilutionDealType   String? // VALUATION_TRANCHES | SINGLE_TRIGGER | DILUTED_DAY_ONE
+  valuationCurrency  String    @default("KWD")
+  latestCapTableDate DateTime?
+  notes              String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contracts  EquityContract[]
+  grants     EquityGrant[]
+  tranches   EquityTranche[]
+  valuations EquityValuation[]
+}
+
+// A dated company valuation. Kept as history rather than a single number on the
+// portfolio so the trend is visible and tranche thresholds can be checked
+// against the valuation that was current at any point in time.
+model EquityValuation {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  valuedAt DateTime
+  // In the portfolio's valuationCurrency — valuations aren't comparable across
+  // currencies, so there's no per-row currency.
+  amount Float
+  notes  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([portfolioId])
+  @@index([portfolioId, valuedAt])
+}
+
+// Equity granted under a specific contract. The vesting window defaults to the
+// contract's term; the date fields here are optional overrides.
+model EquityGrant {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  contractId String?
+  contract   EquityContract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+
+  // FIXED | TRANCHED | DIVIDEND — decides which fields below apply.
+  structureType String @default("FIXED")
+
+  // The grant total. Entered by hand for FIXED/DIVIDEND; for TRANCHED it is kept
+  // in sync with the sum of its valuation tranches.
+  equityPct Float
+
+  // Vesting isn't stored here on purpose: the window is the linked contract's
+  // term and the interval comes from the portfolio, so they can't fall out of sync.
+
+  dividendFrequency String? // MONTHLY | QUARTERLY | YEARLY — DIVIDEND structures only
+
+  notes String?
+
+  createdAt DateTime @default(now())
+
+  tranches EquityTranche[]
+
+  @@index([portfolioId])
+  @@index([contractId])
+}
+
+model EquityContract {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  title     String?
+  signed    Boolean   @default(false)
+  startDate DateTime?
+  // Term length as entered (e.g. 18 MONTHS or 1.5 YEARS). endDate is derived
+  // from startDate + this, never entered by hand.
+  lengthValue Float?
+  lengthUnit  String? // MONTHS | YEARS
+  endDate     DateTime?
+  notes       String?
+
+  // The signed document itself, uploaded to R2.
+  fileUrl      String?
+  fileName     String?
+  fileSize     Int?
+  fileMimeType String?
+
+  createdAt DateTime @default(now())
+
+  grants EquityGrant[]
+
+  @@index([portfolioId])
+}
+
+model EquityTranche {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // Set when the tranche belongs to a specific equity grant. Rows with no grant
+  // are portfolio-wide (the original deal-level dilution schedule).
+  grantId String?
+  grant   EquityGrant? @relation(fields: [grantId], references: [id], onDelete: Cascade)
+
+  order     Int
+  equityPct Float
+  // The stake is granted non-diluted; this slice of it starts diluting once the
+  // company is valued at or above this figure.
+  startsAtValuation Float
+
+  createdAt DateTime @default(now())
+
+  @@index([portfolioId])
+  @@index([grantId])
 }
 
 model PendingTeamInvite {

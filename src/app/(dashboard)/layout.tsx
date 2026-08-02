@@ -4,6 +4,7 @@ import { SignOutButton } from "@clerk/nextjs";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { getCurrentUser, getImpersonation } from "@/lib/auth";
+import { canAccessEquity } from "@/lib/equity-access";
 import { getNotificationSoundUrl } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 
@@ -51,9 +52,11 @@ export default async function DashboardLayout({
     (user
       ? (await prisma.auditPermission.count({ where: { userId: user.id } })) > 0
       : false);
+  // Equity module is private — allowlisted emails only (see equity-access.ts).
+  const canEquity = canAccessEquity(user);
 
   return (
-    <DashboardShell isAdmin={isAdmin} canAudit={canAudit} currentUserId={user?.id} notificationSoundUrl={notificationSoundUrl}>
+    <DashboardShell isAdmin={isAdmin} canAudit={canAudit} canEquity={canEquity} currentUserId={user?.id} notificationSoundUrl={notificationSoundUrl}>
       {children}
       {impersonation && <ImpersonationBanner targetName={impersonation.targetName} />}
     </DashboardShell>

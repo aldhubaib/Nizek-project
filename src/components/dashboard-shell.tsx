@@ -14,7 +14,7 @@ import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
 
 const DESKTOP_BREAKPOINT = 1024;
 
-export function DashboardShell({ children, isAdmin = false, canAudit = false, currentUserId, notificationSoundUrl }: { children: React.ReactNode; isAdmin?: boolean; canAudit?: boolean; currentUserId?: string; notificationSoundUrl?: string | null }) {
+export function DashboardShell({ children, isAdmin = false, canAudit = false, canEquity = false, currentUserId, notificationSoundUrl }: { children: React.ReactNode; isAdmin?: boolean; canAudit?: boolean; canEquity?: boolean; currentUserId?: string; notificationSoundUrl?: string | null }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -67,6 +67,7 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, cu
             onTogglePin={() => setPinned(!pinned)}
             isAdmin={isAdmin}
             canAudit={canAudit}
+            canEquity={canEquity}
           />
         </div>
       )}
@@ -94,7 +95,7 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, cu
             drawerOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <Sidebar isAdmin={isAdmin} canAudit={canAudit} />
+          <Sidebar isAdmin={isAdmin} canAudit={canAudit} canEquity={canEquity} />
         </div>
       )}
 
@@ -114,7 +115,7 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, cu
 
       {/* Mobile/tablet bottom navigation — same permission rules as the sidebar */}
       {showBottomNav && (
-        <BottomNav isAdmin={isAdmin} canAudit={canAudit} onOpenMenu={() => setDrawerOpen(true)} />
+        <BottomNav isAdmin={isAdmin} canAudit={canAudit} canEquity={canEquity} onOpenMenu={() => setDrawerOpen(true)} />
       )}
       <NotificationSound currentUserId={currentUserId} soundUrl={notificationSoundUrl} />
       <NotificationSync currentUserId={currentUserId} />

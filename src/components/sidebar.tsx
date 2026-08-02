@@ -9,6 +9,7 @@ import {
   FolderKanban,
   ClipboardCheck,
   Settings,
+  PieChart,
   Pin,
   PinOff,
 } from "lucide-react";
@@ -20,11 +21,12 @@ import {
 import { cn } from "@/lib/utils";
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false },
-  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false, auditOnly: false },
-  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, auditOnly: false },
-  { name: "Audit", href: "/dashboard/audit", icon: ClipboardCheck, adminOnly: false, auditOnly: true },
-  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, auditOnly: false },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false },
+  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false, auditOnly: false, equityOnly: false },
+  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, auditOnly: false, equityOnly: false },
+  { name: "Equity", href: "/dashboard/equity", icon: PieChart, adminOnly: false, auditOnly: false, equityOnly: true },
+  { name: "Audit", href: "/dashboard/audit", icon: ClipboardCheck, adminOnly: false, auditOnly: true, equityOnly: false },
+  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, auditOnly: false, equityOnly: false },
 ];
 
 interface SidebarProps {
@@ -33,6 +35,7 @@ interface SidebarProps {
   onTogglePin?: () => void;
   isAdmin?: boolean;
   canAudit?: boolean;
+  canEquity?: boolean;
 }
 
 export function Sidebar({
@@ -41,6 +44,7 @@ export function Sidebar({
   onTogglePin,
   isAdmin = false,
   canAudit = false,
+  canEquity = false,
 }: SidebarProps) {
   const pathname = usePathname();
 
@@ -106,7 +110,7 @@ export function Sidebar({
       {/* Nav */}
       <nav className="flex-1 py-1.5 px-2 overflow-y-auto">
         {navigation
-          .filter((item) => (!item.adminOnly || isAdmin) && (!item.auditOnly || canAudit))
+          .filter((item) => (!item.adminOnly || isAdmin) && (!item.auditOnly || canAudit) && (!item.equityOnly || canEquity))
           .map((item) => {
           const active = isActive(item.href);
           const linkContent = (
