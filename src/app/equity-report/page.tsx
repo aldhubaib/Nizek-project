@@ -1,7 +1,15 @@
 import { redirect } from "next/navigation";
+import {
+  CheckCircle2,
+  Coins,
+  Info,
+  PieChart,
+  TrendingUp,
+} from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { canAccessEquity } from "@/lib/equity-access";
 import { getEquityPortfolios, type EquityPortfolioDTO } from "@/actions/equity";
+import { cn } from "@/lib/utils";
 import {
   EQUITY_FREQUENCY,
   EQUITY_STRUCTURE,
@@ -19,6 +27,13 @@ import { PrintButton } from "./print-button";
 
 export const metadata = { title: "Equity status report" };
 
+const ACCENT = "#ff3366";
+
+const cardCls = "rounded-xl border border-white/10 bg-white/[0.04]";
+const thCls =
+  "py-1.5 pr-4 text-left text-[10px] font-normal text-white/40 whitespace-nowrap";
+const tdCls = "py-1.5 pr-4 text-[11px] text-white align-top";
+
 function formatDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString() : "—";
 }
@@ -33,19 +48,48 @@ function contractLabel(
   return contracts[idx].title || `Contract ${idx + 1}`;
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Wordmark({ className }: { className?: string }) {
   return (
-    <div className="border border-neutral-300 rounded px-2.5 py-1.5">
-      <p className="text-[9px] uppercase tracking-wide text-neutral-500">
-        {label}
-      </p>
-      <p className="text-[13px] font-semibold tabular-nums">{value}</p>
-    </div>
+    <span className={cn("font-bold tracking-tight text-white", className)}>
+      nizek<span style={{ color: ACCENT }}>.</span>
+    </span>
   );
 }
 
-const thCls = "py-1 pr-3 font-medium text-neutral-500";
-const tdCls = "py-1 pr-3 align-top";
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p
+      className="text-[9px] font-bold uppercase tracking-[0.12em] mb-1.5"
+      style={{ color: ACCENT }}
+    >
+      {children}
+    </p>
+  );
+}
+
+function Stat({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className={cn(cardCls, "flex items-center gap-2.5 px-3 py-2.5")}>
+      <Icon className="w-5 h-5 shrink-0" strokeWidth={1.5} />
+      <div className="min-w-0">
+        <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-white/40">
+          {label}
+        </p>
+        <p className="text-[13px] font-bold text-white tabular-nums truncate">
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
   const currency = portfolio.valuationCurrency;
@@ -55,19 +99,28 @@ function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
   const vestedWorth = equityValueAt(vested, current?.amount ?? null);
 
   return (
-    <section className="mb-7 break-inside-avoid">
-      <h2 className="text-[15px] font-semibold border-b border-neutral-400 pb-1 mb-2.5">
+    <section className="mt-6 break-inside-avoid">
+      <h2 className="text-[19px] font-bold text-white tracking-tight mb-2.5">
         {portfolio.project.name}
       </h2>
 
-      <div className="grid grid-cols-4 gap-2 mb-3.5">
-        <Stat label="Total equity" value={formatPct(granted)} />
-        <Stat label="Vested today" value={formatPct(vested)} />
+      <div
+        className="grid grid-cols-4 gap-2.5 mb-4"
+        style={{ color: ACCENT }}
+      >
+        <Stat icon={PieChart} label="Total equity" value={formatPct(granted)} />
         <Stat
+          icon={CheckCircle2}
+          label="Vested today"
+          value={formatPct(vested)}
+        />
+        <Stat
+          icon={Coins}
           label="Current valuation"
           value={current ? formatValuation(current.amount, currency) : "—"}
         />
         <Stat
+          icon={TrendingUp}
           label="Vested worth"
           value={
             vestedWorth != null
@@ -77,17 +130,13 @@ function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
         />
       </div>
 
-      <h3 className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500 mb-1">
-        Contracts
-      </h3>
+      <SectionLabel>Contracts</SectionLabel>
       {portfolio.contracts.length === 0 ? (
-        <p className="text-[12px] text-neutral-500 mb-3.5">
-          No contracts recorded.
-        </p>
+        <p className="text-[11px] text-white/40 mb-4">No contracts recorded.</p>
       ) : (
-        <table className="w-full text-[12px] border-collapse mb-3.5">
+        <table className="w-full border-collapse mb-4">
           <thead>
-            <tr className="border-b border-neutral-300 text-left">
+            <tr className="border-b border-white/15">
               <th className={thCls}>Contract</th>
               <th className={thCls}>Status</th>
               <th className={thCls}>Term</th>
@@ -96,11 +145,9 @@ function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
           </thead>
           <tbody>
             {portfolio.contracts.map((c, i) => (
-              <tr key={c.id} className="border-b border-neutral-200">
+              <tr key={c.id} className="border-b border-white/[0.07]">
                 <td className={tdCls}>{c.title || `Contract ${i + 1}`}</td>
-                <td className={tdCls}>
-                  {c.signed ? "Signed" : "Not signed"}
-                </td>
+                <td className={tdCls}>{c.signed ? "Signed" : "Not signed"}</td>
                 <td className={tdCls}>
                   {formatDate(c.startDate)} → {formatDate(c.endDate)}
                 </td>
@@ -113,11 +160,9 @@ function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
         </table>
       )}
 
-      <h3 className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500 mb-1">
-        Equity
-      </h3>
+      <SectionLabel>Equity</SectionLabel>
       {portfolio.grants.length === 0 ? (
-        <p className="text-[12px] text-neutral-500">No equity defined yet.</p>
+        <p className="text-[11px] text-white/40">No equity defined yet.</p>
       ) : (
         portfolio.grants.map((g) => {
           const contract = portfolio.contracts.find(
@@ -134,12 +179,12 @@ function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
           return (
             <div
               key={g.id}
-              className="border border-neutral-300 rounded px-2.5 py-2 mb-1.5 break-inside-avoid"
+              className={cn(cardCls, "px-3.5 py-3 mb-2 break-inside-avoid")}
             >
-              <div className="flex items-baseline justify-between gap-3 text-[12px]">
-                <span className="font-medium">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-[11px] font-semibold text-white">
                   {contractLabel(portfolio.contracts, g.contractId)}
-                  <span className="text-neutral-500 font-normal">
+                  <span className="font-normal text-white/40">
                     {" · "}
                     {equityLabel(EQUITY_STRUCTURE, g.structureType)}
                     {g.structureType === "DIVIDEND" &&
@@ -149,16 +194,16 @@ function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
                       )} dividends`}
                   </span>
                 </span>
-                <span className="tabular-nums whitespace-nowrap">
+                <span className="text-[11px] text-white/70 tabular-nums whitespace-nowrap">
                   {formatPct(g.equityPct)} granted
                   {grantVested != null && ` · ${formatPct(grantVested)} vested`}
                 </span>
               </div>
 
               {g.tranches.length > 0 && (
-                <table className="w-full text-[11px] border-collapse mt-1.5">
+                <table className="w-full border-collapse mt-2">
                   <thead>
-                    <tr className="border-b border-neutral-200 text-left">
+                    <tr className="border-b border-white/[0.07]">
                       <th className={thCls}>Tranche</th>
                       <th className={thCls}>Dilutes at</th>
                       <th className={thCls}>Status</th>
@@ -188,7 +233,7 @@ function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
               )}
 
               {g.notes && (
-                <p className="text-[11px] text-neutral-600 mt-1 whitespace-pre-wrap">
+                <p className="text-[10px] text-white/50 mt-1.5 whitespace-pre-wrap">
                   {g.notes}
                 </p>
               )}
@@ -198,11 +243,18 @@ function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
       )}
 
       {current && grantedWorth != null && (
-        <p className="text-[11px] text-neutral-600 mt-2">
-          At {formatValuation(current.amount, currency)}, {formatPct(granted)}{" "}
-          granted is worth {formatValuation(Math.round(grantedWorth), currency)}
-          .
-        </p>
+        <div className="flex items-center gap-1.5 mt-2">
+          <Info
+            className="w-3 h-3 shrink-0"
+            strokeWidth={1.5}
+            style={{ color: ACCENT }}
+          />
+          <p className="text-[10px] text-white/55">
+            At {formatValuation(current.amount, currency)}, {formatPct(granted)}{" "}
+            granted is worth{" "}
+            {formatValuation(Math.round(grantedWorth), currency)}.
+          </p>
+        </div>
       )}
     </section>
   );
@@ -210,87 +262,112 @@ function PortfolioSection({ portfolio }: { portfolio: EquityPortfolioDTO }) {
 
 export default async function EquityReportPage() {
   const user = await requireUser();
-  if (!canAccessEquity(user)) redirect("/dashboard");
+  if (!(await canAccessEquity(user.id))) redirect("/dashboard");
 
   const portfolios = await getEquityPortfolios();
   const generatedAt = new Date();
 
   return (
-    <div className="min-h-screen bg-neutral-200 py-8 print:bg-white print:py-0">
-      {/* The app is dark-themed; the report is its own light document so it
-          prints legibly without relying on background graphics. */}
+    <div className="min-h-screen bg-[#0a0a0a] py-8 print:py-0">
+      {/* The dark sheet is the design, so backgrounds have to survive printing —
+          browsers drop them unless print-color-adjust is forced. Zero page
+          margins let the sheet bleed to the paper edge; the padding below
+          stands in for them. */}
       <style>{`
-        @page { margin: 14mm; }
+        @page { size: A4; margin: 0; }
         @media print {
-          html, body { background: #fff !important; }
+          html, body {
+            background: #0a0a0a !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
         }
       `}</style>
 
-      <div className="mx-auto w-[210mm] max-w-full bg-white text-neutral-900 px-10 py-8 shadow print:w-full print:px-0 print:py-0 print:shadow-none">
-        <header className="flex items-start justify-between gap-4 border-b border-neutral-400 pb-3 mb-6">
-          <div>
-            <h1 className="text-[18px] font-semibold">Equity status report</h1>
-            <p className="text-[11px] text-neutral-500 mt-0.5">
-              {portfolios.length} project
-              {portfolios.length === 1 ? "" : "s"} · generated{" "}
-              {generatedAt.toLocaleString()}
-            </p>
+      <div className="mx-auto w-[210mm] max-w-full bg-[#0a0a0a] px-10 py-9 print:w-full print:px-[14mm] print:py-[14mm]">
+        <header>
+          <div className="flex items-start justify-between gap-4 mb-5">
+            <Wordmark className="text-[26px]" />
+            <PrintButton />
           </div>
-          <PrintButton />
+          <h1 className="text-[26px] font-bold text-white tracking-tight">
+            Equity status report
+          </h1>
+          <p className="text-[10px] text-white/40 mt-1">
+            {portfolios.length} project{portfolios.length === 1 ? "" : "s"} ·
+            generated {generatedAt.toLocaleString()}
+          </p>
         </header>
 
         {portfolios.length === 0 ? (
-          <p className="text-[13px] text-neutral-500">
+          <p className="text-[12px] text-white/40 mt-6">
             No equity portfolios yet.
           </p>
         ) : (
           <>
-            <h2 className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500 mb-1">
-              All projects
-            </h2>
-            <table className="w-full text-[12px] border-collapse mb-8">
-              <thead>
-                <tr className="border-b border-neutral-400 text-left">
-                  <th className={thCls}>Project</th>
-                  <th className={thCls}>Equity</th>
-                  <th className={thCls}>Vested</th>
-                  <th className={thCls}>Contracts</th>
-                  <th className={thCls}>Signed</th>
-                  <th className={thCls}>Valuation</th>
-                </tr>
-              </thead>
-              <tbody>
-                {portfolios.map((p) => {
-                  const { granted, vested } = computePortfolioEquity(p);
-                  const current = valuationAsOf(p.valuations);
-                  return (
-                    <tr key={p.id} className="border-b border-neutral-200">
-                      <td className={tdCls}>{p.project.name}</td>
-                      <td className={tdCls}>{formatPct(granted)}</td>
-                      <td className={tdCls}>{formatPct(vested)}</td>
-                      <td className={tdCls}>{p.contracts.length || "—"}</td>
-                      <td className={tdCls}>
-                        {p.contracts.filter((c) => c.signed).length || "—"}
-                      </td>
-                      <td className={tdCls}>
-                        {current
-                          ? formatValuation(
-                              current.amount,
-                              p.valuationCurrency
-                            )
-                          : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className={cn(cardCls, "px-3.5 py-3 mt-5 break-inside-avoid")}>
+              <SectionLabel>All projects</SectionLabel>
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-white/15">
+                    <th className={thCls}>Project</th>
+                    <th className={thCls}>Equity</th>
+                    <th className={thCls}>Vested</th>
+                    <th className={thCls}>Contracts</th>
+                    <th className={thCls}>Signed</th>
+                    <th className={thCls}>Valuation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {portfolios.map((p) => {
+                    const { granted, vested } = computePortfolioEquity(p);
+                    const current = valuationAsOf(p.valuations);
+                    return (
+                      <tr key={p.id} className="border-b border-white/[0.07]">
+                        <td className={tdCls}>{p.project.name}</td>
+                        <td className={tdCls}>{formatPct(granted)}</td>
+                        <td className={tdCls}>{formatPct(vested)}</td>
+                        <td className={tdCls}>{p.contracts.length || "—"}</td>
+                        <td className={tdCls}>
+                          {p.contracts.filter((c) => c.signed).length || "—"}
+                        </td>
+                        <td className={tdCls}>
+                          {current
+                            ? formatValuation(
+                                current.amount,
+                                p.valuationCurrency
+                              )
+                            : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
             {portfolios.map((p) => (
               <PortfolioSection key={p.id} portfolio={p} />
             ))}
           </>
         )}
+
+        <footer className="mt-9 pt-3.5 border-t border-white/10 flex items-center gap-3.5">
+          <Wordmark className="text-[19px]" />
+          <div className="w-px self-stretch bg-white/15" />
+          <p className="flex-1 text-[9px] leading-relaxed text-white/40">
+            Empowering ideas. Building value.
+            <br />
+            This report reflects the equity status of your projects and
+            associated contracts.
+          </p>
+          <span
+            className="text-[10px] font-semibold"
+            style={{ color: ACCENT }}
+          >
+            nizek.com
+          </span>
+        </footer>
       </div>
     </div>
   );
