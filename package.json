@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "predev": "node scripts/check-next-cache.mjs",
+    "dev": "NODE_OPTIONS='--max-old-space-size=2048' next dev",
+    "prebuild": "node scripts/check-next-cache.mjs",
     "build": "NODE_OPTIONS='--max-old-space-size=2048' prisma generate && NODE_OPTIONS='--max-old-space-size=2048' next build",
     "start": "NODE_OPTIONS='--max-old-space-size=2048' next start",
     "lint": "eslint",
