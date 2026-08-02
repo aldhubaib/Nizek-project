@@ -3,7 +3,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Expand, ExternalLink, Sparkles, Wrench, Bug, Clock, Timer, Undo2, AlertCircle, Palette, Gauge } from "lucide-react";
-import { memo } from "react";
+import { memo, useState } from "react";
 import Image from "next/image";
 import type { KanbanTask, TaskType, EstimateAccuracy } from "@/store/kanban";
 import { cn } from "@/lib/utils";
@@ -49,7 +49,7 @@ function liveDuration(isoDate: string | null | undefined): string | null {
   return formatDuration(Date.now() - new Date(isoDate).getTime());
 }
 
-/** Timer badge with a styled hover popup explaining what the number means. */
+/** Timer badge — click to open a popup explaining what the number means. */
 function TimeBadge({
   icon: Icon,
   value,
@@ -61,21 +61,44 @@ function TimeBadge({
   label: string;
   explanation: string;
 }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <span className="group/time relative flex items-center gap-1">
-      <Icon className="w-3 h-3" />
-      {value}
-      <span
-        className={cn(
-          "pointer-events-none absolute bottom-full left-0 mb-1.5 z-50 w-52",
-          "rounded-lg border border-border bg-sidebar p-2.5 shadow-xl",
-          "opacity-0 group-hover/time:opacity-100 transition-opacity duration-150",
-          "font-sans normal-nums whitespace-normal",
-        )}
+    <span className="relative flex items-center">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        className="flex items-center gap-1 cursor-pointer transition-colors hover:text-primary"
       >
-        <span className="block text-[11px] font-semibold text-foreground mb-0.5">{label}</span>
-        <span className="block text-[10px] leading-relaxed text-muted-foreground">{explanation}</span>
-      </span>
+        <Icon className="w-3 h-3" />
+        {value}
+      </button>
+      {open && (
+        <>
+          <span
+            className="fixed inset-0 z-40 cursor-default"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+          />
+          <span
+            className={cn(
+              "absolute bottom-full left-0 mb-1.5 z-50 w-52",
+              "rounded-lg border border-border bg-sidebar p-2.5 shadow-xl",
+              "font-sans normal-nums whitespace-normal",
+            )}
+          >
+            <span className="block text-[11px] font-semibold text-foreground mb-0.5">{label}</span>
+            <span className="block text-[10px] leading-relaxed text-muted-foreground">{explanation}</span>
+          </span>
+        </>
+      )}
     </span>
   );
 }
