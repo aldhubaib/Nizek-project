@@ -601,6 +601,11 @@ model EquityContract {
   lengthValue Float?
   lengthUnit  String? // MONTHS | YEARS
   endDate     DateTime?
+  // Recurring fee the startup owes once the term expires — the basic team they
+  // take over paying for, or a flat tech-expense charge. Billing status is never
+  // stored: it reads as estimated while the term runs and actual once endDate
+  // passes, so it can't go stale when a term is extended.
+  monthlyFee  Float?
   notes       String?
 
   // The signed document itself, uploaded to R2.

@@ -13,7 +13,7 @@ async function requireEquityAccess() {
 }
 
 const PORTFOLIO_INCLUDE = {
-  project: { select: { id: true, name: true, logoUrl: true } },
+  project: { select: { id: true, name: true, logoUrl: true, description: true } },
   // Deal-level dilution schedule: tranches not tied to a specific grant.
   tranches: { where: { grantId: null }, orderBy: { order: "asc" as const } },
   contracts: { orderBy: { createdAt: "asc" as const } },
@@ -40,7 +40,12 @@ function serialize(p: {
   latestCapTableDate: Date | null;
   notes: string | null;
   createdAt: Date;
-  project: { id: string; name: string; logoUrl: string | null };
+  project: {
+    id: string;
+    name: string;
+    logoUrl: string | null;
+    description: string | null;
+  };
   tranches: { id: string; order: number; equityPct: number; startsAtValuation: number }[];
   contracts: {
     id: string;
@@ -50,6 +55,7 @@ function serialize(p: {
     endDate: Date | null;
     lengthValue: number | null;
     lengthUnit: string | null;
+    monthlyFee: number | null;
     notes: string | null;
     fileUrl: string | null;
     fileName: string | null;
@@ -92,6 +98,7 @@ function serialize(p: {
       endDate: c.endDate?.toISOString() ?? null,
       lengthValue: c.lengthValue,
       lengthUnit: c.lengthUnit,
+      monthlyFee: c.monthlyFee,
       notes: c.notes,
       fileUrl: c.fileUrl,
       fileName: c.fileName,
@@ -170,6 +177,39 @@ export async function deleteEquityPortfolio(portfolioId: string) {
   revalidatePath("/dashboard/equity");
 }
 
+/**
+ * Writes the shared Project.description — the same column the create-project
+ * dialog and project settings write, so an edit from either side shows up on
+ * the other.
+ *
+ * Gated on equity access rather than the ADMIN/PROJECT_MANAGER role that
+ * updateProject requires: equity permissions are granted independently of
+ * project membership, so reusing that action here would reject the very people
+ * this page exists for.
+ */
+export async function updateEquityProjectDescription(
+  portfolioId: string,
+  description: string
+) {
+  await requireEquityAccess();
+  const portfolio = await prisma.equityPortfolio.findUnique({
+    where: { id: portfolioId },
+    select: { projectId: true },
+  });
+  if (!portfolio) throw new Error("Portfolio not found");
+
+  const trimmed = description.trim();
+  await prisma.project.update({
+    where: { id: portfolio.projectId },
+    data: { description: trimmed || null },
+  });
+
+  revalidatePath(`/dashboard/equity/${portfolioId}`);
+  revalidatePath("/dashboard/equity");
+  revalidatePath(`/dashboard/projects/${portfolio.projectId}`);
+  revalidatePath("/dashboard/projects");
+}
+
 // The end date is never supplied by the caller — it's always derived from the
 // start date plus the contract length so the two can't drift apart.
 type ContractInput = {
@@ -178,6 +218,7 @@ type ContractInput = {
   startDate?: string | null;
   lengthValue?: number | null;
   lengthUnit?: string | null;
+  monthlyFee?: number | null;
   notes?: string | null;
   fileUrl?: string | null;
   fileName?: string | null;
@@ -197,6 +238,7 @@ export async function addEquityContract(portfolioId: string, data: ContractInput
       portfolioId,
       title: data.title ?? null,
       signed: data.signed ?? false,
+      monthlyFee: data.monthlyFee ?? null,
       notes: data.notes ?? null,
       fileUrl: data.fileUrl ?? null,
       fileName: data.fileName ?? null,
@@ -232,6 +274,7 @@ export async function updateEquityContract(contractId: string, data: ContractInp
     data: {
       ...(data.title !== undefined && { title: data.title }),
       ...(data.signed !== undefined && { signed: data.signed }),
+      ...(data.monthlyFee !== undefined && { monthlyFee: data.monthlyFee }),
       ...(data.notes !== undefined && { notes: data.notes }),
       ...(data.fileUrl !== undefined && {
         fileUrl: data.fileUrl,

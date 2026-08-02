@@ -83,6 +83,29 @@ export function computeContractEndDate(
   return target.toISOString().slice(0, 10);
 }
 
+export const FEE_STATUS = {
+  ESTIMATED: "Estimated",
+  ACTUAL: "Actual",
+} as const;
+
+export type FeeStatus = keyof typeof FEE_STATUS;
+
+/**
+ * Whether a contract's monthly fee is being collected yet. The startup pays for
+ * its own team once the term is over, so an expired contract is billing and a
+ * running one is only a projection. Derived from endDate rather than stored, so
+ * extending a term moves the switchover with it.
+ */
+export function feeStatus(
+  endDate: string | Date | null | undefined,
+  asOf: Date = new Date(),
+): FeeStatus {
+  if (!endDate) return "ESTIMATED";
+  const end = new Date(endDate);
+  if (Number.isNaN(end.getTime())) return "ESTIMATED";
+  return end.getTime() <= asOf.getTime() ? "ACTUAL" : "ESTIMATED";
+}
+
 /** Whole intervals (calendar months) elapsed between two dates. */
 function monthsBetween(from: Date, to: Date): number {
   let months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());

@@ -9,6 +9,7 @@ import {
   Plus,
   Layers,
   FileSignature,
+  FileText,
   Pencil,
   PieChart,
   Paperclip,
@@ -26,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
 import {
   deleteEquityPortfolio,
+  updateEquityProjectDescription,
   addEquityTranche,
   updateEquityTranche,
   deleteEquityTranche,
@@ -44,10 +46,12 @@ import {
   EQUITY_FREQUENCY,
   EQUITY_LENGTH_UNIT,
   EQUITY_STRUCTURE,
+  FEE_STATUS,
   computeVestedPct,
   computePortfolioEquity,
   computeContractEndDate,
   equityLabel,
+  feeStatus,
   formatContractLength,
   formatPct,
   formatValuation,
@@ -251,6 +255,9 @@ export function EquityPortfolioClient({
         </div>
       </div>
 
+      {/* The project's own description, edited in place */}
+      <ProjectDescriptionCard portfolio={portfolio} />
+
       {/* Contracts — repeatable related table */}
       <ContractsTable portfolio={portfolio} />
 
@@ -275,6 +282,105 @@ export function EquityPortfolioClient({
   );
 }
 
+/**
+ * The project's description, not the portfolio's — it's the same column the
+ * create-project dialog and project settings write, so this stays in step with
+ * whatever the project page shows.
+ */
+function ProjectDescriptionCard({
+  portfolio,
+}: {
+  portfolio: EquityPortfolioDTO;
+}) {
+  const router = useRouter();
+  const stored = portfolio.project.description ?? "";
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(stored);
+  const [busy, setBusy] = useState(false);
+
+  async function handleSave() {
+    setBusy(true);
+    try {
+      await updateEquityProjectDescription(portfolio.id, draft);
+      setEditing(false);
+      router.refresh();
+    } catch (err) {
+      alert((err as Error).message || "Failed to save description");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card/50 p-5 mb-6">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <FileText
+            className="w-4 h-4 text-muted-foreground"
+            strokeWidth={1.5}
+          />
+          <h2 className="text-[13px] font-semibold text-foreground">
+            Description
+          </h2>
+        </div>
+        {!editing && (
+          <button
+            onClick={() => {
+              // Re-seed from the server value so a cancelled edit is discarded.
+              setDraft(stored);
+              setEditing(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
+          >
+            <Pencil className="w-3.5 h-3.5" strokeWidth={1.5} />
+            Edit
+          </button>
+        )}
+      </div>
+      <p className="text-[11px] text-muted-foreground mb-4">
+        Shared with the project — editing it here updates the project page too.
+      </p>
+
+      {editing ?
+        <>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={4}
+            placeholder="Brief project description..."
+            className={cn(inputCls, "h-auto py-2 resize-y")}
+          />
+          <div className="flex items-center justify-end gap-2 mt-3">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              disabled={busy}
+              className="px-3 py-1.5 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={busy}
+              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {busy ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </>
+      : stored ?
+        <p className="text-[13px] text-foreground whitespace-pre-wrap">
+          {stored}
+        </p>
+      : <p className="text-[12px] text-muted-foreground py-2">
+          No description yet.
+        </p>
+      }
+    </div>
+  );
+}
+
 // The end date isn't part of the draft — it's derived from start + length.
 type ContractDraft = {
   title: string;
@@ -282,6 +388,7 @@ type ContractDraft = {
   startDate: string;
   lengthValue: string;
   lengthUnit: string;
+  monthlyFee: string;
   notes: string;
   fileUrl: string;
   fileName: string;
@@ -295,6 +402,7 @@ const EMPTY_CONTRACT: ContractDraft = {
   startDate: "",
   lengthValue: "",
   lengthUnit: "YEARS",
+  monthlyFee: "",
   notes: "",
   fileUrl: "",
   fileName: "",
@@ -316,6 +424,7 @@ function contractPayload(draft: ContractDraft) {
     startDate: draft.startDate || null,
     lengthValue: draft.lengthValue ? parseFloat(draft.lengthValue) : null,
     lengthUnit: draft.lengthUnit,
+    monthlyFee: draft.monthlyFee ? parseFloat(draft.monthlyFee) : null,
     notes: draft.notes || null,
     fileUrl: draft.fileUrl || null,
     fileName: draft.fileName || null,
@@ -416,12 +525,14 @@ function ContractsTable({ portfolio }: { portfolio: EquityPortfolioDTO }) {
                   startDate: toDateInput(c.startDate),
                   lengthValue: c.lengthValue?.toString() ?? "",
                   lengthUnit: c.lengthUnit ?? "YEARS",
+                  monthlyFee: c.monthlyFee?.toString() ?? "",
                   notes: c.notes ?? "",
                   fileUrl: c.fileUrl ?? "",
                   fileName: c.fileName ?? "",
                   fileSize: c.fileSize,
                   fileMimeType: c.fileMimeType ?? "",
                 }}
+                currency={portfolio.valuationCurrency}
                 busy={busy}
                 submitLabel="Save"
                 onSubmit={(draft) => handleUpdate(c.id, draft)}
@@ -450,6 +561,22 @@ function ContractsTable({ portfolio }: { portfolio: EquityPortfolioDTO }) {
                     >
                       {c.signed ? "Signed" : "Not signed"}
                     </span>
+                    {c.monthlyFee != null && (
+                      <span
+                        className={cn(
+                          "text-[10px] px-1.5 py-0.5 rounded-full border font-medium",
+                          feeStatus(c.endDate) === "ACTUAL"
+                            ? "text-emerald-400 bg-emerald-500/15 border-emerald-500/30"
+                            : "text-sky-400 bg-sky-500/15 border-sky-500/30"
+                        )}
+                      >
+                        {formatValuation(
+                          c.monthlyFee,
+                          portfolio.valuationCurrency
+                        )}
+                        /mo · {FEE_STATUS[feeStatus(c.endDate)]}
+                      </span>
+                    )}
                   </div>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
                     {c.startDate || c.endDate ? (
@@ -519,6 +646,7 @@ function ContractsTable({ portfolio }: { portfolio: EquityPortfolioDTO }) {
       {adding && (
         <ContractForm
           initial={EMPTY_CONTRACT}
+          currency={portfolio.valuationCurrency}
           busy={busy}
           submitLabel="Add contract"
           onSubmit={handleAdd}
@@ -537,12 +665,14 @@ function ContractsTable({ portfolio }: { portfolio: EquityPortfolioDTO }) {
 
 function ContractForm({
   initial,
+  currency,
   busy,
   submitLabel,
   onSubmit,
   onCancel,
 }: {
   initial: ContractDraft;
+  currency: string;
   busy: boolean;
   submitLabel: string;
   onSubmit: (draft: ContractDraft) => void;
@@ -558,6 +688,7 @@ function ContractForm({
     draft.lengthValue ? parseFloat(draft.lengthValue) : null,
     draft.lengthUnit
   );
+  const status = feeStatus(endDate);
 
   function set<K extends keyof ContractDraft>(key: K, value: ContractDraft[K]) {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -673,6 +804,42 @@ function ContractForm({
                   year: "numeric",
                 })
               : "Set a start date and length"}
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>Monthly recurring fee</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              step="0.001"
+              min="0"
+              value={draft.monthlyFee}
+              onChange={(e) => set("monthlyFee", e.target.value)}
+              placeholder="e.g. 1500"
+              className={cn(inputCls, "flex-1 min-w-0")}
+            />
+            <span className="flex h-9 w-[104px] shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 text-[13px] text-muted-foreground">
+              {currency}
+            </span>
+          </div>
+        </div>
+        <div>
+          <label className={labelCls}>Billing status — calculated</label>
+          <div
+            className={cn(
+              "flex h-9 items-center rounded-lg border border-dashed px-3 text-[13px]",
+              !draft.monthlyFee
+                ? "border-border bg-muted/30 text-muted-foreground"
+                : status === "ACTUAL"
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                  : "border-sky-500/30 bg-sky-500/10 text-sky-400"
+            )}
+          >
+            {!draft.monthlyFee
+              ? "No recurring fee"
+              : status === "ACTUAL"
+                ? `${FEE_STATUS.ACTUAL} — term ended, they're paying`
+                : `${FEE_STATUS.ESTIMATED} — starts when the term ends`}
           </div>
         </div>
         <div className="md:col-span-2">
