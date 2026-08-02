@@ -15,6 +15,7 @@ import {
   Volume2,
   Activity,
   ClipboardCheck,
+  PieChart,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { TeamsManager } from "@/components/settings/teams-manager";
@@ -27,6 +28,7 @@ import { LoginSettingsClient } from "./login-settings-client";
 import { NotificationSoundClient } from "./notification-sound-client";
 import { PushHealthClient } from "./push-health-client";
 import { AuditAccessManager } from "@/components/settings/audit-access-manager";
+import { EquityAccessManager } from "@/components/settings/equity-access-manager";
 import type { BrandingAssetDTO } from "@/actions/branding";
 import type { LoginPhotoDTO } from "@/actions/login-photos";
 import type { NotificationSoundDTO } from "@/actions/notification-sound-settings";
@@ -42,7 +44,8 @@ type TabId =
   | "login"
   | "notification-sound"
   | "push-health"
-  | "audit-access";
+  | "audit-access"
+  | "equity-access";
 
 type SettingsItem = {
   id: TabId;
@@ -129,6 +132,12 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         label: "Audit Access",
         icon: ClipboardCheck,
         desc: "Choose who can audit which teams' flagged tasks.",
+      },
+      {
+        id: "equity-access",
+        label: "Equity Access",
+        icon: PieChart,
+        desc: "Choose who can open the private Equity module.",
       },
     ],
   },
@@ -244,6 +253,7 @@ export function AdminPageClient({
         )}
         {active.id === "push-health" && <PushHealthClient />}
         {active.id === "audit-access" && <AuditAccessManager />}
+        {active.id === "equity-access" && <EquityAccessManager />}
       </div>
     </div>
   );

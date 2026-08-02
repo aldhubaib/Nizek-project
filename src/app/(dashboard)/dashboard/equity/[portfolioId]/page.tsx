@@ -10,7 +10,7 @@ export default async function EquityPortfolioPage({
   params: Promise<{ portfolioId: string }>;
 }) {
   const user = await requireUser();
-  if (!canAccessEquity(user)) redirect("/dashboard");
+  if (!(await canAccessEquity(user.id))) redirect("/dashboard");
 
   const { portfolioId } = await params;
   const portfolio = await getEquityPortfolio(portfolioId);

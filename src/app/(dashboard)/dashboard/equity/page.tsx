@@ -6,7 +6,7 @@ import { EquityPageClient } from "./equity-page-client";
 
 export default async function EquityPage() {
   const user = await requireUser();
-  if (!canAccessEquity(user)) redirect("/dashboard");
+  if (!(await canAccessEquity(user.id))) redirect("/dashboard");
 
   const [portfolios, projectOptions] = await Promise.all([
     getEquityPortfolios(),

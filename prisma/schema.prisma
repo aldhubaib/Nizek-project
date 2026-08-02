@@ -110,6 +110,7 @@ model User {
   notificationPreference NotificationPreference? @relation("UserNotificationPreference")
   mutedThreads      MutedThread[]             @relation("UserMutedThreads")
   auditPermissions  AuditPermission[]         @relation("UserAuditPermissions")
+  equityPermission  EquityPermission?         @relation("UserEquityPermission")
   taskAudits        TaskAudit[]               @relation("AuditCreator")
   auditBlames       TaskAuditItem[]           @relation("AuditBlamedUser")
 
@@ -493,7 +494,19 @@ model Invitation {
 
 // ── Equity module ────────────────────────────────────────────────────────────
 // Private tracker for equity deals with startups (one portfolio per project).
-// Access is restricted in code to specific users — see src/lib/equity-access.ts.
+// Access is granted per user — see src/lib/equity-access.ts.
+
+// Grants one user access to the whole Equity module. Unlike AuditPermission
+// there is no team dimension: equity is all-or-nothing. Admins are deliberately
+// not implicit — this is private financial data, so every holder is a row here
+// and can be pointed at.
+model EquityPermission {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation("UserEquityPermission", fields: [userId], references: [id], onDelete: Cascade)
+  grantedById String?
+  createdAt   DateTime @default(now())
+}
 
 model EquityPortfolio {
   id        String  @id @default(cuid())

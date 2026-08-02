@@ -52,8 +52,8 @@ export default async function DashboardLayout({
     (user
       ? (await prisma.auditPermission.count({ where: { userId: user.id } })) > 0
       : false);
-  // Equity module is private — allowlisted emails only (see equity-access.ts).
-  const canEquity = canAccessEquity(user);
+  // Equity module is private — granted per user (see equity-access.ts).
+  const canEquity = await canAccessEquity(user?.id);
 
   return (
     <DashboardShell isAdmin={isAdmin} canAudit={canAudit} canEquity={canEquity} currentUserId={user?.id} notificationSoundUrl={notificationSoundUrl}>

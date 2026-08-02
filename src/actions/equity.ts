@@ -8,7 +8,7 @@ import { computeContractEndDate, sumTrancheEquity } from "@/lib/equity-math";
 
 async function requireEquityAccess() {
   const user = await requireUser();
-  if (!canAccessEquity(user)) throw new Error("Unauthorized");
+  if (!(await canAccessEquity(user.id))) throw new Error("Unauthorized");
   return user;
 }
 
@@ -528,4 +528,59 @@ export async function deleteEquityValuation(valuationId: string) {
   const valuation = await prisma.equityValuation.delete({ where: { id: valuationId } });
   revalidatePath("/dashboard/equity");
   revalidatePath(`/dashboard/equity/${valuation.portfolioId}`);
+}
+
+// ─── Admin: permission management ───────────────────────
+// Guarded on ADMIN rather than equity access, so an admin who holds no grant
+// can still hand one out (including to themselves).
+
+export type EquityMember = {
+  id: string;
+  name: string | null;
+  email: string;
+  imageUrl: string | null;
+};
+
+export async function getEquityPermissionAdminData(): Promise<{
+  members: EquityMember[];
+  allowedUserIds: string[];
+}> {
+  const user = await requireUser();
+  if (user.systemRole !== "ADMIN") throw new Error("Admin only");
+
+  const [members, permissions] = await Promise.all([
+    prisma.user.findMany({
+      where: { blocked: false, systemRole: { not: "CLIENT" } },
+      select: { id: true, name: true, email: true, imageUrl: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.equityPermission.findMany({ select: { userId: true } }),
+  ]);
+
+  return { members, allowedUserIds: permissions.map((p) => p.userId) };
+}
+
+/** Grants or revokes one user's access to the whole Equity module. */
+export async function setUserEquityAccess(
+  userId: string,
+  allowed: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireUser();
+  if (admin.systemRole !== "ADMIN") return { ok: false, error: "Admin only" };
+
+  if (allowed) {
+    await prisma.equityPermission.upsert({
+      where: { userId },
+      create: { userId, grantedById: admin.id },
+      update: {},
+    });
+  } else {
+    await prisma.equityPermission.deleteMany({ where: { userId } });
+  }
+
+  // The nav is computed in the dashboard layout, so the whole shell has to be
+  // rebuilt for the Equity entry to appear or disappear.
+  revalidatePath("/dashboard/admin");
+  revalidatePath("/", "layout");
+  return { ok: true };
 }
