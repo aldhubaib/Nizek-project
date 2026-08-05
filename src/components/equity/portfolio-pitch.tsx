@@ -1028,7 +1028,7 @@ export function PortfolioPitch({
           ) : (
             <ChartFrame
               title="How big the market is"
-              note="Each tier is drawn inside the one above it, with area — not width — following the amount, since that is how two circles get compared by eye. The number, its scale and its currency are entered on the portfolio page; a tier left without a figure is left out entirely."
+              note="Each tier is drawn inside the one above it — TAM, then SAM, then SOM. The circles are fixed in size; the amounts are what the labels and the table say. A tier left without a figure is left out entirely."
               source="Market size"
               data={{
                 columns: ["Name", "Amount"],

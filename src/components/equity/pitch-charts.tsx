@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ECharts, EChartsOption } from "echarts";
 import { EChart } from "@/components/charts/echart";
 import { cn } from "@/lib/utils";
+import { MARKET_TIERS } from "@/lib/market-size";
 
 /**
  * The charts the pitch is drawn with, on Apache ECharts.
@@ -431,6 +432,21 @@ export type MarketTier = {
 const RING_BOX = 300;
 
 /**
+ * The one circle each ring is drawn at, outermost first. Fixed on purpose: the
+ * drawing says "this sits inside that", the labels and the table say how much,
+ * and a to-scale drawing dies the day someone's SOM is a thousandth of their
+ * TAM.
+ */
+const RING_RATIOS = [1, 0.64, 0.36];
+
+/** TAM before SAM before SOM regardless of entry order or amounts; a name from
+ * before the fixed tiers existed files after them, largest figure first. */
+function tierRank(tier: string | null) {
+  const i = MARKET_TIERS.findIndex((t) => t.key === tier);
+  return i === -1 ? MARKET_TIERS.length : i;
+}
+
+/**
  * The market as rings, each sitting inside the one above it: the whole market,
  * then the part that can be served, then the part that can realistically be
  * reached. Nesting is the point — a reachable market is only meaningful as a
@@ -444,33 +460,22 @@ const RING_BOX = 300;
 export function MarketRings({ tiers }: { tiers: MarketTier[] }) {
   const [active, setActive] = useState<number | null>(null);
 
-  // Largest first, whatever order they were entered in: a tier only means
-  // anything against the one it sits inside.
   const ordered = useMemo(
     () =>
       tiers
         .map((tier, i) => ({ ...tier, key: `${i}-${tier.tier ?? tier.display}` }))
-        .sort((a, b) => b.value - a.value),
+        .sort((a, b) => tierRank(a.tier) - tierRank(b.tier) || b.value - a.value),
     [tiers],
   );
 
   // A tier without a figure is simply not shown; the caller decides what an
   // entirely empty set looks like (the pitch shows its "No data" state).
   const drawable = ordered.filter((t) => t.value > 0);
-  const largest = drawable[0]?.value ?? 0;
   const maxRadius = (RING_BOX - 12) / 2;
   const baseY = RING_BOX - 6;
 
   const rings = drawable.map((tier, i) => {
-    // Area follows the amount rather than radius: a circle twice as wide reads
-    // as four times as much, which is how two of them get compared. The floor
-    // keeps a tier orders of magnitude below the total from vanishing entirely —
-    // 800K inside 2B is a quarter of a percent, and a circle that small is a dot
-    // nobody can point at.
-    const radius = Math.max(
-      maxRadius * Math.sqrt(tier.value / largest),
-      maxRadius * 0.17,
-    );
+    const radius = maxRadius * (RING_RATIOS[i] ?? RING_RATIOS.at(-1)!);
     return {
       ...tier,
       index: i,
@@ -543,8 +548,8 @@ export function MarketRings({ tiers }: { tiers: MarketTier[] }) {
                 </p>
               )}
               <p
-                className="text-[17px] font-semibold tabular-nums leading-tight"
-                style={{ color: SERIES[0] }}
+                className="text-[12px] font-medium tabular-nums leading-tight"
+                style={{ color: FOREGROUND }}
               >
                 {ring.display}
               </p>
