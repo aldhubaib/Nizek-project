@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, Trash2, Users } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
 import { HolderAvatar } from "@/components/equity/holder-avatar";
@@ -138,6 +138,20 @@ function TeamForm({
     }));
   }
 
+  // The order rows sit in is the order the team reads in everywhere — the
+  // saved lineup keeps it and the report renders it as entered.
+  function moveMember(key: string, dir: -1 | 1) {
+    setDraft((d) => {
+      const from = d.members.findIndex((m) => m.key === key);
+      const to = from + dir;
+      if (from < 0 || to < 0 || to >= d.members.length) return d;
+      const members = [...d.members];
+      const [row] = members.splice(from, 1);
+      members.splice(to, 0, row);
+      return { ...d, members };
+    });
+  }
+
   const blocked = !draft.effectiveOn
     ? "Pick the date this team was true from"
     : picked.length === 0
@@ -183,10 +197,10 @@ function TeamForm({
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
             What they bring
           </span>
-          <span className="w-8" />
+          <span className="w-[5.25rem]" />
         </div>
 
-        {draft.members.map((member) => (
+        {draft.members.map((member, idx) => (
           <div
             key={member.key}
             className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto] gap-2 items-center"
@@ -224,22 +238,42 @@ function TeamForm({
               className={inputCls}
             />
 
-            <button
-              type="button"
-              onClick={() =>
-                setDraft((d) => ({
-                  ...d,
-                  members:
-                    d.members.length === 1
-                      ? [blankMember()]
-                      : d.members.filter((m) => m.key !== member.key),
-                }))
-              }
-              className="w-8 h-9 grid place-items-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-              aria-label="Remove this person"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={() => moveMember(member.key, -1)}
+                disabled={idx === 0}
+                className="w-7 h-9 grid place-items-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                aria-label="Move up"
+              >
+                <ChevronUp className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => moveMember(member.key, 1)}
+                disabled={idx === draft.members.length - 1}
+                className="w-7 h-9 grid place-items-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                aria-label="Move down"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setDraft((d) => ({
+                    ...d,
+                    members:
+                      d.members.length === 1
+                        ? [blankMember()]
+                        : d.members.filter((m) => m.key !== member.key),
+                  }))
+                }
+                className="w-7 h-9 grid place-items-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                aria-label="Remove this person"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         ))}
 
