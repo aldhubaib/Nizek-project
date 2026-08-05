@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "predev": "node scripts/check-next-cache.mjs",
-    "dev": "NODE_OPTIONS='--max-old-space-size=2048' next dev",
+    "dev": "NODE_OPTIONS='--max-old-space-size=6144' next dev",
     "prebuild": "node scripts/check-next-cache.mjs",
     "build": "NODE_OPTIONS='--max-old-space-size=2048' prisma generate && NODE_OPTIONS='--max-old-space-size=2048' next build",
     "start": "NODE_OPTIONS='--max-old-space-size=2048' next start",
@@ -40,6 +40,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
+    "echarts": "^6.1.0",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "pg": "^8.20.0",

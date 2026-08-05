@@ -11,6 +11,7 @@ import { PushNotifier } from "@/components/push-notifier";
 import { InstallPrompt } from "@/components/install-prompt";
 import { OfflineNotice } from "@/components/offline-notice";
 import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
+import { PAGE_HEADER_ACTIONS_SLOT } from "@/components/page-header-actions";
 
 const DESKTOP_BREAKPOINT = 1024;
 
@@ -72,10 +73,11 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, ca
         </div>
       )}
 
-      {/* Mobile header — just the bell; the inbox has its own header */}
+      {/* Mobile header — the bell, then whatever the page puts beside it */}
       {!isDesktop && !onInbox && (
-        <div className="fixed top-0 left-0 right-0 h-12 flex items-center justify-end px-4 border-b border-border bg-background z-[100]">
+        <div className="fixed top-0 left-0 right-0 h-12 flex items-center justify-end gap-1 px-4 border-b border-border bg-background z-[100]">
           <NotificationBell currentUserId={currentUserId} />
+          <div id={PAGE_HEADER_ACTIONS_SLOT} className="flex items-center gap-1" />
         </div>
       )}
 
@@ -106,8 +108,12 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, ca
         } ${showBottomNav && !onInbox ? "pb-[calc(4rem+env(safe-area-inset-bottom))]" : ""}`}
       >
         {isDesktop && !onInbox && (
-          <div className="fixed top-3 right-4 z-[100]">
+          <div className="fixed top-3 right-4 z-[100] flex items-center gap-1">
             <NotificationBell currentUserId={currentUserId} />
+            <div
+              id={PAGE_HEADER_ACTIONS_SLOT}
+              className="flex items-center gap-1"
+            />
           </div>
         )}
         {children}

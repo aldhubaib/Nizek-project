@@ -1,5 +1,6 @@
 "use server";
 
+import { clerkClient } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, acceptPendingInvitations } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
@@ -200,6 +201,89 @@ export async function updateUserAdmin(userId: string, isAdmin: boolean) {
   });
 
   revalidatePath("/dashboard/team");
+}
+
+// Adds an address to the member's Clerk account and promotes it to primary,
+// rather than replacing what was there. Everyone here signs in with Google, and
+// Clerk refuses to delete an address that belongs to a connected account, so the
+// old one stays attached and their Google sign-in keeps working untouched.
+//
+// Email is the sign-in identity rather than a display field, so Clerk has to
+// accept the new address before the local row moves: a User.email that Clerk has
+// never heard of is worse than leaving the old address in place.
+export async function updateUserEmail(userId: string, email: string) {
+  await requireAdmin();
+
+  const next = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)) {
+    return { error: "Enter a valid email address" };
+  }
+
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target) return { error: "User not found" };
+  if (target.email.toLowerCase() === next) return {};
+
+  const taken = await prisma.user.findFirst({
+    where: { email: { equals: next, mode: "insensitive" }, NOT: { id: userId } },
+    select: { id: true },
+  });
+  if (taken) return { error: "Another member already uses this email" };
+
+  const client = await clerkClient();
+
+  // Accounts accumulate addresses — the Google one plus anything added here
+  // before — so the target may already be present as a secondary.
+  let existingAddressId: string | undefined;
+  try {
+    const clerkUser = await client.users.getUser(target.clerkId);
+    existingAddressId = clerkUser.emailAddresses.find(
+      (e) => e.emailAddress.toLowerCase() === next,
+    )?.id;
+  } catch {
+    return { error: "Could not reach Clerk to update the sign-in email" };
+  }
+
+  try {
+    if (existingAddressId) {
+      await client.emailAddresses.updateEmailAddress(existingAddressId, {
+        verified: true,
+        primary: true,
+      });
+    } else {
+      await client.emailAddresses.createEmailAddress({
+        userId: target.clerkId,
+        emailAddress: next,
+        verified: true,
+        primary: true,
+      });
+    }
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "Clerk rejected the new email",
+    };
+  }
+
+  await prisma.user.update({ where: { id: userId }, data: { email: next } });
+
+  // Allowlist restrictions apply to sign-up rather than sign-in, so this covers
+  // the case where Clerk treats a first Google sign-in from the new address as a
+  // new account instead of linking it. The old entry is left in place; it guards
+  // an address that is still live. Best-effort, matching how inviteToTeam treats it.
+  try {
+    await fetch("https://api.clerk.com/v1/allowlist_identifiers", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ identifier: next, notify: false }),
+    });
+  } catch {
+    // Non-blocking
+  }
+
+  revalidatePath("/dashboard/team");
+  return {};
 }
 
 interface ClerkUserLite {

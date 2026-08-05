@@ -12,6 +12,7 @@ import {
   PieChart,
   Pin,
   PinOff,
+  Trash,
 } from "lucide-react";
 import {
   Tooltip,
@@ -26,6 +27,10 @@ const navigation = [
   { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, auditOnly: false, equityOnly: false },
   { name: "Equity", href: "/dashboard/equity", icon: PieChart, adminOnly: false, auditOnly: false, equityOnly: true },
   { name: "Audit", href: "/dashboard/audit", icon: ClipboardCheck, adminOnly: false, auditOnly: true, equityOnly: false },
+  // The trash is shared by the whole app, but so far only the equity module
+  // puts anything in it — so it's shown to the people who can fill it rather
+  // than to everyone, who'd only ever find it empty.
+  { name: "Trash", href: "/dashboard/trash", icon: Trash, adminOnly: false, auditOnly: false, equityOnly: true },
   { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, auditOnly: false, equityOnly: false },
 ];
 

@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, Trash2, ShieldCheck, Shield, AlertTriangle, ArrowRightLeft, ChevronDown, Check, Eye, Plus } from "lucide-react";
+import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, Trash2, ShieldCheck, Shield, AlertTriangle, ArrowRightLeft, ChevronDown, Check, Eye, Plus, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { updateUserAdmin, inviteToTeam, toggleBlockUser, cancelTeamInvite, resendTeamInvite, getUserTaskSummary } from "@/actions/team";
+import { updateUserAdmin, updateUserEmail, inviteToTeam, toggleBlockUser, cancelTeamInvite, resendTeamInvite, getUserTaskSummary } from "@/actions/team";
 import { updateMemberRole, removeMember } from "@/actions/project";
 import { startImpersonation } from "@/actions/impersonation";
 
@@ -130,6 +130,31 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
   }
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [emailEdit, setEmailEdit] = useState<{
+    userId: string;
+    value: string;
+    error: string | null;
+    saving: boolean;
+  } | null>(null);
+
+  async function handleEmailSave() {
+    if (!emailEdit || emailEdit.saving) return;
+    setEmailEdit({ ...emailEdit, error: null, saving: true });
+    try {
+      const res = await updateUserEmail(emailEdit.userId, emailEdit.value);
+      if (res?.error) {
+        setEmailEdit({ ...emailEdit, error: res.error, saving: false });
+        return;
+      }
+      setEmailEdit(null);
+    } catch (err) {
+      setEmailEdit({
+        ...emailEdit,
+        error: (err as Error).message || "Failed to update email",
+        saving: false,
+      });
+    }
+  }
 
   interface ProjectTransfer {
     id: string;
@@ -639,13 +664,71 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-3 mt-0.5">
-                  <span className="text-[11px] text-muted-foreground truncate">{member.email}</span>
-                  <span className="text-[11px] text-muted-foreground/50 flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    Joined {formatDistanceToNow(new Date(member.createdAt), { addSuffix: true })}
-                  </span>
-                </div>
+                {emailEdit?.userId === member.id ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleEmailSave();
+                    }}
+                    className="flex items-center gap-1.5 mt-1"
+                  >
+                    <input
+                      type="email"
+                      value={emailEdit.value}
+                      autoFocus
+                      disabled={emailEdit.saving}
+                      onChange={(e) => setEmailEdit({ ...emailEdit, value: e.target.value, error: null })}
+                      onKeyDown={(e) => e.key === "Escape" && setEmailEdit(null)}
+                      className="h-6 w-56 rounded-md border border-border bg-background px-2 text-[11px] text-foreground outline-none focus:border-muted-foreground/50 disabled:opacity-50"
+                    />
+                    <button
+                      type="submit"
+                      disabled={emailEdit.saving}
+                      className="h-6 px-2 rounded-md text-[10px] font-medium bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50"
+                    >
+                      {emailEdit.saving ? "Saving..." : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEmailEdit(null)}
+                      disabled={emailEdit.saving}
+                      className="h-6 px-2 rounded-md text-[10px] font-medium border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <span
+                      className="text-[10px] text-muted-foreground/60"
+                      title="Google is the only sign-in method, so the new address has to be a Google account. Their old address keeps working either way."
+                    >
+                      {emailEdit.error ? (
+                        <span className="text-destructive">{emailEdit.error}</span>
+                      ) : (
+                        "Must be a Google account — the old one keeps working too"
+                      )}
+                    </span>
+                  </form>
+                ) : (
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <span className="flex items-center gap-1 min-w-0">
+                      <span className="text-[11px] text-muted-foreground truncate">{member.email}</span>
+                      {isAdmin && (
+                        <button
+                          onClick={() =>
+                            setEmailEdit({ userId: member.id, value: member.email, error: null, saving: false })
+                          }
+                          title="Add another email"
+                          className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground/50 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      Joined {formatDistanceToNow(new Date(member.createdAt), { addSuffix: true })}
+                    </span>
+                  </div>
+                )}
                 {member.projects.length > 0 && (
                   <div className="flex items-center gap-1.5 mt-1">
                     <FolderKanban className="w-3 h-3 text-muted-foreground/50" />

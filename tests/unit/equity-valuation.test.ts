@@ -1,55 +1,61 @@
 import { describe, it, expect } from "vitest";
 import {
-  valuationAsOf,
+  currentValuationOf,
   valuationChangePct,
   equityValueAt,
   isTrancheDiluted,
   splitTranchesByDilution,
   sumTrancheEquity,
-  type ValuationEntry,
+  type SetEntry,
 } from "@/lib/equity-math";
-
-const SEED: ValuationEntry = { valuedAt: "2026-01-15T00:00:00.000Z", amount: 1_000_000 };
-const SERIES_A: ValuationEntry = { valuedAt: "2026-06-01T00:00:00.000Z", amount: 4_000_000 };
-const PLANNED: ValuationEntry = { valuedAt: "2027-01-01T00:00:00.000Z", amount: 9_000_000 };
 
 const ASOF = new Date("2026-08-01T00:00:00.000Z");
 
-describe("valuationAsOf", () => {
-  it("returns null when there is nothing recorded", () => {
-    expect(valuationAsOf([], ASOF)).toBeNull();
+const SEED: SetEntry = {
+  effectiveOn: "2026-01-15T00:00:00.000Z",
+  valuation: 1_000_000,
+  grants: [],
+};
+const SERIES_A: SetEntry = {
+  effectiveOn: "2026-06-01T00:00:00.000Z",
+  valuation: 4_000_000,
+  grants: [],
+};
+const PLANNED: SetEntry = {
+  effectiveOn: "2027-01-01T00:00:00.000Z",
+  valuation: 9_000_000,
+  grants: [],
+};
+
+describe("currentValuationOf", () => {
+  it("returns null when nothing is recorded", () => {
+    expect(currentValuationOf({ sets: [] }, ASOF)).toBeNull();
   });
 
-  it("picks the newest valuation dated on or before the cutoff", () => {
-    expect(valuationAsOf([SEED, SERIES_A], ASOF)).toEqual(SERIES_A);
+  it("takes the price off the newest split in effect", () => {
+    expect(currentValuationOf({ sets: [SEED, SERIES_A] }, ASOF)).toBe(4_000_000);
   });
 
-  it("does not sort in place, so caller order survives", () => {
-    const input = [SEED, SERIES_A];
-    valuationAsOf(input, ASOF);
-    expect(input).toEqual([SEED, SERIES_A]);
-  });
-
-  it("ignores future-dated rounds so a planned raise isn't read as current", () => {
-    expect(valuationAsOf([SEED, SERIES_A, PLANNED], ASOF)).toEqual(SERIES_A);
-  });
-
-  it("includes a valuation dated exactly on the cutoff", () => {
-    const today: ValuationEntry = { valuedAt: ASOF.toISOString(), amount: 5_000_000 };
-    expect(valuationAsOf([SERIES_A, today], ASOF)).toEqual(today);
+  it("ignores a future-dated split so a planned raise isn't read as current", () => {
+    expect(currentValuationOf({ sets: [SEED, SERIES_A, PLANNED] }, ASOF)).toBe(4_000_000);
   });
 
   it("finds the newest regardless of input order", () => {
-    expect(valuationAsOf([SERIES_A, SEED], ASOF)).toEqual(SERIES_A);
+    expect(currentValuationOf({ sets: [SERIES_A, SEED] }, ASOF)).toBe(4_000_000);
   });
 
-  it("returns null when every entry is in the future", () => {
-    expect(valuationAsOf([PLANNED], ASOF)).toBeNull();
+  it("is null when the split in effect was never priced", () => {
+    const unpriced: SetEntry = { ...SERIES_A, valuation: null };
+    expect(currentValuationOf({ sets: [SEED, unpriced] }, ASOF)).toBeNull();
+  });
+
+  it("returns null when every split is still in the future", () => {
+    expect(currentValuationOf({ sets: [PLANNED] }, ASOF)).toBeNull();
   });
 });
 
 describe("valuationChangePct", () => {
-  it("reports growth between two rounds", () => {
+  it("reports growth between two valuations", () => {
     expect(valuationChangePct(4_000_000, 1_000_000)).toBe(300);
   });
 

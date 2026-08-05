@@ -3,15 +3,36 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PieChart, Plus, X, FileSignature, ChevronRight, Printer } from "lucide-react";
+import { PieChart, Plus, X, FileSignature, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createEquityPortfolio, type EquityPortfolioDTO } from "@/actions/equity";
-import { computePortfolioEquity, formatPct } from "@/lib/equity-math";
+import { PageHeader } from "@/components/page-header";
+import { EquityMenu } from "@/components/equity/equity-menu";
+import {
+  createEquityPortfolio,
+  type EquityHolderDTO,
+  type EquityMetricDTO,
+  type EquityPortfolioDTO,
+  type EquityRoleDTO,
+} from "@/actions/equity";
+import { computePortfolioEquity, currentSet, formatPct } from "@/lib/equity-math";
+import { EquityRegistryManager } from "@/components/equity/equity-registry-manager";
+import { EquityMetricManager } from "@/components/equity/equity-metric-manager";
 
 interface Props {
   portfolios: EquityPortfolioDTO[];
   projectOptions: { id: string; name: string; logoUrl: string | null }[];
+  holders: EquityHolderDTO[];
+  roles: EquityRoleDTO[];
+  metrics: EquityMetricDTO[];
 }
+
+const TABS = [
+  { id: "portfolios", label: "Portfolios" },
+  { id: "registry", label: "Names & roles" },
+  { id: "data", label: "Data" },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
 
 function ProjectLogo({ name, logoUrl, size = 9 }: { name: string; logoUrl: string | null; size?: number }) {
   const cls = size === 9 ? "w-9 h-9 text-[13px]" : "w-6 h-6 text-[10px]";
@@ -26,10 +47,17 @@ function ProjectLogo({ name, logoUrl, size = 9 }: { name: string; logoUrl: strin
   );
 }
 
-export function EquityPageClient({ portfolios, projectOptions }: Props) {
+export function EquityPageClient({
+  portfolios,
+  projectOptions,
+  holders,
+  roles,
+  metrics,
+}: Props) {
   const router = useRouter();
   const [showPicker, setShowPicker] = useState(false);
   const [creating, setCreating] = useState<string | null>(null);
+  const [tab, setTab] = useState<TabId>("portfolios");
 
   async function handleCreate(projectId: string) {
     setCreating(projectId);
@@ -43,46 +71,64 @@ export function EquityPageClient({ portfolios, projectOptions }: Props) {
   }
 
   return (
-    <div className="px-6 py-6 max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="text-lg font-semibold text-foreground flex items-center gap-2">
-          <PieChart className="w-4.5 h-4.5 text-primary" strokeWidth={1.5} />
-          Equity
-        </h1>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/equity-report"
-            target="_blank"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-[13px] font-medium text-muted-foreground no-underline hover:text-foreground hover:border-muted-foreground/40 transition-colors"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            Print
-          </Link>
+    <div>
+      <PageHeader hasMenu>
+        <PieChart className="w-4 h-4 text-primary shrink-0" strokeWidth={1.5} />
+        <h1 className="text-sm font-semibold text-foreground flex-1">Equity</h1>
+        <EquityMenu />
+        {tab === "portfolios" && (
           <button
             onClick={() => setShowPicker(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 h-7 rounded-md bg-primary text-primary-foreground text-[12px] font-medium hover:bg-primary/90 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Add Portfolio
           </button>
-        </div>
-      </div>
-      <p className="text-[13px] text-muted-foreground mb-6">
+        )}
+      </PageHeader>
+
+      <div className="px-6 py-6 max-w-5xl mx-auto">
+      <p className="text-[13px] text-muted-foreground mb-4">
         Equity deals across startups — vesting, dilution and tranche triggers.
       </p>
 
-      {portfolios.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border p-12 text-center">
-          <PieChart className="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" strokeWidth={1} />
-          <p className="text-[13px] text-muted-foreground">
-            No portfolios yet. Add one by picking a project.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4">
+      <div className="flex items-center gap-1 border-b border-border mb-6">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={cn(
+              "px-3 py-2 text-[13px] font-medium border-b-2 -mb-px transition-colors",
+              tab === t.id
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "registry" && (
+        <EquityRegistryManager holders={holders} roles={roles} />
+      )}
+
+      {tab === "data" && <EquityMetricManager metrics={metrics} />}
+
+      {tab === "portfolios" &&
+        (portfolios.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-12 text-center">
+            <PieChart className="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" strokeWidth={1} />
+            <p className="text-[13px] text-muted-foreground">
+              No portfolios yet. Add one by picking a project.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4">
           {portfolios.map((p) => {
-            const { granted, vested } = computePortfolioEquity(p);
+            const { held, vested } = computePortfolioEquity(p);
             const signedCount = p.contracts.filter((c) => c.signed).length;
+            const entries = currentSet(p.sets)?.grants.length ?? 0;
             return (
               <Link
                 key={p.id}
@@ -107,9 +153,9 @@ export function EquityPageClient({ portfolios, projectOptions }: Props) {
                       )}
                     </div>
                     <span className="text-[11px] text-muted-foreground">
-                      {p.grants.length === 0
+                      {entries === 0
                         ? "No equity defined yet"
-                        : `${p.grants.length} equity ${p.grants.length === 1 ? "entry" : "entries"}`}
+                        : `${entries} equity ${entries === 1 ? "entry" : "entries"}`}
                     </span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
@@ -118,7 +164,7 @@ export function EquityPageClient({ portfolios, projectOptions }: Props) {
                   <div className="rounded-lg bg-muted/40 px-2.5 py-2">
                     <p className="text-[10px] text-muted-foreground mb-0.5">Equity</p>
                     <p className="text-[15px] font-semibold text-foreground tabular-nums">
-                      {formatPct(granted)}
+                      {formatPct(held)}
                     </p>
                   </div>
                   <div className="rounded-lg bg-muted/40 px-2.5 py-2">
@@ -143,8 +189,9 @@ export function EquityPageClient({ portfolios, projectOptions }: Props) {
               </Link>
             );
           })}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
 
       {/* Project picker */}
       {showPicker && (

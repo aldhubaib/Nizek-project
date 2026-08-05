@@ -113,6 +113,8 @@ model User {
   equityPermission  EquityPermission?         @relation("UserEquityPermission")
   taskAudits        TaskAudit[]               @relation("AuditCreator")
   auditBlames       TaskAuditItem[]           @relation("AuditBlamedUser")
+  equityActivities  EquityActivity[]          @relation("EquityActivityUser")
+  trashedItems      TrashItem[]               @relation("TrashDeletedBy")
 
   @@index([systemRole])
   @@index([blocked])
@@ -525,25 +527,581 @@ model EquityPortfolio {
   dilutionDealType   String? // VALUATION_TRANCHES | SINGLE_TRIGGER | DILUTED_DAY_ONE
   valuationCurrency  String    @default("KWD")
   latestCapTableDate DateTime?
+  // When the product went, or is due to go, live. Whether it *is* live is read
+  // off this date rather than kept alongside it as a flag, so a launch that
+  // slips can't leave the two disagreeing — the same trick as EquityContract's
+  // endDate driving fee status.
+  liveDate           DateTime?
   notes              String?
+
+  // Thrown away but kept: a portfolio is years of contracts, splits and
+  // financials, so deleting one moves it to the trash instead of dropping it.
+  // Every read filters on this, and only emptying the trash removes the row.
+  deletedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   contracts  EquityContract[]
+  sets       EquitySet[]
   grants     EquityGrant[]
   tranches   EquityTranche[]
-  valuations EquityValuation[]
   financialReports EquityFinancialReport[]
+  performance      EquityPerformanceEntry[]
+  reportFields     EquityPortfolioField[]
+  opportunity      EquityOpportunity?
+  productPhotos    EquityProductPhoto[]
+  marketTiers      EquityMarketTier[]
+  milestones       EquityTractionMilestone[]
+  teamSnapshots    EquityTeamSnapshot[]
+  activities       EquityActivity[]
+
+  @@index([deletedAt])
 }
 
-// A dated company valuation. Kept as history rather than a single number on the
-// portfolio so the trend is visible and tranche thresholds can be checked
-// against the valuation that was current at any point in time.
+// Who changed what, one row per field. Written by the equity actions as they
+// save, so the history is a record of what actually reached the database rather
+// than what a form thought it was sending.
+//
+// Values are stored as the text they were shown as, not as typed columns: a
+// history is read, not recomputed, and a percentage, a date and a name all read
+// the same way once written down.
+model EquityActivity {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // Which part of the page the change landed in, so history can be read one
+  // section at a time. Matches the section headings: OPPORTUNITY, CONTRACTS,
+  // EQUITY, FINANCIALS, TRANCHES, PORTFOLIO.
+  section String
+  // created | updated | deleted | restored
+  action  String
+
+  // The row within the section — a contract title, a split's date, the person
+  // a grant belongs to. Null when the change is the section itself.
+  subject String?
+  // What was edited, in the words the form uses for it.
+  label    String?
+  oldValue String?
+  newValue String?
+
+  userId String
+  user   User   @relation("EquityActivityUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([portfolioId, createdAt])
+  @@index([portfolioId, section, createdAt])
+}
+
+// One list of everything deleted but not yet gone, across the whole app.
+//
+// The deleted row stays where it is, flagged; this table only records that it
+// was thrown away, by whom, and what it was called at the time. That keeps the
+// trash honest about entities it doesn't own — it holds no foreign key per type,
+// so a new kind of deletable thing needs a handler, not a migration.
+model TrashItem {
+  id String @id @default(cuid())
+
+  // EQUITY_PORTFOLIO, and whatever comes next. Paired with entityId to find the
+  // row again, and to stop the same thing being trashed twice.
+  entityType String
+  entityId   String
+
+  // What it was called when it was deleted. Kept as text so the trash still
+  // reads properly if the row it points at is unreadable or already gone.
+  label    String
+  sublabel String?
+
+  deletedById String
+  deletedBy   User   @relation("TrashDeletedBy", fields: [deletedById], references: [id], onDelete: Cascade)
+
+  deletedAt DateTime @default(now())
+
+  @@unique([entityType, entityId])
+  @@index([deletedAt])
+}
+
+// The case for the startup, in the order a deck tells it: the problem, the
+// solution, the market, the product, how it makes money, and who's building it.
+// One per portfolio — a project has a single story, revised rather than
+// duplicated.
+//
+// The three long-form sections live here as columns because there is exactly
+// one of each. Everything else repeats, and repeats in nearly the same shape, so
+// it sits in the item table below rather than in six near-identical tables.
+model EquityOpportunity {
+  id          String          @id @default(cuid())
+  portfolioId String          @unique
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  problem  String?
+  solution String?
+  product  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items EquityOpportunityItem[]
+}
+
+// A repeating line in one of the opportunity's sections. The columns are
+// deliberately generic — a validation stat, a market tier, a competitor and a
+// team member are all "a heading, a figure and a line of prose" — and `section`
+// says which of them a row is. What each column means per section:
+//
+//   MARKET_VALIDATION  heading=source  figure=the number  caption=what it counts  body=note
+//   BUSINESS_MODEL     figure=amount (optional)  body=the line
+//   MARKET_ADOPTION    heading=channel  body=how we reach it
+//   COMPETITION        heading=who  axisX/axisY=where they sit  isUs=that's us
+//   ADVANTAGE          heading=the edge  body=why it holds
+//
+// The team was one of these until it needed dating: who is building the thing
+// changes, and a pitch made last year was made by the team of last year. It
+// moved to EquityTeamSnapshot below, which keeps every lineup rather than
+// overwriting one.
+model EquityOpportunityItem {
+  id            String            @id @default(cuid())
+  opportunityId String
+  opportunity   EquityOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  section String
+  order   Int    @default(0)
+
+  heading String?
+  figure  String?
+  caption String?
+  body    String?
+
+  // Where a figure was measured, as ISO 3166-1 alpha-2 codes. Codes rather than
+  // names so the same market reads the same on every row, and a list because a
+  // validation figure usually spans more than one country.
+  countries String[]
+
+  // Where a competitor sits on the deck's quadrant, -100 to 100: axisX runs
+  // offline to online, axisY expensive to affordable.
+  axisX Int?
+  axisY Int?
+  isUs  Boolean @default(false)
+
+  // What portion of the whole this row accounts for, as a percentage. Only
+  // sections drawn as a split use it, and there the rows have to reach 100
+  // between them or the chart would be claiming a total nobody stated.
+  share Float?
+
+  // A team member is a name from the shared registry, so a face and a bio are
+  // written once and reused wherever the person appears.
+  holderId String?
+  holder   EquityHolder? @relation(fields: [holderId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([opportunityId, section, order])
+  @@index([holderId])
+}
+
+// One dated version of a project's whole split, and what the company was worth
+// when it was agreed. Ownership is versioned rather than edited in place: the
+// earliest set is what we were granted, the latest is what we hold, and the gap
+// between the two is the dilution.
+//
+// This replaced a separate table of funding rounds. Percentages were entered
+// there too, so keeping both meant one split could disagree with the other
+// about who owns what; the split is now the only place ownership is recorded.
+// Deal facts a round carried — amount raised, lead investor — are gone with it,
+// nothing having been derived from them.
+model EquitySet {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // The day this split took effect. Ordering reads off this rather than
+  // createdAt so a set entered late still lands in its right place in the
+  // history, and a future-dated one isn't read as today's position.
+  effectiveOn DateTime
+  // Post-money at the time, in the portfolio's valuationCurrency, and what
+  // decides which protected stakes have started diluting. Optional: a split
+  // agreed before anyone priced the company is still a split.
+  valuation   Float?
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  grants EquityGrant[]
+
+  @@index([portfolioId])
+  @@index([portfolioId, effectiveOn])
+}
+
+// A screenshot of the product, for the module that describes it. Kept as its
+// own rows rather than a list of URLs on the opportunity, so a caption can sit
+// with the shot it belongs to and the order they're shown in is a field rather
+// than an accident of how they were uploaded.
+model EquityProductPhoto {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  url     String
+  // What the shot is of — "the booking screen, after search".
+  caption String?
+
+  order Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([portfolioId, order])
+}
+
+// One tier of the market a project is going after: the whole thing, then the
+// part that can be served, then the part that can realistically be reached.
+//
+// This was a section of the opportunity until it stopped fitting there. The
+// other sections are lists of prose — a source, a channel, a competitor — and
+// this one is a set of nested amounts drawn to scale against each other, which
+// is a different thing to hold and a different thing to read.
+//
+// The amount stays as it was typed. "$2+ billion" is how a deck says it and how
+// the report shows it; a number is read out of that line for the drawing, and a
+// tier with no number in it is listed rather than plotted.
+model EquityMarketTier {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // "Total available market" — what this slice of the market is called.
+  tier    String?
+  // The figure as written: "$2+ billion", "670,000 rooms".
+  amount  String?
+  // What the amount counts — "from trips booked worldwide".
+  covers  String?
+  // Why the tier is where it is, for the legend under the rings.
+  meaning String?
+
+  // Largest first, by hand rather than by the amount: the order tiers are meant
+  // to be read in is the order they were entered in, and an amount nobody can
+  // parse would otherwise fall to the end.
+  order Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([portfolioId, order])
+}
+
+// One thing that happened, dated: a launch, a first customer, a round closed.
+//
+// Traction is the part of a deck that is checked rather than read, so each
+// milestone is a row with a day against it instead of a paragraph listing
+// several. The report draws them along a time axis, and the gaps between the
+// dates are the argument — three in a quarter reads as pace in a way that the
+// same three as bullet points don't.
+//
+// A milestone dated ahead of today is shown as upcoming rather than achieved.
+// That falls out of the date, so there's no status to keep honest.
+model EquityTractionMilestone {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // The day it happened. Held at UTC midnight, like a split's effectiveOn, so
+  // two entered for the same day are the same day.
+  happenedOn DateTime
+  // What happened, in a few words — "First paying customer".
+  title      String
+  // The detail behind it, for whoever stops on this one.
+  body       String?
+  // A shot of the thing itself: the launch screen, the signed page, the stand.
+  // Optional, and shown under the detail where there is one.
+  photoUrl   String?
+
+  // Where it sits in the list as entered. The report reads the dates, so this
+  // only settles milestones sharing a day.
+  order Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([portfolioId, happenedOn])
+}
+
+// Who was building the project on a given day. Dated and kept rather than
+// edited in place, for the same reason the split is: a team changes, and a deck
+// shown last quarter was the case made by the people on it at the time.
+//
+// The lineup in force is simply the latest-dated one; everything before it is
+// the history, which is why nothing here is flagged as current.
+model EquityTeamSnapshot {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // The day this lineup was true from. Held at UTC midnight, like a split's
+  // effectiveOn, so two entered for the same day are the same day.
+  effectiveOn DateTime
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members EquityTeamMember[]
+
+  @@index([portfolioId, effectiveOn])
+}
+
+// One person in one lineup. Who they are is a name from the shared registry —
+// the photo, bio and LinkedIn are written once there and follow the person
+// everywhere — and what's held here is what was true of them on this team:
+// the title they went by, and what they brought to it.
+model EquityTeamMember {
+  id         String             @id @default(cuid())
+  snapshotId String
+  snapshot   EquityTeamSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  // Restricted rather than cascading: a name still on a team can't be deleted
+  // from the registry, the same rule as a name on a cap table.
+  holderId String
+  holder   EquityHolder @relation(fields: [holderId], references: [id], onDelete: Restrict)
+
+  // What they were called on the deck — "Business development & brand".
+  title String?
+  // What they bring, where it differs from the bio on their name.
+  body  String?
+
+  order Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A person is on a team once. Twice would be two answers to what they do.
+  @@unique([snapshotId, holderId])
+  @@index([snapshotId, order])
+  @@index([holderId])
+}
+
+// Someone who can hold equity: us, a founder, a fund, an option pool. Names live
+// in one shared registry so a fund on two cap tables is the same row in both and
+// a correction to a name follows everywhere it appears.
+model EquityHolder {
+  id   String @id @default(cuid())
+  name String @unique
+
+  // Exactly one holder is us, enforced by a partial unique index in the
+  // migration. Our stake in any split is read from this holder's rows rather
+  // than stored alongside them, so there's no second copy to fall out of step.
+  isUs Boolean @default(false)
+
+  kind String? // FOUNDER | INVESTOR | POOL | OTHER — descriptive only
+
+  // Who the name belongs to, for anyone reading a cap table they didn't write.
+  photoUrl    String?
+  bio         String?
+  linkedinUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  grants           EquityGrant[]
+  opportunityItems EquityOpportunityItem[]
+  teamMembers      EquityTeamMember[]
+
+  @@index([isUs])
+}
+
+// The capacity a name holds equity in on a particular deal — development
+// partner, founder, advisor. Kept as its own list rather than a fixed set
+// because the arrangements differ per deal, and held against the grant rather
+// than the name since the same party can appear in different capacities across
+// projects.
+model EquityRole {
+  id   String @id @default(cuid())
+  name String @unique
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  grants EquityGrant[]
+}
+
+// Something a project is tracked on: users, churn, revenue, the day a licence
+// lands. Defined once here and picked per entry, so "MRR" on two projects means
+// the same thing and renaming it follows every figure already recorded.
+//
+// The list is deliberately open — what's worth watching differs per startup and
+// changes as one grows, so these are rows rather than columns on the entry.
+model EquityMetric {
+  id   String @id @default(cuid())
+  name String @unique
+
+  // PERFORMANCE | FINANCIAL. Which module offers the field: a dated reading, or
+  // a closed reporting period. Kept as one registry because the two are the same
+  // thing — a named figure recorded over and over — and one list is one place to
+  // look when a name needs changing.
+  group String @default("PERFORMANCE")
+
+  // NUMBER | PERCENT | DATE | FORMULA. Decides the input the form offers and how
+  // a value reads back; it's also why a metric can't be flipped between a figure
+  // and a date once values exist, there being nothing to convert. A FORMULA is
+  // never entered — it's worked out from the two fields below, every time it's
+  // read, so it can't drift out of step with them.
+  type String @default("NUMBER")
+
+  // ADD | SUBTRACT | MULTIPLY | DIVIDE, over leftId and rightId. Set together
+  // and only for a FORMULA; a formula missing an operand simply reads as blank
+  // rather than guessing at a value.
+  formulaOp String?
+  leftId    String?
+  left      EquityMetric?  @relation("MetricLeft", fields: [leftId], references: [id], onDelete: SetNull)
+  leftOf    EquityMetric[] @relation("MetricLeft")
+  rightId   String?
+  right     EquityMetric?  @relation("MetricRight", fields: [rightId], references: [id], onDelete: SetNull)
+  rightOf   EquityMetric[] @relation("MetricRight")
+
+  // What the figure counts — "users", "KWD/mo", "months". Shown after the number
+  // and never parsed, so it can say whatever the metric needs it to.
+  unit String?
+
+  // Where it sits in its group, on the form and on every table that follows.
+  order Int @default(0)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  values          EquityPerformanceValue[]
+  financialValues EquityFinancialValue[]
+  portfolioFields EquityPortfolioField[]
+
+  @@index([group, order])
+}
+
+// Which of the registry's fields one project is actually asked for, and which of
+// them it can't file a period without.
+//
+// The registry above is the vocabulary — every figure anyone might report — and
+// this is the questionnaire, per project. They have to be separate: a SaaS
+// company reports MRR and a marketplace reports GMV, and asking either for the
+// other's figures produces blanks that look like missing data rather than what
+// they are, which is a question that doesn't apply.
+//
+// Required is enforced when a period is first filed and only warned about
+// afterwards. Tightening the rule shouldn't make an old report unopenable, and
+// a field added today has no history in the periods that closed before it.
+model EquityPortfolioField {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // Cascading rather than restricting, unlike the tables that hold values: this
+  // row is a question, not an answer, and a field deleted from the registry is
+  // a question nobody can be asked any more. Deleting one that carries reported
+  // figures is blocked by those tables regardless.
+  metricId String
+  metric   EquityMetric @relation(fields: [metricId], references: [id], onDelete: Cascade)
+
+  required Boolean @default(false)
+
+  // Where it sits on this project's form, which is why the registry's own order
+  // isn't enough: two projects can want the same fields asked in a different
+  // order.
+  order Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A field is asked once per project. Twice would be the same question with
+  // two answers about whether it's required.
+  @@unique([portfolioId, metricId])
+  @@index([portfolioId, order])
+  @@index([metricId])
+}
+
+// Where a project stood on a given day, across whichever metrics were worth
+// recording that day. Dated rather than periodic — unlike a financial report,
+// this is a snapshot taken when someone looks, not a period being closed.
+model EquityPerformanceEntry {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // Held at UTC midnight, like a financial report's periodStart, so two
+  // readings on the same day sort by nothing but their order of entry.
+  recordedOn DateTime
+  notes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  values EquityPerformanceValue[]
+
+  @@index([portfolioId, recordedOn])
+}
+
+// One metric's value in one reading. Which column holds it is decided by the
+// metric's type: NUMBER and PERCENT land in numberValue, DATE in dateValue.
+// Storing them typed rather than as text keeps a series plottable, which is the
+// point of recording the same metric over and over.
+model EquityPerformanceValue {
+  id      String                 @id @default(cuid())
+  entryId String
+  entry   EquityPerformanceEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  // Restricted rather than cascading: a metric still being reported on can't be
+  // deleted from the registry, the same rule as a name on a cap table.
+  metricId String
+  metric   EquityMetric @relation(fields: [metricId], references: [id], onDelete: Restrict)
+
+  order Int @default(0)
+
+  numberValue Float?
+  dateValue   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A metric reads once per day's reading — a second row for it would be two
+  // answers to the same question.
+  @@unique([entryId, metricId])
+  @@index([metricId])
+}
+
+// One financial field's value in one reported period. The twin of
+// EquityPerformanceValue, and typed the same way for the same reason: a figure
+// reported quarter after quarter is only worth plotting if it stayed a number.
+model EquityFinancialValue {
+  id       String                @id @default(cuid())
+  reportId String
+  report   EquityFinancialReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  // Restricted rather than cascading: a field still carrying reported figures
+  // can't be deleted from the registry, the same rule as a name on a cap table.
+  metricId String
+  metric   EquityMetric @relation(fields: [metricId], references: [id], onDelete: Restrict)
+
+  order Int @default(0)
+
+  numberValue Float?
+  dateValue   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A field reports once per period — a second row for it would be two answers
+  // to the same question.
+  @@unique([reportId, metricId])
+  @@index([metricId])
+}
+
 // A periodic financial check-in on the startup, entered by Nizek from figures
-// the founders report. Every figure is nullable so a partly-known period still
-// saves; profit and runway are absent on purpose, being derived from the fields
-// below rather than stored where they could drift out of step.
+// the founders report. The period and whether it was audited are fixed; what
+// gets reported for it isn't, and lives in the values above.
 model EquityFinancialReport {
   id          String          @id @default(cuid())
   portfolioId String
@@ -557,13 +1115,13 @@ model EquityFinancialReport {
   periodStart DateTime
   audited     Boolean  @default(false)
 
-  // P&L and cash, in the portfolio's valuationCurrency — same reasoning as
-  // EquityValuation, the figures aren't comparable across currencies.
-  revenue     Float?
-  cost        Float?
-  cashInBank  Float?
-  monthlyBurn Float?
-
+  // Nothing reads or writes these any more. P&L and cash became defined fields
+  // in the registry, and the operations block was taken off the form before
+  // that; both stay until the old values are confirmed disposable.
+  revenue            Float?
+  cost               Float?
+  cashInBank         Float?
+  periodBurn         Float?
   customersGained    Int?
   customersLost      Int?
   teamSize           Int? // full-time employees
@@ -577,25 +1135,13 @@ model EquityFinancialReport {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // What was reported for the period, in the portfolio's valuationCurrency where
+  // the field is money — same reasoning as a round's post-money, the figures
+  // aren't comparable across currencies.
+  values EquityFinancialValue[]
+
   @@unique([portfolioId, periodType, periodStart])
   @@index([portfolioId, periodStart])
-}
-
-model EquityValuation {
-  id          String          @id @default(cuid())
-  portfolioId String
-  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
-
-  valuedAt DateTime
-  // In the portfolio's valuationCurrency — valuations aren't comparable across
-  // currencies, so there's no per-row currency.
-  amount Float
-  notes  String?
-
-  createdAt DateTime @default(now())
-
-  @@index([portfolioId])
-  @@index([portfolioId, valuedAt])
 }
 
 // Equity granted under a specific contract. The vesting window defaults to the
@@ -605,8 +1151,28 @@ model EquityGrant {
   portfolioId String
   portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
+  // The dated split this row belongs to. Every row belongs to one: a grant with
+  // no set would be an ownership figure with no date, which is what having two
+  // tables for the same question used to cause.
+  setId String
+  set   EquitySet @relation(fields: [setId], references: [id], onDelete: Cascade)
+
   contractId String?
   contract   EquityContract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+
+  // Who holds the stake and in what capacity, both picked from lists managed on
+  // the equity page so the same party reads identically across projects.
+  // Restricted rather than cascading, matching EquityHolding: removing a name or
+  // a role must not quietly delete the grants that reference it.
+  holderId String?
+  holder   EquityHolder? @relation(fields: [holderId], references: [id], onDelete: Restrict)
+  roleId   String?
+  role     EquityRole?   @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  // Where the row sits in its split. Kept explicitly because a whole split is
+  // written in one transaction, so createdAt ties and can't order them — and
+  // the order is meaningful anyway, being the one it was arranged in.
+  order Int @default(0)
 
   // FIXED | TRANCHED | DIVIDEND — decides which fields below apply.
   structureType String @default("FIXED")
@@ -627,7 +1193,10 @@ model EquityGrant {
   tranches EquityTranche[]
 
   @@index([portfolioId])
+  @@index([setId])
   @@index([contractId])
+  @@index([holderId])
+  @@index([roleId])
 }
 
 model EquityContract {
@@ -641,7 +1210,9 @@ model EquityContract {
   // Term length as entered (e.g. 18 MONTHS or 1.5 YEARS). endDate is derived
   // from startDate + this, never entered by hand.
   lengthValue Float?
-  lengthUnit  String? // MONTHS | YEARS
+  // MONTHS | YEARS | ONGOING. ONGOING has no term at all, so lengthValue,
+  // endDate and monthlyFee are all cleared when it's chosen.
+  lengthUnit  String?
   endDate     DateTime?
   // Recurring fee the startup owes once the term expires — the basic team they
   // take over paying for, or a flat tech-expense charge. Billing status is never
