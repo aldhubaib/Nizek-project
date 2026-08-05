@@ -278,6 +278,7 @@ export function EquityPortfolioClient({
         <MarketSizeSection
           portfolioId={portfolio.id}
           tiers={portfolio.marketTiers}
+          currency={portfolio.valuationCurrency}
         />
 
         {/* How the money is made, and how the first users are reached */}
@@ -287,6 +288,7 @@ export function EquityPortfolioClient({
             portfolioId={portfolio.id}
             section={section}
             items={pitchItems}
+            currency={portfolio.valuationCurrency}
           />
         ))}
 

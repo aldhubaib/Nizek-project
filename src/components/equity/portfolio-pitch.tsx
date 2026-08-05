@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { countryFlag, countryName } from "@/lib/countries";
+import { formatMarketAmount, marketAmount } from "@/lib/market-size";
 import { ChartFrame } from "@/components/equity/chart-frame";
 import { PhotoGallery } from "@/components/equity/photo-gallery";
 import {
@@ -85,27 +86,6 @@ function itemsOf(portfolio: EquityPortfolioDTO, section: string): Item[] {
   return (portfolio.opportunity?.items ?? []).filter(
     (i) => i.section === section,
   );
-}
-
-/**
- * A number read out of an amount written by hand — "$2+ billion", "670,000
- * rooms". Only used to size the market rings against each other; the line
- * itself is what gets shown, and an amount with no number in it is worth 0 and
- * goes unplotted rather than guessed at.
- */
-function parseFigure(raw: string | null): number {
-  if (!raw) return 0;
-  const text = raw.replace(/,/g, "").toLowerCase();
-  const num = text.match(/\d+(?:\.\d+)?/);
-  if (!num) return 0;
-  const n = parseFloat(num[0]);
-  // The scale can be separated from the number by anything — "$2+ billion" —
-  // so it's looked for in the rest of the line rather than right after it.
-  const rest = text.slice((num.index ?? 0) + num[0].length);
-  if (/\b(b|bn|billion|billions)\b/.test(rest)) return n * 1_000_000_000;
-  if (/\b(m|mm|million|millions)\b/.test(rest)) return n * 1_000_000;
-  if (/\b(k|thousand|thousands)\b/.test(rest)) return n * 1_000;
-  return n;
 }
 
 /**
@@ -955,30 +935,21 @@ export function PortfolioPitch({
           ) : (
             <ChartFrame
               title="How big the market is"
-              note="Each tier is drawn inside the one above it, with area — not width — following the amount, since that is how two circles get compared by eye. The amounts are typed by hand on the portfolio page and shown as written; a tier with no number to read in it is named under the drawing rather than plotted, and what each tier counts and why it is that big are in the table."
+              note="Each tier is drawn inside the one above it, with area — not width — following the amount, since that is how two circles get compared by eye. The number, its scale and its currency are entered on the portfolio page; a tier left without a figure is named under the drawing rather than plotted."
               source="Market size"
               data={{
-                columns: [
-                  "Tier",
-                  "Amount",
-                  "What it counts",
-                  "Why it's that big",
-                ],
+                columns: ["Name", "Amount"],
                 rows: marketTiers.map((t) => [
                   t.tier || "—",
-                  t.amount || "—",
-                  t.covers || "—",
-                  t.meaning || "—",
+                  formatMarketAmount(t),
                 ]),
               }}
             >
               <MarketRings
                 tiers={marketTiers.map((t) => ({
                   tier: t.tier,
-                  display: t.amount || "—",
-                  value: parseFigure(t.amount),
-                  covers: t.covers,
-                  meaning: t.meaning,
+                  display: formatMarketAmount(t),
+                  value: marketAmount(t),
                 }))}
               />
             </ChartFrame>
@@ -996,16 +967,16 @@ export function PortfolioPitch({
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6">
               {businessModel.map((b, i) => (
-                <Panel key={b.id} className="flex items-center gap-3">
-                  <span
-                    className="text-[18px] font-bold tabular-nums shrink-0"
+                <Panel key={b.id}>
+                  <p
+                    className="text-[18px] font-bold tabular-nums"
                     style={{ color: seriesColor(i) }}
                   >
-                    {b.figure || "—"}
-                  </span>
-                  <span className="text-[12px] text-foreground/90">
-                    {b.body}
-                  </span>
+                    {formatMarketAmount(b)}
+                  </p>
+                  <p className="text-[12px] text-foreground/90 mt-1.5">
+                    {b.heading}
+                  </p>
                 </Panel>
               ))}
             </div>

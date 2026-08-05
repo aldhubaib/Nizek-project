@@ -21,6 +21,7 @@ import {
   sortedCountries,
 } from "@/lib/countries";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
+import { MARKET_CURRENCIES, MARKET_UNITS } from "@/lib/market-size";
 import {
   saveEquityPitchSection,
   type EquityPortfolioDTO,
@@ -62,13 +63,25 @@ type FieldKey =
   | "axisX"
   | "axisY"
   | "isUs"
-  | "share";
+  | "share"
+  | "value"
+  | "unit"
+  | "currency";
 
 type FieldSpec = {
   key: FieldKey;
   label: string;
   placeholder?: string;
-  kind: "text" | "textarea" | "axis" | "flag" | "countries" | "percent";
+  kind:
+    | "text"
+    | "textarea"
+    | "axis"
+    | "flag"
+    | "countries"
+    | "percent"
+    | "number"
+    | "unit"
+    | "currency";
 };
 
 export type SectionSpec = {
@@ -111,16 +124,19 @@ export const PITCH_SECTIONS: Record<string, SectionSpec> = {
   BUSINESS_MODEL: {
     id: "BUSINESS_MODEL",
     title: "Business model",
-    description: "How the money is made, a line at a time.",
-    grid: "sm:grid-cols-[10rem_minmax(0,1fr)_1.75rem]",
+    description:
+      "How the money is made, a line at a time. The scale is picked rather than typed, so a fee and a run rate can be told apart.",
+    grid: "sm:grid-cols-[minmax(0,1fr)_9rem_9rem_7rem_1.75rem]",
     fields: [
-      { key: "figure", label: "Figure", placeholder: "$25", kind: "text" },
       {
-        key: "body",
-        label: "Line",
-        placeholder: "Average fee — $80/night for 3 nights",
+        key: "heading",
+        label: "Title",
+        placeholder: "Subscription fees",
         kind: "text",
       },
+      { key: "value", label: "Number", placeholder: "25", kind: "number" },
+      { key: "unit", label: "Unit", kind: "unit" },
+      { key: "currency", label: "Currency", kind: "currency" },
     ],
     addLabel: "Add a line",
     emptyLabel: "Nothing on the business model yet.",
@@ -284,11 +300,15 @@ export type ItemDraft = {
   axisY: string;
   isUs: boolean;
   share: string;
+  value: string;
+  unit: string;
+  currency: string;
 };
 
 let itemSeq = 0;
 
-export function emptyItem(): ItemDraft {
+/** A new row, on the portfolio's own currency where it's going to carry one. */
+export function emptyItem(currency = ""): ItemDraft {
   itemSeq += 1;
   return {
     key: `item-${itemSeq}`,
@@ -301,12 +321,15 @@ export function emptyItem(): ItemDraft {
     axisY: "",
     isUs: false,
     share: "",
+    value: "",
+    unit: "",
+    currency,
   };
 }
 
 export function itemToDraft(item: PitchItem): ItemDraft {
   return {
-    ...emptyItem(),
+    ...emptyItem(item.currency ?? ""),
     heading: item.heading ?? "",
     figure: item.figure ?? "",
     caption: item.caption ?? "",
@@ -316,10 +339,13 @@ export function itemToDraft(item: PitchItem): ItemDraft {
     axisY: item.axisY?.toString() ?? "",
     isUs: item.isUs,
     share: item.share?.toString() ?? "",
+    value: item.value?.toString() ?? "",
+    unit: item.unit ?? "",
   };
 }
 
-function parseAxis(raw: string): number | null {
+/** A typed figure, or nothing where the box is empty or unreadable. */
+function parseNumber(raw: string): number | null {
   if (!raw.trim()) return null;
   const n = Number(raw);
   return Number.isNaN(n) ? null : n;
@@ -336,16 +362,19 @@ export function draftsToItems(
     caption: d.caption,
     body: d.body,
     countries: d.countries,
-    axisX: parseAxis(d.axisX),
-    axisY: parseAxis(d.axisY),
+    axisX: parseNumber(d.axisX),
+    axisY: parseNumber(d.axisY),
     isUs: d.isUs,
-    share: parseAxis(d.share),
+    share: parseNumber(d.share),
+    value: parseNumber(d.value.replace(/,/g, "")),
+    unit: d.unit,
+    currency: d.currency,
   }));
 }
 
 /** What the shares come to, ignoring the rows nobody has filled in yet. */
 export function shareTotal(rows: ItemDraft[]) {
-  return rows.reduce((sum, r) => sum + (parseAxis(r.share) ?? 0), 0);
+  return rows.reduce((sum, r) => sum + (parseNumber(r.share) ?? 0), 0);
 }
 
 /**
@@ -379,6 +408,12 @@ function readValue(spec: FieldSpec, item: PitchItem): string {
       return (spec.key === "axisX" ? item.axisX : item.axisY)?.toString() ?? "—";
     case "percent":
       return item.share != null ? `${item.share}%` : "—";
+    case "number":
+      return item.value != null ? item.value.toLocaleString("en-US") : "—";
+    case "unit":
+      return MARKET_UNITS.find((u) => u.key === item.unit)?.label ?? "—";
+    case "currency":
+      return item.currency || "—";
     case "flag":
       return item.isUs ? "Us" : "—";
     default:
@@ -490,10 +525,13 @@ export function PitchRowsEditor({
   spec,
   rows,
   setRows,
+  currency = "",
 }: {
   spec: SectionSpec;
   rows: ItemDraft[];
   setRows: (update: (rows: ItemDraft[]) => ItemDraft[]) => void;
+  /** What a row carrying money starts on, where the section has one. */
+  currency?: string;
 }) {
   function update(key: string, patch: Partial<ItemDraft>) {
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -534,6 +572,48 @@ export function PitchRowsEditor({
             placeholder={spec.placeholder}
             className={cn(inputCls, "tabular-nums")}
           />
+        );
+      case "number":
+        return (
+          <input
+            type="number"
+            inputMode="decimal"
+            step="any"
+            value={row.value}
+            onChange={(e) => update(row.key, { value: e.target.value })}
+            placeholder={spec.placeholder}
+            className={cn(inputCls, "tabular-nums")}
+          />
+        );
+      case "unit":
+        return (
+          <select
+            value={row.unit}
+            onChange={(e) => update(row.key, { unit: e.target.value })}
+            className={inputCls}
+          >
+            <option value="">as entered</option>
+            {MARKET_UNITS.map((u) => (
+              <option key={u.key} value={u.key}>
+                {u.label}
+              </option>
+            ))}
+          </select>
+        );
+      case "currency":
+        return (
+          <select
+            value={row.currency}
+            onChange={(e) => update(row.key, { currency: e.target.value })}
+            className={inputCls}
+          >
+            <option value="">none</option>
+            {MARKET_CURRENCIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         );
       case "flag":
         return (
@@ -604,7 +684,7 @@ export function PitchRowsEditor({
 
       <button
         type="button"
-        onClick={() => setRows((rs) => [...rs, emptyItem()])}
+        onClick={() => setRows((rs) => [...rs, emptyItem(currency)])}
         className="flex items-center gap-1 px-2.5 h-8 rounded-lg border border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
       >
         <Plus className="w-3 h-3" />
@@ -622,11 +702,14 @@ export function PitchSectionCard({
   portfolioId,
   section,
   items,
+  currency = "",
 }: {
   portfolioId: string;
   section: string;
   /** Every pitch item on the portfolio; this card takes only its own. */
   items: PitchItem[];
+  /** What the portfolio is priced in, for the sections that carry amounts. */
+  currency?: string;
 }) {
   const router = useRouter();
   const spec = PITCH_SECTIONS[section];
@@ -658,6 +741,7 @@ export function PitchSectionCard({
           portfolioId={portfolioId}
           spec={spec}
           rows={rows}
+          currency={currency}
           busy={busy}
           setBusy={setBusy}
           onDone={() => {
@@ -677,6 +761,7 @@ function PitchSectionForm({
   portfolioId,
   spec,
   rows: saved,
+  currency,
   busy,
   setBusy,
   onDone,
@@ -685,13 +770,14 @@ function PitchSectionForm({
   portfolioId: string;
   spec: SectionSpec;
   rows: PitchItem[];
+  currency: string;
   busy: boolean;
   setBusy: (v: boolean) => void;
   onDone: () => void;
   onCancel: () => void;
 }) {
   const [rows, setRows] = useState<ItemDraft[]>(() =>
-    saved.length > 0 ? saved.map(itemToDraft) : [emptyItem()],
+    saved.length > 0 ? saved.map(itemToDraft) : [emptyItem(currency)],
   );
 
   async function save() {
@@ -712,7 +798,12 @@ function PitchSectionForm({
 
   return (
     <div className="space-y-4">
-      <PitchRowsEditor spec={spec} rows={rows} setRows={setRows} />
+      <PitchRowsEditor
+        spec={spec}
+        rows={rows}
+        setRows={setRows}
+        currency={currency}
+      />
       {spec.sharesTotal && <ShareTally rows={rows} />}
       <FormButtons
         busy={busy}

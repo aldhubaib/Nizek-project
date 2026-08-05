@@ -6,6 +6,11 @@ import { Globe2, Pencil, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
 import {
+  MARKET_CURRENCIES,
+  MARKET_UNITS,
+  formatMarketAmount,
+} from "@/lib/market-size";
+import {
   saveEquityMarketSize,
   type EquityPortfolioDTO,
 } from "@/actions/equity";
@@ -21,48 +26,42 @@ const readCellCls =
 const labelCls =
   "block text-[11px] font-medium text-muted-foreground uppercase tracking-wide";
 
-/** Matches the field list below, plus a trailing column for the remove button. */
-const GRID =
-  "sm:grid-cols-[minmax(0,1fr)_9rem_minmax(0,1fr)_minmax(0,1.2fr)_1.75rem]";
+/** Name, number, unit, currency, then the remove button. */
+const GRID = "sm:grid-cols-[minmax(0,1fr)_9rem_9rem_7rem_1.75rem]";
 
-const FIELDS: {
-  key: "tier" | "amount" | "covers" | "meaning";
-  label: string;
-  placeholder: string;
-}[] = [
-  { key: "tier", label: "Tier", placeholder: "Total available market" },
-  { key: "amount", label: "Amount", placeholder: "$2+ billion" },
-  { key: "covers", label: "What it counts", placeholder: "trips booked worldwide" },
-  {
-    key: "meaning",
-    label: "Why it's that big",
-    placeholder: "everyone who books a trip online",
-  },
-];
+/** Read back, the three amount columns are one line of text again. */
+const READ_GRID = "sm:grid-cols-[minmax(0,1fr)_minmax(0,25rem)_1.75rem]";
+
+const HEADINGS = ["Name", "Number", "Unit", "Currency"];
 
 type TierDraft = {
   /** Survives reordering and edits, which an index wouldn't. */
   key: string;
   tier: string;
-  amount: string;
-  covers: string;
-  meaning: string;
+  value: string;
+  unit: string;
+  currency: string;
 };
 
 let tierSeq = 0;
 
-function blankTier(): TierDraft {
+function blankTier(currency: string): TierDraft {
   tierSeq += 1;
-  return { key: `tier-${tierSeq}`, tier: "", amount: "", covers: "", meaning: "" };
+  return {
+    key: `tier-${tierSeq}`,
+    tier: "",
+    value: "",
+    unit: "",
+    currency,
+  };
 }
 
 function tierToDraft(tier: Tier): TierDraft {
   return {
-    ...blankTier(),
+    ...blankTier(tier.currency ?? ""),
     tier: tier.tier ?? "",
-    amount: tier.amount ?? "",
-    covers: tier.covers ?? "",
-    meaning: tier.meaning ?? "",
+    value: tier.value != null ? String(tier.value) : "",
+    unit: tier.unit ?? "",
   };
 }
 
@@ -78,9 +77,12 @@ function tierToDraft(tier: Tier): TierDraft {
 export function MarketSizeSection({
   portfolioId,
   tiers,
+  currency,
 }: {
   portfolioId: string;
   tiers: Tier[];
+  /** What the portfolio is priced in, which is what a new row starts on. */
+  currency: string;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -95,7 +97,7 @@ export function MarketSizeSection({
           ? `${tiers.length} ${tiers.length === 1 ? "tier" : "tiers"}`
           : "Nothing here yet"
       }
-      description="How big the market is, from the whole of it down to the part this project can reach. The amount is kept as it's written — the report reads a number out of it to draw the rings."
+      description="How big the market is, from the whole of it down to the part this project can reach. The scale is picked rather than typed, so the report can draw one tier inside another."
       forceOpen={editing}
       actions={
         !editing && (
@@ -113,6 +115,7 @@ export function MarketSizeSection({
         <MarketSizeForm
           portfolioId={portfolioId}
           tiers={tiers}
+          currency={currency}
           busy={busy}
           setBusy={setBusy}
           onDone={() => {
@@ -127,23 +130,20 @@ export function MarketSizeSection({
         </p>
       ) : (
         <div className="space-y-2">
-          <div className={cn("hidden sm:grid gap-2 px-0.5", GRID)}>
-            {FIELDS.map((f) => (
-              <span key={f.key} className={labelCls}>
-                {f.label}
-              </span>
-            ))}
+          <div className={cn("hidden sm:grid gap-2 px-0.5", READ_GRID)}>
+            <span className={labelCls}>Name</span>
+            <span className={labelCls}>Amount</span>
             <span />
           </div>
           {tiers.map((tier) => (
-            <div key={tier.id} className={cn("grid gap-2 items-stretch", GRID)}>
-              {FIELDS.map((f) => (
-                <div key={f.key} className={readCellCls}>
-                  <span className="whitespace-pre-wrap break-words">
-                    {tier[f.key] || "—"}
-                  </span>
-                </div>
-              ))}
+            <div
+              key={tier.id}
+              className={cn("grid gap-2 items-stretch", READ_GRID)}
+            >
+              <div className={readCellCls}>{tier.tier || "—"}</div>
+              <div className={cn(readCellCls, "tabular-nums")}>
+                {formatMarketAmount(tier)}
+              </div>
               <span />
             </div>
           ))}
@@ -156,6 +156,7 @@ export function MarketSizeSection({
 function MarketSizeForm({
   portfolioId,
   tiers,
+  currency,
   busy,
   setBusy,
   onDone,
@@ -163,13 +164,14 @@ function MarketSizeForm({
 }: {
   portfolioId: string;
   tiers: Tier[];
+  currency: string;
   busy: boolean;
   setBusy: (v: boolean) => void;
   onDone: () => void;
   onCancel: () => void;
 }) {
   const [rows, setRows] = useState<TierDraft[]>(() =>
-    tiers.length > 0 ? tiers.map(tierToDraft) : [blankTier()],
+    tiers.length > 0 ? tiers.map(tierToDraft) : [blankTier(currency)],
   );
 
   function update(key: string, patch: Partial<TierDraft>) {
@@ -183,9 +185,11 @@ function MarketSizeForm({
         portfolioId,
         rows.map((r) => ({
           tier: r.tier,
-          amount: r.amount,
-          covers: r.covers,
-          meaning: r.meaning,
+          // An unreadable figure saves as nothing rather than as a guess; the
+          // row keeps its name and the report leaves it out of the drawing.
+          value: r.value.trim() === "" ? null : Number(r.value.replace(/,/g, "")),
+          unit: r.unit,
+          currency: r.currency,
         })),
       );
       onDone();
@@ -200,9 +204,9 @@ function MarketSizeForm({
     <div className="space-y-4">
       <div className="space-y-2">
         <div className={cn("hidden sm:grid gap-2 px-0.5", GRID)}>
-          {FIELDS.map((f) => (
-            <span key={f.key} className={labelCls}>
-              {f.label}
+          {HEADINGS.map((h) => (
+            <span key={h} className={labelCls}>
+              {h}
             </span>
           ))}
           <span />
@@ -210,22 +214,52 @@ function MarketSizeForm({
 
         {rows.map((row) => (
           <div key={row.key} className={cn("grid gap-2 items-start", GRID)}>
-            {FIELDS.map((f) => (
-              <input
-                key={f.key}
-                type="text"
-                value={row[f.key]}
-                onChange={(e) => update(row.key, { [f.key]: e.target.value })}
-                placeholder={f.placeholder}
-                className={inputCls}
-              />
-            ))}
+            <input
+              type="text"
+              value={row.tier}
+              onChange={(e) => update(row.key, { tier: e.target.value })}
+              placeholder="Total available market"
+              className={inputCls}
+            />
+            <input
+              type="number"
+              inputMode="decimal"
+              step="any"
+              value={row.value}
+              onChange={(e) => update(row.key, { value: e.target.value })}
+              placeholder="1.3"
+              className={inputCls}
+            />
+            <select
+              value={row.unit}
+              onChange={(e) => update(row.key, { unit: e.target.value })}
+              className={inputCls}
+            >
+              <option value="">as entered</option>
+              {MARKET_UNITS.map((u) => (
+                <option key={u.key} value={u.key}>
+                  {u.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={row.currency}
+              onChange={(e) => update(row.key, { currency: e.target.value })}
+              className={inputCls}
+            >
+              <option value="">none</option>
+              {MARKET_CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
               onClick={() =>
                 setRows((rs) =>
                   rs.length === 1
-                    ? [blankTier()]
+                    ? [blankTier(currency)]
                     : rs.filter((r) => r.key !== row.key),
                 )
               }
@@ -239,7 +273,7 @@ function MarketSizeForm({
 
         <button
           type="button"
-          onClick={() => setRows((rs) => [...rs, blankTier()])}
+          onClick={() => setRows((rs) => [...rs, blankTier(currency)])}
           className="flex items-center gap-1 px-2.5 h-8 rounded-lg border border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
         >
           <Plus className="w-3 h-3" />

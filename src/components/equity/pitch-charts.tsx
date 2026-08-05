@@ -421,14 +421,10 @@ export function RosePie({
 export type MarketTier = {
   /** What the tier is called — "Total available market". */
   tier: string | null;
-  /** The amount as it was typed, which is what gets shown. */
+  /** The amount as it reads — "USD 1.3 billion". */
   display: string;
-  /** The same amount read as a number, or 0 where there wasn't one to read. */
+  /** The same amount as one number, or 0 where there is no figure. */
   value: number;
-  /** What the amount counts — "hotel rooms worldwide". */
-  covers: string | null;
-  /** Why the tier is drawn where it is, for the legend. */
-  meaning: string | null;
 };
 
 /** The square the rings are drawn in, in both SVG units and CSS pixels. */
@@ -551,11 +547,6 @@ export function MarketRings({ tiers }: { tiers: MarketTier[] }) {
               >
                 {ring.display}
               </p>
-              {ring.covers && (
-                <p className="text-[10px] text-muted-foreground truncate">
-                  {ring.covers}
-                </p>
-              )}
             </div>
           ))}
         </div>
@@ -568,8 +559,8 @@ export function MarketRings({ tiers }: { tiers: MarketTier[] }) {
       */}
       {undrawable.length > 0 && (
         <p className="text-[11px] text-muted-foreground text-center">
-          Not drawn, no number to read in the amount:{" "}
-          {undrawable.map((t) => t.tier || t.covers || "a tier").join(", ")}.
+          Not drawn, no amount against them:{" "}
+          {undrawable.map((t) => t.tier || "a tier").join(", ")}.
         </p>
       )}
     </div>

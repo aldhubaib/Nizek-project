@@ -16,6 +16,7 @@ import {
   sumTrancheEquity,
 } from "@/lib/equity-math";
 import { isCountryCode } from "@/lib/countries";
+import { formatMarketAmount } from "@/lib/market-size";
 import { addToTrash } from "@/lib/trash";
 import {
   logEquityChanges,
@@ -284,6 +285,9 @@ function serialize(p: {
       axisY: number | null;
       isUs: boolean;
       share: number | null;
+      value: number | null;
+      unit: string | null;
+      currency: string | null;
       holderId: string | null;
       holder: {
         id: string;
@@ -303,9 +307,9 @@ function serialize(p: {
   marketTiers: {
     id: string;
     tier: string | null;
-    amount: string | null;
-    covers: string | null;
-    meaning: string | null;
+    value: number | null;
+    unit: string | null;
+    currency: string | null;
     order: number;
   }[];
   milestones: {
@@ -2537,6 +2541,9 @@ export type OpportunityItemInput = {
   axisY?: number | null;
   isUs?: boolean;
   share?: number | null;
+  value?: number | null;
+  unit?: string | null;
+  currency?: string | null;
   holderId?: string | null;
 };
 
@@ -2590,6 +2597,9 @@ function opportunityItemsData(items: OpportunityItemInput[]) {
       axisY: axis(item.axisY),
       isUs: item.isUs ?? false,
       share: share(item.share),
+      value: Number.isFinite(item.value) ? item.value ?? null : null,
+      unit: trimmed(item.unit),
+      currency: trimmed(item.currency),
       holderId: item.holderId || null,
     }))
     .filter(
@@ -2600,6 +2610,7 @@ function opportunityItemsData(items: OpportunityItemInput[]) {
         item.body ||
         item.countries.length > 0 ||
         item.share != null ||
+        item.value != null ||
         item.holderId,
     )
     .map((item, i) => ({ ...item, order: i + 1 }));
@@ -2634,6 +2645,9 @@ type OpportunityRow = {
   body: string | null;
   countries: string[];
   share?: number | null;
+  value?: number | null;
+  unit?: string | null;
+  currency?: string | null;
   holderId: string | null;
 };
 
@@ -2647,6 +2661,13 @@ function opportunityRowText(row: OpportunityRow) {
     [
       row.heading,
       row.share != null ? `${row.share}%` : null,
+      row.value != null
+        ? formatMarketAmount({
+            value: row.value,
+            unit: row.unit ?? null,
+            currency: row.currency ?? null,
+          })
+        : null,
       row.figure,
       row.caption,
       row.body,
@@ -2882,9 +2903,9 @@ export async function saveEquityPitchSection(
 
 export type MarketTierInput = {
   tier: string | null;
-  amount: string | null;
-  covers: string | null;
-  meaning: string | null;
+  value: number | null;
+  unit: string | null;
+  currency: string | null;
 };
 
 /** Empty rows are dropped rather than saved — an added row left untouched. */
@@ -2892,25 +2913,26 @@ function marketTiersData(tiers: MarketTierInput[]) {
   return tiers
     .map((t) => ({
       tier: trimmed(t.tier),
-      amount: trimmed(t.amount),
-      covers: trimmed(t.covers),
-      meaning: trimmed(t.meaning),
+      value: Number.isFinite(t.value) ? t.value : null,
+      unit: trimmed(t.unit),
+      currency: trimmed(t.currency),
     }))
-    .filter((t) => t.tier || t.amount || t.covers || t.meaning)
+    // A scale or a currency on their own say nothing, so a row counts as filled
+    // in only once it has a name or a figure.
+    .filter((t) => t.tier || t.value != null)
     .map((t, i) => ({ ...t, order: i + 1 }));
 }
 
 type MarketTierRow = {
   tier: string | null;
-  amount: string | null;
-  covers: string | null;
-  meaning: string | null;
+  value: number | null;
+  unit: string | null;
+  currency: string | null;
 };
 
 function marketTierText(row: MarketTierRow) {
   return (
-    [row.tier, row.amount, row.covers, row.meaning]
-      .map((part) => part?.trim())
+    [row.tier, row.value != null ? formatMarketAmount(row) : null]
       .filter(Boolean)
       .join(" · ") || null
   );

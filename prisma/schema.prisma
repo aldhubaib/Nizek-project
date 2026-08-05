@@ -674,6 +674,13 @@ model EquityOpportunityItem {
   caption String?
   body    String?
 
+  // An amount held the way a market tier holds one: a number, the scale it's
+  // said at and what it's counted in. A row that carries money is compared and
+  // formatted rather than read, which a line of text can't be.
+  value    Float?
+  unit     String? // THOUSAND | MILLION | BILLION | TRILLION, null for none
+  currency String? // ISO code, null where the figure isn't money
+
   // Where a figure was measured, as ISO 3166-1 alpha-2 codes. Codes rather than
   // names so the same market reads the same on every row, and a list because a
   // validation figure usually spans more than one country.
@@ -765,22 +772,22 @@ model EquityProductPhoto {
 // this one is a set of nested amounts drawn to scale against each other, which
 // is a different thing to hold and a different thing to read.
 //
-// The amount stays as it was typed. "$2+ billion" is how a deck says it and how
-// the report shows it; a number is read out of that line for the drawing, and a
-// tier with no number in it is listed rather than plotted.
+// The amount is held as a number, a scale and a currency rather than as the
+// line it reads as. Written by hand it was ambiguous the moment two tiers had
+// to be drawn against each other — "$2+ billion" against "670,000" needs a
+// parser to compare and gets it wrong as often as not.
 model EquityMarketTier {
   id          String          @id @default(cuid())
   portfolioId String
   portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
-  // "Total available market" — what this slice of the market is called.
-  tier    String?
-  // The figure as written: "$2+ billion", "670,000 rooms".
-  amount  String?
-  // What the amount counts — "from trips booked worldwide".
-  covers  String?
-  // Why the tier is where it is, for the legend under the rings.
-  meaning String?
+  // "TAM" — what this slice of the market is called.
+  tier     String?
+  // 1.3, with the scale beside it rather than in it: entering 1300000000 is
+  // how a zero goes missing, and 1.3 billion is how the figure is said.
+  value    Float?
+  unit     String? // THOUSAND | MILLION | BILLION | TRILLION, null for none
+  currency String? // ISO code, null where the market isn't counted in money
 
   // Largest first, by hand rather than by the amount: the order tiers are meant
   // to be read in is the order they were entered in, and an amount nobody can
