@@ -10,16 +10,23 @@ import {
   Loader2,
   RefreshCw,
   Search,
+  Send,
   Smartphone,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import {
   getMembersNotificationStatus,
+  sendTestNotificationToMember,
   type MemberNotificationStatus,
 } from "@/actions/notification-status";
 
 type Filter = "all" | "on" | "off";
+
+type TestState =
+  | { status: "sending" }
+  | { status: "done"; pushed: boolean; deviceCount: number }
+  | { status: "error" };
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
   return (
@@ -61,6 +68,62 @@ function OnOffPill({
 }
 
 /**
+ * Sends a real test notification (bell + push) to one member and reports how
+ * it went: how many devices were pushed to, or that it only reached the
+ * in-app bell because the member has no push devices.
+ */
+function TestButton({
+  state,
+  onSend,
+}: {
+  state: TestState | undefined;
+  onSend: () => void;
+}) {
+  if (state?.status === "sending") {
+    return (
+      <span className="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2.5 text-[10px] font-medium text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Sending…
+      </span>
+    );
+  }
+  if (state?.status === "done") {
+    return (
+      <span
+        className={cn(
+          "inline-flex h-7 items-center gap-1 rounded-lg border px-2.5 text-[10px] font-medium",
+          state.pushed
+            ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
+            : "border-amber-500/30 bg-amber-500/15 text-amber-400",
+        )}
+      >
+        <CheckCheck className="h-3 w-3" />
+        {state.pushed
+          ? `Pushed to ${state.deviceCount} device${state.deviceCount === 1 ? "" : "s"}`
+          : "Sent to bell only — no push devices"}
+      </span>
+    );
+  }
+  if (state?.status === "error") {
+    return (
+      <span className="inline-flex h-7 items-center rounded-lg border border-destructive/40 bg-destructive/10 px-2.5 text-[10px] font-medium text-destructive">
+        Failed to send
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onSend}
+      className="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
+    >
+      <Send className="h-3 w-3" />
+      Send test
+    </button>
+  );
+}
+
+/**
  * Admin overview of who actually receives notifications: per member, whether
  * push is enabled from the website and/or the installed app (PWA), their
  * registered devices, the last notification they received, and whether they
@@ -71,6 +134,29 @@ export function NotificationStatusClient() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [tests, setTests] = useState<Record<string, TestState>>({});
+
+  const sendTest = useCallback((memberId: string) => {
+    setTests((t) => ({ ...t, [memberId]: { status: "sending" } }));
+    sendTestNotificationToMember(memberId)
+      .then((res) =>
+        setTests((t) => ({ ...t, [memberId]: { status: "done", ...res } })),
+      )
+      .catch(() =>
+        setTests((t) => ({ ...t, [memberId]: { status: "error" } })),
+      )
+      .finally(() => {
+        // Let the result linger, then return to the button so it can be resent.
+        setTimeout(() => {
+          setTests((t) => {
+            if (t[memberId]?.status === "sending") return t;
+            const rest = { ...t };
+            delete rest[memberId];
+            return rest;
+          });
+        }, 6000);
+      });
+  }, []);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -211,6 +297,7 @@ export function NotificationStatusClient() {
                 <div className="flex shrink-0 items-center gap-1.5">
                   <OnOffPill icon={Globe} label="Website" on={m.webOn} />
                   <OnOffPill icon={Smartphone} label="App" on={m.pwaOn} />
+                  <TestButton state={tests[m.id]} onSend={() => sendTest(m.id)} />
                 </div>
               </div>
 

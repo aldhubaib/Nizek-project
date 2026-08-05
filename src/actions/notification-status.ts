@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { endpointHost } from "@/lib/push-core";
+import { isPushConfigured, sendPush } from "@/lib/push";
+import { createAndPublishNotifications } from "@/lib/notify";
 
 export type MemberNotificationDevice = {
   id: string;
@@ -83,6 +85,53 @@ function deviceKind(
     return "pwa";
   }
   return "unknown";
+}
+
+/**
+ * Sends a real end-to-end test notification to the given member: a Notification
+ * row + bell event + web push to every one of their registered devices. Runs
+ * the exact production pipeline, so failures land in the push delivery log.
+ */
+export async function sendTestNotificationToMember(memberId: string): Promise<{
+  pushed: boolean;
+  deviceCount: number;
+}> {
+  const user = await requireUser();
+  if (user.systemRole !== "ADMIN") throw new Error("Admin only");
+
+  const member = await prisma.user.findUnique({
+    where: { id: memberId },
+    select: { id: true },
+  });
+  if (!member) throw new Error("Member not found");
+
+  const title = "Test notification";
+  const body = `Sent by ${user.name || "an admin"} to check notifications reach you.`;
+  const tag = `test-${member.id}`;
+
+  await createAndPublishNotifications({
+    recipientIds: [member.id],
+    type: "test",
+    title,
+    body,
+    linkUrl: "/dashboard/account",
+    tag,
+  });
+
+  const deviceCount = await prisma.pushSubscription.count({
+    where: { memberId: member.id },
+  });
+  // Await (rather than fire-and-forget) so the delivery log is written before
+  // the admin panel refreshes.
+  await sendPush([member.id], {
+    title,
+    body,
+    url: "/dashboard/account",
+    tag,
+    type: "test",
+  });
+
+  return { pushed: isPushConfigured() && deviceCount > 0, deviceCount };
 }
 
 /**
