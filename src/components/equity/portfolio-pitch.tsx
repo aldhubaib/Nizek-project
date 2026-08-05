@@ -1498,6 +1498,28 @@ function useActiveSection(ids: string[]) {
     const list = key.split("|").filter(Boolean);
     const tops = new Map<string, number>();
 
+    // A short last section may never climb into the band before the page runs
+    // out of scroll, so the bottom of the page counts as reading it.
+    const atEnd = () =>
+      window.innerHeight + window.scrollY >=
+      document.documentElement.scrollHeight - 2;
+
+    const pick = () => {
+      if (atEnd() && list.length > 0) {
+        setActive(list[list.length - 1]);
+        return;
+      }
+      let best: string | null = null;
+      let bestTop = Number.POSITIVE_INFINITY;
+      for (const [id, top] of tops) {
+        if (top < bestTop) {
+          best = id;
+          bestTop = top;
+        }
+      }
+      if (best) setActive(best);
+    };
+
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -1508,15 +1530,7 @@ function useActiveSection(ids: string[]) {
               : Number.POSITIVE_INFINITY,
           );
         }
-        let best: string | null = null;
-        let bestTop = Number.POSITIVE_INFINITY;
-        for (const [id, top] of tops) {
-          if (top < bestTop) {
-            best = id;
-            bestTop = top;
-          }
-        }
-        if (best) setActive(best);
+        pick();
       },
       // The band the "current" section has to be in: below the sticky header,
       // above the bottom half of the screen.
@@ -1527,7 +1541,11 @@ function useActiveSection(ids: string[]) {
       const el = document.getElementById(id);
       if (el) observer.observe(el);
     }
-    return () => observer.disconnect();
+    window.addEventListener("scroll", pick, { passive: true });
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("scroll", pick);
+    };
   }, [key]);
 
   return active;
