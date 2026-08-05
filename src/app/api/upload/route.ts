@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { uploadToR2, generateR2Key } from "@/lib/r2";
+import { MAX_PROXY_UPLOAD_BYTES } from "@/lib/upload-limits";
 
 export const runtime = "nodejs";
 
@@ -8,7 +9,6 @@ export const runtime = "nodejs";
 // (see lib/upload.ts), but cross-origin PUTs fail on some mobile browsers / PWAs
 // (CORS preflight quirks). This route proxies the bytes through our own origin,
 // which sidesteps CORS entirely. Kept for images/attachments (bounded size).
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   if (!(file instanceof File) || file.size === 0) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
-  if (file.size > MAX_FILE_SIZE) {
+  if (file.size > MAX_PROXY_UPLOAD_BYTES) {
     return NextResponse.json({ error: "File too large (max 25MB)" }, { status: 400 });
   }
 

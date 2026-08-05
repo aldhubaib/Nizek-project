@@ -3,6 +3,8 @@
 // and PWAs (CORS preflight quirks), so we transparently fall back to a
 // same-origin proxy upload (/api/upload) which has no CORS to trip over.
 
+import { MAX_PROXY_UPLOAD_BYTES } from "@/lib/upload-limits";
+
 export type UploadedFile = {
   filename: string;
   url: string;
@@ -16,9 +18,12 @@ export async function uploadFileToR2(
 ): Promise<UploadedFile> {
   try {
     return await uploadViaPresign(file, onProgress);
-  } catch {
+  } catch (err) {
     // Direct-to-R2 failed (commonly CORS/network on mobile/PWA). Retry through
-    // our own origin, which always works cross-device.
+    // our own origin, which always works cross-device. The proxy buffers the
+    // file in server memory though, so big files must not silently fall back
+    // to it and die on its tighter limit — surface the original error instead.
+    if (file.size > MAX_PROXY_UPLOAD_BYTES) throw err;
     return await uploadViaServer(file, onProgress);
   }
 }

@@ -72,6 +72,7 @@ import {
 import { LinkPreviewCard } from "@/components/messages/link-preview";
 import { firstUrl } from "@/lib/link-preview";
 import { uploadFileToR2 } from "@/lib/upload";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/upload-limits";
 import {
   DeadlineReminderCard,
   NizekBotAvatar,
@@ -739,6 +740,7 @@ export function ThreadChat({
   const skipAutoScrollRef = useRef(false);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingFile[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [outbox, setOutbox] = useState<OutboxEntry[]>([]);
   const [, startTransition] = useTransition();
   const [dragging, setDragging] = useState(false);
@@ -1002,8 +1004,15 @@ export function ThreadChat({
   // Files wait locally (no upload) until the user presses Send.
   const pickFiles = (files: FileList | File[] | null) => {
     if (!files || files.length === 0) return;
-    const picked: PendingFile[] = Array.from(files)
-      .filter((f) => f.size > 0)
+    const all = Array.from(files).filter((f) => f.size > 0);
+    const tooBig = all.filter((f) => f.size > MAX_UPLOAD_BYTES);
+    setFileError(
+      tooBig.length > 0
+        ? `${tooBig.map((f) => f.name).join(", ")} ${tooBig.length === 1 ? "is" : "are"} over the ${MAX_UPLOAD_LABEL} limit and won't be attached.`
+        : null,
+    );
+    const picked: PendingFile[] = all
+      .filter((f) => f.size <= MAX_UPLOAD_BYTES)
       .map((file) => ({
         key: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         file,
@@ -1845,6 +1854,19 @@ export function ThreadChat({
               {recordError}
             </div>
           )}
+          {fileError && (
+            <div className="mb-2 flex items-start justify-between gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <span>{fileError}</span>
+              <button
+                type="button"
+                className="shrink-0 opacity-70 hover:opacity-100"
+                onClick={() => setFileError(null)}
+                aria-label="Dismiss"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           {recording ? (
             <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-surface/40 p-2 sm:gap-3">
               <Button
@@ -1901,6 +1923,9 @@ export function ThreadChat({
               onChange={(e) => {
                 pickFiles(e.target.files);
                 e.target.value = "";
+                // Hand focus back to the composer so Enter sends the message
+                // instead of re-activating the attach button.
+                composerRef.current?.focus();
               }}
             />
             <Button
@@ -1909,6 +1934,14 @@ export function ThreadChat({
               className="rounded-full"
               aria-label="Attach"
               onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(e) => {
+                // Focus lands back on this button when the file dialog closes;
+                // Enter should still send rather than reopen the picker.
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  send();
+                }
+              }}
             >
               <Paperclip className="h-4 w-4" />
             </Button>

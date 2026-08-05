@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { presignPutUrl, generateR2Key } from "@/lib/r2";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/upload-limits";
 
 export const runtime = "nodejs";
-
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
 // Issues a presigned PUT URL for a direct browser -> R2 upload. The server no
 // longer proxies file bytes (removes the OOM risk from concurrent 50MB uploads).
@@ -31,8 +30,11 @@ export async function POST(req: NextRequest) {
   if (!filename) {
     return NextResponse.json({ error: "Missing filename" }, { status: 400 });
   }
-  if (size > MAX_FILE_SIZE) {
-    return NextResponse.json({ error: "File too large (max 50MB)" }, { status: 400 });
+  if (size > MAX_UPLOAD_BYTES) {
+    return NextResponse.json(
+      { error: `File too large (max ${MAX_UPLOAD_LABEL})` },
+      { status: 400 },
+    );
   }
 
   try {
