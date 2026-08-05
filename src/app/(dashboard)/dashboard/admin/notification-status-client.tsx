@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Ban,
+  Bell,
   BellOff,
   BellRing,
   CheckCheck,
   Circle,
+  Download,
   Globe,
   Loader2,
   RefreshCw,
@@ -30,41 +33,91 @@ type TestState =
   | { status: "done"; pushed: boolean; deviceCount: number }
   | { status: "error" };
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
+/** One of the four headline figures: an icon in its own tint, the number, and
+ * what it counts. */
+function StatCard({
+  icon: Icon,
+  value,
+  label,
+  sub,
+  tone,
+}: {
+  icon: typeof Bell;
+  value: string;
+  label: string;
+  sub: string;
+  tone: "primary" | "sky" | "violet" | "bad" | "good";
+}) {
+  const tones = {
+    primary: { chip: "bg-primary/15 text-primary", value: "text-primary" },
+    sky: { chip: "bg-sky-500/15 text-sky-400", value: "text-sky-400" },
+    violet: { chip: "bg-violet-500/15 text-violet-400", value: "text-violet-400" },
+    bad: { chip: "bg-destructive/15 text-destructive", value: "text-destructive" },
+    good: { chip: "bg-emerald-500/15 text-emerald-400", value: "text-emerald-400" },
+  }[tone];
+
   return (
-    <div className="rounded-xl border border-border/60 bg-surface p-4">
-      <div
-        className={`text-xl font-semibold tabular-nums ${
-          tone === "good" ? "text-emerald-500" : tone === "bad" ? "text-destructive" : ""
-        }`}
-      >
-        {value}
+    <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-card p-4">
+      <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", tones.chip)}>
+        <Icon className="h-4 w-4" />
+      </span>
+      <div className="min-w-0">
+        <div className={cn("text-xl font-semibold leading-tight tabular-nums", tones.value)}>
+          {value}
+        </div>
+        <div className="mt-0.5 text-[12px] font-medium text-foreground">{label}</div>
+        <div className="text-[11px] text-muted-foreground">{sub}</div>
       </div>
-      <div className="mt-0.5 text-[11px] text-muted-foreground">{label}</div>
     </div>
   );
 }
 
-function OnOffPill({
+function ChannelPill({
   icon: Icon,
   label,
   on,
+  title,
 }: {
   icon: typeof Globe;
   label: string;
   on: boolean;
+  title?: string;
 }) {
   return (
     <span
+      title={title}
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium whitespace-nowrap",
         on
-          ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
           : "border-border bg-card text-muted-foreground/70",
       )}
     >
       <Icon className="h-3 w-3" />
       {label} {on ? "On" : "Off"}
+    </span>
+  );
+}
+
+/** Opened / Not Opened / No Activity, read off the member's last notification. */
+function StatusPill({ m }: { m: MemberNotificationStatus }) {
+  if (!m.lastNotification) {
+    return (
+      <span className="inline-flex items-center rounded-full border border-border bg-card px-2 py-0.5 text-[10px] font-medium text-muted-foreground whitespace-nowrap">
+        No Activity
+      </span>
+    );
+  }
+  if (m.lastNotification.read) {
+    return (
+      <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 whitespace-nowrap">
+        Opened
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400 whitespace-nowrap">
+      Not Opened
     </span>
   );
 }
@@ -83,7 +136,7 @@ function TestButton({
 }) {
   if (state?.status === "sending") {
     return (
-      <span className="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2.5 text-[10px] font-medium text-muted-foreground">
+      <span className="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2.5 text-[10px] font-medium text-muted-foreground whitespace-nowrap">
         <Loader2 className="h-3 w-3 animate-spin" />
         Sending…
       </span>
@@ -93,7 +146,7 @@ function TestButton({
     return (
       <span
         className={cn(
-          "inline-flex h-7 items-center gap-1 rounded-lg border px-2.5 text-[10px] font-medium",
+          "inline-flex h-7 items-center gap-1 rounded-lg border px-2.5 text-[10px] font-medium whitespace-nowrap",
           state.pushed
             ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
             : "border-amber-500/30 bg-amber-500/15 text-amber-400",
@@ -102,13 +155,13 @@ function TestButton({
         <CheckCheck className="h-3 w-3" />
         {state.pushed
           ? `Pushed to ${state.deviceCount} device${state.deviceCount === 1 ? "" : "s"}`
-          : "Sent to bell only — no push devices"}
+          : "Bell only — no devices"}
       </span>
     );
   }
   if (state?.status === "error") {
     return (
-      <span className="inline-flex h-7 items-center rounded-lg border border-destructive/40 bg-destructive/10 px-2.5 text-[10px] font-medium text-destructive">
+      <span className="inline-flex h-7 items-center rounded-lg border border-destructive/40 bg-destructive/10 px-2.5 text-[10px] font-medium text-destructive whitespace-nowrap">
         Failed to send
       </span>
     );
@@ -117,12 +170,54 @@ function TestButton({
     <button
       type="button"
       onClick={onSend}
-      className="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
+      className="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground whitespace-nowrap"
     >
       <Send className="h-3 w-3" />
       Send test
     </button>
   );
+}
+
+/** The table as a file: what's on screen, one row per member. */
+function exportCsv(rows: MemberNotificationStatus[]) {
+  const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const lines = [
+    [
+      "Name",
+      "Email",
+      "Website",
+      "App (PWA)",
+      "Last notification",
+      "Received at",
+      "Opened",
+      "Last push delivered",
+      "Unread",
+    ].join(","),
+    ...rows.map((m) =>
+      [
+        esc(m.name ?? ""),
+        esc(m.email),
+        m.webOn ? "On" : "Off",
+        m.pwaOn ? "On" : "Off",
+        esc(m.lastNotification?.title ?? ""),
+        m.lastNotification
+          ? new Date(m.lastNotification.createdAt).toISOString()
+          : "",
+        m.lastNotification ? (m.lastNotification.read ? "Yes" : "No") : "",
+        m.lastPushDeliveredAt
+          ? new Date(m.lastPushDeliveredAt).toISOString()
+          : "",
+        String(m.unreadCount),
+      ].join(","),
+    ),
+  ];
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "notification-coverage.csv";
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /**
@@ -244,31 +339,69 @@ function MembersView() {
   const webCount = data.filter((m) => m.webOn).length;
   const pwaCount = data.filter((m) => m.pwaOn).length;
   const offCount = data.length - enabledCount;
+  const coverage =
+    data.length > 0 ? Math.round((enabledCount / data.length) * 100) : 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold">Notification coverage</div>
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
+            <Bell className="h-4.5 w-4.5" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[15px] font-semibold leading-tight">
+              Notification coverage
+            </div>
+            <div className="truncate text-[11px] text-muted-foreground">
+              Overview of notification channels and status
+            </div>
+          </div>
+        </div>
         <button
           type="button"
           onClick={load}
           disabled={loading}
-          className="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+          className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground disabled:opacity-50"
         >
-          <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+          <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
           Refresh
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Notifications on" value={`${enabledCount}/${data.length}`} tone="good" />
-        <Stat label="Website" value={String(webCount)} />
-        <Stat label="App (PWA)" value={String(pwaCount)} />
-        <Stat label="Off / never enabled" value={String(offCount)} tone={offCount > 0 ? "bad" : "good"} />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <StatCard
+          icon={Bell}
+          value={`${enabledCount} / ${data.length}`}
+          label="Notifications On"
+          sub={`${coverage}% coverage`}
+          tone="primary"
+        />
+        <StatCard
+          icon={Globe}
+          value={String(webCount)}
+          label="Website"
+          sub="Enabled"
+          tone="sky"
+        />
+        <StatCard
+          icon={Smartphone}
+          value={String(pwaCount)}
+          label="App (PWA)"
+          sub="Enabled"
+          tone="violet"
+        />
+        <StatCard
+          icon={Ban}
+          value={String(offCount)}
+          label="Off / Never Enabled"
+          sub={`${100 - coverage}% not covered`}
+          tone={offCount > 0 ? "bad" : "good"}
+        />
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-52 flex-1">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
@@ -299,116 +432,171 @@ function MembersView() {
             {f.label}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => exportCsv(filtered)}
+          className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
+        >
+          <Download className="h-3 w-3" />
+          Export
+        </button>
       </div>
 
-      <div className="divide-y divide-border/50 rounded-xl border border-border/60">
-        {filtered.map((m) => {
-          const enabled = m.webOn || m.pwaOn;
-          return (
-            <div key={m.id} className="px-3 py-3">
-              <div className="flex items-center gap-3">
-                {m.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.imageUrl} alt="" className="h-8 w-8 shrink-0 rounded-full" />
-                ) : (
-                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary">
-                    {(m.name?.[0] || m.email[0]).toUpperCase()}
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-[13px] font-medium text-foreground">
-                      {m.name || m.email}
-                    </span>
-                    {enabled ? (
-                      <BellRing className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                    ) : (
-                      <BellOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
-                    )}
-                    {m.unreadCount > 0 && (
-                      <span className="rounded-full border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
-                        {m.unreadCount} unread
-                      </span>
-                    )}
-                  </div>
-                  <div className="truncate text-[11px] text-muted-foreground">{m.email}</div>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <OnOffPill icon={Globe} label="Website" on={m.webOn} />
-                  <OnOffPill icon={Smartphone} label="App" on={m.pwaOn} />
-                  <TestButton state={tests[m.id]} onSend={() => sendTest(m.id)} />
-                </div>
-              </div>
-
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 pl-11 text-[11px] text-muted-foreground">
-                {m.lastNotification ? (
-                  <>
-                    <span className="inline-flex items-center gap-1">
-                      Last notification{" "}
-                      {formatDistanceToNow(new Date(m.lastNotification.createdAt), {
-                        addSuffix: true,
-                      })}
-                      <span className="text-muted-foreground/60">
-                        — “{m.lastNotification.title}”
-                      </span>
-                    </span>
-                    {m.lastNotification.read ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-400">
-                        <CheckCheck className="h-3 w-3" />
-                        Opened
-                        {m.lastNotification.readAt
-                          ? ` ${formatDistanceToNow(new Date(m.lastNotification.readAt), { addSuffix: true })}`
-                          : ""}
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-amber-400">
-                        <Circle className="h-2 w-2 fill-current" />
-                        Not opened yet
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-muted-foreground/60">
-                    Never received a notification
-                  </span>
-                )}
-                {m.lastPushDeliveredAt && (
-                  <span className="text-muted-foreground/60">
-                    Last push delivered{" "}
-                    {formatDistanceToNow(new Date(m.lastPushDeliveredAt), {
-                      addSuffix: true,
-                    })}
-                  </span>
-                )}
-              </div>
-
-              {m.devices.length > 0 && (
-                <div className="mt-1.5 flex flex-wrap gap-1 pl-11">
-                  {m.devices.map((d) => (
-                    <span
-                      key={d.id}
-                      title={`Last synced ${formatDistanceToNow(new Date(d.lastActiveAt), { addSuffix: true })}`}
-                      className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground"
-                    >
-                      {d.kind === "pwa" ? (
-                        <Smartphone className="h-2.5 w-2.5" />
-                      ) : (
-                        <Globe className="h-2.5 w-2.5" />
-                      )}
-                      {d.label}
-                      {d.kind === "pwa" ? " · PWA" : d.kind === "web" ? " · Web" : ""}
-                    </span>
-                  ))}
-                </div>
+      <div className="overflow-x-auto rounded-xl border border-border/60">
+        <table className="w-full min-w-[46rem] border-collapse text-left">
+          <thead>
+            <tr className="border-b border-border/60 bg-card/60">
+              {["User", "Last Notification", "Status", "Channels", "Actions"].map(
+                (h) => (
+                  <th
+                    key={h}
+                    className="px-4 py-2.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+                  >
+                    {h}
+                  </th>
+                ),
               )}
-            </div>
-          );
-        })}
-        {filtered.length === 0 && (
-          <p className="px-3 py-6 text-center text-[13px] text-muted-foreground">
-            No members match.
-          </p>
-        )}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/50">
+            {filtered.map((m) => {
+              const enabled = m.webOn || m.pwaOn;
+              const webDevices = m.devices.filter((d) => d.kind !== "pwa");
+              const pwaDevices = m.devices.filter((d) => d.kind === "pwa");
+              return (
+                <tr key={m.id} className="align-top transition-colors hover:bg-card/40">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      {m.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={m.imageUrl}
+                          alt=""
+                          className="h-8 w-8 shrink-0 rounded-full"
+                        />
+                      ) : (
+                        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary">
+                          {(m.name?.[0] || m.email[0]).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-[13px] font-medium text-foreground">
+                            {m.name || m.email}
+                          </span>
+                          {enabled ? (
+                            <BellRing className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                          ) : (
+                            <BellOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+                          )}
+                          {m.unreadCount > 0 && (
+                            <span className="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+                              {m.unreadCount} unread
+                            </span>
+                          )}
+                        </div>
+                        <div className="truncate text-[11px] text-muted-foreground">
+                          {m.email}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <td className="px-4 py-3">
+                    {m.lastNotification ? (
+                      <div className="space-y-0.5">
+                        <div className="text-[12px] text-foreground">
+                          {formatDistanceToNow(
+                            new Date(m.lastNotification.createdAt),
+                            { addSuffix: true },
+                          )}
+                        </div>
+                        <div className="max-w-64 truncate text-[11px] text-muted-foreground">
+                          {m.lastNotification.title}
+                        </div>
+                        {m.lastNotification.read ? (
+                          <div className="flex items-center gap-1 text-[11px] text-emerald-400">
+                            <CheckCheck className="h-3 w-3" />
+                            Opened
+                            {m.lastNotification.readAt
+                              ? ` ${formatDistanceToNow(new Date(m.lastNotification.readAt), { addSuffix: true })}`
+                              : ""}
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+                            <span className="inline-flex items-center gap-1 text-amber-400">
+                              <Circle className="h-2 w-2 fill-current" />
+                              Not opened yet
+                            </span>
+                            {m.lastPushDeliveredAt && (
+                              <span className="text-muted-foreground/70">
+                                · Pushed{" "}
+                                {formatDistanceToNow(
+                                  new Date(m.lastPushDeliveredAt),
+                                  { addSuffix: true },
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-0.5">
+                        <div className="text-[12px] text-foreground">Never</div>
+                        <div className="text-[11px] text-muted-foreground/70">
+                          Never received a notification
+                        </div>
+                      </div>
+                    )}
+                  </td>
+
+                  <td className="px-4 py-3">
+                    <StatusPill m={m} />
+                  </td>
+
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <ChannelPill
+                        icon={Globe}
+                        label="Website"
+                        on={m.webOn}
+                        title={
+                          webDevices.length > 0
+                            ? webDevices.map((d) => d.label).join(", ")
+                            : undefined
+                        }
+                      />
+                      <ChannelPill
+                        icon={Smartphone}
+                        label="App"
+                        on={m.pwaOn}
+                        title={
+                          pwaDevices.length > 0
+                            ? pwaDevices.map((d) => d.label).join(", ")
+                            : undefined
+                        }
+                      />
+                    </div>
+                  </td>
+
+                  <td className="px-4 py-3">
+                    <TestButton state={tests[m.id]} onSend={() => sendTest(m.id)} />
+                  </td>
+                </tr>
+              );
+            })}
+            {filtered.length === 0 && (
+              <tr>
+                <td
+                  colSpan={5}
+                  className="px-4 py-8 text-center text-[13px] text-muted-foreground"
+                >
+                  No members match.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
       <p className="text-[11px] text-muted-foreground">
