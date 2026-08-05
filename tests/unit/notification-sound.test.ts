@@ -50,6 +50,29 @@ describe("sound preference storage", () => {
   });
 });
 
+// Minimal HTMLAudioElement stand-in matching what the library touches.
+function makeFakeAudio() {
+  const play = vi.fn().mockResolvedValue(undefined);
+  const constructed = vi.fn();
+  class FakeAudio {
+    preload = "";
+    currentTime = 0;
+    muted = false;
+    src = "";
+    paused = true;
+    play = play;
+    pause = vi.fn();
+    load = vi.fn();
+    removeAttribute = vi.fn((attr: string) => {
+      if (attr === "src") this.src = "";
+    });
+    constructor() {
+      constructed();
+    }
+  }
+  return { FakeAudio, play, constructed };
+}
+
 describe("playNotificationSound", () => {
   it("does not throw when audio is unavailable (jsdom has no AudioContext)", async () => {
     const lib = await freshModule();
@@ -61,14 +84,7 @@ describe("playNotificationSound", () => {
     const lib = await freshModule();
     lib.setNotificationSoundEnabled(false);
 
-    const play = vi.fn().mockResolvedValue(undefined);
-    class FakeAudio {
-      preload = "";
-      currentTime = 0;
-      muted = false;
-      play = play;
-      pause = vi.fn();
-    }
+    const { FakeAudio, play } = makeFakeAudio();
     vi.stubGlobal("Audio", FakeAudio as unknown as typeof Audio);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response()));
 
@@ -85,19 +101,67 @@ describe("playNotificationSound", () => {
   it("plays the custom sound when enabled", async () => {
     const lib = await freshModule();
 
-    const play = vi.fn().mockResolvedValue(undefined);
-    class FakeAudio {
-      preload = "";
-      currentTime = 0;
-      muted = false;
-      play = play;
-      pause = vi.fn();
-    }
+    const { FakeAudio, play } = makeFakeAudio();
     vi.stubGlobal("Audio", FakeAudio as unknown as typeof Audio);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response()));
 
     lib.setCustomNotificationSound("https://cdn.example.com/notification_sound/y.mp3");
     lib.playNotificationSound();
+    expect(play).toHaveBeenCalledTimes(1);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("reuses one Audio element across sound URL changes (keeps gesture unlock)", async () => {
+    const lib = await freshModule();
+
+    const { FakeAudio, constructed } = makeFakeAudio();
+    vi.stubGlobal("Audio", FakeAudio as unknown as typeof Audio);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response()));
+
+    lib.setCustomNotificationSound("https://cdn.example.com/notification_sound/a.mp3");
+    lib.setCustomNotificationSound("https://cdn.example.com/notification_sound/b.mp3");
+    expect(constructed).toHaveBeenCalledTimes(1);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("falls back to no custom playback after the sound is removed", async () => {
+    const lib = await freshModule();
+
+    const { FakeAudio, play } = makeFakeAudio();
+    vi.stubGlobal("Audio", FakeAudio as unknown as typeof Audio);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response()));
+
+    lib.setCustomNotificationSound("https://cdn.example.com/notification_sound/a.mp3");
+    lib.setCustomNotificationSound(null);
+    lib.playNotificationSound();
+    expect(play).not.toHaveBeenCalled(); // chime path (no AudioContext in jsdom)
+
+    vi.unstubAllGlobals();
+  });
+
+  it("unlocks a custom sound that loads AFTER priming, on the next gesture", async () => {
+    const lib = await freshModule();
+
+    const { FakeAudio, play } = makeFakeAudio();
+    vi.stubGlobal("Audio", FakeAudio as unknown as typeof Audio);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response()));
+
+    // Prime first (as the app does on mount), then the sound URL arrives async
+    // — the regression this guards: a one-shot unlock would have missed it.
+    lib.primeNotificationAudio();
+    window.dispatchEvent(new Event("pointerdown")); // gesture before sound exists
+
+    lib.setCustomNotificationSound("https://cdn.example.com/notification_sound/late.mp3");
+    expect(play).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new Event("pointerdown")); // next gesture unlocks it
+    expect(play).toHaveBeenCalledTimes(1);
+    await Promise.resolve(); // let the unlock's play() promise settle
+
+    // Once unlocked, further gestures don't re-play.
+    window.dispatchEvent(new Event("pointerdown"));
     expect(play).toHaveBeenCalledTimes(1);
 
     vi.unstubAllGlobals();

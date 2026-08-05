@@ -37,8 +37,11 @@ export async function POST(req: NextRequest) {
         memberId: user.id,
         p256dh: keys.p256dh,
         auth: keys.auth,
-        deviceId: did,
-        userAgent: ua,
+        // The SW's pushsubscriptionchange re-subscribe can't read localStorage,
+        // so it posts without deviceId — keep existing metadata instead of
+        // wiping it; the next app open backfills via syncPushSubscription.
+        ...(did ? { deviceId: did } : {}),
+        ...(ua ? { userAgent: ua } : {}),
       },
     });
 

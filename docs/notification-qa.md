@@ -101,6 +101,25 @@ Same grid as desktop web, plus:
   laptop shows no banner, but the phone still gets a push (this is the
   WhatsApp behavior and is intentional).
 
+## Production configuration checklist
+
+Push is **silently disabled** when its env vars are missing — the code no-ops
+rather than crashing. After any deploy or environment change verify:
+
+1. `NEXT_PUBLIC_VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` are set (generate once
+   with `npx web-push generate-vapid-keys`; see `.env.example`). Rotating the
+   public key invalidates every existing subscription — devices re-subscribe
+   automatically on next app open, but pushes are lost until then.
+2. `NEXT_PUBLIC_APP_URL` points at the real origin (used in push payload links).
+3. Centrifugo: `NEXT_PUBLIC_CENTRIFUGO_WS`, `CENTRIFUGO_HTTP_API`,
+   `CENTRIFUGO_API_KEY`, `CENTRIFUGO_TOKEN_HMAC_SECRET_KEY` are set and match
+   the Centrifugo server's own config. Note `centrifugo/config.json` ships with
+   `allowed_origins: ["http://localhost:3000"]` — in production override it via
+   `CENTRIFUGO_CLIENT_ALLOWED_ORIGINS` (or edit the config) to the real app
+   origin, otherwise browser WebSocket connections are rejected.
+4. Admin → Settings → Push Health must show **no red/amber config alerts**, and
+   Account → Notification diagnostics → "Send test notification" must deliver.
+
 ## When something "doesn't notify"
 
 1. Ask the user to open **Account → Notification diagnostics** and read the

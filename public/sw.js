@@ -126,10 +126,16 @@ self.addEventListener("pushsubscriptionchange", (event) => {
       .subscribe({ userVisibleOnly: true, applicationServerKey: appServerKey })
       .then((newSub) => {
         const json = newSub.toJSON();
+        // deviceId lives in localStorage (unreachable from a SW); the next app
+        // open backfills it via syncPushSubscription. userAgent IS available.
         return fetch("/api/push", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+          body: JSON.stringify({
+            endpoint: json.endpoint,
+            keys: json.keys,
+            userAgent: navigator.userAgent,
+          }),
         });
       })
       .catch(() => {}),

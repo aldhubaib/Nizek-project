@@ -27,14 +27,30 @@ export function setNotificationSoundEnabled(enabled: boolean): void {
 // the same one.
 let customSoundUrl: string | null = null;
 let customAudio: HTMLAudioElement | null = null;
+// Safari/iOS only allow play() on elements that have already played inside a
+// user gesture. Tracked per-element; reset if we ever recreate the element.
+let customAudioUnlocked = false;
 
 export function setCustomNotificationSound(url: string | null): void {
   if (typeof window === "undefined") return;
   if (url === customSoundUrl) return;
   customSoundUrl = url;
   if (url) {
-    customAudio = new Audio(url);
-    customAudio.preload = "auto";
+    // Reuse ONE element and swap its src: a gesture-unlock sticks to the
+    // element, so this keeps working when the sound URL changes later (the
+    // URL arrives async after mount, and admins can swap it live). A fresh
+    // element per URL would need a brand-new gesture each time.
+    if (!customAudio) {
+      customAudio = new Audio();
+      customAudio.preload = "auto";
+      customAudioUnlocked = false;
+    }
+    customAudio.src = url;
+    try {
+      customAudio.load();
+    } catch {
+      /* ignore */
+    }
     // Warm the service-worker / HTTP cache so playback is instant and works
     // offline. no-cors keeps it a simple GET the SW can store as an opaque
     // response; failures are harmless (we still preload via the Audio element).
@@ -43,8 +59,15 @@ export function setCustomNotificationSound(url: string | null): void {
     } catch {
       /* ignore */
     }
-  } else {
-    customAudio = null;
+  } else if (customAudio) {
+    // Keep the (possibly unlocked) element around in case a sound is set again
+    // later; just drop the source so nothing can play meanwhile.
+    try {
+      customAudio.removeAttribute("src");
+      customAudio.load();
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -114,7 +137,7 @@ function playChime(): void {
  */
 export function playNotificationSound(force = false): void {
   if (!force && !isNotificationSoundEnabled()) return;
-  if (customAudio) {
+  if (customAudio && customSoundUrl) {
     try {
       customAudio.currentTime = 0;
       const p = customAudio.play();
@@ -139,9 +162,12 @@ export function getAudioReadiness(): AudioReadiness {
   return ctx.state === "running" ? "unlocked" : "suspended";
 }
 
-// Unlocks audio on the first user gesture so later (non-gesture) notifications
-// can play. Autoplay policies only let us resume an AudioContext in response to
-// a real interaction; after that it stays running for the session.
+// Unlocks audio on user gestures so later (non-gesture) notifications can play.
+// Autoplay policies only allow this in response to a real interaction. The
+// listeners stay attached for the whole session (they no-op once everything is
+// unlocked): the custom sound element is (re)created ASYNCHRONOUSLY after mount
+// — and can be swapped live by an admin — so a one-shot unlock on the first
+// gesture would miss it and the uploaded sound would never play on Safari/iOS.
 let unlockAttached = false;
 
 export function primeNotificationAudio(): void {
@@ -151,39 +177,32 @@ export function primeNotificationAudio(): void {
   const unlock = () => {
     // Unlock the custom HTMLAudioElement (autoplay policy) by doing a silent
     // play/pause during this gesture so later programmatic plays are allowed.
-    if (customAudio) {
-      const el = customAudio;
+    // Skipped once unlocked, when there's no source yet, or while it is
+    // audibly playing a real notification (pausing would cut it off).
+    const el = customAudio;
+    if (el && !customAudioUnlocked && customSoundUrl && el.paused) {
       const wasMuted = el.muted;
       el.muted = true;
-      el.play()
-        .then(() => {
+      const p = el.play();
+      if (p && typeof p.then === "function") {
+        p.then(() => {
+          customAudioUnlocked = true;
           el.pause();
           el.currentTime = 0;
           el.muted = wasMuted;
-        })
-        .catch(() => {
+        }).catch(() => {
           el.muted = wasMuted;
         });
+      } else {
+        customAudioUnlocked = true;
+        el.muted = wasMuted;
+      }
     }
 
     const ctx = getAudioContext();
-    if (!ctx) {
-      detach();
-      return;
+    if (ctx && ctx.state !== "running") {
+      void ctx.resume().catch(() => {});
     }
-    if (ctx.state !== "running") {
-      void ctx.resume().then(() => {
-        if (ctx.state === "running") detach();
-      });
-    } else {
-      detach();
-    }
-  };
-
-  const detach = () => {
-    window.removeEventListener("pointerdown", unlock);
-    window.removeEventListener("keydown", unlock);
-    window.removeEventListener("touchstart", unlock);
   };
 
   window.addEventListener("pointerdown", unlock);
