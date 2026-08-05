@@ -1315,13 +1315,15 @@ export type EquityHolderDTO = {
   linkedinUrl: string | null;
   /** Rows held under this name — a name in use can't be deleted. */
   grantCount: number;
+  /** Team lineups this name is on — also a use that blocks deletion. */
+  teamCount: number;
 };
 
 export async function listEquityHolders(): Promise<EquityHolderDTO[]> {
   await requireEquityAccess();
   const holders = await prisma.equityHolder.findMany({
     orderBy: [{ isUs: "desc" }, { name: "asc" }],
-    include: { _count: { select: { grants: true } } },
+    include: { _count: { select: { grants: true, teamMembers: true } } },
   });
   return holders.map((h) => ({
     id: h.id,
@@ -1332,6 +1334,7 @@ export async function listEquityHolders(): Promise<EquityHolderDTO[]> {
     bio: h.bio,
     linkedinUrl: h.linkedinUrl,
     grantCount: h._count.grants,
+    teamCount: h._count.teamMembers,
   }));
 }
 

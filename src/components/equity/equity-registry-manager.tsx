@@ -485,7 +485,10 @@ function HolderList({ holders }: { holders: EquityHolderDTO[] }) {
                   )}
                 </div>
                 <span className="text-[10px] text-muted-foreground/70 tabular-nums shrink-0">
-                  {usageLabel([{ label: "entry", n: holder.grantCount }])}
+                  {usageLabel([
+                    { label: "entry", n: holder.grantCount },
+                    { label: "team", n: holder.teamCount },
+                  ])}
                 </span>
                 <button
                   type="button"
