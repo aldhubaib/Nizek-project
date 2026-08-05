@@ -13,7 +13,6 @@ import {
   Image as ImageIcon,
   LogIn,
   Volume2,
-  Activity,
   BellRing,
   ClipboardCheck,
   PieChart,
@@ -27,7 +26,6 @@ import { DefaultQuestionsManager } from "@/components/settings/default-questions
 import { AppLogoClient } from "./app-logo-client";
 import { LoginSettingsClient } from "./login-settings-client";
 import { NotificationSoundClient } from "./notification-sound-client";
-import { PushHealthClient } from "./push-health-client";
 import { NotificationStatusClient } from "./notification-status-client";
 import { AuditAccessManager } from "@/components/settings/audit-access-manager";
 import { EquityAccessManager } from "@/components/settings/equity-access-manager";
@@ -125,16 +123,10 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
     group: "Monitoring",
     items: [
       {
-        id: "push-health",
-        label: "Push Health",
-        icon: Activity,
-        desc: "Delivery success, device coverage, and recent push failures.",
-      },
-      {
         id: "notification-status",
         label: "Member Notifications",
         icon: BellRing,
-        desc: "Who has notifications on or off (website and app), and whether their last notification was opened.",
+        desc: "Who has notifications on or off (website and app), whether their last notification was opened, and push delivery health.",
       },
       {
         id: "audit-access",
@@ -186,7 +178,9 @@ export function AdminPageClient({
   currentUserId,
 }: Props) {
   const searchParams = useSearchParams();
-  const activeTab = searchParams.get("tab") as TabId | null;
+  const rawTab = searchParams.get("tab") as TabId | null;
+  // Push Health folded into Member Notifications; old links keep working.
+  const activeTab = rawTab === "push-health" ? "notification-status" : rawTab;
   const active = ITEMS.find((i) => i.id === activeTab) ?? null;
 
   // Settings hub — grouped tiles, shown when no section is selected.
@@ -260,8 +254,11 @@ export function AdminPageClient({
         {active.id === "notification-sound" && (
           <NotificationSoundClient sound={notificationSound} />
         )}
-        {active.id === "push-health" && <PushHealthClient />}
-        {active.id === "notification-status" && <NotificationStatusClient />}
+        {active.id === "notification-status" && (
+          <NotificationStatusClient
+            initialView={rawTab === "push-health" ? "health" : "members"}
+          />
+        )}
         {active.id === "audit-access" && <AuditAccessManager />}
         {active.id === "equity-access" && <EquityAccessManager />}
       </div>

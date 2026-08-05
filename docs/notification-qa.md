@@ -24,7 +24,7 @@ the notification pipeline.
   the banner only when a tab is focused AND visible there
   (`public/sw-lib.js: shouldShowPushNotification`).
 - **Delivery audit:** every send attempt is recorded in `PushDeliveryLog`
-  (admin → Settings → Push Health).
+  (admin → Settings → Member Notifications → Push health).
 - **Preferences/mutes:** `NotificationPreference` + `MutedThread`, enforced
   server-side in `src/lib/notify.ts` before rows/pushes are created.
 
@@ -85,7 +85,7 @@ Same grid as desktop web, plus:
 | # | Action | Expected |
 | --- | --- | --- |
 | 18 | Account → Notification diagnostics | All checks green on a healthy device. "Send test notification" produces a bell entry + push, and the delivery appears in the panel's log. |
-| 19 | Admin → Settings → Push Health | Success rate visible; users without devices listed; VAPID/Centrifugo misconfiguration shows a red/amber alert. |
+| 19 | Admin → Settings → Member Notifications → Push health | Success rate visible; users without devices listed; VAPID/Centrifugo misconfiguration shows a red/amber alert. |
 | 20 | Block notifications in browser site settings, run diagnostics | Permission check turns red with instructions. |
 
 ## Known platform limits
@@ -117,14 +117,14 @@ rather than crashing. After any deploy or environment change verify:
    `allowed_origins: ["http://localhost:3000"]` — in production override it via
    `CENTRIFUGO_CLIENT_ALLOWED_ORIGINS` (or edit the config) to the real app
    origin, otherwise browser WebSocket connections are rejected.
-4. Admin → Settings → Push Health must show **no red/amber config alerts**, and
+4. Admin → Settings → Member Notifications → Push health must show **no red/amber config alerts**, and
    Account → Notification diagnostics → "Send test notification" must deliver.
 
 ## When something "doesn't notify"
 
 1. Ask the user to open **Account → Notification diagnostics** and read the
    red/amber rows.
-2. Check **Admin → Settings → Push Health**: is the user in "no push device"?
+2. Check **Admin → Settings → Member Notifications → Push health**: is the user in "no push device"?
    Did their sends fail (401/403 = VAPID mismatch, 404/410 = expired
    subscription — auto-cleaned)?
 3. `PushDeliveryLog` has the full per-attempt history (status code, error,

@@ -20,8 +20,10 @@ import {
   sendTestNotificationToMember,
   type MemberNotificationStatus,
 } from "@/actions/notification-status";
+import { PushHealthClient } from "./push-health-client";
 
 type Filter = "all" | "on" | "off";
+type View = "members" | "health";
 
 type TestState =
   | { status: "sending" }
@@ -124,12 +126,49 @@ function TestButton({
 }
 
 /**
- * Admin overview of who actually receives notifications: per member, whether
- * push is enabled from the website and/or the installed app (PWA), their
- * registered devices, the last notification they received, and whether they
- * opened it.
+ * Everything notification-related about the team in one place, as two tabs:
+ * per-member coverage (who has push on where, their last notification and
+ * whether they opened it) and the system-wide delivery health that used to be
+ * its own settings page.
  */
-export function NotificationStatusClient() {
+export function NotificationStatusClient({
+  initialView = "members",
+}: {
+  initialView?: View;
+}) {
+  const [view, setView] = useState<View>(initialView);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-card p-1 w-fit">
+        {(
+          [
+            { id: "members", label: "Members" },
+            { id: "health", label: "Push health" },
+          ] as { id: View; label: string }[]
+        ).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setView(t.id)}
+            className={cn(
+              "h-7 rounded-md px-3 text-[12px] font-medium transition-colors",
+              view === t.id
+                ? "bg-primary/15 text-primary"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {view === "members" ? <MembersView /> : <PushHealthClient />}
+    </div>
+  );
+}
+
+function MembersView() {
   const [data, setData] = useState<MemberNotificationStatus[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
