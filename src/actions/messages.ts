@@ -333,6 +333,9 @@ export async function sendMessage(
     let taskTitle = "";
     let taskNumber = 0;
     let projectName = "";
+    let projectLogoUrl: string | null = null;
+    /** Group-conversation name for notification titles; "" for 1:1 DMs. */
+    let groupName = "";
     let participantIds: string[] = [];
 
     if (conversationId) {
@@ -345,6 +348,7 @@ export async function sendMessage(
       });
       if (!convo) throw new Error("Conversation not found");
       participantIds = convo.participants.map((p) => p.memberId);
+      if (convo.isGroup) groupName = convo.title || "Group chat";
       taskId = null;
       projectId = null;
     } else if (taskId) {
@@ -356,7 +360,11 @@ export async function sendMessage(
           taskNumber: true,
           projectId: true,
           project: {
-            select: { name: true, contracts: { select: CONTRACT_SELECT } },
+            select: {
+              name: true,
+              logoUrl: true,
+              contracts: { select: CONTRACT_SELECT },
+            },
           },
         },
       });
@@ -369,17 +377,23 @@ export async function sendMessage(
       taskTitle = task.title;
       taskNumber = task.taskNumber;
       projectName = task.project.name;
+      projectLogoUrl = task.project.logoUrl;
     } else if (projectId) {
       if (!(await hasProjectAccess(projectId)))
         throw new Error("Permission denied");
       const project = await prisma.project.findUnique({
         where: { id: projectId },
-        select: { name: true, contracts: { select: CONTRACT_SELECT } },
+        select: {
+          name: true,
+          logoUrl: true,
+          contracts: { select: CONTRACT_SELECT },
+        },
       });
       if (!project) throw new Error("Project not found");
       if (!getActiveContract(project.contracts))
         throw new Error("This project is not active");
       projectName = project.name;
+      projectLogoUrl = project.logoUrl;
     } else {
       throw new Error("No thread specified");
     }
@@ -477,11 +491,25 @@ export async function sendMessage(
         : conversationId
           ? "message"
           : "mention";
+    // Where the message came from, right in the OS banner: the group name, an
+    // explicit "Direct message", or the task's project.
     const title = conversationId
-      ? authorName
+      ? `${authorName} · ${groupName || "Direct message"}`
       : input.kind === "rejection"
         ? `${authorName} declined "${taskTitle}"`
-        : `${authorName} mentioned you${taskTitle ? ` in "${taskTitle}"` : projectName ? ` in ${projectName}` : ""}`;
+        : `${authorName} mentioned you${
+            taskTitle
+              ? ` in "${taskTitle}" · ${projectName}`
+              : projectName
+                ? ` in ${projectName}`
+                : ""
+          }`;
+    // DMs and groups show the sender's face; project threads show the project
+    // logo. The service worker falls back to the app icon when neither exists.
+    const notifIcon =
+      (conversationId
+        ? message.author.imageUrl
+        : (projectLogoUrl ?? message.author.imageUrl)) ?? undefined;
 
     const uniqueRecipients = [...new Set(recipients)];
     if (uniqueRecipients.length > 0) {
@@ -505,7 +533,14 @@ export async function sendMessage(
       if (rows.length > 0) {
         void sendPush(
           rows.map((r) => r.recipientId),
-          { title, body: preview, url, tag: pushTag, type: notifyType },
+          {
+            title,
+            body: preview,
+            url,
+            tag: pushTag,
+            type: notifyType,
+            icon: notifIcon,
+          },
         );
       }
     }
