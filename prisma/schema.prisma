@@ -874,7 +874,13 @@ model EquityTeamMember {
   holderId String
   holder   EquityHolder @relation(fields: [holderId], references: [id], onDelete: Restrict)
 
-  // What they were called on the deck — "Business development & brand".
+  // What they are on the team, picked from the shared roles registry so the
+  // same capacity reads identically across projects and a rename follows.
+  roleId String?
+  role   EquityRole? @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  // What they were called on the deck before roles: kept so lineups written
+  // as free text still read; new rows carry a roleId instead.
   title String?
   // What they bring, where it differs from the bio on their name.
   body  String?
@@ -888,6 +894,7 @@ model EquityTeamMember {
   @@unique([snapshotId, holderId])
   @@index([snapshotId, order])
   @@index([holderId])
+  @@index([roleId])
 }
 
 // Someone who can hold equity: us, a founder, a fund, an option pool. Names live
@@ -933,7 +940,8 @@ model EquityRole {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  grants EquityGrant[]
+  grants      EquityGrant[]
+  teamMembers EquityTeamMember[]
 }
 
 // Something a project is tracked on: users, churn, revenue, the day a licence

@@ -20,6 +20,7 @@ import {
   deleteEquityTeamSnapshot,
   type EquityHolderDTO,
   type EquityPortfolioDTO,
+  type EquityRoleDTO,
 } from "@/actions/equity";
 
 const inputCls =
@@ -37,7 +38,7 @@ type MemberDraft = {
   /** Survives reordering and name changes, which an index wouldn't. */
   key: string;
   holderId: string;
-  title: string;
+  roleId: string;
   body: string;
 };
 
@@ -50,7 +51,7 @@ type TeamDraft = {
 let memberSeq = 0;
 function blankMember(): MemberDraft {
   memberSeq += 1;
-  return { key: `member-${memberSeq}`, holderId: "", title: "", body: "" };
+  return { key: `member-${memberSeq}`, holderId: "", roleId: "", body: "" };
 }
 
 function today() {
@@ -74,7 +75,7 @@ function nextTeam(previous: Snapshot | undefined): TeamDraft {
     members: previous.members.map((m) => ({
       ...blankMember(),
       holderId: m.holderId,
-      title: m.title ?? "",
+      roleId: m.roleId ?? "",
       body: m.body ?? "",
     })),
   };
@@ -87,7 +88,7 @@ function snapshotToDraft(snapshot: Snapshot): TeamDraft {
     members: snapshot.members.map((m) => ({
       ...blankMember(),
       holderId: m.holderId,
-      title: m.title ?? "",
+      roleId: m.roleId ?? "",
       body: m.body ?? "",
     })),
   };
@@ -113,6 +114,7 @@ function formatDay(iso: string) {
 function TeamForm({
   initial,
   holders,
+  roles,
   busy,
   submitLabel,
   onSubmit,
@@ -120,6 +122,7 @@ function TeamForm({
 }: {
   initial: TeamDraft;
   holders: EquityHolderDTO[];
+  roles: EquityRoleDTO[];
   busy: boolean;
   submitLabel: string;
   onSubmit: (draft: TeamDraft) => void;
@@ -192,7 +195,7 @@ function TeamForm({
             Name
           </span>
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            Title
+            Role
           </span>
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
             What they bring
@@ -220,15 +223,20 @@ function TeamForm({
               ))}
             </select>
 
-            <input
-              type="text"
-              value={member.title}
+            <select
+              value={member.roleId}
               onChange={(e) =>
-                patchMember(member.key, { title: e.target.value })
+                patchMember(member.key, { roleId: e.target.value })
               }
-              placeholder="Business development & brand"
-              className={inputCls}
-            />
+              className={selectCls}
+            >
+              <option value="">No role</option>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
 
             <input
               type="text"
@@ -322,9 +330,11 @@ function TeamForm({
 export function TeamSection({
   portfolio,
   holders,
+  roles,
 }: {
   portfolio: EquityPortfolioDTO;
   holders: EquityHolderDTO[];
+  roles: EquityRoleDTO[];
 }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
@@ -341,7 +351,11 @@ export function TeamSection({
       notes: draft.notes,
       members: draft.members
         .filter((m) => m.holderId)
-        .map((m) => ({ holderId: m.holderId, title: m.title, body: m.body })),
+        .map((m) => ({
+          holderId: m.holderId,
+          roleId: m.roleId || null,
+          body: m.body,
+        })),
     };
   }
 
@@ -403,6 +417,7 @@ export function TeamSection({
             <TeamForm
               initial={nextTeam(current)}
               holders={holders}
+              roles={roles}
               busy={busy}
               submitLabel="Save team"
               onCancel={() => setAdding(false)}
@@ -428,6 +443,7 @@ export function TeamSection({
                   key={snapshot.id}
                   initial={snapshotToDraft(snapshot)}
                   holders={holders}
+                  roles={roles}
                   busy={busy}
                   submitLabel="Save team"
                   onCancel={() => setEditingId(null)}
@@ -475,7 +491,7 @@ export function TeamSection({
                     {snapshot.members.map((member) => (
                       <RecordDetail
                         key={member.id}
-                        label={member.title || "On the team"}
+                        label={member.role?.name || member.title || "On the team"}
                         value={
                           <span className="flex items-center gap-2 min-w-0">
                             <HolderAvatar

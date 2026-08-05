@@ -619,29 +619,27 @@ function TeamMemberPanel({
         </p>
       )}
       {bio && (
-        <>
-          <p
-            ref={bioRef}
-            onClick={clamped ? () => setOpen(true) : undefined}
-            className={cn(
-              "text-[11px] text-muted-foreground mt-3.5 whitespace-pre-wrap line-clamp-3",
-              clamped && "cursor-pointer",
-            )}
-          >
-            {bio}
-          </p>
-          {clamped && (
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className="text-[11px] font-medium text-foreground/70 hover:text-foreground mt-1.5 transition-colors"
-            >
-              Read more
-            </button>
+        <p
+          ref={bioRef}
+          onClick={clamped ? () => setOpen(true) : undefined}
+          className={cn(
+            "text-[11px] text-muted-foreground mt-3.5 whitespace-pre-wrap line-clamp-3",
+            clamped && "cursor-pointer",
           )}
-        </>
+        >
+          {bio}
+        </p>
       )}
-      {linkedin}
+      {linkedin && <div>{linkedin}</div>}
+      {bio && clamped && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="block mx-auto text-[11px] font-medium text-foreground/70 hover:text-foreground mt-2 transition-colors"
+        >
+          Read more
+        </button>
+      )}
 
       {open &&
         createPortal(
@@ -1148,7 +1146,7 @@ export function PortfolioPitch({
                     key={m.id}
                     name={m.holder.name}
                     photoUrl={m.holder.photoUrl}
-                    title={m.title}
+                    title={m.role?.name ?? m.title}
                     bio={m.body || m.holder.bio}
                     linkedinUrl={m.holder.linkedinUrl}
                   />

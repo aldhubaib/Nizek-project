@@ -299,7 +299,7 @@ export function EquityPortfolioClient({
         />
 
         {/* Who is building it, dated — the latest lineup is the team today */}
-        <TeamSection portfolio={portfolio} holders={holders} />
+        <TeamSection portfolio={portfolio} holders={holders} roles={roles} />
 
         {/* Contracts — repeatable related table */}
         <ContractsTable portfolio={portfolio} />

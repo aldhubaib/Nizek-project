@@ -160,6 +160,7 @@ const PORTFOLIO_INCLUDE = {
               linkedinUrl: true,
             },
           },
+          role: { select: { id: true, name: true } },
         },
       },
     },
@@ -327,6 +328,7 @@ function serialize(p: {
     members: {
       id: string;
       holderId: string;
+      roleId: string | null;
       title: string | null;
       body: string | null;
       order: number;
@@ -337,6 +339,7 @@ function serialize(p: {
         bio: string | null;
         linkedinUrl: string | null;
       };
+      role: { id: string; name: string } | null;
     }[];
   }[];
 }) {
@@ -1438,19 +1441,22 @@ export type EquityRoleDTO = {
   notes: string | null;
   /** Equity entries using this role — one in use can't be deleted. */
   grantCount: number;
+  /** Team lineup rows using this role — also a use that blocks deletion. */
+  teamCount: number;
 };
 
 export async function listEquityRoles(): Promise<EquityRoleDTO[]> {
   await requireEquityAccess();
   const roles = await prisma.equityRole.findMany({
     orderBy: { name: "asc" },
-    include: { _count: { select: { grants: true } } },
+    include: { _count: { select: { grants: true, teamMembers: true } } },
   });
   return roles.map((r) => ({
     id: r.id,
     name: r.name,
     notes: r.notes,
     grantCount: r._count.grants,
+    teamCount: r._count.teamMembers,
   }));
 }
 
@@ -1492,12 +1498,17 @@ export async function deleteEquityRole(roleId: string) {
   await requireEquityAccess();
   const role = await prisma.equityRole.findUnique({
     where: { id: roleId },
-    include: { _count: { select: { grants: true } } },
+    include: { _count: { select: { grants: true, teamMembers: true } } },
   });
   if (!role) throw new Error("Role not found");
   if (role._count.grants > 0) {
     throw new Error(
       `${role.name} is used by ${role._count.grants} equity ${role._count.grants === 1 ? "entry" : "entries"} and can't be deleted`,
+    );
+  }
+  if (role._count.teamMembers > 0) {
+    throw new Error(
+      `${role.name} is used on ${role._count.teamMembers} team ${role._count.teamMembers === 1 ? "lineup" : "lineups"} and can't be deleted`,
     );
   }
 
@@ -2065,7 +2076,7 @@ export async function deleteEquityPerformanceEntry(entryId: string) {
 
 type TeamMemberInput = {
   holderId: string;
-  title?: string | null;
+  roleId?: string | null;
   body?: string | null;
 };
 
@@ -2078,7 +2089,10 @@ type TeamSnapshotInput = {
 const TEAM_MEMBERS_INCLUDE = {
   members: {
     orderBy: { order: "asc" as const },
-    include: { holder: { select: { name: true } } },
+    include: {
+      holder: { select: { name: true } },
+      role: { select: { name: true } },
+    },
   },
 };
 
@@ -2086,6 +2100,7 @@ type StoredMember = {
   title: string | null;
   body: string | null;
   holder: { name: string };
+  role: { name: string } | null;
 };
 
 /**
@@ -2102,12 +2117,19 @@ async function prepareTeamMembers(members: TeamMemberInput[]) {
     throw new Error("Someone is on this team twice");
   }
 
-  const known = await prisma.equityHolder.count({ where: { id: { in: ids } } });
+  const roleIds = [
+    ...new Set(rows.map((m) => m.roleId).filter((r): r is string => !!r)),
+  ];
+  const [known, knownRoles] = await Promise.all([
+    prisma.equityHolder.count({ where: { id: { in: ids } } }),
+    prisma.equityRole.count({ where: { id: { in: roleIds } } }),
+  ]);
   if (known !== ids.length) throw new Error("That name no longer exists");
+  if (knownRoles !== roleIds.length) throw new Error("That role no longer exists");
 
   return rows.map((row, i) => ({
     holderId: row.holderId,
-    title: row.title?.trim() || null,
+    roleId: row.roleId || null,
     body: row.body?.trim() || null,
     order: i + 1,
   }));
@@ -2123,7 +2145,9 @@ function teamSnapshotOf(members: StoredMember[]): Snapshot {
   const snapshot: Snapshot = {};
   for (const member of members) {
     snapshot[member.holder.name] =
-      [member.title, member.body].filter(Boolean).join(" — ") || "On the team";
+      [member.role?.name ?? member.title, member.body]
+        .filter(Boolean)
+        .join(" — ") || "On the team";
   }
   return snapshot;
 }
@@ -2193,7 +2217,10 @@ export async function updateEquityTeamSnapshot(
   const after = await prisma.equityTeamMember.findMany({
     where: { snapshotId },
     orderBy: { order: "asc" },
-    include: { holder: { select: { name: true } } },
+    include: {
+      holder: { select: { name: true } },
+      role: { select: { name: true } },
+    },
   });
 
   await logEquityChanges({

@@ -545,7 +545,10 @@ export function EquityRegistryManager({
         items={roles.map((r) => ({
           id: r.id,
           name: r.name,
-          usage: usageLabel([{ label: "entry", n: r.grantCount }]),
+          usage: usageLabel([
+            { label: "entry", n: r.grantCount },
+            { label: "team", n: r.teamCount },
+          ]),
         }))}
         onAdd={async (name) => {
           await addEquityRole({ name });
