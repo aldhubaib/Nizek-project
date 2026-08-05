@@ -1405,7 +1405,12 @@ model PushSubscription {
   auth      String
   deviceId  String?
   userAgent String?
+  /// True when subscribed from an installed PWA (display-mode: standalone),
+  /// false from a browser tab, null for rows created before this was tracked
+  /// (backfilled on the device's next app open via syncPushSubscription).
+  standalone Boolean?
   createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@index([memberId])
   @@index([memberId, deviceId])

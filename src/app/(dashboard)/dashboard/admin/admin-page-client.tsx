@@ -14,6 +14,7 @@ import {
   LogIn,
   Volume2,
   Activity,
+  BellRing,
   ClipboardCheck,
   PieChart,
 } from "lucide-react";
@@ -27,6 +28,7 @@ import { AppLogoClient } from "./app-logo-client";
 import { LoginSettingsClient } from "./login-settings-client";
 import { NotificationSoundClient } from "./notification-sound-client";
 import { PushHealthClient } from "./push-health-client";
+import { NotificationStatusClient } from "./notification-status-client";
 import { AuditAccessManager } from "@/components/settings/audit-access-manager";
 import { EquityAccessManager } from "@/components/settings/equity-access-manager";
 import type { BrandingAssetDTO } from "@/actions/branding";
@@ -44,6 +46,7 @@ type TabId =
   | "login"
   | "notification-sound"
   | "push-health"
+  | "notification-status"
   | "audit-access"
   | "equity-access";
 
@@ -126,6 +129,12 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         label: "Push Health",
         icon: Activity,
         desc: "Delivery success, device coverage, and recent push failures.",
+      },
+      {
+        id: "notification-status",
+        label: "Member Notifications",
+        icon: BellRing,
+        desc: "Who has notifications on or off (website and app), and whether their last notification was opened.",
       },
       {
         id: "audit-access",
@@ -252,6 +261,7 @@ export function AdminPageClient({
           <NotificationSoundClient sound={notificationSound} />
         )}
         {active.id === "push-health" && <PushHealthClient />}
+        {active.id === "notification-status" && <NotificationStatusClient />}
         {active.id === "audit-access" && <AuditAccessManager />}
         {active.id === "equity-access" && <EquityAccessManager />}
       </div>

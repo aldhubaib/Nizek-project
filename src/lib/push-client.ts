@@ -14,6 +14,20 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
+/** True when running as an installed PWA rather than a browser tab. */
+export function isStandaloneDisplayMode(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      // iOS Safari's non-standard flag for home-screen apps.
+      (navigator as { standalone?: boolean }).standalone === true
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function pushSupported(): boolean {
   return (
     typeof window !== "undefined" &&
@@ -64,6 +78,7 @@ export async function syncPushSubscription(
         deviceId: getDeviceId(),
         userAgent:
           typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+        standalone: isStandaloneDisplayMode(),
       }),
     });
     return true;

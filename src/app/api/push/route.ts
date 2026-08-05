@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, skipped: "impersonating" });
     }
 
-    const { endpoint, keys, deviceId, userAgent } = await req.json();
+    const { endpoint, keys, deviceId, userAgent, standalone } = await req.json();
 
     if (!endpoint || !keys?.p256dh || !keys?.auth) {
       return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     const did = typeof deviceId === "string" && deviceId ? deviceId : null;
     const ua =
       typeof userAgent === "string" && userAgent ? userAgent.slice(0, 512) : null;
+    const sa = typeof standalone === "boolean" ? standalone : null;
 
     await prisma.pushSubscription.upsert({
       where: { endpoint },
@@ -32,16 +33,19 @@ export async function POST(req: NextRequest) {
         auth: keys.auth,
         deviceId: did,
         userAgent: ua,
+        standalone: sa,
       },
       update: {
         memberId: user.id,
         p256dh: keys.p256dh,
         auth: keys.auth,
-        // The SW's pushsubscriptionchange re-subscribe can't read localStorage,
-        // so it posts without deviceId — keep existing metadata instead of
-        // wiping it; the next app open backfills via syncPushSubscription.
+        // The SW's pushsubscriptionchange re-subscribe can't read localStorage
+        // or matchMedia, so it posts without these — keep existing metadata
+        // instead of wiping it; the next app open backfills the rest via
+        // syncPushSubscription.
         ...(did ? { deviceId: did } : {}),
         ...(ua ? { userAgent: ua } : {}),
+        ...(sa === null ? {} : { standalone: sa }),
       },
     });
 
