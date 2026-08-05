@@ -267,13 +267,6 @@ export function EquityPortfolioClient({
           photos={portfolio.productPhotos}
         />
 
-        {/* Proof the demand is already there */}
-        <PitchSectionCard
-          portfolioId={portfolio.id}
-          section="MARKET_VALIDATION"
-          items={pitchItems}
-        />
-
         {/* How big the market is, tier by tier — drawn as rings in the report */}
         <MarketSizeSection
           portfolioId={portfolio.id}

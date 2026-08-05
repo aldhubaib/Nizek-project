@@ -7,8 +7,10 @@ import { cn } from "@/lib/utils";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
 import {
   MARKET_CURRENCIES,
+  MARKET_TIERS,
   MARKET_UNITS,
   formatMarketAmount,
+  marketTierName,
 } from "@/lib/market-size";
 import {
   saveEquityMarketSize,
@@ -32,7 +34,7 @@ const GRID = "sm:grid-cols-[minmax(0,1fr)_9rem_9rem_7rem_1.75rem]";
 /** Read back, the three amount columns are one line of text again. */
 const READ_GRID = "sm:grid-cols-[minmax(0,1fr)_minmax(0,25rem)_1.75rem]";
 
-const HEADINGS = ["Name", "Number", "Unit", "Currency"];
+const HEADINGS = ["Tier", "Number", "Unit", "Currency"];
 
 type TierDraft = {
   /** Survives reordering and edits, which an index wouldn't. */
@@ -140,7 +142,7 @@ export function MarketSizeSection({
               key={tier.id}
               className={cn("grid gap-2 items-stretch", READ_GRID)}
             >
-              <div className={readCellCls}>{tier.tier || "—"}</div>
+              <div className={readCellCls}>{marketTierName(tier.tier)}</div>
               <div className={cn(readCellCls, "tabular-nums")}>
                 {formatMarketAmount(tier)}
               </div>
@@ -170,13 +172,37 @@ function MarketSizeForm({
   onDone: () => void;
   onCancel: () => void;
 }) {
+  // A fresh form starts with all three tiers laid out rather than one blank
+  // row: TAM/SAM/SOM is the whole vocabulary, so the form may as well say so.
   const [rows, setRows] = useState<TierDraft[]>(() =>
-    tiers.length > 0 ? tiers.map(tierToDraft) : [blankTier(currency)],
+    tiers.length > 0
+      ? tiers.map(tierToDraft)
+      : MARKET_TIERS.map((t) => ({ ...blankTier(currency), tier: t.key })),
   );
 
   function update(key: string, patch: Partial<TierDraft>) {
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   }
+
+  /** TAM/SAM/SOM once each: what the other rows hold is out of this picker,
+   * and a name saved before the picker existed stays choosable so editing a
+   * row doesn't silently rename it. */
+  function tierOptions(row: TierDraft) {
+    const taken = new Set(
+      rows.filter((r) => r.key !== row.key).map((r) => r.tier),
+    );
+    const options = MARKET_TIERS.filter(
+      (t) => t.key === row.tier || !taken.has(t.key),
+    ).map((t) => ({ value: t.key, label: `${t.key} — ${t.name}` }));
+    if (row.tier && !MARKET_TIERS.some((t) => t.key === row.tier)) {
+      options.unshift({ value: row.tier, label: row.tier });
+    }
+    return options;
+  }
+
+  const allTiersUsed = MARKET_TIERS.every((t) =>
+    rows.some((r) => r.tier === t.key),
+  );
 
   async function save() {
     setBusy(true);
@@ -214,13 +240,18 @@ function MarketSizeForm({
 
         {rows.map((row) => (
           <div key={row.key} className={cn("grid gap-2 items-start", GRID)}>
-            <input
-              type="text"
+            <select
               value={row.tier}
               onChange={(e) => update(row.key, { tier: e.target.value })}
-              placeholder="Total available market"
               className={inputCls}
-            />
+            >
+              <option value="">Pick a tier</option>
+              {tierOptions(row).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
             <input
               type="number"
               inputMode="decimal"
@@ -271,14 +302,25 @@ function MarketSizeForm({
           </div>
         ))}
 
-        <button
-          type="button"
-          onClick={() => setRows((rs) => [...rs, blankTier(currency)])}
-          className="flex items-center gap-1 px-2.5 h-8 rounded-lg border border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
-        >
-          <Plus className="w-3 h-3" />
-          Add a tier
-        </button>
+        {!allTiersUsed && (
+          <button
+            type="button"
+            onClick={() =>
+              setRows((rs) => {
+                const taken = new Set(rs.map((r) => r.tier));
+                const next = MARKET_TIERS.find((t) => !taken.has(t.key));
+                return [
+                  ...rs,
+                  { ...blankTier(currency), tier: next?.key ?? "" },
+                ];
+              })
+            }
+            className="flex items-center gap-1 px-2.5 h-8 rounded-lg border border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
+          >
+            <Plus className="w-3 h-3" />
+            Add a tier
+          </button>
+        )}
       </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-border pt-3">

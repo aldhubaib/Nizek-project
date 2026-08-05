@@ -26,8 +26,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { countryFlag, countryName } from "@/lib/countries";
-import { formatMarketAmount, marketAmount } from "@/lib/market-size";
+import {
+  formatMarketAmount,
+  marketAmount,
+  marketTierName,
+} from "@/lib/market-size";
 import { ChartFrame } from "@/components/equity/chart-frame";
 import { PhotoGallery } from "@/components/equity/photo-gallery";
 import {
@@ -98,7 +101,6 @@ const SECTIONS: { id: string; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "opportunity", label: "Opportunity" },
   { id: "product", label: "The product" },
-  { id: "validation", label: "Market validation" },
   { id: "market", label: "Market size" },
   { id: "business-model", label: "Business model" },
   { id: "adoption", label: "Market adoption" },
@@ -697,7 +699,6 @@ export function PortfolioPitch({
   const opportunity = portfolio.opportunity;
   const description = portfolio.project.description;
 
-  const validation = itemsOf(portfolio, "MARKET_VALIDATION");
   const businessModel = itemsOf(portfolio, "BUSINESS_MODEL");
   const adoption = itemsOf(portfolio, "MARKET_ADOPTION");
   const competition = itemsOf(portfolio, "COMPETITION");
@@ -706,7 +707,10 @@ export function PortfolioPitch({
   // kept, and the section says how many there are rather than listing them.
   const team = portfolio.teamSnapshots[0];
   const teamHistory = Math.max(portfolio.teamSnapshots.length - 1, 0);
-  const marketTiers = portfolio.marketTiers;
+  // Only tiers with a figure appear in the report: one left empty is left out
+  // of the drawing and the table, and with none filled in the section says
+  // "No data" rather than drawing nothing.
+  const marketTiers = portfolio.marketTiers.filter((t) => marketAmount(t) > 0);
   const productPhotos = portfolio.productPhotos;
   const milestones = portfolio.milestones;
 
@@ -876,54 +880,6 @@ export function PortfolioPitch({
           )}
         </Section>
 
-        {/* ── Market validation ── */}
-        <Section
-          id="validation"
-          icon={CheckCircle2}
-          title="Market validation"
-        >
-          {validation.length === 0 ? (
-            <NoData />
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-6">
-              {validation.map((v) => (
-                <Panel key={v.id}>
-                  <p
-                    className="text-[24px] font-bold tabular-nums leading-none"
-                    style={{ color: ACCENT }}
-                  >
-                    {v.figure || "—"}
-                  </p>
-                  <p className="text-[12px] text-foreground mt-3">{v.caption}</p>
-                  {v.heading && (
-                    <p className="text-[11px] text-muted-foreground mt-3">
-                      {v.heading}
-                    </p>
-                  )}
-                  {v.countries.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-4">
-                      {v.countries.map((c) => (
-                        <span
-                          key={c}
-                          title={countryName(c)}
-                          className="text-[11px] px-1.5 py-0.5 rounded-md bg-muted/60 text-muted-foreground"
-                        >
-                          {countryFlag(c)} {c}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {v.body && (
-                    <p className="text-[10px] text-muted-foreground/70 mt-3.5">
-                      {v.body}
-                    </p>
-                  )}
-                </Panel>
-              ))}
-            </div>
-          )}
-        </Section>
-
         {/* ── Market size: the tiers, drawn inside one another to scale ── */}
         <Section
           id="market"
@@ -935,12 +891,12 @@ export function PortfolioPitch({
           ) : (
             <ChartFrame
               title="How big the market is"
-              note="Each tier is drawn inside the one above it, with area — not width — following the amount, since that is how two circles get compared by eye. The number, its scale and its currency are entered on the portfolio page; a tier left without a figure is named under the drawing rather than plotted."
+              note="Each tier is drawn inside the one above it, with area — not width — following the amount, since that is how two circles get compared by eye. The number, its scale and its currency are entered on the portfolio page; a tier left without a figure is left out entirely."
               source="Market size"
               data={{
                 columns: ["Name", "Amount"],
                 rows: marketTiers.map((t) => [
-                  t.tier || "—",
+                  marketTierName(t.tier),
                   formatMarketAmount(t),
                 ]),
               }}

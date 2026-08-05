@@ -454,8 +454,9 @@ export function MarketRings({ tiers }: { tiers: MarketTier[] }) {
     [tiers],
   );
 
+  // A tier without a figure is simply not shown; the caller decides what an
+  // entirely empty set looks like (the pitch shows its "No data" state).
   const drawable = ordered.filter((t) => t.value > 0);
-  const undrawable = ordered.filter((t) => t.value <= 0);
   const largest = drawable[0]?.value ?? 0;
   const maxRadius = (RING_BOX - 12) / 2;
   const baseY = RING_BOX - 6;
@@ -552,17 +553,6 @@ export function MarketRings({ tiers }: { tiers: MarketTier[] }) {
         </div>
       )}
 
-      {/*
-        Every ring names itself in the middle of the drawing, so there's no key
-        under it to repeat them. The one thing the drawing can't say is that a
-        tier was left out of it, which is what this line is for.
-      */}
-      {undrawable.length > 0 && (
-        <p className="text-[11px] text-muted-foreground text-center">
-          Not drawn, no amount against them:{" "}
-          {undrawable.map((t) => t.tier || "a tier").join(", ")}.
-        </p>
-      )}
     </div>
   );
 }

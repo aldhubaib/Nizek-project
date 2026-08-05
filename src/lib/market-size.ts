@@ -10,6 +10,25 @@
 
 export type MarketUnit = "THOUSAND" | "MILLION" | "BILLION" | "TRILLION";
 
+/**
+ * The three tiers a market is quoted in, widest first. The name is picked, not
+ * typed — TAM/SAM/SOM is the vocabulary every reader already has, and a fixed
+ * list is what lets the drawing nest one inside the other with confidence.
+ */
+export const MARKET_TIERS: { key: string; name: string }[] = [
+  { key: "TAM", name: "Total addressable market" },
+  { key: "SAM", name: "Serviceable available market" },
+  { key: "SOM", name: "Serviceable obtainable market" },
+];
+
+/** "TAM" back as "TAM — Total addressable market"; anything saved before the
+ * picker existed reads as it was typed. */
+export function marketTierName(tier: string | null): string {
+  if (!tier) return "—";
+  const known = MARKET_TIERS.find((t) => t.key === tier);
+  return known ? `${known.key} — ${known.name}` : tier;
+}
+
 export const MARKET_UNITS: { key: MarketUnit; label: string; factor: number }[] =
   [
     { key: "THOUSAND", label: "thousand", factor: 1_000 },
