@@ -128,6 +128,9 @@ export default async function ThreadPage({
     const map = new Map<string, { id: string; name: string }>();
     for (const m of [...projectMembers.map((pm) => pm.user), ...admins]) {
       map.set(m.id, { id: m.id, name: m.name ?? m.email });
+      // Names the typing indicator can show — "Sara is typing…" rather than
+      // "Someone is typing…".
+      memberNames[m.id] = m.name ?? m.email;
     }
     map.delete(user.id);
     mentionables = [...map.values()].sort((a, b) => a.name.localeCompare(b.name));

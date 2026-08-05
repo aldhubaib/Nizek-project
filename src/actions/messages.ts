@@ -492,18 +492,19 @@ export async function sendMessage(
           ? "message"
           : "mention";
     // Where the message came from, right in the OS banner: the group name, an
-    // explicit "Direct message", or the task's project.
+    // explicit "Direct message", or the task's project. Kept short — iOS
+    // truncates banner titles around 30 characters, so anything appended after
+    // "mentioned you in …" was never visible. Author first, context right
+    // after, and the task name moves into the body (which gets two lines).
     const title = conversationId
       ? `${authorName} · ${groupName || "Direct message"}`
       : input.kind === "rejection"
         ? `${authorName} declined "${taskTitle}"`
-        : `${authorName} mentioned you${
-            taskTitle
-              ? ` in "${taskTitle}" · ${projectName}`
-              : projectName
-                ? ` in ${projectName}`
-                : ""
-          }`;
+        : `${authorName} · ${projectName}`;
+    const notifBody =
+      taskTitle && input.kind !== "rejection"
+        ? `"${taskTitle}" — ${preview}`
+        : preview;
     // DMs and groups show the sender's face; project threads show the project
     // logo. The service worker falls back to the app icon when neither exists.
     const notifIcon =
@@ -524,7 +525,7 @@ export async function sendMessage(
         recipientIds: uniqueRecipients,
         type: notifyType,
         title,
-        body: preview,
+        body: notifBody,
         linkUrl: url,
         tag: pushTag,
         threadKey: threadId,
@@ -535,7 +536,7 @@ export async function sendMessage(
           rows.map((r) => r.recipientId),
           {
             title,
-            body: preview,
+            body: notifBody,
             url,
             tag: pushTag,
             type: notifyType,
