@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Activity,
   AlertCircle,
@@ -23,6 +24,7 @@ import {
   Target,
   TrendingUp,
   Users,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -553,6 +555,143 @@ function TeamPhoto({
 }
 
 /**
+ * One person on the team. A bio can run to paragraphs, and a card that long
+ * drags the whole grid with it — so the card shows three lines, and clicking
+ * them opens an overlay with the person in full.
+ */
+function TeamMemberPanel({
+  name,
+  photoUrl,
+  title,
+  bio,
+  linkedinUrl,
+}: {
+  name: string;
+  photoUrl: string | null;
+  title: string | null;
+  bio: string | null;
+  linkedinUrl: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const bioRef = useRef<HTMLParagraphElement>(null);
+  const [clamped, setClamped] = useState(false);
+
+  // Whether the three-line clamp actually cut anything — measured, since a
+  // character count guesses wrong at every column width.
+  useEffect(() => {
+    const el = bioRef.current;
+    if (!el) return;
+    const check = () => setClamped(el.scrollHeight > el.clientHeight + 1);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [bio]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const linkedin = linkedinUrl && (
+    <a
+      href={linkedinUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground no-underline mt-4 transition-colors"
+    >
+      <ExternalLink className="w-3 h-3" strokeWidth={1.5} />
+      LinkedIn
+    </a>
+  );
+
+  return (
+    <Panel className="text-center">
+      <TeamPhoto name={name} photoUrl={photoUrl} />
+      <p className="text-[13px] font-semibold text-foreground">{name}</p>
+      {title && (
+        <p className="text-[11px] mt-1.5" style={{ color: ACCENT }}>
+          {title}
+        </p>
+      )}
+      {bio && (
+        <>
+          <p
+            ref={bioRef}
+            onClick={clamped ? () => setOpen(true) : undefined}
+            className={cn(
+              "text-[11px] text-muted-foreground mt-3.5 whitespace-pre-wrap line-clamp-3",
+              clamped && "cursor-pointer",
+            )}
+          >
+            {bio}
+          </p>
+          {clamped && (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className="text-[11px] font-medium text-foreground/70 hover:text-foreground mt-1.5 transition-colors"
+            >
+              Read more
+            </button>
+          )}
+        </>
+      )}
+      {linkedin}
+
+      {open &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4"
+            onClick={() => setOpen(false)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={name}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border border-border/60 bg-background p-6 text-left"
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-20 shrink-0">
+                  <TeamPhoto name={name} photoUrl={photoUrl} />
+                </div>
+                <div className="min-w-0 flex-1 pt-1">
+                  <p className="text-[15px] font-semibold text-foreground">
+                    {name}
+                  </p>
+                  {title && (
+                    <p className="text-[12px] mt-1" style={{ color: ACCENT }}>
+                      {title}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close"
+                  className="p-2 -m-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-[12.5px] leading-relaxed text-muted-foreground whitespace-pre-wrap mt-4">
+                {bio}
+              </p>
+              {linkedin}
+            </div>
+          </div>,
+          document.body,
+        )}
+    </Panel>
+  );
+}
+
+/**
  * A module, or a field of one, with nothing in it. Said rather than left out:
  * a report that skips what it hasn't got reads as complete when it isn't, and
  * the gap is often the thing worth seeing.
@@ -1005,36 +1144,14 @@ export function PortfolioPitch({
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-6">
                 {team.members.map((m) => (
-                  <Panel key={m.id} className="text-center">
-                    <TeamPhoto
-                      name={m.holder.name}
-                      photoUrl={m.holder.photoUrl}
-                    />
-                    <p className="text-[13px] font-semibold text-foreground">
-                      {m.holder.name}
-                    </p>
-                    {m.title && (
-                      <p className="text-[11px] mt-1.5" style={{ color: ACCENT }}>
-                        {m.title}
-                      </p>
-                    )}
-                    {(m.body || m.holder.bio) && (
-                      <p className="text-[11px] text-muted-foreground mt-3.5 whitespace-pre-wrap">
-                        {m.body || m.holder.bio}
-                      </p>
-                    )}
-                    {m.holder.linkedinUrl && (
-                      <a
-                        href={m.holder.linkedinUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground no-underline mt-4 transition-colors"
-                      >
-                        <ExternalLink className="w-3 h-3" strokeWidth={1.5} />
-                        LinkedIn
-                      </a>
-                    )}
-                  </Panel>
+                  <TeamMemberPanel
+                    key={m.id}
+                    name={m.holder.name}
+                    photoUrl={m.holder.photoUrl}
+                    title={m.title}
+                    bio={m.body || m.holder.bio}
+                    linkedinUrl={m.holder.linkedinUrl}
+                  />
                 ))}
               </div>
             </>
