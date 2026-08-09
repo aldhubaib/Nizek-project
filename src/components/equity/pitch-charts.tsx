@@ -61,6 +61,12 @@ export type Slice = {
   sub?: string;
   /** Ours, which is drawn in the house pink wherever it lands in the order. */
   isUs?: boolean;
+  /**
+   * The stages a slice is made of, where it has more than one — a stake
+   * protected in tranches. Drawn as one slice in one hue, divided by hairlines,
+   * each stage a step of the same colour with its own figure and caption.
+   */
+  parts?: { value: number; sub?: string }[];
 };
 
 /**
@@ -76,6 +82,21 @@ function sliceColors(slices: Slice[]) {
   return slices.map((s) =>
     s.isUs ? SERIES[0] : SERIES[1 + (other++ % (SERIES.length - 1))],
   );
+}
+
+/**
+ * The step of a slice's colour its stage number earns: the first stage keeps
+ * the hue as given and each later one sinks a little towards the card, so the
+ * stages read as cuts of one holding rather than as new holders.
+ */
+function stageShade(hex: string, stage: number, stages: number) {
+  if (stages <= 1 || stage === 0) return hex;
+  const t = (stage / (stages - 1)) * 0.45;
+  const channel = (at: number) => {
+    const own = parseInt(hex.slice(at, at + 2), 16);
+    return Math.round(own + (10 - own) * t);
+  };
+  return `rgb(${channel(1)},${channel(3)},${channel(5)})`;
 }
 
 export type LegendEntry = {
@@ -167,11 +188,41 @@ export function DonutChart({
   centerLabel: string;
 }) {
   const [chart, setChart] = useState<ECharts | null>(null);
-  const [active, setActive] = useState<number | null>(null);
+  // What the pointer is on: a single stage of a slice when it came off the
+  // ring, or the whole slice when it came off the legend.
+  const [active, setActive] = useState<
+    { slice: number; piece: number | null } | null
+  >(null);
 
   const allocated = slices.reduce((sum, s) => sum + s.value, 0);
   const unallocated = Math.round((total - allocated) * 100) / 100;
   const colors = useMemo(() => sliceColors(slices), [slices]);
+
+  // The ring is drawn a piece per stage rather than a piece per slice, so a
+  // stake protected in tranches shows its stages: same hue stepped a shade per
+  // stage, parted by hairlines where whole holders are parted by full gaps.
+  const pieces = useMemo(
+    () =>
+      slices.flatMap((s, slice) => {
+        const parts =
+          s.parts && s.parts.length > 1 ? s.parts : [{ value: s.value }];
+        return parts.map((p, i) => ({
+          slice,
+          label: s.label,
+          value: p.value,
+          sub: "sub" in p ? p.sub : undefined,
+          total: s.value,
+          staged: parts.length > 1,
+          color: stageShade(colors[slice], i, parts.length),
+        }));
+      }),
+    [slices, colors],
+  );
+  const piecesOf = useCallback(
+    (slice: number) =>
+      pieces.flatMap((p, i) => (p.slice === slice ? [i] : [])),
+    [pieces],
+  );
 
   const option = useMemo<EChartsOption>(
     () => ({
@@ -180,8 +231,16 @@ export function DonutChart({
         ...TOOLTIP,
         trigger: "item",
         formatter: (params) => {
-          const p = params as { marker: string; name: string; value: number };
-          return `${p.marker} ${p.name} &nbsp;<b>${p.value}%</b>`;
+          const p = params as {
+            marker: string;
+            name: string;
+            value: number;
+            data: { sub?: string; total?: number };
+          };
+          const caption = p.data.sub
+            ? `<br/><span style="opacity:.65">${p.data.sub} · ${p.data.total}% in all</span>`
+            : "";
+          return `${p.marker} ${p.name} &nbsp;<b>${p.value}%</b>${caption}`;
         },
       },
       series: [
@@ -198,10 +257,17 @@ export function DonutChart({
             itemStyle: { shadowBlur: 16, shadowColor: "rgba(0,0,0,0.5)" },
           },
           data: [
-            ...slices.map((s, i) => ({
-              name: s.label,
-              value: s.value,
-              itemStyle: { color: colors[i] },
+            ...pieces.map((p) => ({
+              name: p.label,
+              value: p.value,
+              sub: p.sub,
+              total: p.total,
+              itemStyle: {
+                color: p.color,
+                // Within one holding the gaps thin out to hairlines, so its
+                // stages read as divisions of one thing.
+                ...(p.staged ? { borderWidth: 1.5, borderRadius: 3 } : {}),
+              },
             })),
             ...(unallocated > 0.01
               ? [
@@ -216,18 +282,23 @@ export function DonutChart({
         },
       ],
     }),
-    [slices, colors, unallocated],
+    [pieces, unallocated],
   );
 
-  // Hovering the ring names the slice in the middle, the same as hovering its
+  // Hovering the ring names the piece in the middle, the same as hovering its
   // line in the legend does — one piece of state, whichever side it came from.
-  const onReady = useCallback((instance: ECharts) => {
-    setChart(instance);
-    instance.on("mouseover", { seriesIndex: 0 }, (event) => {
-      setActive((event as { dataIndex: number }).dataIndex);
-    });
-    instance.on("globalout", () => setActive(null));
-  }, []);
+  const onReady = useCallback(
+    (instance: ECharts) => {
+      setChart(instance);
+      instance.on("mouseover", { seriesIndex: 0 }, (event) => {
+        const at = (event as { dataIndex: number }).dataIndex;
+        const piece = pieces[at];
+        setActive(piece ? { slice: piece.slice, piece: at } : null);
+      });
+      instance.on("globalout", () => setActive(null));
+    },
+    [pieces],
+  );
 
   useEffect(() => {
     if (!chart) return;
@@ -237,12 +308,23 @@ export function DonutChart({
       chart.dispatchAction({
         type: "highlight",
         seriesIndex: 0,
-        dataIndex: active,
+        // Off the legend, every stage of the holder lights up together.
+        dataIndex: active.piece ?? piecesOf(active.slice),
       });
     }
-  }, [chart, active]);
+  }, [chart, active, piecesOf]);
 
-  const shown = active != null ? slices[active] : null;
+  // A stage under the cursor is named with its own figure and milestone; a
+  // whole slice, or a stage of a plain one-piece slice, reads as before.
+  const shown = (() => {
+    if (active == null) return null;
+    const piece = active.piece != null ? pieces[active.piece] : null;
+    if (piece?.sub) {
+      return { value: piece.value, label: `${piece.label} · ${piece.sub}` };
+    }
+    const s = slices[active.slice];
+    return s ? { value: s.value, label: s.label } : null;
+  })();
 
   return (
     <div className="flex flex-col items-center gap-7">
@@ -267,8 +349,10 @@ export function DonutChart({
           value: `${s.value}%`,
           sub: s.sub,
         }))}
-        active={active}
-        onActive={setActive}
+        active={active?.slice ?? null}
+        onActive={(i) =>
+          setActive(i == null ? null : { slice: i, piece: null })
+        }
       />
     </div>
   );

@@ -323,37 +323,114 @@ function metricSeriesOf(portfolio: EquityPortfolioDTO): MetricSeries[] {
 /**
  * The current split as slices of a cap table: rows under one name are one
  * holder's stake, since a name protected in stages is still one person on the
- * chart. Kept alongside the number of rows it came from, so the table behind
- * the chart can show the merge rather than hide it.
+ * chart. Kept alongside the number of rows it came from and the stages the
+ * stake breaks into — a fixed piece, or a protected tranche and the valuation
+ * it holds to — so the chart and the table behind it can show the make-up of
+ * the merge rather than hide it.
  */
 function capTable(
   grants: {
     equityPct: number;
+    structureType?: string;
+    tranches?: { equityPct: number; startsAtValuation: number }[];
     holder: { name: string; isUs?: boolean } | null;
   }[],
 ) {
   const byHolder = new Map<
     string,
-    { label: string; value: number; rows: number; isUs: boolean }
+    {
+      label: string;
+      value: number;
+      rows: number;
+      isUs: boolean;
+      parts: { value: number; protectedTo: number | null }[];
+    }
   >();
   for (const g of grants) {
     const label = g.holder?.name ?? "Unassigned";
-    const at = byHolder.get(label);
-    if (at) {
-      at.value += g.equityPct;
-      at.rows += 1;
-    } else {
-      byHolder.set(label, {
-        label,
-        value: g.equityPct,
-        rows: 1,
-        isUs: g.holder?.isUs ?? false,
-      });
-    }
+    const parts =
+      g.structureType === "TRANCHED" && g.tranches?.length
+        ? g.tranches.map((t) => ({
+            value: t.equityPct,
+            protectedTo: t.startsAtValuation,
+          }))
+        : [{ value: g.equityPct, protectedTo: null }];
+    const at = byHolder.get(label) ?? {
+      label,
+      value: 0,
+      rows: 0,
+      isUs: g.holder?.isUs ?? false,
+      parts: [],
+    };
+    at.value += g.equityPct;
+    at.rows += 1;
+    at.parts.push(...parts);
+    byHolder.set(label, at);
   }
   return [...byHolder.values()]
-    .map((s) => ({ ...s, value: Math.round(s.value * 100) / 100 }))
+    .map((s) => ({
+      ...s,
+      value: Math.round(s.value * 100) / 100,
+      // Fixed pieces first, then the protected stages cheapest milestone
+      // first — the order the protection gives way in as the company is
+      // valued higher.
+      parts: [...s.parts]
+        .sort((a, b) => (a.protectedTo ?? -1) - (b.protectedTo ?? -1))
+        .map((p) => ({ ...p, value: Math.round(p.value * 100) / 100 })),
+    }))
     .sort((a, b) => b.value - a.value);
+}
+
+/** How one stage of a stake reads — "Protected to 2,000,000 KWD", or "Fixed". */
+function stageCaption(
+  part: { protectedTo: number | null },
+  currency: string,
+) {
+  return part.protectedTo != null
+    ? `Protected to ${formatValuation(part.protectedTo, currency)}`
+    : "Fixed";
+}
+
+/** The cap table as the donut draws it, stages captioned in the money. */
+function splitSlices(rows: ReturnType<typeof capTable>, currency: string) {
+  return rows.map((s) => ({
+    label: s.label,
+    value: s.value,
+    isUs: s.isUs,
+    parts:
+      s.parts.length > 1
+        ? s.parts.map((p) => ({
+            value: p.value,
+            sub: stageCaption(p, currency),
+          }))
+        : undefined,
+  }));
+}
+
+/**
+ * The cap table as the data view prints it: a line per name, and under a name
+ * whose stake comes in stages, an indented line per stage with its own figure.
+ */
+function splitTableRows(
+  rows: ReturnType<typeof capTable>,
+  currency: string,
+): React.ReactNode[][] {
+  return rows.flatMap((s) => {
+    const own: React.ReactNode[] = [s.label, s.rows, formatPct(s.value)];
+    if (s.parts.length <= 1) return [own];
+    return [
+      own,
+      ...s.parts.map((p, i) => [
+        <span key={i} className="block pl-4 text-muted-foreground">
+          {stageCaption(p, currency)}
+        </span>,
+        "",
+        <span key={i} className="text-muted-foreground/80">
+          {formatPct(p.value)}
+        </span>,
+      ]),
+    ];
+  });
 }
 
 // ─── Layout pieces ──────────────────────────────────────
@@ -1170,7 +1247,7 @@ export function PortfolioPitch({
             <div className="space-y-6">
               <ChartFrame
                 title="The split"
-                note="Every row of the current split, added up per name — a stake protected in stages holds several rows but is one holder on the chart. The centre is our own share of the same split."
+                note="Every row of the current split, added up per name — a stake protected in stages holds several rows but is one holder on the chart, drawn as one slice divided into its stages. Each stage is listed under its name here with the valuation it holds to. The centre is our own share of the same split."
                 source={
                   latest
                     ? `Equity · split effective ${day(latest.effectiveOn)} · ${
@@ -1180,11 +1257,7 @@ export function PortfolioPitch({
                 }
                 data={{
                   columns: ["Name", "Rows", "Equity"],
-                  rows: slices.map((s) => [
-                    s.label,
-                    s.rows,
-                    formatPct(s.value),
-                  ]),
+                  rows: splitTableRows(slices, currency),
                 }}
                 history={pastSplits.map((s) => ({
                   label: day(s.effectiveOn) ?? "Earlier",
@@ -1200,16 +1273,12 @@ export function PortfolioPitch({
                   }`,
                   data: {
                     columns: ["Name", "Rows", "Equity"],
-                    rows: capTable(s.grants).map((row) => [
-                      row.label,
-                      row.rows,
-                      formatPct(row.value),
-                    ]),
+                    rows: splitTableRows(capTable(s.grants), currency),
                   },
                 }))}
               >
                 <DonutChart
-                  slices={slices}
+                  slices={splitSlices(slices, currency)}
                   total={100}
                   centerLabel={formatPct(held)}
                 />
