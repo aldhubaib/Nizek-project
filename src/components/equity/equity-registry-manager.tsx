@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
+import { GrowingTextarea } from "@/components/equity/growing-textarea";
 import { HolderAvatar } from "@/components/equity/holder-avatar";
 import {
   addEquityHolder,
@@ -336,12 +337,11 @@ function HolderEditor({
 
       <div>
         <label className={labelCls}>Bio</label>
-        <textarea
+        <GrowingTextarea
           value={bio}
-          onChange={(e) => setBio(e.target.value)}
-          rows={3}
+          onChange={setBio}
           placeholder="Who they are and what they bring to the table."
-          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 resize-y"
+          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
         />
       </div>
 

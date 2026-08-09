@@ -21,6 +21,7 @@ import {
   sortedCountries,
 } from "@/lib/countries";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
+import { GrowingTextarea } from "@/components/equity/growing-textarea";
 import { MARKET_CURRENCIES, MARKET_UNITS } from "@/lib/market-size";
 import {
   saveEquityPitchSection,
@@ -628,12 +629,11 @@ export function PitchRowsEditor({
         );
       case "textarea":
         return (
-          <textarea
+          <GrowingTextarea
             value={row[spec.key as "body" | "caption"]}
-            onChange={(e) =>
-              update(row.key, { [spec.key]: e.target.value } as Partial<ItemDraft>)
+            onChange={(value) =>
+              update(row.key, { [spec.key]: value } as Partial<ItemDraft>)
             }
-            rows={2}
             placeholder={spec.placeholder}
             className={textareaCls}
           />

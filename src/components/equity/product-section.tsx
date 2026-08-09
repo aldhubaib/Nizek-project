@@ -6,6 +6,7 @@ import { ImagePlus, Loader2, Package, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
+import { GrowingTextarea } from "@/components/equity/growing-textarea";
 import { PhotoGallery } from "@/components/equity/photo-gallery";
 import {
   Blank,
@@ -209,10 +210,9 @@ function ProductForm({
 
   return (
     <div className="space-y-4">
-      <textarea
+      <GrowingTextarea
         value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={5}
+        onChange={setText}
         placeholder="Search by price and location, browse host profiles, book in three clicks…"
         className={textareaCls}
       />

@@ -13,6 +13,7 @@ import {
 } from "@/actions/equity";
 import { LIVE_STATUS, formatLiveStatus, liveStatus } from "@/lib/equity-math";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
+import { GrowingTextarea } from "@/components/equity/growing-textarea";
 import {
   Blank,
   EditButton,
@@ -278,10 +279,9 @@ function OpportunityForm({
         <p className="text-[11px] text-muted-foreground mb-1.5">
           Shared with the project — editing it here updates the project page too.
         </p>
-        <textarea
+        <GrowingTextarea
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={4}
+          onChange={setDescription}
           placeholder="What the company does, in a paragraph."
           className={textareaCls}
         />
@@ -293,10 +293,9 @@ function OpportunityForm({
           <p className="text-[11px] text-muted-foreground mb-1.5">
             {p.description}
           </p>
-          <textarea
+          <GrowingTextarea
             value={prose[p.key]}
-            onChange={(e) => setProse[p.key](e.target.value)}
-            rows={4}
+            onChange={setProse[p.key]}
             placeholder={p.placeholder}
             className={textareaCls}
           />

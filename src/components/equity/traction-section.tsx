@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Flag, ImagePlus, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { GrowingTextarea } from "@/components/equity/growing-textarea";
 import { uploadFileToR2 } from "@/lib/upload";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
 import {
@@ -183,49 +184,6 @@ export function TractionSection({
   );
 }
 
-/**
- * A detail box the height of what's written in it. A milestone's detail is a
- * paragraph, and a paragraph you can only see one line of at a time is one you
- * can't check over before saving.
- *
- * It stops growing at a point that would otherwise dwarf the rows around it
- * and scrolls beyond that, which only a very long entry will ever reach.
- */
-function GrowingTextarea({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-}) {
-  // Reset first: scrollHeight is measured against the current height, so
-  // without this the box could only ever get taller.
-  const fit = useCallback((el: HTMLTextAreaElement | null) => {
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, []);
-
-  return (
-    <textarea
-      // Sizes what's already there when the form opens; typing keeps it fitted.
-      ref={fit}
-      value={value}
-      onChange={(e) => {
-        onChange(e.target.value);
-        fit(e.currentTarget);
-      }}
-      placeholder={placeholder}
-      rows={1}
-      className={cn(
-        inputCls,
-        "h-auto min-h-9 max-h-80 py-2 resize-none overflow-y-auto",
-      )}
-    />
-  );
-}
 
 /**
  * One row's photo: the thumbnail once there is one, an empty frame to click
@@ -400,6 +358,7 @@ function TractionForm({
               value={row.body}
               onChange={(body) => update(row.key, { body })}
               placeholder="What happened, and why it mattered."
+              className={cn(inputCls, "py-2")}
             />
             <PhotoCell
               url={row.photoUrl}

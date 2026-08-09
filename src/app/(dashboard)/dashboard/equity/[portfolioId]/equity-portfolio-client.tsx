@@ -41,6 +41,7 @@ import { MarketSizeSection } from "@/components/equity/market-size-section";
 import { TractionSection } from "@/components/equity/traction-section";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
 import { ConfirmDeleteDialog } from "@/components/equity/confirm-delete-dialog";
+import { GrowingTextarea } from "@/components/equity/growing-textarea";
 import {
   RecordBadge,
   RecordDetail,
@@ -890,12 +891,11 @@ function ContractForm({
         </div>
         <div className="md:col-span-2">
           <label className={labelCls}>Notes</label>
-          <textarea
+          <GrowingTextarea
             value={draft.notes}
-            onChange={(e) => set("notes", e.target.value)}
-            rows={2}
+            onChange={(notes) => set("notes", notes)}
             placeholder="e.g. signed between Abdulaziz and the founders, not Nizek"
-            className={cn(inputCls, "h-auto py-2 resize-y")}
+            className={cn(inputCls, "py-2")}
           />
         </div>
       </div>
