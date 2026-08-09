@@ -125,7 +125,7 @@ export function Lightbox({
         </div>
       </div>
       <div
-        className="relative flex flex-1 items-center justify-center px-4 pb-6"
+        className="relative flex min-h-0 flex-1 items-center justify-center px-4 pb-6"
         onClick={(e) => e.stopPropagation()}
       >
         {images.length > 1 && (
@@ -144,7 +144,11 @@ export function Lightbox({
         <img
           src={current.url}
           alt={current.name}
-          className="max-h-full max-w-full rounded-lg object-contain"
+          // Viewport-based cap (header ≈ 60px + bottom padding) instead of
+          // max-h-full: percentage heights inside a grown flex item don't
+          // resolve reliably (Safari/iOS), which let tall images overflow and
+          // get cut off. dvh tracks the real visible height on mobile.
+          className="max-h-[calc(100dvh-6.5rem)] max-w-full rounded-lg object-contain"
         />
         {images.length > 1 && (
           <button
