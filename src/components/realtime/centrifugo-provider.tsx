@@ -24,14 +24,24 @@ const BACKGROUND_GRACE_MS = 30_000;
 // so many components can watch the same channel over one Subscription.
 
 type MessageHandler = (data: unknown) => void;
+type StaleHandler = () => void;
 
 type CentrifugoContextValue = {
   connected: boolean;
   /** True when a Centrifugo WS URL is configured (realtime is available). */
   enabled: boolean;
   memberId: string;
-  /** Subscribe to a channel. Returns an unsubscribe cleanup. */
-  subscribe: (channel: string, onMessage: MessageHandler) => () => void;
+  /**
+   * Subscribe to a channel. Returns an unsubscribe cleanup.
+   * `onStale` fires when the channel resubscribed after a gap but history
+   * recovery FAILED — publications were missed and will never be replayed, so
+   * the subscriber must refetch its data from the server.
+   */
+  subscribe: (
+    channel: string,
+    onMessage: MessageHandler,
+    onStale?: StaleHandler,
+  ) => () => void;
   /** Publish an ephemeral event (e.g. typing) to a channel. */
   publish: (channel: string, data: unknown) => void;
   /** Fetch current presence (online members) for a channel. */
@@ -69,7 +79,14 @@ export function CentrifugoProvider({
   const clientRef = useRef<Centrifuge | null>(null);
   // channel -> { sub, handlers } so multiple listeners share one Subscription.
   const subsRef = useRef<
-    Map<string, { sub: Subscription; handlers: Set<MessageHandler> }>
+    Map<
+      string,
+      {
+        sub: Subscription;
+        handlers: Set<MessageHandler>;
+        staleHandlers: Set<StaleHandler>;
+      }
+    >
   >(new Map());
   // Channels that must stay subscribed for the whole session (the global
   // presence channel). Without pinning, a page that watches the same channel
@@ -216,6 +233,7 @@ export function CentrifugoProvider({
       });
     }
     const handlers = new Set<MessageHandler>();
+    const staleHandlers = new Set<StaleHandler>();
     sub.on("publication", (ctx) => {
       handlers.forEach((h) => {
         try {
@@ -223,10 +241,23 @@ export function CentrifugoProvider({
         } catch {}
       });
     });
+    // Resubscribed after a drop but history recovery failed (away longer than
+    // the channel's history TTL, Redis restart, recovery not configured): the
+    // events published meanwhile are gone for good. Tell subscribers so they
+    // refetch instead of silently showing a stale view until a manual refresh.
+    sub.on("subscribed", (ctx) => {
+      if (ctx.wasRecovering && !ctx.recovered) {
+        staleHandlers.forEach((h) => {
+          try {
+            h();
+          } catch {}
+        });
+      }
+    });
     sub.on("error", (ctx) => {
       console.warn(`[realtime] subscription error (${channel}):`, ctx.error?.message ?? ctx);
     });
-    entry = { sub, handlers };
+    entry = { sub, handlers, staleHandlers };
     subsRef.current.set(channel, entry);
     sub.subscribe();
     return entry;
@@ -234,12 +265,14 @@ export function CentrifugoProvider({
   ensureSubRef.current = ensureSub;
 
   const subscribe = useCallback(
-    (channel: string, onMessage: MessageHandler) => {
+    (channel: string, onMessage: MessageHandler, onStale?: StaleHandler) => {
       const entry = ensureSub(channel);
       if (!entry) return () => {};
       entry.handlers.add(onMessage);
+      if (onStale) entry.staleHandlers.add(onStale);
       return () => {
         entry.handlers.delete(onMessage);
+        if (onStale) entry.staleHandlers.delete(onStale);
         if (entry.handlers.size === 0 && !pinnedRef.current.has(channel)) {
           try {
             entry.sub.unsubscribe();

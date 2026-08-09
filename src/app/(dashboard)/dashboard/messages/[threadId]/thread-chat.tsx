@@ -847,6 +847,35 @@ export function ThreadChat({
     });
   }, [threadKey]);
 
+  // Reconcile with the server after a gap in realtime coverage — failed
+  // history recovery on the channel, or coming back from a long background —
+  // by fetching the newest page and appending whatever we don't have. This is
+  // what used to require a manual refresh: a DM sent while the phone was
+  // locked reconnected to a channel whose replay window had passed, and
+  // nothing ever refetched.
+  const refreshingRef = useRef(false);
+  const refreshLatest = useCallback(async () => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    try {
+      const page = await getThreadMessages(target);
+      setMessages((prev) => {
+        const seen = new Set(prev.map((m) => m.id));
+        const fresh = page.messages.filter((m) => !seen.has(m.id));
+        if (fresh.length === 0) return prev;
+        return [...prev, ...fresh].sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+      });
+    } catch {
+      // Best-effort — the next navigation reconciles.
+    } finally {
+      refreshingRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.taskId, target.projectId, target.conversationId]);
+
   // Mark this thread's notifications read — but only while someone is actually
   // looking at it. The server component deliberately no longer marks anything
   // (link prefetch was silently marking threads read), so read-state is owned
@@ -858,12 +887,25 @@ export function ThreadChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target.taskId, target.projectId, target.conversationId]);
 
+  const hiddenAtRef = useRef<number | null>(null);
   useEffect(() => {
     markRead();
-    const onVisibility = () => markRead();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAtRef.current = Date.now();
+        return;
+      }
+      markRead();
+      // Backgrounded long enough for the WebSocket to have been dropped (or
+      // killed by the OS) — catch up on anything published meanwhile.
+      if (hiddenAtRef.current && Date.now() - hiddenAtRef.current > 10_000) {
+        void refreshLatest();
+      }
+      hiddenAtRef.current = null;
+    };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [markRead]);
+  }, [markRead, refreshLatest]);
 
   const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestMarkRead = useCallback(() => {
@@ -927,7 +969,8 @@ export function ThreadChat({
       const { messageId } = d;
       setMessages((prev) => prev.filter((x) => x.id !== messageId));
     }
-  });
+    // Reconnected but the missed events couldn't be replayed — refetch.
+  }, () => void refreshLatest());
 
   useEffect(() => {
     // Prepending older pages must not yank the user to the bottom.

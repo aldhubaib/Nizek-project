@@ -106,10 +106,33 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
     setLiveThreads(threads);
   }
 
+  // Reconcile the whole list after a realtime coverage gap: the user channel
+  // reconnected but its history replay failed (backgrounded longer than the
+  // replay window), or the tab was hidden long enough for the WebSocket to
+  // have been dropped. Without this, DMs sent meanwhile only appear after a
+  // manual refresh.
+  const hiddenAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAtRef.current = Date.now();
+        return;
+      }
+      if (hiddenAtRef.current && Date.now() - hiddenAtRef.current > 10_000) {
+        router.refresh();
+      }
+      hiddenAtRef.current = null;
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [router]);
+
   // Live inbox: patch the affected row from the event delta instead of
   // refetching the whole RSC tree. Falls back to a refresh only when the target
   // row isn't present yet (e.g. a brand-new conversation/thread).
-  useChannel(cent ? userChannel(cent.memberId) : null, (data) => {
+  useChannel(
+    cent ? userChannel(cent.memberId) : null,
+    (data) => {
     const d = data as
       | {
           type?: string;
@@ -153,7 +176,10 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
       next[idx] = row;
       return next;
     });
-  });
+    },
+    // Reconnected but missed events couldn't be replayed — refetch the list.
+    () => router.refresh(),
+  );
 
   const allRows = useMemo(() => {
     return liveThreads

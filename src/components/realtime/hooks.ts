@@ -4,17 +4,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useCentrifugo } from "./centrifugo-provider";
 
 // Subscribe to a channel and invoke `onMessage` for each publication.
+// `onStale` (optional) fires when the channel reconnected but missed events
+// could NOT be replayed from history — the subscriber should refetch.
 export function useChannel(
   channel: string | null,
   onMessage: (data: unknown) => void,
+  onStale?: () => void,
 ) {
   const cent = useCentrifugo();
   const handlerRef = useRef(onMessage);
   handlerRef.current = onMessage;
+  const staleRef = useRef(onStale);
+  staleRef.current = onStale;
 
   useEffect(() => {
     if (!cent || !channel) return;
-    return cent.subscribe(channel, (data) => handlerRef.current(data));
+    return cent.subscribe(
+      channel,
+      (data) => handlerRef.current(data),
+      () => staleRef.current?.(),
+    );
   }, [cent, channel]);
 }
 
