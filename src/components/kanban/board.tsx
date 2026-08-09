@@ -23,6 +23,7 @@ import { DeclineDialog, type DeclineAttachment } from "./decline-dialog";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { useChannel } from "@/components/realtime/hooks";
 import { projectChannel } from "@/lib/channels";
+import { canTransition } from "@/lib/permissions";
 
 interface QuestionWithType extends TaskQuestion {
   taskType: string;
@@ -205,20 +206,32 @@ export function KanbanBoard({
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
+  // Same rule the server applies (src/lib/permissions.ts), so a drag the
+  // board allows can't be one the save then rejects — including the bug lane
+  // where Internal Review forwards straight to Ready for Release.
   const canMoveFromTo = useCallback(
-    (from: Stage, to: Stage) => {
-      if (!isProjectActive) return false;
-      if (userPermissions.isAdmin) return true;
-      if (!userPermissions.canMoveTask) return false;
-      const allowed = userPermissions.allowedTransitions?.[from];
-      return allowed ? allowed.includes(to) : false;
-    },
+    (from: Stage, to: Stage) =>
+      isProjectActive &&
+      canTransition(
+        {
+          isAdmin: userPermissions.isAdmin,
+          canMoveTask: userPermissions.canMoveTask,
+          allowedTransitions: userPermissions.allowedTransitions ?? {},
+        },
+        from,
+        to,
+      ),
     [userPermissions, isProjectActive]
   );
 
-  const canSkipClientReview = userPermissions.isAdmin || (
-    userPermissions.canMoveTask &&
-    (userPermissions.allowedTransitions?.["INTERNAL_REVIEW"] ?? []).includes("READY_FOR_RELEASE")
+  const canSkipClientReview = canTransition(
+    {
+      isAdmin: userPermissions.isAdmin,
+      canMoveTask: userPermissions.canMoveTask,
+      allowedTransitions: userPermissions.allowedTransitions ?? {},
+    },
+    "INTERNAL_REVIEW",
+    "READY_FOR_RELEASE",
   );
 
   // Claim a task by clicking its avatar — offered when the viewer can move it at

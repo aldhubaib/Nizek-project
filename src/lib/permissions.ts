@@ -20,14 +20,26 @@ export function parseTransitions(raw: string | null): Record<string, string[]> {
 }
 
 export function canTransition(
-  permissions: ProjectRolePermissions,
+  permissions: Pick<
+    ProjectRolePermissions,
+    "isAdmin" | "canMoveTask" | "allowedTransitions"
+  >,
   fromStage: string,
   toStage: string,
 ): boolean {
   if (permissions.isAdmin) return true;
   if (!permissions.canMoveTask) return false;
   const allowed = permissions.allowedTransitions[fromStage];
-  return allowed ? allowed.includes(toStage) : false;
+  if (!allowed) return false;
+  if (allowed.includes(toStage)) return true;
+  // Bugs skip Client Review and go straight to Ready for Release, so being
+  // allowed forward out of Internal Review covers that lane too. Checked here
+  // rather than trusting the stored role, which may predate the shortcut.
+  return (
+    fromStage === "INTERNAL_REVIEW" &&
+    toStage === "READY_FOR_RELEASE" &&
+    allowed.includes("CLIENT_REVIEW")
+  );
 }
 
 export function canCreateInStage(

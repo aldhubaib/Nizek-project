@@ -53,6 +53,30 @@ describe("getPermissionsFromRole — move permission", () => {
     expect(canTransition(perms, "CLARIFICATION", "READY_FOR_DEV")).toBe(false);
   });
 
+  it("forward out of Internal Review covers the bug lane to Ready for Release", () => {
+    // Regression: bugs skip Client Review, so the board redirects a drop on
+    // Client Review to Ready for Release. Roles saved before the editor
+    // started writing that shortcut only stored INTERNAL_REVIEW →
+    // CLIENT_REVIEW and denied the move ("Permission Denied") even though
+    // Forward was ticked.
+    const perms = getPermissionsFromRole({
+      ...baseRole,
+      allowedTransitions: JSON.stringify({
+        INTERNAL_REVIEW: ["CLIENT_REVIEW", "IN_DEVELOPMENT"],
+      }),
+    });
+
+    expect(canTransition(perms, "INTERNAL_REVIEW", "READY_FOR_RELEASE")).toBe(true);
+    // The shortcut only follows a granted forward, not a rollback-only role.
+    const rollbackOnly = getPermissionsFromRole({
+      ...baseRole,
+      allowedTransitions: JSON.stringify({
+        INTERNAL_REVIEW: ["IN_DEVELOPMENT"],
+      }),
+    });
+    expect(canTransition(rollbackOnly, "INTERNAL_REVIEW", "READY_FOR_RELEASE")).toBe(false);
+  });
+
   it("admin roles bypass transition checks entirely", () => {
     const perms = getPermissionsFromRole({
       ...baseRole,
