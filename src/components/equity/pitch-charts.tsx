@@ -76,7 +76,7 @@ export type Slice = {
  * take the other hues in order. With nobody named as us there's nothing to
  * reserve, and the palette is used from the top.
  */
-function sliceColors(slices: Slice[]) {
+function sliceColors(slices: { isUs?: boolean }[]) {
   if (!slices.some((s) => s.isUs)) return slices.map((_, i) => seriesColor(i));
   let other = 0;
   return slices.map((s) =>
@@ -762,6 +762,125 @@ export function QuadrantChart({
   );
 
   return <EChart option={option} height={300} />;
+}
+
+/**
+ * Everyone in the market on one shape: the portfolio's anchors as the corners,
+ * every player a translucent polygon scored 0–10 against each of them. Ours
+ * keeps the house pink and a heavier fill, since the chart's question is how
+ * our shape compares to theirs.
+ *
+ * The legend is ours, the same one the ring gets — hovering a name pulls its
+ * polygon forward, hovering a polygon lights its name.
+ */
+export function RadarChart({
+  anchors,
+  series,
+  height = 368,
+}: {
+  anchors: string[];
+  series: { label: string; values: (number | null)[]; isUs: boolean }[];
+  height?: number;
+}) {
+  const [chart, setChart] = useState<ECharts | null>(null);
+  const [active, setActive] = useState<number | null>(null);
+
+  const colors = useMemo(() => sliceColors(series), [series]);
+
+  const option = useMemo<EChartsOption>(
+    () => ({
+      animationDuration: 600,
+      tooltip: {
+        ...TOOLTIP,
+        trigger: "item",
+        formatter: (params) => {
+          const p = params as {
+            marker: string;
+            name: string;
+            value: (number | null)[];
+          };
+          const lines = anchors
+            .map((a, i) => `${a} &nbsp;<b>${p.value[i] ?? "—"}</b>`)
+            .join("<br/>");
+          return `${p.marker} <b>${p.name}</b><br/>${lines}`;
+        },
+      },
+      radar: {
+        indicator: anchors.map((name) => ({ name, max: 10 })),
+        center: ["50%", "52%"],
+        radius: "70%",
+        axisName: { color: TEXT, fontSize: 11 },
+        axisLine: { lineStyle: { color: GRID_LINE } },
+        splitLine: { lineStyle: { color: GRID_LINE } },
+        // The web alone, no banded fill — the polygons are the picture, and
+        // alternating bands behind translucent fills read as more data.
+        splitArea: { show: false },
+      },
+      series: [
+        {
+          type: "radar",
+          symbol: "circle",
+          symbolSize: 5,
+          data: series.map((s, i) => ({
+            name: s.label,
+            // A missing score sits at the centre, which is what an unscored
+            // corner honestly is — no claimed strength.
+            value: s.values.map((v) => v ?? 0),
+            lineStyle: { width: 2, color: colors[i] },
+            itemStyle: { color: colors[i], borderColor: CARD, borderWidth: 1 },
+            areaStyle: { color: colors[i], opacity: s.isUs ? 0.3 : 0.14 },
+          })),
+          emphasis: {
+            focus: "self",
+            lineStyle: { width: 3 },
+            areaStyle: { opacity: 0.42 },
+          },
+        },
+      ],
+    }),
+    [anchors, series, colors],
+  );
+
+  // Hovering a polygon lights its legend line and the other way round — one
+  // piece of state, whichever side it came from.
+  const onReady = useCallback((instance: ECharts) => {
+    setChart(instance);
+    instance.on("mouseover", { seriesIndex: 0 }, (event) => {
+      setActive((event as { dataIndex: number }).dataIndex);
+    });
+    instance.on("globalout", () => setActive(null));
+  }, []);
+
+  useEffect(() => {
+    if (!chart) return;
+    if (active == null) {
+      chart.dispatchAction({ type: "downplay", seriesIndex: 0 });
+    } else {
+      chart.dispatchAction({
+        type: "highlight",
+        seriesIndex: 0,
+        dataIndex: active,
+      });
+    }
+  }, [chart, active]);
+
+  return (
+    <div className="flex flex-col items-center gap-7">
+      <div className="w-full max-w-[420px]">
+        <EChart option={option} height={height} onReady={onReady} />
+      </div>
+
+      <ChartLegend
+        entries={series.map((s, i) => ({
+          label: s.label,
+          color: colors[i],
+          sub: s.isUs ? "us" : undefined,
+        }))}
+        active={active}
+        onActive={setActive}
+      />
+    </div>
+  );
 }
 
 /**

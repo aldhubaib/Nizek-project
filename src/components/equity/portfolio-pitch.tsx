@@ -45,6 +45,7 @@ import {
   MarketRings,
   MetricSpark,
   QuadrantChart,
+  RadarChart,
   RosePie,
   SERIES,
   SeriesArea,
@@ -915,6 +916,12 @@ export function PortfolioPitch({
   const businessModel = itemsOf(portfolio, "BUSINESS_MODEL");
   const adoption = itemsOf(portfolio, "MARKET_ADOPTION");
   const competition = itemsOf(portfolio, "COMPETITION");
+  // The radar draws once there are anchors and at least one score against
+  // them; competition entered before either falls back to the old quadrant.
+  const radarAnchors = portfolio.opportunity?.radarAnchors ?? [];
+  const radarScored = competition.some(
+    (c) => c.scores && radarAnchors.some((a) => c.scores?.[a] != null),
+  );
   const advantages = itemsOf(portfolio, "ADVANTAGE");
   // The deck shows the team as it stands; the lineups behind it are dated and
   // kept, and the section says how many there are rather than listing them.
@@ -1170,7 +1177,31 @@ export function PortfolioPitch({
         >
           {competition.length === 0 ? (
             <NoData />
+          ) : radarAnchors.length >= 3 && radarScored ? (
+            <ChartFrame
+              title="How everyone measures up"
+              note="Every player scored 0–10 by hand against the anchors this market is fought on — the anchors are the portfolio's own, picked in the Competition module. Nothing here is measured; it's the read we're putting our name to, and ours is the pink shape."
+              source={`Competition · ${radarAnchors.length} anchors`}
+              data={{
+                columns: ["Who", ...radarAnchors],
+                rows: competition.map((c) => [
+                  `${c.heading || "—"}${c.isUs ? " (us)" : ""}`,
+                  ...radarAnchors.map((a) => c.scores?.[a] ?? "—"),
+                ]),
+              }}
+            >
+              <RadarChart
+                anchors={radarAnchors}
+                series={competition.map((c) => ({
+                  label: c.heading || "—",
+                  values: radarAnchors.map((a) => c.scores?.[a] ?? null),
+                  isUs: c.isUs,
+                }))}
+              />
+            </ChartFrame>
           ) : (
+            // Entered before the radar existed: the old quadrant reads as it
+            // did, until the rows are scored against anchors.
             <ChartFrame
               title="Where everyone sits"
               note="Every competitor is placed by hand on two scales running −100 to 100: offline to online across, costly to cheap up. Nothing here is measured — it's the read we're putting our name to, and ours is the marked point."

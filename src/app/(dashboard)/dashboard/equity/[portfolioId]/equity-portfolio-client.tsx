@@ -292,11 +292,12 @@ export function EquityPortfolioClient({
           milestones={portfolio.milestones}
         />
 
-        {/* Who else is in the market */}
+        {/* Who else is in the market, scored against the portfolio's anchors */}
         <PitchSectionCard
           portfolioId={portfolio.id}
           section="COMPETITION"
           items={pitchItems}
+          anchors={portfolio.opportunity?.radarAnchors ?? []}
         />
 
         {/* Who is building it, dated — the latest lineup is the team today */}

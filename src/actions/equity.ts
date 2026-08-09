@@ -273,6 +273,7 @@ function serialize(p: {
     problem: string | null;
     solution: string | null;
     product: string | null;
+    radarAnchors: string[];
     items: {
       id: string;
       section: string;
@@ -285,6 +286,8 @@ function serialize(p: {
       axisX: number | null;
       axisY: number | null;
       isUs: boolean;
+      /** JSON off the driver; serialize narrows it to the name→score map. */
+      scores: unknown;
       share: number | null;
       value: number | null;
       unit: string | null;
@@ -431,7 +434,17 @@ function serialize(p: {
         metric: v.metric,
       })),
     })),
-    opportunity: p.opportunity,
+    opportunity: p.opportunity
+      ? {
+          ...p.opportunity,
+          items: p.opportunity.items.map((item) => ({
+            ...item,
+            // JSON straight off the driver; the sanitizer only ever wrote a
+            // name→score map into it, so that is what comes back out.
+            scores: (item.scores ?? null) as Record<string, number> | null,
+          })),
+        }
+      : null,
     productPhotos: p.productPhotos,
     marketTiers: p.marketTiers,
     milestones: p.milestones.map((m) => ({
@@ -2570,6 +2583,8 @@ export type OpportunityItemInput = {
   axisX?: number | null;
   axisY?: number | null;
   isUs?: boolean;
+  /** 0–10 against each of the portfolio's radar anchors, keyed by name. */
+  scores?: Record<string, number | null> | null;
   share?: number | null;
   value?: number | null;
   unit?: string | null;
@@ -2601,6 +2616,40 @@ function share(value: number | null | undefined) {
   return Math.max(0, Math.min(100, Math.round(value * 100) / 100));
 }
 
+/** How many anchors a radar can carry: under 3 there's no shape, over 6 no room. */
+export const RADAR_ANCHORS_MIN = 3;
+export const RADAR_ANCHORS_MAX = 6;
+
+/** Trimmed, deduped and capped at six — the corners the radar will be drawn on. */
+function radarAnchors(anchors: string[] | undefined): string[] {
+  if (!anchors) return [];
+  const seen = new Set<string>();
+  for (const raw of anchors) {
+    const name = raw.trim();
+    if (name) seen.add(name);
+  }
+  return [...seen].slice(0, RADAR_ANCHORS_MAX);
+}
+
+/**
+ * A competitor's scores, kept to the anchors that exist and the 0–10 the form
+ * promises. An anchor scored then renamed or removed loses that score, which
+ * is the honest reading — nobody re-judged the row against the new corner.
+ */
+function radarScores(
+  scores: Record<string, number | null> | null | undefined,
+  anchors: string[],
+): Record<string, number> | null {
+  if (!scores) return null;
+  const kept: Record<string, number> = {};
+  for (const anchor of anchors) {
+    const raw = scores[anchor];
+    if (raw == null || Number.isNaN(raw)) continue;
+    kept[anchor] = Math.max(0, Math.min(10, Math.round(raw * 10) / 10));
+  }
+  return Object.keys(kept).length > 0 ? kept : null;
+}
+
 /** Uppercased, deduped and checked against the list — anything else is dropped. */
 function countryCodes(codes: string[] | undefined) {
   if (!codes) return [];
@@ -2613,7 +2662,7 @@ function countryCodes(codes: string[] | undefined) {
 }
 
 /** Empty rows are dropped rather than saved — an added row left untouched. */
-function opportunityItemsData(items: OpportunityItemInput[]) {
+function opportunityItemsData(items: OpportunityItemInput[], anchors: string[]) {
   return items
     .filter((item) => OPPORTUNITY_SECTIONS.has(item.section))
     .map((item) => ({
@@ -2626,6 +2675,7 @@ function opportunityItemsData(items: OpportunityItemInput[]) {
       axisX: axis(item.axisX),
       axisY: axis(item.axisY),
       isUs: item.isUs ?? false,
+      scores: radarScores(item.scores, anchors),
       share: share(item.share),
       value: Number.isFinite(item.value) ? item.value ?? null : null,
       unit: trimmed(item.unit),
@@ -2639,11 +2689,18 @@ function opportunityItemsData(items: OpportunityItemInput[]) {
         item.caption ||
         item.body ||
         item.countries.length > 0 ||
+        item.scores ||
         item.share != null ||
         item.value != null ||
         item.holderId,
     )
-    .map((item, i) => ({ ...item, order: i + 1 }));
+    .map((item, i) => ({
+      ...item,
+      // Prisma reads a bare null on a Json column as ambiguous, so a row with
+      // no scores simply doesn't mention the column.
+      scores: item.scores ?? undefined,
+      order: i + 1,
+    }));
 }
 
 /**
@@ -2674,12 +2731,23 @@ type OpportunityRow = {
   caption: string | null;
   body: string | null;
   countries: string[];
+  scores?: unknown;
   share?: number | null;
   value?: number | null;
   unit?: string | null;
   currency?: string | null;
   holderId: string | null;
 };
+
+/** A score map as the history reads it — "Sales 7, Marketing 3". */
+function scoresText(scores: unknown): string | null {
+  if (!scores || typeof scores !== "object") return null;
+  const entries = Object.entries(scores as Record<string, unknown>).filter(
+    (entry): entry is [string, number] => typeof entry[1] === "number",
+  );
+  if (entries.length === 0) return null;
+  return entries.map(([anchor, score]) => `${anchor} ${score}`).join(", ");
+}
 
 /**
  * A repeating row as one line. The rows are replaced wholesale on every save
@@ -2701,6 +2769,7 @@ function opportunityRowText(row: OpportunityRow) {
       row.figure,
       row.caption,
       row.body,
+      scoresText(row.scores),
       row.countries.join(", "),
     ]
       .map((part) => part?.trim())
@@ -2879,17 +2948,30 @@ export async function saveEquityProduct(
 /**
  * The rows of a single section, replaced wholesale. Only that section's rows
  * are touched, so each module owns its own save and can't clear another's.
+ *
+ * Competition also carries the portfolio's radar anchors — the corners its
+ * competitors are scored against. They're saved with the rows because they're
+ * edited with them: a score means nothing apart from the anchor it was given
+ * under.
  */
 export async function saveEquityPitchSection(
   portfolioId: string,
   section: string,
   items: OpportunityItemInput[],
+  anchors?: string[],
 ) {
   const user = await requireEquityAccess();
   if (!OPPORTUNITY_SECTIONS.has(section)) throw new Error("Unknown section");
 
+  const setAnchors = section === "COMPETITION" && anchors != null;
+  const nextAnchors = radarAnchors(anchors);
+  if (setAnchors && nextAnchors.length > 0 && nextAnchors.length < RADAR_ANCHORS_MIN) {
+    throw new Error(`A radar needs at least ${RADAR_ANCHORS_MIN} anchors`);
+  }
+
   const rows = opportunityItemsData(
     items.map((item) => ({ ...item, section })),
+    nextAnchors,
   );
 
   const before = await prisma.equityOpportunity.findUnique({
@@ -2902,8 +2984,8 @@ export async function saveEquityPitchSection(
   await prisma.$transaction(async (tx) => {
     const opportunity = await tx.equityOpportunity.upsert({
       where: { portfolioId },
-      create: { portfolioId },
-      update: {},
+      create: { portfolioId, ...(setAnchors ? { radarAnchors: nextAnchors } : {}) },
+      update: setAnchors ? { radarAnchors: nextAnchors } : {},
     });
     await tx.equityOpportunityItem.deleteMany({
       where: { opportunityId: opportunity.id, section },
@@ -2920,7 +3002,15 @@ export async function saveEquityPitchSection(
     userId: user.id,
     section: SECTION_LOGGED_AS[section] ?? "OPPORTUNITY",
     action: "updated",
-    changes: opportunityRowChanges(before?.items ?? [], rows),
+    changes: [
+      ...(setAnchors
+        ? diffSnapshots(
+            { Anchors: (before?.radarAnchors ?? []).join(", ") || null },
+            { Anchors: nextAnchors.join(", ") || null },
+          )
+        : []),
+      ...opportunityRowChanges(before?.items ?? [], rows),
+    ],
   });
 
   revalidatePath("/dashboard/equity");

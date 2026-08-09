@@ -640,6 +640,11 @@ model EquityOpportunity {
   solution String?
   product  String?
 
+  // What the competition is judged on — the corners of the radar the report
+  // draws, 3 to 6 of them, named per portfolio since every market is fought
+  // on its own terms. Each competitor row carries a score per anchor.
+  radarAnchors String[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -687,10 +692,16 @@ model EquityOpportunityItem {
   countries String[]
 
   // Where a competitor sits on the deck's quadrant, -100 to 100: axisX runs
-  // offline to online, axisY expensive to affordable.
+  // offline to online, axisY expensive to affordable. Superseded by the radar
+  // scores below but kept, so nothing entered before the radar is lost.
   axisX Int?
   axisY Int?
   isUs  Boolean @default(false)
+
+  // A competitor's 0–10 score against each of the opportunity's radar anchors,
+  // keyed by the anchor's name. JSON rather than rows because the whole map is
+  // replaced with its section on every save and is never queried into.
+  scores Json?
 
   // What portion of the whole this row accounts for, as a percentage. Only
   // sections drawn as a split use it, and there the rows have to reach 100

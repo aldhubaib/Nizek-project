@@ -168,7 +168,7 @@ export const PITCH_SECTIONS: Record<string, SectionSpec> = {
     id: "COMPETITION",
     title: "Competition",
     description:
-      "Who else is in the market, and where they sit. Each axis runs -100 to 100: offline to online, and expensive to affordable.",
+      "Who else is in the market, scored 0–10 against the anchors the market is fought on. The report draws everyone on one radar, each anchor a corner.",
     grid: "sm:grid-cols-[minmax(0,1fr)_7rem_7rem_5rem_1.75rem]",
     fields: [
       { key: "heading", label: "Who", placeholder: "Craigslist", kind: "text" },
@@ -703,6 +703,7 @@ export function PitchSectionCard({
   section,
   items,
   currency = "",
+  anchors = [],
 }: {
   portfolioId: string;
   section: string;
@@ -710,6 +711,8 @@ export function PitchSectionCard({
   items: PitchItem[];
   /** What the portfolio is priced in, for the sections that carry amounts. */
   currency?: string;
+  /** The radar's corners, which only the competition module carries. */
+  anchors?: string[];
 }) {
   const router = useRouter();
   const spec = PITCH_SECTIONS[section];
@@ -718,6 +721,12 @@ export function PitchSectionCard({
 
   const rows = items.filter((i) => i.section === section);
   const [one, many] = spec.noun;
+  const competition = section === "COMPETITION";
+
+  function done() {
+    setEditing(false);
+    router.refresh();
+  }
 
   return (
     <CollapsibleCard
@@ -737,20 +746,33 @@ export function PitchSectionCard({
       }
     >
       {editing ? (
-        <PitchSectionForm
-          portfolioId={portfolioId}
-          spec={spec}
-          rows={rows}
-          currency={currency}
-          busy={busy}
-          setBusy={setBusy}
-          onDone={() => {
-            setEditing(false);
-            router.refresh();
-          }}
-          onCancel={() => setEditing(false)}
-        />
+        competition ? (
+          <CompetitionForm
+            portfolioId={portfolioId}
+            savedAnchors={anchors}
+            saved={rows}
+            busy={busy}
+            setBusy={setBusy}
+            onDone={done}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
+          <PitchSectionForm
+            portfolioId={portfolioId}
+            spec={spec}
+            rows={rows}
+            currency={currency}
+            busy={busy}
+            setBusy={setBusy}
+            onDone={done}
+            onCancel={() => setEditing(false)}
+          />
+        )
+      ) : competition && anchors.length > 0 ? (
+        <CompetitionMatrixView anchors={anchors} rows={rows} />
       ) : (
+        // Competition entered before anchors existed still reads in its old
+        // quadrant columns, until it's edited and scored.
         <PitchRowsView spec={spec} rows={rows} />
       )}
     </CollapsibleCard>
@@ -811,6 +833,331 @@ function PitchSectionForm({
         onCancel={onCancel}
         onSave={save}
       />
+    </div>
+  );
+}
+
+// ─── Competition: anchors and scores ────────────────────
+// The competition module outgrew the generic columns: its rows are scored
+// against anchors the portfolio itself defines, so the editor is a matrix
+// whose columns are data. Everything else about it — replace-wholesale saves,
+// the card, the buttons — is shared with the other sections.
+
+/** What a new portfolio starts scoring on, until its own anchors are named. */
+export const DEFAULT_ANCHORS = [
+  "Product",
+  "Price",
+  "Sales",
+  "Marketing",
+  "Support",
+];
+
+/** Under 3 anchors there's no shape to draw; over 6, no room to read it. */
+const ANCHORS_MIN = 3;
+const ANCHORS_MAX = 6;
+
+type AnchorDraft = { key: string; name: string };
+
+type CompetitorDraft = {
+  key: string;
+  heading: string;
+  isUs: boolean;
+  /** Keyed by the anchor draft's key, so renaming an anchor keeps its scores. */
+  scores: Record<string, string>;
+  /** The old quadrant placement, carried through a save unseen so it's kept. */
+  axisX: number | null;
+  axisY: number | null;
+};
+
+let anchorSeq = 0;
+function anchorDraft(name = ""): AnchorDraft {
+  anchorSeq += 1;
+  return { key: `anchor-${anchorSeq}`, name };
+}
+
+let competitorSeq = 0;
+function emptyCompetitor(): CompetitorDraft {
+  competitorSeq += 1;
+  return {
+    key: `competitor-${competitorSeq}`,
+    heading: "",
+    isUs: false,
+    scores: {},
+    axisX: null,
+    axisY: null,
+  };
+}
+
+/** The saved anchors and rows as drafts, scores re-keyed to the anchor drafts. */
+function competitionDrafts(savedAnchors: string[], saved: PitchItem[]) {
+  const anchors = (savedAnchors.length > 0 ? savedAnchors : DEFAULT_ANCHORS).map(
+    (name) => anchorDraft(name),
+  );
+  const rows =
+    saved.length > 0
+      ? saved.map((item) => ({
+          ...emptyCompetitor(),
+          heading: item.heading ?? "",
+          isUs: item.isUs,
+          axisX: item.axisX,
+          axisY: item.axisY,
+          scores: Object.fromEntries(
+            anchors.map((a) => [a.key, item.scores?.[a.name]?.toString() ?? ""]),
+          ),
+        }))
+      : [emptyCompetitor()];
+  return { anchors, rows };
+}
+
+/** Why the competition can't be saved yet, said before the button is pressed. */
+function competitionBlocked(anchors: AnchorDraft[], rows: CompetitorDraft[]) {
+  const filled = rows.some(
+    (r) => r.heading.trim() || Object.values(r.scores).some((s) => s.trim()),
+  );
+  if (!filled) return null;
+  const names = anchors.map((a) => a.name.trim()).filter(Boolean);
+  if (names.length < ANCHORS_MIN) {
+    return `A radar needs at least ${ANCHORS_MIN} anchors.`;
+  }
+  if (new Set(names.map((n) => n.toLowerCase())).size !== names.length) {
+    return "Two anchors share a name.";
+  }
+  return null;
+}
+
+/** The columns of the matrix: who, a score per anchor, the us flag, remove. */
+function competitionGrid(anchorCount: number, trailing: string) {
+  return {
+    gridTemplateColumns: `minmax(0,1fr) repeat(${anchorCount}, minmax(0,4.5rem))${trailing}`,
+  };
+}
+
+function CompetitionForm({
+  portfolioId,
+  savedAnchors,
+  saved,
+  busy,
+  setBusy,
+  onDone,
+  onCancel,
+}: {
+  portfolioId: string;
+  savedAnchors: string[];
+  saved: PitchItem[];
+  busy: boolean;
+  setBusy: (v: boolean) => void;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [initial] = useState(() => competitionDrafts(savedAnchors, saved));
+  const [anchors, setAnchors] = useState(initial.anchors);
+  const [rows, setRows] = useState(initial.rows);
+
+  function updateRow(key: string, patch: Partial<CompetitorDraft>) {
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  }
+
+  async function save() {
+    setBusy(true);
+    try {
+      const named = anchors
+        .map((a) => ({ key: a.key, name: a.name.trim() }))
+        .filter((a) => a.name);
+      await saveEquityPitchSection(
+        portfolioId,
+        "COMPETITION",
+        rows.map((r) => ({
+          section: "COMPETITION",
+          heading: r.heading,
+          isUs: r.isUs,
+          axisX: r.axisX,
+          axisY: r.axisY,
+          scores: Object.fromEntries(
+            named.map((a) => [a.name, parseNumber(r.scores[a.key] ?? "")]),
+          ),
+        })),
+        named.map((a) => a.name),
+      );
+      onDone();
+    } catch (err) {
+      alert((err as Error).message || "Failed to save");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const grid = competitionGrid(anchors.length, " 3rem 1.75rem");
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <span className={labelCls}>
+          Anchors — what everyone is scored on, 0–10 ({ANCHORS_MIN}–{ANCHORS_MAX})
+        </span>
+        <div className="flex flex-wrap gap-2 mt-2">
+          {anchors.map((a) => (
+            <div
+              key={a.key}
+              className="flex items-center gap-1 h-9 pl-3 pr-1 rounded-lg border border-border bg-card"
+            >
+              <input
+                value={a.name}
+                onChange={(e) =>
+                  setAnchors((as) =>
+                    as.map((x) =>
+                      x.key === a.key ? { ...x, name: e.target.value } : x,
+                    ),
+                  )
+                }
+                placeholder="Anchor"
+                className="w-24 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  setAnchors((as) => as.filter((x) => x.key !== a.key))
+                }
+                title="Remove anchor"
+                className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" strokeWidth={1.5} />
+              </button>
+            </div>
+          ))}
+          {anchors.length < ANCHORS_MAX && (
+            <button
+              type="button"
+              onClick={() => setAnchors((as) => [...as, anchorDraft()])}
+              className="flex items-center gap-1 px-2.5 h-9 rounded-lg border border-dashed border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
+            >
+              <Plus className="w-3 h-3" />
+              Add an anchor
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2 overflow-x-auto">
+        <div className="hidden sm:grid gap-2 px-0.5" style={grid}>
+          <span className={labelCls}>Who</span>
+          {anchors.map((a) => (
+            <span key={a.key} className={cn(labelCls, "truncate")}>
+              {a.name.trim() || "—"}
+            </span>
+          ))}
+          <span className={labelCls}>Us</span>
+          <span />
+        </div>
+
+        {rows.map((row) => (
+          <div key={row.key} className="grid gap-2 items-start" style={grid}>
+            <input
+              type="text"
+              value={row.heading}
+              onChange={(e) => updateRow(row.key, { heading: e.target.value })}
+              placeholder="Competitor"
+              className={inputCls}
+            />
+            {anchors.map((a) => (
+              <input
+                key={a.key}
+                type="number"
+                min={0}
+                max={10}
+                step="any"
+                value={row.scores[a.key] ?? ""}
+                onChange={(e) =>
+                  updateRow(row.key, {
+                    scores: { ...row.scores, [a.key]: e.target.value },
+                  })
+                }
+                placeholder="–"
+                className={cn(inputCls, "tabular-nums text-center px-1")}
+              />
+            ))}
+            <label className="h-9 flex items-center justify-center">
+              <input
+                type="checkbox"
+                checked={row.isUs}
+                onChange={(e) => updateRow(row.key, { isUs: e.target.checked })}
+                className="w-4 h-4 accent-primary"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() =>
+                setRows((rs) => rs.filter((r) => r.key !== row.key))
+              }
+              title="Remove competitor"
+              className="w-7 h-9 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
+            </button>
+          </div>
+        ))}
+
+        <button
+          type="button"
+          onClick={() => setRows((rs) => [...rs, emptyCompetitor()])}
+          className="flex items-center gap-1 px-2.5 h-8 rounded-lg border border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
+        >
+          <Plus className="w-3 h-3" />
+          Add a competitor
+        </button>
+      </div>
+
+      <FormButtons
+        busy={busy}
+        blocked={competitionBlocked(anchors, rows)}
+        onCancel={onCancel}
+        onSave={save}
+      />
+    </div>
+  );
+}
+
+/** The saved matrix as it reads: who, and their score against each anchor. */
+function CompetitionMatrixView({
+  anchors,
+  rows,
+}: {
+  anchors: string[];
+  rows: PitchItem[];
+}) {
+  if (rows.length === 0) {
+    return <Blank>{PITCH_SECTIONS.COMPETITION.emptyLabel}</Blank>;
+  }
+  const grid = competitionGrid(anchors.length, "");
+  return (
+    <div className="space-y-2 overflow-x-auto">
+      <div className="hidden sm:grid gap-2 px-0.5" style={grid}>
+        <span className={labelCls}>Who</span>
+        {anchors.map((a) => (
+          <span key={a} className={cn(labelCls, "truncate")}>
+            {a}
+          </span>
+        ))}
+      </div>
+      {rows.map((row) => (
+        <div key={row.id} className="grid gap-2 items-stretch" style={grid}>
+          <div className={readCellCls}>
+            <span className="truncate">{row.heading || "—"}</span>
+            {row.isUs && (
+              <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary shrink-0">
+                us
+              </span>
+            )}
+          </div>
+          {anchors.map((a) => (
+            <div
+              key={a}
+              className={cn(readCellCls, "justify-center tabular-nums")}
+            >
+              {row.scores?.[a] ?? "—"}
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
