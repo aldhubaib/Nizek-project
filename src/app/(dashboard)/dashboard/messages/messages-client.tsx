@@ -115,6 +115,7 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
           type?: string;
           conversationId?: string | null;
           projectId?: string | null;
+          taskId?: string | null;
           authorId?: string;
           lastAuthor?: string;
           lastMessage?: string;
@@ -145,7 +146,10 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
       if (d.lastMessage != null) row.lastMessage = d.lastMessage;
       if (d.lastAuthor != null) row.lastAuthor = d.lastAuthor;
       if (d.lastAt) row.lastAt = d.lastAt;
-      if (!isSelf && !isViewing) row.unread = (row.unread ?? 0) + 1;
+      // Task-comment notifications are cleared on the task page, not by
+      // opening this thread — keep them out of the badge so it matches what
+      // the server counts (and what opening the thread clears).
+      if (!isSelf && !isViewing && !d.taskId) row.unread = (row.unread ?? 0) + 1;
       next[idx] = row;
       return next;
     });

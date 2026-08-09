@@ -7,10 +7,7 @@ import {
   projectChannel,
   conversationChannel,
   globalPresenceChannel,
-  userChannel,
-  NOTIFICATION_READ,
 } from "@/lib/channels";
-import { publish } from "@/lib/centrifugo";
 import { getThreadMessages } from "@/actions/messages";
 import { getActiveContract } from "@/lib/contract-rules";
 import { ThreadChat, type ThreadTarget } from "./thread-chat";
@@ -139,40 +136,14 @@ export default async function ThreadPage({
   // Latest page only (50 messages) — older pages load on demand in the client.
   const page = await getThreadMessages(target);
 
-  // Mark this thread's notifications as read.
-  const linkUrl = target.conversationId
-    ? `/dashboard/messages/conv-${target.conversationId}`
-    : target.taskId
-      ? `/dashboard/projects/${target.projectId}/tasks/${target.taskId}`
-      : `/dashboard/messages/project-${target.projectId}`;
-  const toMark = await prisma.notification.findMany({
-    where: { recipientId: user.id, read: false, linkUrl },
-    select: { id: true, tag: true },
-  });
-  if (toMark.length > 0) {
-    await prisma.notification.updateMany({
-      where: { recipientId: user.id, read: false, linkUrl },
-      data: { read: true, readAt: new Date() },
-    });
-    const unread = await prisma.notification.count({
-      where: { recipientId: user.id, read: false },
-    });
-    // Sync read-state to the user's other devices/tabs (bell + app badge) and
-    // let them close the matching OS push banners by tag.
-    void publish(userChannel(user.id), {
-      type: NOTIFICATION_READ,
-      ids: toMark.map((n) => n.id),
-      tags: [
-        ...new Set(
-          toMark.map((n) => n.tag).filter((t): t is string => !!t),
-        ),
-      ],
-      unread,
-    });
-  }
+  // Deliberately NO mark-as-read here: this Server Component also renders for
+  // Next.js Link prefetches from the inbox list, and hovering a thread must
+  // not mark it read. The client marks read (markThreadRead) once the thread
+  // is actually on a visible screen.
 
   return (
     <ThreadChat
+      key={threadId}
       channel={channel}
       presenceChannel={presenceChannel}
       target={target}

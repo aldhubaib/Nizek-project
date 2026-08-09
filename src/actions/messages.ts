@@ -17,11 +17,13 @@ import {
 import { ALL_MENTION_NAME } from "@/lib/mentions";
 import {
   broadcast,
+  publish,
   taskChannel,
   projectChannel,
   conversationChannel,
   userChannel,
 } from "@/lib/centrifugo";
+import { NOTIFICATION_READ } from "@/lib/channels";
 
 const CONTRACT_SELECT = {
   id: true,
@@ -574,6 +576,58 @@ export async function sendMessage(
   });
 }
 
+// ─── Read state ───────────────────────────────────────────────────────────────
+
+/**
+ * Marks a thread's notifications as read. Deliberately a client-initiated
+ * action rather than a side effect of rendering the thread page: Next.js
+ * prefetches thread pages from the inbox list, and a prefetch must never count
+ * as reading. The client calls this only while the thread is actually visible
+ * (and again when messages arrive while the user is watching).
+ */
+export async function markThreadRead(target: {
+  taskId?: string | null;
+  projectId?: string | null;
+  conversationId?: string | null;
+}): Promise<void> {
+  const user = await requireUser();
+
+  const linkUrl = target.conversationId
+    ? `/dashboard/messages/conv-${target.conversationId}`
+    : target.taskId
+      ? `/dashboard/projects/${target.projectId}/tasks/${target.taskId}`
+      : target.projectId
+        ? `/dashboard/messages/project-${target.projectId}`
+        : null;
+  if (!linkUrl) return;
+
+  // Only the caller's own notification rows are touched, so no further access
+  // checks are needed.
+  const toMark = await prisma.notification.findMany({
+    where: { recipientId: user.id, read: false, linkUrl },
+    select: { id: true, tag: true },
+  });
+  if (toMark.length === 0) return;
+
+  await prisma.notification.updateMany({
+    where: { recipientId: user.id, read: false, linkUrl },
+    data: { read: true, readAt: new Date() },
+  });
+  const unread = await prisma.notification.count({
+    where: { recipientId: user.id, read: false },
+  });
+  // Sync read-state to the user's other devices/tabs (bell + app badge) and
+  // let them close the matching OS push banners by tag.
+  void publish(userChannel(user.id), {
+    type: NOTIFICATION_READ,
+    ids: toMark.map((n) => n.id),
+    tags: [
+      ...new Set(toMark.map((n) => n.tag).filter((t): t is string => !!t)),
+    ],
+    unread,
+  });
+}
+
 // ─── Reactions ────────────────────────────────────────────────────────────────
 
 export async function toggleReaction(
@@ -746,21 +800,18 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
   ]);
 
   const unreadMap = new Map<string, number>();
-  // Pre-aggregate per-project task-thread unreads in a single pass over the
-  // notification groups, instead of scanning the whole map once per project.
-  const projectTaskUnread = new Map<string, number>();
   for (const row of unreadCounts) {
     if (!row.linkUrl) continue;
     unreadMap.set(row.linkUrl, row._count);
-    const m = row.linkUrl.match(/^\/dashboard\/projects\/([^/]+)\//);
-    if (m) projectTaskUnread.set(m[1], (projectTaskUnread.get(m[1]) ?? 0) + row._count);
   }
 
   const projectThreads: InboxThread[] = projects.map((p) => {
     const last = p.messages[0];
-    const unread =
-      (unreadMap.get(`/dashboard/messages/project-${p.id}`) ?? 0) +
-      (projectTaskUnread.get(p.id) ?? 0);
+    // Only notifications that opening this thread clears count toward its
+    // badge. Task-comment notifications link to the task page and are cleared
+    // there — folding them in here made the badge impossible to clear from
+    // the inbox.
+    const unread = unreadMap.get(`/dashboard/messages/project-${p.id}`) ?? 0;
     return {
       id: `project-${p.id}`,
       kind: "project" as const,

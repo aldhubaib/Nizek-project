@@ -46,11 +46,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
-  sendMessage,
   toggleReaction,
   deleteMessage as deleteMessageAction,
   getThreadMessages,
   getProjectTaskRefs,
+  markThreadRead,
   type MessageDTO,
   type MessageAttachment,
   type MessageTaskRef,
@@ -71,7 +71,14 @@ import {
 } from "@/components/messages/chat-attachments";
 import { LinkPreviewCard } from "@/components/messages/link-preview";
 import { firstUrl } from "@/lib/link-preview";
-import { uploadFileToR2 } from "@/lib/upload";
+import {
+  enqueueOutboxMessage,
+  retryOutboxEntry,
+  discardOutboxEntry,
+  useThreadOutbox,
+  subscribeDelivered,
+  type OutboxEntry,
+} from "@/lib/message-outbox";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/upload-limits";
 import {
   DeadlineReminderCard,
@@ -155,21 +162,6 @@ function VoiceVisualizer({
       ))}
     </div>
   );
-}
-
-type AttachmentMeta = {
-  filename: string;
-  url: string;
-  fileSize: number | null;
-  mimeType: string | null;
-};
-
-// Presigned direct-to-R2 upload with progress.
-function uploadFile(
-  file: File,
-  onProgress: (pct: number) => void,
-): Promise<AttachmentMeta> {
-  return uploadFileToR2(file, onProgress);
 }
 
 export type ChatMessage = {
@@ -349,30 +341,9 @@ function sameDay(a: string, b: string) {
 // A file picked in the composer, held locally until the user presses Send.
 type PendingFile = { key: string; file: File; previewUrl: string | null };
 
-// A file being uploaded as part of an optimistic (outbox) message.
-type OutFile = {
-  key: string;
-  file: File;
-  name: string;
-  contentType: string | null;
-  previewUrl: string | null;
-  progress: number;
-  status: "uploading" | "done" | "error";
-  url?: string;
-};
-
-// A message the user has sent that is still uploading/delivering — rendered as
-// a bubble with progress (WhatsApp-style optimistic send).
-type OutboxEntry = {
-  tempId: string;
-  body: string;
-  replyToId: string | null;
-  /** When set, the message is posted as a comment on this task (# reference). */
-  taskRefId: string | null;
-  createdAt: string;
-  files: OutFile[];
-  status: "uploading" | "sending" | "error";
-};
+// Sent-but-not-delivered messages (the outbox) live in the app-wide manager in
+// lib/message-outbox.ts, NOT in this component — so uploads keep going and the
+// message still delivers when the user switches threads or pages mid-upload.
 
 // One chat message. Memoized so unrelated parent re-renders (typing indicator,
 // presence, composer keystrokes, recording timer) don't re-render every row —
@@ -741,7 +712,6 @@ export function ThreadChat({
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingFile[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
-  const [outbox, setOutbox] = useState<OutboxEntry[]>([]);
   const [, startTransition] = useTransition();
   const [dragging, setDragging] = useState(false);
   const [view, setView] = useState<"chat" | "files">("chat");
@@ -755,6 +725,8 @@ export function ThreadChat({
       : target.projectId
         ? `project-${target.projectId}`
         : null;
+  // This thread's pending sends, held by the app-wide outbox manager.
+  const outbox = useThreadOutbox(threadKey);
   const [muted, setMuted] = useState(false);
   useEffect(() => {
     if (!threadKey) return;
@@ -844,6 +816,70 @@ export function ThreadChat({
     [],
   );
 
+  // When the outbox manager finishes delivering one of this thread's messages,
+  // append the server-confirmed message (no refetch). If the user is on
+  // another page at that moment, nothing is subscribed and the message is
+  // simply included in the next server render of the thread.
+  useEffect(() => {
+    if (!threadKey) return;
+    return subscribeDelivered(threadKey, (m, replyToId) => {
+      setMessages((prev) =>
+        prev.some((x) => x.id === m.id)
+          ? prev
+          : [
+              ...prev,
+              {
+                id: m.id,
+                authorId: m.authorId,
+                authorName: m.authorName,
+                authorImageUrl: m.authorImageUrl ?? null,
+                body: m.body,
+                createdAt: m.createdAt,
+                attachments: m.attachments,
+                reactions: [],
+                replyToId,
+                kind: m.kind,
+                task: m.task ?? null,
+                mentions: m.mentions ?? [],
+              },
+            ],
+      );
+    });
+  }, [threadKey]);
+
+  // Mark this thread's notifications read — but only while someone is actually
+  // looking at it. The server component deliberately no longer marks anything
+  // (link prefetch was silently marking threads read), so read-state is owned
+  // here: on open in a visible tab, whenever the tab becomes visible again,
+  // and (debounced) when messages arrive while the user is watching.
+  const markRead = useCallback(() => {
+    if (document.visibilityState !== "visible") return;
+    void markThreadRead(target).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.taskId, target.projectId, target.conversationId]);
+
+  useEffect(() => {
+    markRead();
+    const onVisibility = () => markRead();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [markRead]);
+
+  const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestMarkRead = useCallback(() => {
+    if (markReadTimerRef.current) return;
+    markReadTimerRef.current = setTimeout(() => {
+      markReadTimerRef.current = null;
+      markRead();
+    }, 800);
+  }, [markRead]);
+  useEffect(
+    () => () => {
+      if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
+    },
+    [],
+  );
+
   useChannel(channel, (data) => {
     const d = data as
       | {
@@ -856,6 +892,9 @@ export function ThreadChat({
     if (!d) return;
     if (d.type === "message.new" && d.message) {
       const m = d.message;
+      // A message arriving while the user is watching this thread counts as
+      // read — otherwise it stays unread in the DB until the next page load.
+      if (m.authorId !== currentMemberId) requestMarkRead();
       setMessages((prev) => {
         if (prev.some((x) => x.id === m.id)) return prev;
         return [
@@ -1061,122 +1100,10 @@ export function ThreadChat({
     pickFiles(e.dataTransfer.files);
   };
 
-  const updateOutFile = useCallback(
-    (tempId: string, fileKey: string, patch: Partial<OutFile>) => {
-      setOutbox((prev) =>
-        prev.map((o) =>
-          o.tempId === tempId
-            ? {
-                ...o,
-                files: o.files.map((f) =>
-                  f.key === fileKey ? { ...f, ...patch } : f,
-                ),
-              }
-            : o,
-        ),
-      );
-    },
-    [],
-  );
-
-  // Deliver an outbox entry (all uploads resolved). The bubble stays in the
-  // list until the server confirms, then the real message replaces it.
-  const deliver = useCallback(
-    (entry: OutboxEntry, attachments: AttachmentMeta[]) => {
-      setOutbox((prev) =>
-        prev.map((o) =>
-          o.tempId === entry.tempId ? { ...o, status: "sending" } : o,
-        ),
-      );
-      startTransition(async () => {
-        const res = await sendMessage({
-          ...target,
-          taskId: entry.taskRefId ?? target.taskId,
-          body: entry.body,
-          attachments,
-          replyToId: entry.replyToId ?? undefined,
-        });
-        if (res.ok) {
-          const m = res.data;
-          for (const f of entry.files) {
-            if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
-          }
-          setOutbox((prev) => prev.filter((o) => o.tempId !== entry.tempId));
-          setMessages((prev) =>
-            prev.some((x) => x.id === m.id)
-              ? prev
-              : [
-                  ...prev,
-                  {
-                    id: m.id,
-                    authorId: m.authorId,
-                    authorName: m.authorName,
-                    authorImageUrl: m.authorImageUrl ?? null,
-                    body: m.body,
-                    createdAt: m.createdAt,
-                    attachments: m.attachments,
-                    reactions: [],
-                    replyToId: entry.replyToId,
-                    kind: m.kind,
-                    task: m.task ?? null,
-                    mentions: m.mentions ?? [],
-                  },
-                ],
-          );
-          // No router.refresh(): the message is already shown optimistically and
-          // other clients receive it live over Centrifugo. Reconciliation happens
-          // on the next navigation / RSC render.
-        } else {
-          setOutbox((prev) =>
-            prev.map((o) =>
-              o.tempId === entry.tempId ? { ...o, status: "error" } : o,
-            ),
-          );
-        }
-      });
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [target.taskId, target.projectId, target.conversationId],
-  );
-
-  // Upload each of an entry's files, tracking progress; deliver once all are up.
-  const startUploads = useCallback(
-    (entry: OutboxEntry) => {
-      const results: (AttachmentMeta | null)[] = new Array(entry.files.length).fill(null);
-      let remaining = entry.files.length;
-      let failed = false;
-      entry.files.forEach((f, idx) => {
-        uploadFile(f.file, (pct) => updateOutFile(entry.tempId, f.key, { progress: pct }))
-          .then((meta) => {
-            if (failed) return;
-            results[idx] = meta;
-            updateOutFile(entry.tempId, f.key, {
-              status: "done",
-              progress: 100,
-              url: meta.url,
-            });
-            remaining -= 1;
-            if (remaining === 0) {
-              deliver(entry, results.filter((r): r is AttachmentMeta => r !== null));
-            }
-          })
-          .catch(() => {
-            failed = true;
-            updateOutFile(entry.tempId, f.key, { status: "error" });
-            setOutbox((prev) =>
-              prev.map((o) =>
-                o.tempId === entry.tempId ? { ...o, status: "error" } : o,
-              ),
-            );
-          });
-      });
-    },
-    [deliver, updateOutFile],
-  );
-
   const send = () => {
     let text = draft.trim();
     if (!text && pending.length === 0) return;
+    if (!threadKey) return;
     // Convert @all first, then any "@Full Name" that matches a project member.
     text = text.replace(ALL_MENTION_TEXT_RE, ALL_MENTION_TOKEN);
     const sortedMentions = [...mentionables].sort(
@@ -1194,40 +1121,20 @@ export function ThreadChat({
     setPendingTaskRef(null);
     setDismissedPreview(null);
 
-    if (files.length === 0) {
-      const entry: OutboxEntry = {
-        tempId: `out-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        body: text,
-        replyToId: replyId,
-        taskRefId,
-        createdAt: new Date().toISOString(),
-        files: [],
-        status: "sending",
-      };
-      setOutbox((prev) => [...prev, entry]);
-      deliver(entry, []);
-      return;
-    }
-
-    const entry: OutboxEntry = {
-      tempId: `out-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    // The app-wide outbox uploads and delivers this even if the user leaves
+    // the thread; this component only renders the entry's progress bubble.
+    enqueueOutboxMessage({
+      threadKey,
+      target,
       body: text,
       replyToId: replyId,
       taskRefId,
-      createdAt: new Date().toISOString(),
       files: files.map((f) => ({
         key: f.key,
         file: f.file,
-        name: f.file.name,
-        contentType: f.file.type || null,
         previewUrl: f.previewUrl,
-        progress: 0,
-        status: "uploading" as const,
       })),
-      status: "uploading",
-    };
-    setOutbox((prev) => [...prev, entry]);
-    startUploads(entry);
+    });
   };
 
   // --- Voice messages ---
@@ -1248,30 +1155,19 @@ export function ThreadChat({
   // Send a finished recording through the normal attachment pipeline.
   const sendVoice = useCallback(
     (file: File) => {
-      const entry: OutboxEntry = {
-        tempId: `out-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        body: "",
-        replyToId: replyTo,
-        taskRefId: null,
-        createdAt: new Date().toISOString(),
-        files: [
-          {
-            key: `voice-${Date.now()}`,
-            file,
-            name: file.name,
-            contentType: file.type || null,
-            previewUrl: null,
-            progress: 0,
-            status: "uploading",
-          },
-        ],
-        status: "uploading",
-      };
+      if (!threadKey) return;
+      const replyId = replyTo;
       setReplyTo(null);
-      setOutbox((prev) => [...prev, entry]);
-      startUploads(entry);
+      enqueueOutboxMessage({
+        threadKey,
+        target,
+        body: "",
+        replyToId: replyId,
+        files: [{ key: `voice-${Date.now()}`, file, previewUrl: null }],
+      });
     },
-    [replyTo, startUploads],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [replyTo, threadKey, target.taskId, target.projectId, target.conversationId],
   );
 
   const cleanupRecordingResources = () => {
@@ -1390,31 +1286,6 @@ export function ThreadChat({
       } catch {}
     };
   }, []);
-
-  const retryOutbox = (tempId: string) => {
-    const entry = outbox.find((o) => o.tempId === tempId);
-    if (!entry) return;
-    if (entry.files.length === 0) {
-      deliver({ ...entry, status: "sending" }, []);
-      return;
-    }
-    const reset: OutboxEntry = {
-      ...entry,
-      status: "uploading",
-      files: entry.files.map((f) => ({ ...f, status: "uploading", progress: 0, url: undefined })),
-    };
-    setOutbox((prev) => prev.map((o) => (o.tempId === tempId ? reset : o)));
-    startUploads(reset);
-  };
-
-  const discardOutbox = (tempId: string) => {
-    const entry = outbox.find((o) => o.tempId === tempId);
-    if (!entry) return;
-    for (const f of entry.files) {
-      if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
-    }
-    setOutbox((prev) => prev.filter((o) => o.tempId !== tempId));
-  };
 
   const react = useCallback(
     (messageId: string, emoji: string) => {
@@ -1647,8 +1518,8 @@ export function ThreadChat({
             <OutboxBubble
               key={o.tempId}
               entry={o}
-              onRetry={() => retryOutbox(o.tempId)}
-              onDiscard={() => discardOutbox(o.tempId)}
+              onRetry={() => retryOutboxEntry(o.tempId)}
+              onDiscard={() => discardOutboxEntry(o.tempId)}
             />
           ))}
           {messages.length === 0 && outbox.length === 0 && (
@@ -2288,9 +2159,11 @@ function OutboxBubble({
             return previewUrl ? <LinkPreviewCard url={previewUrl} mine /> : null;
           })()}
         {failed ? (
-          <div className="flex items-center gap-2 text-xs text-destructive">
-            <AlertCircle className="h-3.5 w-3.5" />
-            <span>Failed to send</span>
+          <div className="flex max-w-full flex-wrap items-center justify-end gap-2 text-xs text-destructive">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 break-words text-right">
+              {entry.errorMessage || "Failed to send"}
+            </span>
             <button
               type="button"
               onClick={onRetry}

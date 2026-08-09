@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { uploadToR2, generateR2Key } from "@/lib/r2";
-import { MAX_PROXY_UPLOAD_BYTES } from "@/lib/upload-limits";
+import {
+  MAX_PROXY_UPLOAD_BYTES,
+  MAX_PROXY_UPLOAD_LABEL,
+} from "@/lib/upload-limits";
 
 export const runtime = "nodejs";
 
@@ -28,7 +31,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
   if (file.size > MAX_PROXY_UPLOAD_BYTES) {
-    return NextResponse.json({ error: "File too large (max 25MB)" }, { status: 400 });
+    return NextResponse.json(
+      { error: `File too large (max ${MAX_PROXY_UPLOAD_LABEL})` },
+      { status: 400 },
+    );
   }
 
   try {
