@@ -416,7 +416,7 @@ function splitTableRows(
   currency: string,
 ): React.ReactNode[][] {
   return rows.flatMap((s) => {
-    const own: React.ReactNode[] = [s.label, s.rows, formatPct(s.value)];
+    const own: React.ReactNode[] = [s.label, formatPct(s.value)];
     if (s.parts.length <= 1) return [own];
     return [
       own,
@@ -424,7 +424,6 @@ function splitTableRows(
         <span key={i} className="block pl-4 text-muted-foreground">
           {stageCaption(p, currency)}
         </span>,
-        "",
         <span key={i} className="text-muted-foreground/80">
           {formatPct(p.value)}
         </span>,
@@ -1256,7 +1255,7 @@ export function PortfolioPitch({
                     : "Equity"
                 }
                 data={{
-                  columns: ["Name", "Rows", "Equity"],
+                  columns: ["Name", "Equity"],
                   rows: splitTableRows(slices, currency),
                 }}
                 history={pastSplits.map((s) => ({
@@ -1272,7 +1271,7 @@ export function PortfolioPitch({
                       : ""
                   }`,
                   data: {
-                    columns: ["Name", "Rows", "Equity"],
+                    columns: ["Name", "Equity"],
                     rows: splitTableRows(capTable(s.grants), currency),
                   },
                 }))}
