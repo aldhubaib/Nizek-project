@@ -70,13 +70,14 @@ export function marketAmount({ value, unit }: MarketAmount): number {
 }
 
 /**
- * The amount as it should be read: "USD 1.3 billion". The scale stays a word
+ * The amount as it should be read: "1.3 billion USD". The scale stays a word
  * rather than being multiplied out, since that is how the figure is said and
- * how it was entered.
+ * how it was entered; the currency trails the figure the way the amount is
+ * spoken.
  */
 export function formatMarketAmount({ value, unit, currency }: MarketAmount) {
   if (value == null) return "—";
-  return [currency, value.toLocaleString("en-US"), unitOf(unit)?.label]
+  return [value.toLocaleString("en-US"), unitOf(unit)?.label, currency]
     .filter(Boolean)
     .join(" ");
 }

@@ -506,7 +506,7 @@ export function RosePie({
 export type MarketTier = {
   /** What the tier is called — "Total available market". */
   tier: string | null;
-  /** The amount as it reads — "USD 1.3 billion". */
+  /** The amount as it reads — "1.3 billion USD". */
   display: string;
   /** The same amount as one number, or 0 where there is no figure. */
   value: number;
