@@ -1166,8 +1166,32 @@ model EquityFinancialReport {
   // aren't comparable across currencies.
   values EquityFinancialValue[]
 
+  // The statements behind the figures — the P&L, bank statement or audit the
+  // period was reported from, uploaded alongside it.
+  documents EquityFinancialDocument[]
+
   @@unique([portfolioId, periodType, periodStart])
   @@index([portfolioId, periodStart])
+}
+
+// A file uploaded with a financial period: the founders' own statements, held
+// beside the figures entered from them so a figure can be checked against its
+// source. Same shape as a message attachment — the file itself lives on R2 and
+// only its address is kept here.
+model EquityFinancialDocument {
+  id       String                @id @default(cuid())
+  reportId String
+  report   EquityFinancialReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  filename String
+  url      String
+  fileSize Int?
+  mimeType String?
+  order    Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([reportId])
 }
 
 // Equity granted under a specific contract. The vesting window defaults to the

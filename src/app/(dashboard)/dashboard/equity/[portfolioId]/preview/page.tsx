@@ -5,7 +5,6 @@ import { requireUser } from "@/lib/auth";
 import { canAccessEquity } from "@/lib/equity-access";
 import { getEquityPortfolio, listEquityMetrics } from "@/actions/equity";
 import { PageHeader } from "@/components/page-header";
-import { PortfolioMenu } from "@/components/equity/portfolio-menu";
 import { PortfolioPitch } from "@/components/equity/portfolio-pitch";
 
 /**
@@ -47,10 +46,8 @@ export default async function EquityPreviewPage({
         <span className="text-[11px] text-muted-foreground whitespace-nowrap">
           Pitch preview
         </span>
-        <PortfolioMenu
-          portfolioId={portfolio.id}
-          projectName={portfolio.project.name}
-        />
+        {/* No actions menu here: the preview is for reading, and everything
+            the menu does — including delete — belongs on the portfolio page. */}
       </PageHeader>
 
       <div className="px-6 py-6 max-w-6xl mx-auto">

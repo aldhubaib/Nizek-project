@@ -5,9 +5,10 @@ import { cn } from "@/lib/utils";
 import { PhotoGallery } from "@/components/equity/photo-gallery";
 
 /**
- * Traction: the milestones one under another down a spine, oldest at the top,
- * all of them open. Nothing to drag and nothing hidden, which is what makes it
- * work the same on a phone, in a print-out, and for anyone skimming.
+ * Traction: the milestones one under another down a spine, in whatever order
+ * they're handed over (the report leads with the newest), all of them open.
+ * Nothing to drag and nothing hidden, which is what makes it work the same on
+ * a phone, in a print-out, and for anyone skimming.
  */
 
 const ACCENT = "#ff3366";
@@ -37,6 +38,51 @@ function isUpcoming(iso: string) {
   return new Date(iso).getTime() > Date.now();
 }
 
+/**
+ * The milestone's write-up, held to three lines with the rest behind
+ * "Read more". Whether three lines actually cut anything off is measured
+ * rather than guessed from the character count — where text wraps depends
+ * on the column it's in.
+ */
+function MilestoneBody({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const [clipped, setClipped] = useState(false);
+  const ref = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || open) return;
+    const measure = () => setClipped(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const watcher = new ResizeObserver(measure);
+    watcher.observe(el);
+    return () => watcher.disconnect();
+  }, [text, open]);
+
+  return (
+    <div className="mt-2">
+      <p
+        ref={ref}
+        className={cn(
+          "text-muted-foreground whitespace-pre-wrap",
+          !open && "line-clamp-3",
+        )}
+      >
+        {text}
+      </p>
+      {(clipped || open) && (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="mt-1 text-[11px] font-medium text-foreground/70 hover:text-foreground transition-colors"
+        >
+          {open ? "Read less" : "Read more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** How far through the panel the reader is, for whoever is showing the count. */
 export type TractionProgress = { at: number; scrolls: boolean };
 
@@ -50,7 +96,7 @@ export function TractionCount({ at, total }: { at: number; total: number }) {
     <span className="text-[11px] tabular-nums shrink-0">
       {/* The report's accent, the same one marking the step you're reading. */}
       <span style={{ color: ACCENT }}>{at + 1}/</span>
-      <span className="text-muted-foreground/50">{total}</span>
+      <span className="text-foreground">{total}</span>
     </span>
   );
 }
@@ -168,7 +214,9 @@ export function TractionTimeline({
 
               <div className="flex items-baseline gap-2 flex-wrap">
                 <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/70 tabular-nums">
-                  Step {String(i + 1).padStart(2, "0")}
+                  {/* Numbered from the beginning of the journey, whichever end
+                    of it the list leads with. */}
+                  Step {String(milestones.length - i).padStart(2, "0")}
                 </span>
                 <span className="text-[11px] tabular-nums text-muted-foreground">
                   {longDay(milestone.happenedOn)}
@@ -188,22 +236,26 @@ export function TractionTimeline({
               >
                 {milestone.title}
               </p>
-              {milestone.body && (
-                <p className="text-[12px] text-muted-foreground mt-2 whitespace-pre-wrap max-w-[70ch]">
-                  {milestone.body}
-                </p>
-              )}
-
-              {/* Held to the width of the text it follows, so a milestone with
-                a photo doesn't shout over the ones without. Click to enlarge. */}
-              {milestone.photoUrl && (
-                <PhotoGallery
-                  photos={[
-                    { id: milestone.id, url: milestone.photoUrl, caption: null },
-                  ]}
-                  className="grid-cols-1 max-w-[420px] mt-3"
-                  defaultColumns={1}
-                />
+              {/* One column for the words and the photo both — the constraint
+                lives on the wrapper so the two can't come out different
+                widths. Click the photo to enlarge. */}
+              {(milestone.body || milestone.photoUrl) && (
+                <div className="max-w-[70ch] text-[12px]">
+                  {milestone.body && <MilestoneBody text={milestone.body} />}
+                  {milestone.photoUrl && (
+                    <PhotoGallery
+                      photos={[
+                        {
+                          id: milestone.id,
+                          url: milestone.photoUrl,
+                          caption: null,
+                        },
+                      ]}
+                      className="grid-cols-1 mt-3"
+                      defaultColumns={1}
+                    />
+                  )}
+                </div>
               )}
             </li>
           );

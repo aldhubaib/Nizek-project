@@ -86,6 +86,7 @@ const PORTFOLIO_INCLUDE = {
           metric: { select: { id: true, name: true, type: true, unit: true } },
         },
       },
+      documents: { orderBy: { order: "asc" as const } },
     },
   },
   // Which financial fields this project is asked for, in the order it asks for
@@ -238,6 +239,14 @@ function serialize(p: {
       numberValue: number | null;
       dateValue: Date | null;
       metric: { id: string; name: string; type: string; unit: string | null };
+    }[];
+    documents: {
+      id: string;
+      filename: string;
+      url: string;
+      fileSize: number | null;
+      mimeType: string | null;
+      order: number;
     }[];
   }[];
   reportFields: {
@@ -412,6 +421,14 @@ function serialize(p: {
         numberValue: v.numberValue,
         dateValue: v.dateValue?.toISOString() ?? null,
         metric: v.metric,
+      })),
+      documents: r.documents.map((d) => ({
+        id: d.id,
+        filename: d.filename,
+        url: d.url,
+        fileSize: d.fileSize,
+        mimeType: d.mimeType,
+        order: d.order,
       })),
     })),
     reportFields: p.reportFields.map((f) => ({
@@ -2293,7 +2310,33 @@ type FinancialReportInput = {
   helpNotes: string | null;
   /** One per defined financial field the period was reported with. */
   values: PerformanceValueInput[];
+  /** The statements the period was reported from, already uploaded to R2. */
+  documents: FinancialDocumentInput[];
 };
+
+type FinancialDocumentInput = {
+  filename: string;
+  url: string;
+  fileSize: number | null;
+  mimeType: string | null;
+};
+
+/**
+ * The uploaded statements as they'll be stored. A row without an address has
+ * nothing behind it — the upload is what makes the document — so it's dropped
+ * rather than kept as a dead link.
+ */
+function financialDocumentsData(documents: FinancialDocumentInput[]) {
+  return documents
+    .filter((d) => d.url.trim())
+    .map((d, i) => ({
+      filename: d.filename.trim() || "Document",
+      url: d.url.trim(),
+      fileSize: d.fileSize,
+      mimeType: d.mimeType,
+      order: i + 1,
+    }));
+}
 
 function financialReportData(data: FinancialReportInput) {
   const periodStart = new Date(data.periodStart);
@@ -2314,6 +2357,7 @@ const FINANCIAL_VALUES_INCLUDE = {
     orderBy: { order: "asc" as const },
     include: { metric: { select: { name: true, type: true, unit: true } } },
   },
+  documents: { orderBy: { order: "asc" as const } },
 };
 
 /**
@@ -2428,6 +2472,7 @@ function reportSnapshot(report: {
   needsHelp: boolean;
   helpNotes: string | null;
   values: StoredValue[];
+  documents: { filename: string }[];
 }): Snapshot {
   const snapshot: Snapshot = { Audited: asText(report.audited) };
   for (const value of report.values) {
@@ -2435,6 +2480,10 @@ function reportSnapshot(report: {
   }
   snapshot["Needs help"] = asText(report.needsHelp);
   snapshot["Help notes"] = report.helpNotes;
+  snapshot["Documents"] =
+    report.documents.length > 0
+      ? report.documents.map((d) => d.filename).join(", ")
+      : null;
   return snapshot;
 }
 
@@ -2458,6 +2507,7 @@ export async function addEquityFinancialReport(
         portfolioId,
         ...financialReportData(data),
         values: { create: values },
+        documents: { create: financialDocumentsData(data.documents) },
       },
       include: FINANCIAL_VALUES_INCLUDE,
     });
@@ -2501,6 +2551,10 @@ export async function updateEquityFinancialReport(
       data: {
         ...financialReportData(data),
         values: { deleteMany: {}, create: values },
+        documents: {
+          deleteMany: {},
+          create: financialDocumentsData(data.documents),
+        },
       },
       include: FINANCIAL_VALUES_INCLUDE,
     });

@@ -1847,7 +1847,24 @@ type FinancialReportDraft = {
   rows: FieldRow[];
   needsHelp: boolean;
   helpNotes: string;
+  /** The statements the period is reported from, already uploaded to R2. */
+  documents: ReportDocumentDraft[];
 };
+
+/** One uploaded statement on the form. The key is only for React's lists. */
+type ReportDocumentDraft = {
+  key: string;
+  filename: string;
+  url: string;
+  fileSize: number | null;
+  mimeType: string | null;
+};
+
+let reportDocumentSeq = 0;
+function documentKey(): string {
+  reportDocumentSeq += 1;
+  return `findoc-${reportDocumentSeq}`;
+}
 
 let financialRowSeq = 0;
 function blankFieldRow(): FieldRow {
@@ -1875,6 +1892,7 @@ function emptyFinancialReport(fields: ReportField[]): FinancialReportDraft {
         : [blankFieldRow()],
     needsHelp: false,
     helpNotes: "",
+    documents: [],
   };
 }
 
@@ -1907,6 +1925,13 @@ function reportToDraft(
     rows: rows.length > 0 ? rows : [blankFieldRow()],
     needsHelp: r.needsHelp,
     helpNotes: r.helpNotes ?? "",
+    documents: r.documents.map((d) => ({
+      key: documentKey(),
+      filename: d.filename,
+      url: d.url,
+      fileSize: d.fileSize,
+      mimeType: d.mimeType,
+    })),
   };
 }
 
@@ -2049,6 +2074,12 @@ function financialReportPayload(draft: FinancialReportDraft) {
         numberValue: optionalAmount(row.number),
         dateValue: row.date || null,
       })),
+    documents: draft.documents.map((d) => ({
+      filename: d.filename,
+      url: d.url,
+      fileSize: d.fileSize,
+      mimeType: d.mimeType,
+    })),
   };
 }
 
@@ -2348,6 +2379,31 @@ function FinancialReportRow({
             }
           />
         )}
+        {r.documents.length > 0 && (
+          <RecordDetail
+            label="Documents"
+            span
+            value={
+              <span className="flex flex-wrap gap-x-3 gap-y-1">
+                {r.documents.map((doc) => (
+                  <a
+                    key={doc.id}
+                    href={doc.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-foreground no-underline hover:underline"
+                  >
+                    <Paperclip
+                      className="w-3 h-3 text-muted-foreground"
+                      strokeWidth={1.5}
+                    />
+                    {doc.filename}
+                  </a>
+                ))}
+              </span>
+            }
+          />
+        )}
       </RecordDetails>
     </RecordRow>
   );
@@ -2614,12 +2670,46 @@ function FinancialReportForm({
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState<FinancialReportDraft>(initial);
+  const [uploadPct, setUploadPct] = useState<number | null>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
+  const uploading = uploadPct !== null;
 
   function set<K extends keyof FinancialReportDraft>(
     key: K,
     value: FinancialReportDraft[K]
   ) {
     setDraft((d) => ({ ...d, [key]: value }));
+  }
+
+  // One at a time so the counter means something; a failure stops the batch
+  // where it happened rather than losing the files already through.
+  async function handleDocuments(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    setUploadPct(0);
+    try {
+      for (const file of files) {
+        const uploaded = await uploadFileToR2(file, setUploadPct);
+        setDraft((d) => ({
+          ...d,
+          documents: [
+            ...d.documents,
+            {
+              key: documentKey(),
+              filename: uploaded.filename,
+              url: uploaded.url,
+              fileSize: uploaded.fileSize,
+              mimeType: uploaded.mimeType,
+            },
+          ],
+        }));
+      }
+    } catch (err) {
+      alert((err as Error).message || "Upload failed");
+    } finally {
+      setUploadPct(null);
+      if (documentInputRef.current) documentInputRef.current.value = "";
+    }
   }
 
   function patchRow(key: string, patch: Partial<FieldRow>) {
@@ -2995,6 +3085,71 @@ function FinancialReportForm({
         )}
       </div>
 
+      {/* The statements the figures above were read from, kept with the
+          period so a figure can always be checked against its source. */}
+      <div>
+        <label className={labelCls}>Financial documents</label>
+        <div className="space-y-1.5">
+          {draft.documents.map((doc) => (
+            <div
+              key={doc.key}
+              className="flex items-center gap-2 h-9 px-3 rounded-lg border border-border bg-muted/30"
+            >
+              <Paperclip
+                className="w-3.5 h-3.5 shrink-0 text-muted-foreground"
+                strokeWidth={1.5}
+              />
+              <a
+                href={doc.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[13px] text-foreground truncate no-underline hover:underline"
+              >
+                {doc.filename}
+              </a>
+              {formatFileSize(doc.fileSize) && (
+                <span className="text-[11px] text-muted-foreground/60 shrink-0">
+                  {formatFileSize(doc.fileSize)}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() =>
+                  setDraft((d) => ({
+                    ...d,
+                    documents: d.documents.filter((x) => x.key !== doc.key),
+                  }))
+                }
+                disabled={busy}
+                className="ml-auto w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                title="Remove this document"
+              >
+                <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => documentInputRef.current?.click()}
+            disabled={busy || uploading}
+            className="flex items-center gap-2 w-full h-9 px-3 rounded-lg border border-dashed border-border bg-card text-[13px] text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
+          >
+            <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
+            {uploading
+              ? `Uploading… ${uploadPct}%`
+              : "Upload the financials this period was reported from (PDF, spreadsheet, image)"}
+          </button>
+          <input
+            ref={documentInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,image/*"
+            onChange={handleDocuments}
+            className="hidden"
+          />
+        </div>
+      </div>
+
       <div className="flex items-center justify-end gap-2">
         {blocked ? (
           <span className="text-[11px] text-muted-foreground mr-auto">
@@ -3016,7 +3171,7 @@ function FinancialReportForm({
         <button
           type="button"
           onClick={() => onSubmit(draft)}
-          disabled={busy || blocked != null}
+          disabled={busy || uploading || blocked != null}
           className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium hover:bg-primary/90 transition-colors disabled:opacity-40"
         >
           {busy ? "Saving…" : submitLabel}

@@ -17,10 +17,9 @@ import {
   Lightbulb,
   Megaphone,
   Package,
+  Paperclip,
   PieChart,
   Rocket,
-  Shield,
-  Sparkles,
   Target,
   TrendingUp,
   Users,
@@ -239,6 +238,13 @@ function financialFigures(
 }
 
 /** What the financials chart is standing on, in a line under the table. */
+function formatFileSize(bytes: number | null): string | null {
+  if (!bytes) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
 function financialsNote(figures: { label: string; calculation: string | null }[]) {
   const worked = figures.filter((f) => f.calculation);
   const reported = figures.filter((f) => !f.calculation).map((f) => f.label);
@@ -866,16 +872,21 @@ function Traction({
     scrolls: false,
   });
 
+  // Newest at the top: the latest step is the news, the early ones are
+  // history. The step numbers still count from the beginning, so Step 01
+  // stays the first thing that ever happened.
+  const ordered = useMemo(() => [...milestones].reverse(), [milestones]);
+
   return (
     <ChartFrame
-      title="Milestones, oldest first"
-      note="Every milestone as it was entered on the portfolio page, with the day it happened, oldest first. Anything dated after today is shown as upcoming rather than achieved."
-      source={`Traction · ${milestones.length} ${
-        milestones.length === 1 ? "milestone" : "milestones"
-      }, oldest first`}
+      title="Milestones, newest first"
+      note="Every milestone as it was entered on the portfolio page, with the day it happened, newest first. Anything dated after today is shown as upcoming rather than achieved."
+      source={`Traction · ${ordered.length} ${
+        ordered.length === 1 ? "milestone" : "milestones"
+      }, newest first`}
       data={{
         columns: ["Date", "Milestone", "Detail"],
-        rows: milestones.map((m) => [
+        rows: ordered.map((m) => [
           day(m.happenedOn) ?? "—",
           m.title,
           m.body || "—",
@@ -883,11 +894,11 @@ function Traction({
       }}
       aside={
         progress.scrolls && (
-          <TractionCount at={progress.at} total={milestones.length} />
+          <TractionCount at={progress.at} total={ordered.length} />
         )
       }
     >
-      <TractionTimeline milestones={milestones} onProgress={setProgress} />
+      <TractionTimeline milestones={ordered} onProgress={setProgress} />
     </ChartFrame>
   );
 }
@@ -922,7 +933,6 @@ export function PortfolioPitch({
   const radarScored = competition.some(
     (c) => c.scores && radarAnchors.some((a) => c.scores?.[a] != null),
   );
-  const advantages = itemsOf(portfolio, "ADVANTAGE");
   // The deck shows the team as it stands; the lineups behind it are dated and
   // kept, and the section says how many there are rather than listing them.
   const team = portfolio.teamSnapshots[0];
@@ -990,6 +1000,19 @@ export function PortfolioPitch({
       reports.map((r) => formatPeriodLabel(r.periodType, r.periodStart)),
     [reports],
   );
+  // The statements uploaded with the periods, kept in the same oldest-first
+  // order as the chart so the two read together.
+  const documented = useMemo(
+    () =>
+      reports
+        .map((r, i) => ({
+          id: r.id,
+          label: periodLabels[i],
+          documents: r.documents,
+        }))
+        .filter((r) => r.documents.length > 0),
+    [reports, periodLabels],
+  );
 
   const metrics = useMemo(() => metricSeriesOf(portfolio), [portfolio]);
   const lastReading = portfolio.performance[0] ?? null;
@@ -1047,32 +1070,6 @@ export function PortfolioPitch({
                 <Prose text={opportunity.solution} />
               ) : (
                 <NoData />
-              )}
-            </Field>
-
-            <Field icon={Shield} title="Competitive advantage">
-              {advantages.length === 0 ? (
-                <NoData />
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6">
-                  {advantages.map((a) => (
-                    <Panel key={a.id} className="flex gap-2.5">
-                      <Sparkles
-                        className="w-4 h-4 shrink-0 mt-0.5"
-                        strokeWidth={1.5}
-                        style={{ color: ACCENT }}
-                      />
-                      <div className="min-w-0">
-                        <p className="text-[13px] font-semibold text-foreground">
-                          {a.heading}
-                        </p>
-                        <p className="text-[12px] text-muted-foreground mt-1.5">
-                          {a.body}
-                        </p>
-                      </div>
-                    </Panel>
-                  ))}
-                </div>
               )}
             </Field>
           </div>
@@ -1438,6 +1435,50 @@ export function PortfolioPitch({
                 height={402}
               />
             </ChartFrame>
+          )}
+
+          {/* The statements the figures were reported from, period by period.
+              Every claim above has its paperwork here. */}
+          {documented.length > 0 && (
+            <Panel className="mt-4">
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-3">
+                Reported documents
+              </p>
+              <div className="space-y-2.5">
+                {documented.map((period) => (
+                  <div
+                    key={period.id}
+                    className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-4"
+                  >
+                    <span className="text-[12px] font-medium text-foreground/80 tabular-nums w-20 shrink-0">
+                      {period.label}
+                    </span>
+                    <span className="flex flex-wrap gap-x-4 gap-y-1 min-w-0">
+                      {period.documents.map((doc) => (
+                        <a
+                          key={doc.id}
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-[13px] text-foreground/90 no-underline hover:underline min-w-0"
+                        >
+                          <Paperclip
+                            className="w-3.5 h-3.5 shrink-0 text-muted-foreground"
+                            strokeWidth={1.5}
+                          />
+                          <span className="truncate">{doc.filename}</span>
+                          {formatFileSize(doc.fileSize) && (
+                            <span className="text-[11px] text-muted-foreground/60 shrink-0">
+                              {formatFileSize(doc.fileSize)}
+                            </span>
+                          )}
+                        </a>
+                      ))}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Panel>
           )}
         </Section>
 
