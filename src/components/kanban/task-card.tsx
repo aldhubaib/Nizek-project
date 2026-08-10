@@ -2,8 +2,9 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Expand, ExternalLink, Sparkles, Wrench, Bug, Clock, Timer, Undo2, AlertCircle, Palette, Gauge } from "lucide-react";
-import { memo, useState } from "react";
+import { Sparkles, Wrench, Bug, Clock, Timer, Undo2, AlertCircle, Palette, Gauge } from "lucide-react";
+import { memo, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import type { KanbanTask, TaskType, EstimateAccuracy } from "@/store/kanban";
 import { cn } from "@/lib/utils";
@@ -132,16 +133,16 @@ interface TaskCardProps {
   isOverlay?: boolean;
   disabled?: boolean;
   locked?: boolean;
-  // Stable callbacks (receive the task/id) so this memo'd card doesn't re-render
-  // just because the parent recreated a per-card closure.
-  onExpand?: (taskId: string) => void;
   projectId?: string;
   /** True when the viewer may claim this task at its current stage. */
   canSelfAssign?: boolean;
+  // Stable callback (receives the task) so this memo'd card doesn't re-render
+  // just because the parent recreated a per-card closure.
   onSelfAssign?: (task: KanbanTask) => void;
 }
 
-export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, locked, onExpand, projectId, canSelfAssign, onSelfAssign }: TaskCardProps) {
+export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, locked, projectId, canSelfAssign, onSelfAssign }: TaskCardProps) {
+  const router = useRouter();
   const {
     attributes,
     listeners,
@@ -150,6 +151,23 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
     transition,
     isDragging,
   } = useSortable({ id: task.id, disabled: disabled || locked });
+
+  // Clicking the card opens the task's details page — but the browser also
+  // fires a click when a drag ends on the card, so remember that a drag
+  // happened and swallow that one.
+  const wasDragged = useRef(false);
+  useEffect(() => {
+    if (isDragging) wasDragged.current = true;
+  }, [isDragging]);
+
+  const openDetails = () => {
+    if (wasDragged.current) {
+      wasDragged.current = false;
+      return;
+    }
+    if (!projectId || isOverlay) return;
+    router.push(`/dashboard/projects/${projectId}/tasks/${task.id}`);
+  };
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -179,44 +197,16 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
       style={style}
       {...attributes}
       {...listeners}
+      onClick={openDetails}
       className={cn(
         "group relative rounded-lg border border-border bg-card p-3 transition-colors hover:border-muted-foreground/20",
         isDragging && "opacity-50",
         isOverlay && "rotate-2 shadow-xl border-primary/50",
-        disabled ? "opacity-70" : locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
+        disabled && "opacity-70",
+        // Cards that can't be dragged still open their details on click.
+        disabled || locked ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"
       )}
     >
-      {(onExpand || projectId) && (
-        <div className="absolute top-2 right-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all z-10">
-          {projectId && (
-            <a
-              href={`/dashboard/projects/${projectId}/tasks/${task.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="rounded-md p-1 text-muted-foreground/40 hover:text-foreground hover:bg-accent transition-all"
-              title="Open in new tab"
-            >
-              <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.5} />
-            </a>
-          )}
-          {onExpand && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onExpand(task.id);
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="rounded-md p-1 text-muted-foreground/40 hover:text-foreground hover:bg-accent transition-all"
-              title="Open sidebar"
-            >
-              <Expand className="w-3.5 h-3.5" strokeWidth={1.5} />
-            </button>
-          )}
-        </div>
-      )}
-
       <div className="min-w-0">
         <span className="text-[10px] font-mono text-muted-foreground/60">
           {task.taskType === "BUG" ? "B" : task.taskType === "REPORTED_BUG" ? "RB" : task.taskType === "ENHANCEMENT" ? "E" : task.taskType === "DESIGN" ? "D" : "F"}-{String(task.taskNumber).padStart(3, "0")}

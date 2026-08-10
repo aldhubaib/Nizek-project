@@ -29,7 +29,10 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, ca
   const onThread =
     pathname.startsWith("/dashboard/messages/") &&
     pathname !== "/dashboard/messages";
-  const showBottomNav = !isDesktop && !onThread;
+  // The expanded task page is a focus screen with its own back button, so the
+  // navigation (sidebar rail and bottom nav) gets out of the way entirely.
+  const onTaskPage = /^\/dashboard\/projects\/[^/]+\/tasks\/./.test(pathname);
+  const showBottomNav = !isDesktop && !onThread && !onTaskPage;
 
   useEffect(() => {
     const handleResize = () =>
@@ -57,7 +60,7 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, ca
   const shell = (
     <div className="flex min-h-screen">
       {/* Desktop sidebar — pushes content, not overlay */}
-      {isDesktop && (
+      {isDesktop && !onTaskPage && (
         <div
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
@@ -104,7 +107,7 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, ca
       {/* Main content — pushed by sidebar, rounded corner */}
       <main
         className={`flex-1 min-w-0 bg-background relative z-10 ${
-          isDesktop ? "rounded-l-2xl" : onInbox ? "" : "pt-12"
+          isDesktop ? (onTaskPage ? "" : "rounded-l-2xl") : onInbox ? "" : "pt-12"
         } ${showBottomNav && !onInbox ? "pb-[calc(4rem+env(safe-area-inset-bottom))]" : ""}`}
       >
         {isDesktop && !onInbox && (

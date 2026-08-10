@@ -551,9 +551,6 @@ export function KanbanBoard({
                 tasks={stageTasks}
                 disabled
                 projectId={projectId}
-                questions={questions}
-                isAdmin={userPermissions.isAdmin}
-                canSkipClientReview={canSkipClientReview}
               />
             );
           })}
@@ -581,12 +578,9 @@ export function KanbanBoard({
               stage={stage}
               tasks={stageTasks}
               projectId={projectId}
-              questions={questions}
               canCreateTask={userPermissions.isAdmin || (userPermissions.createStages ?? []).includes(stage.id)}
               dragFromStage={dragFromStage}
               dragTaskType={dragTaskType}
-              isAdmin={userPermissions.isAdmin}
-              canSkipClientReview={canSkipClientReview}
               canSelfAssign={canSelfAssign}
               onSelfAssign={openSelfAssign}
             />

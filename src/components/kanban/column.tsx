@@ -8,42 +8,25 @@ import {
 import { Plus, Zap, CheckCircle2, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { TaskCard } from "./task-card";
-import { TaskSidebar } from "./task-sidebar";
-import { useMemo, useState, useCallback, memo } from "react";
-import { useKanbanStore, type KanbanTask, type Stage } from "@/store/kanban";
-import type { TaskQuestion } from "./question-field";
+import { useMemo, memo } from "react";
+import type { KanbanTask, Stage } from "@/store/kanban";
 import { cn } from "@/lib/utils";
-
-interface QuestionWithType extends TaskQuestion {
-  taskType: string;
-}
 
 interface ColumnProps {
   stage: { id: Stage; label: string; color: string };
   tasks: KanbanTask[];
   disabled?: boolean;
   projectId: string;
-  questions: QuestionWithType[];
   canCreateTask?: boolean;
   dragFromStage?: Stage | null;
   dragTaskType?: string | null;
-  isAdmin?: boolean;
-  canSkipClientReview?: boolean;
   canSelfAssign?: (task: KanbanTask) => boolean;
   onSelfAssign?: (task: KanbanTask) => void;
 }
 
-export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled, projectId, questions, canCreateTask, dragFromStage, dragTaskType, isAdmin, canSkipClientReview, canSelfAssign, onSelfAssign }: ColumnProps) {
+export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled, projectId, canCreateTask, dragFromStage, dragTaskType, canSelfAssign, onSelfAssign }: ColumnProps) {
   const router = useRouter();
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
-
-  const selectedTask = useKanbanStore(
-    useCallback(
-      (s: { tasks: KanbanTask[] }) => (selectedTaskId ? s.tasks.find((t) => t.id === selectedTaskId) ?? null : null),
-      [selectedTaskId]
-    )
-  );
 
   const isClarification = stage.id === "CLARIFICATION";
 
@@ -78,8 +61,6 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
   }, [dragFromStage, stage.id, dragTaskType]);
 
   const isDragging = dragFromStage != null;
-
-  const handleExpand = useCallback((taskId: string) => setSelectedTaskId(taskId), []);
 
   return (
     <div
@@ -134,7 +115,6 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
                         task={task}
                         disabled={disabled}
                         locked={i > 0}
-                        onExpand={handleExpand}
                         projectId={projectId}
                         canSelfAssign={canSelfAssign?.(task) ?? false}
                         onSelfAssign={onSelfAssign}
@@ -163,7 +143,6 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
                         task={task}
                         disabled={disabled}
                         locked
-                        onExpand={handleExpand}
                         projectId={projectId}
                         canSelfAssign={canSelfAssign?.(task) ?? false}
                         onSelfAssign={onSelfAssign}
@@ -192,7 +171,6 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
                         task={task}
                         disabled={disabled}
                         locked
-                        onExpand={handleExpand}
                         projectId={projectId}
                         canSelfAssign={canSelfAssign?.(task) ?? false}
                         onSelfAssign={onSelfAssign}
@@ -209,7 +187,6 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
                   key={task.id}
                   task={task}
                   disabled={disabled}
-                  onExpand={handleExpand}
                   projectId={projectId}
                   canSelfAssign={canSelfAssign?.(task) ?? false}
                   onSelfAssign={onSelfAssign}
@@ -226,17 +203,6 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
         )}
       </div>
 
-      {selectedTask && (
-        <TaskSidebar
-          task={selectedTask}
-          open={!!selectedTask}
-          onClose={() => setSelectedTaskId(null)}
-          questions={questions}
-          projectId={projectId}
-          isAdmin={isAdmin}
-          canSkipClientReview={canSkipClientReview}
-        />
-      )}
     </div>
   );
 });
