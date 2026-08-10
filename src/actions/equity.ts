@@ -2616,9 +2616,11 @@ function share(value: number | null | undefined) {
   return Math.max(0, Math.min(100, Math.round(value * 100) / 100));
 }
 
-/** How many anchors a radar can carry: under 3 there's no shape, over 6 no room. */
-export const RADAR_ANCHORS_MIN = 3;
-export const RADAR_ANCHORS_MAX = 6;
+// How many anchors a radar can carry: under 3 there's no shape, over 6 no
+// room. Not exported — a "use server" module may only export async functions;
+// the competition editor keeps its own copy of the same bounds.
+const RADAR_ANCHORS_MIN = 3;
+const RADAR_ANCHORS_MAX = 6;
 
 /** Trimmed, deduped and capped at six — the corners the radar will be drawn on. */
 function radarAnchors(anchors: string[] | undefined): string[] {
