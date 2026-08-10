@@ -9,6 +9,7 @@ import { AssetsTab } from "@/components/project/assets-tab";
 import { MemberList } from "@/components/team/member-list";
 import { InviteMemberDialog } from "@/components/team/invite-member-dialog";
 import { ProjectSettingsOverlay } from "@/components/project/project-settings-overlay";
+import { VaultTab } from "@/components/vault/vault-tab";
 import { createPortal } from "react-dom";
 import { getMeetingNotes } from "@/actions/meeting-note";
 import { getAssets } from "@/actions/asset";
@@ -16,10 +17,11 @@ import { getProjectInvitations } from "@/actions/project";
 import { getRoles } from "@/actions/role";
 import { getContractPrefixes } from "@/actions/contract-prefix";
 import { getTeams } from "@/actions/team";
+import { listProjectVaultCredentials, type VaultCredentialDTO } from "@/actions/vault";
 
 import type { TaskQuestion } from "@/components/kanban/question-field";
 import Link from "next/link";
-import { LayoutGrid, FileText, Paperclip, Users, Settings, Loader2, ArrowLeft } from "lucide-react";
+import { LayoutGrid, FileText, Paperclip, Users, KeyRound, Settings, Loader2, ArrowLeft } from "lucide-react";
 import type { KanbanTask } from "@/store/kanban";
 export interface UserPermissions {
   canCreateTask: boolean;
@@ -166,6 +168,8 @@ interface Props {
   isDeadlineTestProject?: boolean;
   allowedTaskTypes?: string[];
   activeContractType?: string | null;
+  /** Separate Vault permission — not the same as project team access. */
+  canAccessVault?: boolean;
 }
 
 function TabSpinner() {
@@ -189,6 +193,7 @@ export function ProjectDetailClient({
   isDeadlineTestProject = false,
   allowedTaskTypes,
   activeContractType,
+  canAccessVault = false,
 }: Props) {
   const canEdit = userPermissions.canModifyTask || userPermissions.isAdmin;
   const isAdmin = userPermissions.isAdmin;
@@ -201,11 +206,13 @@ export function ProjectDetailClient({
   const [notes, setNotes] = useState<MeetingNote[] | null>(null);
   const [assets, setAssets] = useState<Asset[] | null>(null);
   const [teamData, setTeamData] = useState<{ roles: ProjectRole[]; invitations: Invitation[] } | null>(null);
+  const [vaultCredentials, setVaultCredentials] = useState<VaultCredentialDTO[] | null>(null);
   const [settingsData, setSettingsData] = useState<{ teams: Team[]; contractPrefixes: ContractPrefixOption[] } | null>(null);
 
   const [loadingNotes, startNotesTransition] = useTransition();
   const [loadingAssets, startAssetsTransition] = useTransition();
   const [loadingTeam, startTeamTransition] = useTransition();
+  const [loadingVault, startVaultTransition] = useTransition();
   const [loadingSettings, startSettingsTransition] = useTransition();
 
   useEffect(() => {
@@ -237,6 +244,15 @@ export function ProjectDetailClient({
       });
     }
   }, [activeTab, teamData, project.id]);
+
+  useEffect(() => {
+    if (activeTab === "vault" && canAccessVault && vaultCredentials === null) {
+      startVaultTransition(async () => {
+        const data = await listProjectVaultCredentials(project.id);
+        setVaultCredentials(data);
+      });
+    }
+  }, [activeTab, canAccessVault, vaultCredentials, project.id]);
 
   function handleOpenSettings() {
     setSettingsOpen(true);
@@ -332,6 +348,17 @@ export function ProjectDetailClient({
                 </span>
               </TabsTrigger>
             )}
+            {canAccessVault && (
+              <TabsTrigger value="vault" className="gap-1.5">
+                <KeyRound className="h-3.5 w-3.5" />
+                Vault
+                {vaultCredentials && (
+                  <span className="ml-1 text-[10px] text-muted-foreground">
+                    {vaultCredentials.length}
+                  </span>
+                )}
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="board">
@@ -404,6 +431,16 @@ export function ProjectDetailClient({
               </div>
             )}
           </TabsContent>
+
+          {canAccessVault && (
+            <TabsContent value="vault">
+              {loadingVault || !vaultCredentials ? (
+                <TabSpinner />
+              ) : (
+                <VaultTab projectId={project.id} credentials={vaultCredentials} />
+              )}
+            </TabsContent>
+          )}
 
         </Tabs>
       </div>

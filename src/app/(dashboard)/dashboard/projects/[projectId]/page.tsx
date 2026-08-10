@@ -6,6 +6,7 @@ import { getPermissionsFromRole, getAdminPermissions } from "@/lib/permissions";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import { isDeadlineTestProjectByName } from "@/lib/deadline-reminders";
 import { isProjectAccessError } from "@/lib/project-access";
+import { canAccessProjectVault } from "@/lib/vault-access";
 import { notFound } from "next/navigation";
 import { ProjectDetailClient } from "./project-detail-client";
 import type { KanbanTask } from "@/store/kanban";
@@ -26,6 +27,8 @@ export default async function ProjectDetailPage({ params }: Props) {
     if (isProjectAccessError(err)) notFound();
     throw err;
   });
+
+  const canAccessVault = await canAccessProjectVault(user.id, projectId);
 
   const isSystemAdmin = user.systemRole === "ADMIN";
   const isProjectAdmin = member.projectRole?.isAdmin ?? false;
@@ -74,6 +77,7 @@ export default async function ProjectDetailPage({ params }: Props) {
       isDeadlineTestProject={isDeadlineTestProjectByName(project.name)}
       allowedTaskTypes={allowedTaskTypes}
       activeContractType={activeContract?.contractType ?? null}
+      canAccessVault={canAccessVault}
     />
   );
 }

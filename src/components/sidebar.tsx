@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   Settings,
   PieChart,
+  KeyRound,
   Pin,
   PinOff,
   Trash,
@@ -22,16 +23,16 @@ import {
 import { cn } from "@/lib/utils";
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false },
-  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false, auditOnly: false, equityOnly: false },
-  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, auditOnly: false, equityOnly: false },
-  { name: "Equity", href: "/dashboard/equity", icon: PieChart, adminOnly: false, auditOnly: false, equityOnly: true },
-  { name: "Audit", href: "/dashboard/audit", icon: ClipboardCheck, adminOnly: false, auditOnly: true, equityOnly: false },
-  // The trash is shared by the whole app, but so far only the equity module
-  // puts anything in it — so it's shown to the people who can fill it rather
-  // than to everyone, who'd only ever find it empty.
-  { name: "Trash", href: "/dashboard/trash", icon: Trash, adminOnly: false, auditOnly: false, equityOnly: true },
-  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, auditOnly: false, equityOnly: false },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
+  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
+  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
+  { name: "Vault", href: "/dashboard/vault", icon: KeyRound, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: true, trashOnly: false },
+  { name: "Equity", href: "/dashboard/equity", icon: PieChart, adminOnly: false, auditOnly: false, equityOnly: true, vaultOnly: false, trashOnly: false },
+  { name: "Audit", href: "/dashboard/audit", icon: ClipboardCheck, adminOnly: false, auditOnly: true, equityOnly: false, vaultOnly: false, trashOnly: false },
+  // Trash holds equity + vault soft-deletes. Equity people see equity items;
+  // vault items are admin-only. Show the nav when either audience applies.
+  { name: "Trash", href: "/dashboard/trash", icon: Trash, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: true },
+  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
 ];
 
 interface SidebarProps {
@@ -41,6 +42,7 @@ interface SidebarProps {
   isAdmin?: boolean;
   canAudit?: boolean;
   canEquity?: boolean;
+  canVault?: boolean;
 }
 
 export function Sidebar({
@@ -50,6 +52,7 @@ export function Sidebar({
   isAdmin = false,
   canAudit = false,
   canEquity = false,
+  canVault = false,
 }: SidebarProps) {
   const pathname = usePathname();
 
@@ -58,6 +61,8 @@ export function Sidebar({
       return pathname === "/dashboard" || pathname === "/dashboard/";
     return pathname === href || pathname.startsWith(href + "/");
   };
+
+  const canSeeTrash = canEquity || isAdmin;
 
   return (
     <div
@@ -115,7 +120,14 @@ export function Sidebar({
       {/* Nav */}
       <nav className="flex-1 py-1.5 px-2 overflow-y-auto">
         {navigation
-          .filter((item) => (!item.adminOnly || isAdmin) && (!item.auditOnly || canAudit) && (!item.equityOnly || canEquity))
+          .filter(
+            (item) =>
+              (!item.adminOnly || isAdmin) &&
+              (!item.auditOnly || canAudit) &&
+              (!item.equityOnly || canEquity) &&
+              (!item.vaultOnly || canVault) &&
+              (!item.trashOnly || canSeeTrash),
+          )
           .map((item) => {
           const active = isActive(item.href);
           const linkContent = (

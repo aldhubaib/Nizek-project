@@ -5,6 +5,7 @@ import { DashboardShell } from "@/components/dashboard-shell";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { getCurrentUser, getImpersonation } from "@/lib/auth";
 import { canAccessEquity } from "@/lib/equity-access";
+import { canAccessAnyVault } from "@/lib/vault-access";
 import { getNotificationSoundUrl } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 
@@ -54,9 +55,11 @@ export default async function DashboardLayout({
       : false);
   // Equity module is private — granted per user (see equity-access.ts).
   const canEquity = await canAccessEquity(user?.id);
+  // Vault is per-user per-project — nav shows if they have any grant.
+  const canVault = await canAccessAnyVault(user?.id);
 
   return (
-    <DashboardShell isAdmin={isAdmin} canAudit={canAudit} canEquity={canEquity} currentUserId={user?.id} notificationSoundUrl={notificationSoundUrl}>
+    <DashboardShell isAdmin={isAdmin} canAudit={canAudit} canEquity={canEquity} canVault={canVault} currentUserId={user?.id} notificationSoundUrl={notificationSoundUrl}>
       {children}
       {impersonation && <ImpersonationBanner targetName={impersonation.targetName} />}
     </DashboardShell>

@@ -54,7 +54,7 @@ export async function listTrash(): Promise<TrashItemDTO[]> {
       label: item.label,
       sublabel: item.sublabel,
       noun: handler.noun,
-      href: handler.href(item.entityId),
+      href: await handler.href(item.entityId),
       deletedAt: item.deletedAt.toISOString(),
       deletedBy: item.deletedBy,
     });
@@ -88,10 +88,12 @@ export async function restoreTrashItem(trashItemId: string) {
   await handler.restore(item.entityId, user.id);
   await prisma.trashItem.delete({ where: { id: item.id } });
 
+  const href = await handler.href(item.entityId);
   revalidatePath("/dashboard/trash");
-  revalidatePath(handler.href(item.entityId));
+  revalidatePath(href);
   revalidatePath("/dashboard/equity");
-  return { href: handler.href(item.entityId) };
+  revalidatePath("/dashboard/vault");
+  return { href };
 }
 
 /**
@@ -116,6 +118,7 @@ export async function purgeTrashItem(trashItemId: string) {
 
   revalidatePath("/dashboard/trash");
   revalidatePath("/dashboard/equity");
+  revalidatePath("/dashboard/vault");
 }
 
 /** Empties everything the admin can see, and reports what it managed to remove. */
@@ -134,5 +137,6 @@ export async function emptyTrash(): Promise<{ purged: number }> {
 
   revalidatePath("/dashboard/trash");
   revalidatePath("/dashboard/equity");
+  revalidatePath("/dashboard/vault");
   return { purged };
 }

@@ -15,7 +15,7 @@ import { PAGE_HEADER_ACTIONS_SLOT } from "@/components/page-header-actions";
 
 const DESKTOP_BREAKPOINT = 1024;
 
-export function DashboardShell({ children, isAdmin = false, canAudit = false, canEquity = false, currentUserId, notificationSoundUrl }: { children: React.ReactNode; isAdmin?: boolean; canAudit?: boolean; canEquity?: boolean; currentUserId?: string; notificationSoundUrl?: string | null }) {
+export function DashboardShell({ children, isAdmin = false, canAudit = false, canEquity = false, canVault = false, currentUserId, notificationSoundUrl }: { children: React.ReactNode; isAdmin?: boolean; canAudit?: boolean; canEquity?: boolean; canVault?: boolean; currentUserId?: string; notificationSoundUrl?: string | null }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -72,6 +72,7 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, ca
             isAdmin={isAdmin}
             canAudit={canAudit}
             canEquity={canEquity}
+            canVault={canVault}
           />
         </div>
       )}
@@ -100,7 +101,7 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, ca
             drawerOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <Sidebar isAdmin={isAdmin} canAudit={canAudit} canEquity={canEquity} />
+          <Sidebar isAdmin={isAdmin} canAudit={canAudit} canEquity={canEquity} canVault={canVault} />
         </div>
       )}
 
@@ -124,7 +125,7 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, ca
 
       {/* Mobile/tablet bottom navigation — same permission rules as the sidebar */}
       {showBottomNav && (
-        <BottomNav isAdmin={isAdmin} canAudit={canAudit} canEquity={canEquity} onOpenMenu={() => setDrawerOpen(true)} />
+        <BottomNav isAdmin={isAdmin} canAudit={canAudit} canEquity={canEquity} canVault={canVault} onOpenMenu={() => setDrawerOpen(true)} />
       )}
       <NotificationSound currentUserId={currentUserId} soundUrl={notificationSoundUrl} />
       <NotificationSync currentUserId={currentUserId} />

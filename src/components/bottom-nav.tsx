@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   Settings,
   PieChart,
+  KeyRound,
   Menu,
   Trash,
 } from "lucide-react";
@@ -16,13 +17,14 @@ import { cn } from "@/lib/utils";
 
 // Same items + permission flags as the desktop sidebar.
 const NAV_ITEMS = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false },
-  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false, auditOnly: false, equityOnly: false },
-  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, auditOnly: false, equityOnly: false },
-  { name: "Equity", href: "/dashboard/equity", icon: PieChart, adminOnly: false, auditOnly: false, equityOnly: true },
-  { name: "Audit", href: "/dashboard/audit", icon: ClipboardCheck, adminOnly: false, auditOnly: true, equityOnly: false },
-  { name: "Trash", href: "/dashboard/trash", icon: Trash, adminOnly: false, auditOnly: false, equityOnly: true },
-  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, auditOnly: false, equityOnly: false },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
+  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
+  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
+  { name: "Vault", href: "/dashboard/vault", icon: KeyRound, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: true, trashOnly: false },
+  { name: "Equity", href: "/dashboard/equity", icon: PieChart, adminOnly: false, auditOnly: false, equityOnly: true, vaultOnly: false, trashOnly: false },
+  { name: "Audit", href: "/dashboard/audit", icon: ClipboardCheck, adminOnly: false, auditOnly: true, equityOnly: false, vaultOnly: false, trashOnly: false },
+  { name: "Trash", href: "/dashboard/trash", icon: Trash, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: true },
+  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
 ];
 
 // Tabs shown at once, including the trailing Menu tab.
@@ -32,6 +34,7 @@ interface BottomNavProps {
   isAdmin?: boolean;
   canAudit?: boolean;
   canEquity?: boolean;
+  canVault?: boolean;
   /** Opens the drawer with the full sidebar (account, plus any overflow items). */
   onOpenMenu: () => void;
 }
@@ -41,11 +44,17 @@ interface BottomNavProps {
  * the sidebar. The Inbox tab is always kept visible; if there are ever more
  * items than tab slots, the extras stay reachable through the Menu drawer.
  */
-export function BottomNav({ isAdmin = false, canAudit = false, canEquity = false, onOpenMenu }: BottomNavProps) {
+export function BottomNav({ isAdmin = false, canAudit = false, canEquity = false, canVault = false, onOpenMenu }: BottomNavProps) {
   const pathname = usePathname();
 
+  const canSeeTrash = canEquity || isAdmin;
   const allowed = NAV_ITEMS.filter(
-    (item) => (!item.adminOnly || isAdmin) && (!item.auditOnly || canAudit) && (!item.equityOnly || canEquity),
+    (item) =>
+      (!item.adminOnly || isAdmin) &&
+      (!item.auditOnly || canAudit) &&
+      (!item.equityOnly || canEquity) &&
+      (!item.vaultOnly || canVault) &&
+      (!item.trashOnly || canSeeTrash),
   );
   let visible = allowed.slice(0, MAX_TABS - 1);
   const inbox = allowed.find((item) => item.name === "Inbox");

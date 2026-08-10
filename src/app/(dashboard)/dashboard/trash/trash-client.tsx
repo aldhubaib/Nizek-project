@@ -74,7 +74,8 @@ export function TrashClient({
       <div className="px-6 py-6 max-w-5xl mx-auto">
         <p className="text-[12px] text-muted-foreground mb-4">
           Deleted things wait here instead of going straight out. Restoring one
-          puts it back exactly as it was.
+          puts it back exactly as it was. Vault credentials only appear here for
+          admins — even if someone else deleted them.
           {isAdmin
             ? " Emptying the trash is what finally deletes them, and that can't be undone."
             : " An admin has to empty the trash before anything is really gone."}

@@ -111,6 +111,9 @@ model User {
   mutedThreads      MutedThread[]             @relation("UserMutedThreads")
   auditPermissions  AuditPermission[]         @relation("UserAuditPermissions")
   equityPermission  EquityPermission?         @relation("UserEquityPermission")
+  vaultPermissions  VaultPermission[]         @relation("UserVaultPermissions")
+  vaultCredentials  VaultCredential[]         @relation("VaultCredentialAuthor")
+  vaultActivities   VaultActivity[]           @relation("VaultActivityUser")
   taskAudits        TaskAudit[]               @relation("AuditCreator")
   auditBlames       TaskAuditItem[]           @relation("AuditBlamedUser")
   equityActivities  EquityActivity[]          @relation("EquityActivityUser")
@@ -173,6 +176,8 @@ model Project {
   invitations  Invitation[]
   messages     Message[]
   equityPortfolio EquityPortfolio?
+  vaultCredentials VaultCredential[]
+  vaultPermissions VaultPermission[]
   @@index([teamId])
 }
 
@@ -1628,4 +1633,73 @@ model LoginPhoto {
   createdAt   DateTime @default(now())
 
   @@index([column, order])
+}
+
+// ─── Vault (project credentials) ─────────────────────────────────────────────
+//
+// Password-manager style storage for project logins, emails, API keys, etc.
+// Access is granted per user per project (VaultPermission) — not the same as
+// being on the project team. Secrets are encrypted at rest; history never
+// stores plaintext passwords. Soft-deleted rows go to the shared trash, but
+// only system admins can see / restore / permanently delete vault items.
+
+model VaultPermission {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("UserVaultPermissions", fields: [userId], references: [id], onDelete: Cascade)
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  grantedById String?
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, projectId])
+  @@index([userId])
+  @@index([projectId])
+}
+
+model VaultCredential {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  title    String
+  username String?
+  /// AES-256-GCM ciphertext (iv:tag:data), never plaintext.
+  passwordEnc String?
+  url         String?
+  notesEnc    String?
+  category    String? // LOGIN | EMAIL | API_KEY | OTHER
+
+  createdById String
+  createdBy   User   @relation("VaultCredentialAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  activities VaultActivity[]
+
+  @@index([projectId, deletedAt])
+  @@index([deletedAt])
+}
+
+model VaultActivity {
+  id           String          @id @default(cuid())
+  credentialId String
+  credential   VaultCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+
+  // created | updated | deleted | restored | revealed
+  action String
+
+  label    String?
+  oldValue String?
+  newValue String?
+
+  userId String
+  user   User   @relation("VaultActivityUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([credentialId, createdAt])
 }

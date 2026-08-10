@@ -16,6 +16,7 @@ import {
   BellRing,
   ClipboardCheck,
   PieChart,
+  KeyRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { TeamsManager } from "@/components/settings/teams-manager";
@@ -29,6 +30,7 @@ import { NotificationSoundClient } from "./notification-sound-client";
 import { NotificationStatusClient } from "./notification-status-client";
 import { AuditAccessManager } from "@/components/settings/audit-access-manager";
 import { EquityAccessManager } from "@/components/settings/equity-access-manager";
+import { VaultAccessManager } from "@/components/settings/vault-access-manager";
 import type { BrandingAssetDTO } from "@/actions/branding";
 import type { LoginPhotoDTO } from "@/actions/login-photos";
 import type { NotificationSoundDTO } from "@/actions/notification-sound-settings";
@@ -46,7 +48,8 @@ type TabId =
   | "push-health"
   | "notification-status"
   | "audit-access"
-  | "equity-access";
+  | "equity-access"
+  | "vault-access";
 
 type SettingsItem = {
   id: TabId;
@@ -139,6 +142,12 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         label: "Equity Access",
         icon: PieChart,
         desc: "Choose who can open the private Equity module.",
+      },
+      {
+        id: "vault-access",
+        label: "Vault Access",
+        icon: KeyRound,
+        desc: "Choose who can open each project's password vault.",
       },
     ],
   },
@@ -261,6 +270,7 @@ export function AdminPageClient({
         )}
         {active.id === "audit-access" && <AuditAccessManager />}
         {active.id === "equity-access" && <EquityAccessManager />}
+        {active.id === "vault-access" && <VaultAccessManager />}
       </div>
     </div>
   );
