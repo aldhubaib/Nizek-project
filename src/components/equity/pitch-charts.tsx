@@ -808,7 +808,9 @@ export function RadarChart({
       radar: {
         indicator: anchors.map((name) => ({ name, max: 10 })),
         center: ["50%", "52%"],
-        radius: "70%",
+        // As much of its box as the ring takes of its own, less the margin
+        // the corner names need to stay readable.
+        radius: "74%",
         axisName: { color: TEXT, fontSize: 11 },
         axisLine: { lineStyle: { color: GRID_LINE } },
         splitLine: { lineStyle: { color: GRID_LINE } },
@@ -866,7 +868,8 @@ export function RadarChart({
 
   return (
     <div className="flex flex-col items-center gap-7">
-      <div className="w-full max-w-[420px]">
+      {/* The same box the equity ring draws in, so the deck's charts line up. */}
+      <div className="w-full max-w-[368px]">
         <EChart option={option} height={height} onReady={onReady} />
       </div>
 

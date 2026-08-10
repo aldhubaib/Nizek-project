@@ -704,6 +704,7 @@ export function PitchSectionCard({
   items,
   currency = "",
   anchors = [],
+  usLabel = "Us",
 }: {
   portfolioId: string;
   section: string;
@@ -713,6 +714,8 @@ export function PitchSectionCard({
   currency?: string;
   /** The radar's corners, which only the competition module carries. */
   anchors?: string[];
+  /** What the competition's fixed first row is called — the project's name. */
+  usLabel?: string;
 }) {
   const router = useRouter();
   const spec = PITCH_SECTIONS[section];
@@ -751,6 +754,7 @@ export function PitchSectionCard({
             portfolioId={portfolioId}
             savedAnchors={anchors}
             saved={rows}
+            usLabel={usLabel}
             busy={busy}
             setBusy={setBusy}
             onDone={done}
@@ -861,6 +865,7 @@ type AnchorDraft = { key: string; name: string };
 type CompetitorDraft = {
   key: string;
   heading: string;
+  /** The portfolio's own row: first, named for the company, not removable. */
   isUs: boolean;
   /** Keyed by the anchor draft's key, so renaming an anchor keeps its scores. */
   scores: Record<string, string>;
@@ -888,33 +893,68 @@ function emptyCompetitor(): CompetitorDraft {
   };
 }
 
-/** The saved anchors and rows as drafts, scores re-keyed to the anchor drafts. */
-function competitionDrafts(savedAnchors: string[], saved: PitchItem[]) {
+/**
+ * The saved anchors and rows as drafts, scores re-keyed to the anchor drafts.
+ * The first row is always the portfolio's own company under its project name —
+ * the whole section exists to compare against us, so us isn't optional — and
+ * whatever row was marked as ours before carries its scores into it.
+ */
+function competitionDrafts(
+  savedAnchors: string[],
+  saved: PitchItem[],
+  usLabel: string,
+) {
   const anchors = (savedAnchors.length > 0 ? savedAnchors : DEFAULT_ANCHORS).map(
     (name) => anchorDraft(name),
   );
-  const rows =
-    saved.length > 0
-      ? saved.map((item) => ({
-          ...emptyCompetitor(),
-          heading: item.heading ?? "",
-          isUs: item.isUs,
-          axisX: item.axisX,
-          axisY: item.axisY,
-          scores: Object.fromEntries(
-            anchors.map((a) => [a.key, item.scores?.[a.name]?.toString() ?? ""]),
-          ),
-        }))
-      : [emptyCompetitor()];
+  const draftOf = (item: PitchItem | undefined): CompetitorDraft => ({
+    ...emptyCompetitor(),
+    heading: item?.heading ?? "",
+    axisX: item?.axisX ?? null,
+    axisY: item?.axisY ?? null,
+    scores: Object.fromEntries(
+      anchors.map((a) => [a.key, item?.scores?.[a.name]?.toString() ?? ""]),
+    ),
+  });
+  const others = saved.filter((item) => !item.isUs);
+  const rows = [
+    { ...draftOf(saved.find((item) => item.isUs)), heading: usLabel, isUs: true },
+    ...(others.length > 0 ? others.map(draftOf) : [emptyCompetitor()]),
+  ];
   return { anchors, rows };
+}
+
+/** A typed score that isn't a number from 0 to 10. An empty box isn't wrong —
+ * missing is its own complaint — but 11 or -1 is. */
+function scoreInvalid(raw: string) {
+  if (!raw.trim()) return false;
+  const n = Number(raw);
+  return Number.isNaN(n) || n < 0 || n > 10;
+}
+
+/** A row that counts: ours always, anyone else once named or scored at all. */
+function activeRow(row: CompetitorDraft) {
+  return (
+    row.isUs ||
+    row.heading.trim() !== "" ||
+    Object.values(row.scores).some((s) => s.trim())
+  );
+}
+
+/** Whether anything has been entered at all. Our own row is always there, so
+ * only a named competitor or a typed score counts as the section being
+ * filled in — an untouched form is allowed to close quietly. */
+function competitionFilled(rows: CompetitorDraft[]) {
+  return rows.some(
+    (r) =>
+      (!r.isUs && r.heading.trim()) ||
+      Object.values(r.scores).some((s) => s.trim()),
+  );
 }
 
 /** Why the competition can't be saved yet, said before the button is pressed. */
 function competitionBlocked(anchors: AnchorDraft[], rows: CompetitorDraft[]) {
-  const filled = rows.some(
-    (r) => r.heading.trim() || Object.values(r.scores).some((s) => s.trim()),
-  );
-  if (!filled) return null;
+  if (!competitionFilled(rows)) return null;
   const names = anchors.map((a) => a.name.trim()).filter(Boolean);
   if (names.length < ANCHORS_MIN) {
     return `A radar needs at least ${ANCHORS_MIN} anchors.`;
@@ -922,13 +962,28 @@ function competitionBlocked(anchors: AnchorDraft[], rows: CompetitorDraft[]) {
   if (new Set(names.map((n) => n.toLowerCase())).size !== names.length) {
     return "Two anchors share a name.";
   }
+  if (rows.some((r) => Object.values(r.scores).some(scoreInvalid))) {
+    return "Scores run 0 to 10.";
+  }
+  const active = rows.filter(activeRow);
+  if (active.some((r) => !r.isUs && !r.heading.trim())) {
+    return "Every competitor needs a name.";
+  }
+  const anchorKeys = anchors.filter((a) => a.name.trim()).map((a) => a.key);
+  if (
+    active.some((r) => anchorKeys.some((k) => !(r.scores[k] ?? "").trim()))
+  ) {
+    return "Every row needs a score on every anchor.";
+  }
   return null;
 }
 
-/** The columns of the matrix: who, a score per anchor, the us flag, remove. */
+/** The columns of the matrix: who, a score per anchor, and the trailing
+ * controls. Wide enough for the anchor's name, since the header is where the
+ * anchors are edited. */
 function competitionGrid(anchorCount: number, trailing: string) {
   return {
-    gridTemplateColumns: `minmax(0,1fr) repeat(${anchorCount}, minmax(0,4.5rem))${trailing}`,
+    gridTemplateColumns: `minmax(0,1fr) repeat(${anchorCount}, minmax(0,6.5rem))${trailing}`,
   };
 }
 
@@ -936,6 +991,7 @@ function CompetitionForm({
   portfolioId,
   savedAnchors,
   saved,
+  usLabel,
   busy,
   setBusy,
   onDone,
@@ -944,12 +1000,16 @@ function CompetitionForm({
   portfolioId: string;
   savedAnchors: string[];
   saved: PitchItem[];
+  /** What the first, fixed row is called — the portfolio's project name. */
+  usLabel: string;
   busy: boolean;
   setBusy: (v: boolean) => void;
   onDone: () => void;
   onCancel: () => void;
 }) {
-  const [initial] = useState(() => competitionDrafts(savedAnchors, saved));
+  const [initial] = useState(() =>
+    competitionDrafts(savedAnchors, saved, usLabel),
+  );
   const [anchors, setAnchors] = useState(initial.anchors);
   const [rows, setRows] = useState(initial.rows);
 
@@ -986,20 +1046,23 @@ function CompetitionForm({
     }
   }
 
-  const grid = competitionGrid(anchors.length, " 3rem 1.75rem");
+  const grid = competitionGrid(anchors.length, " 1.75rem");
+  // The missing-score red only lights once something has been entered — an
+  // untouched form isn't wrong yet, it's just empty.
+  const filled = competitionFilled(rows);
 
   return (
     <div className="space-y-4">
-      <div>
-        <span className={labelCls}>
-          Anchors — what everyone is scored on, 0–10 ({ANCHORS_MIN}–{ANCHORS_MAX})
-        </span>
-        <div className="flex flex-wrap gap-2 mt-2">
+      <div className="space-y-2 overflow-x-auto">
+        {/*
+          The anchors are the header: what everyone is scored on is edited
+          where it's read, one row for both, with the last cell adding a
+          column the way the button under the rows adds a row.
+        */}
+        <div className="grid gap-2 px-0.5 items-center" style={grid}>
+          <span className={labelCls}>Who</span>
           {anchors.map((a) => (
-            <div
-              key={a.key}
-              className="flex items-center gap-1 h-9 pl-3 pr-1 rounded-lg border border-border bg-card"
-            >
+            <div key={a.key} className="relative">
               <input
                 value={a.name}
                 onChange={(e) =>
@@ -1010,7 +1073,10 @@ function CompetitionForm({
                   )
                 }
                 placeholder="Anchor"
-                className="w-24 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+                className={cn(
+                  inputCls,
+                  "h-8 px-2 pr-6 text-[11px] font-medium uppercase tracking-wide",
+                )}
               />
               <button
                 type="button"
@@ -1018,81 +1084,106 @@ function CompetitionForm({
                   setAnchors((as) => as.filter((x) => x.key !== a.key))
                 }
                 title="Remove anchor"
-                className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
               >
-                <X className="w-3.5 h-3.5" strokeWidth={1.5} />
+                <X className="w-3 h-3" strokeWidth={1.5} />
               </button>
             </div>
           ))}
-          {anchors.length < ANCHORS_MAX && (
+          {anchors.length < ANCHORS_MAX ? (
             <button
               type="button"
               onClick={() => setAnchors((as) => [...as, anchorDraft()])}
-              className="flex items-center gap-1 px-2.5 h-9 rounded-lg border border-dashed border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
+              title="Add an anchor"
+              className="w-7 h-8 rounded-md border border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
             >
-              <Plus className="w-3 h-3" />
-              Add an anchor
+              <Plus className="w-3.5 h-3.5" strokeWidth={1.5} />
             </button>
+          ) : (
+            <span />
           )}
-        </div>
-      </div>
-
-      <div className="space-y-2 overflow-x-auto">
-        <div className="hidden sm:grid gap-2 px-0.5" style={grid}>
-          <span className={labelCls}>Who</span>
-          {anchors.map((a) => (
-            <span key={a.key} className={cn(labelCls, "truncate")}>
-              {a.name.trim() || "—"}
-            </span>
-          ))}
-          <span className={labelCls}>Us</span>
-          <span />
         </div>
 
         {rows.map((row) => (
           <div key={row.key} className="grid gap-2 items-start" style={grid}>
-            <input
-              type="text"
-              value={row.heading}
-              onChange={(e) => updateRow(row.key, { heading: e.target.value })}
-              placeholder="Competitor"
-              className={inputCls}
-            />
-            {anchors.map((a) => (
+            {row.isUs ? (
+              // Us, under the project's own name: the row the rest are read
+              // against, so it can't be renamed or removed.
+              <div
+                className={cn(
+                  readCellCls,
+                  "bg-muted/30 text-foreground font-medium",
+                )}
+              >
+                <span className="truncate">{row.heading}</span>
+              </div>
+            ) : (
               <input
-                key={a.key}
-                type="number"
-                min={0}
-                max={10}
-                step="any"
-                value={row.scores[a.key] ?? ""}
-                onChange={(e) =>
-                  updateRow(row.key, {
-                    scores: { ...row.scores, [a.key]: e.target.value },
-                  })
+                type="text"
+                value={row.heading}
+                onChange={(e) => updateRow(row.key, { heading: e.target.value })}
+                placeholder="Competitor"
+                className={cn(
+                  inputCls,
+                  // Scored but nameless: the row is in the chart with nothing
+                  // to call it, so the empty name is the box in the wrong.
+                  filled &&
+                    activeRow(row) &&
+                    !row.heading.trim() &&
+                    "border-destructive focus:ring-destructive/40",
+                )}
+              />
+            )}
+            {anchors.map((a) => {
+              const raw = row.scores[a.key] ?? "";
+              // Out of 0–10, or left empty on a row that's in play — both
+              // hold the save, so both are shown where the problem is.
+              const wrong =
+                scoreInvalid(raw) ||
+                (filled &&
+                  activeRow(row) &&
+                  a.name.trim() !== "" &&
+                  !raw.trim());
+              return (
+                <input
+                  key={a.key}
+                  type="number"
+                  min={0}
+                  max={10}
+                  step="any"
+                  value={raw}
+                  onChange={(e) =>
+                    updateRow(row.key, {
+                      scores: { ...row.scores, [a.key]: e.target.value },
+                    })
+                  }
+                  placeholder="–"
+                  className={cn(
+                    inputCls,
+                    "tabular-nums text-center px-1",
+                    // A 0–10 box has no room for spinners, and nobody dials
+                    // a score a step at a time.
+                    "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+                    wrong &&
+                      "border-destructive text-destructive focus:ring-destructive/40",
+                  )}
+                />
+              );
+            })}
+            {row.isUs ? (
+              <span />
+            ) : (
+              <button
+                type="button"
+                onClick={() =>
+                  setRows((rs) => rs.filter((r) => r.key !== row.key))
                 }
-                placeholder="–"
-                className={cn(inputCls, "tabular-nums text-center px-1")}
-              />
-            ))}
-            <label className="h-9 flex items-center justify-center">
-              <input
-                type="checkbox"
-                checked={row.isUs}
-                onChange={(e) => updateRow(row.key, { isUs: e.target.checked })}
-                className="w-4 h-4 accent-primary"
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() =>
-                setRows((rs) => rs.filter((r) => r.key !== row.key))
-              }
-              title="Remove competitor"
-              className="w-7 h-9 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-            >
-              <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
-            </button>
+                title="Remove competitor"
+                className="w-7 h-9 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
+              </button>
+            )}
           </div>
         ))}
 

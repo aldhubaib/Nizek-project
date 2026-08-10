@@ -298,6 +298,7 @@ export function EquityPortfolioClient({
           section="COMPETITION"
           items={pitchItems}
           anchors={portfolio.opportunity?.radarAnchors ?? []}
+          usLabel={portfolio.project.name}
         />
 
         {/* Who is building it, dated — the latest lineup is the team today */}
