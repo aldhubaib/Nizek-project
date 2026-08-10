@@ -215,7 +215,7 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
           {task.title}
         </p>
 
-        <div className="mt-2 flex items-center gap-1.5">
+        <div className="mt-3 flex items-center gap-1.5">
           <span
             className={cn(
               "inline-flex items-center justify-center rounded-full border w-5 h-5",

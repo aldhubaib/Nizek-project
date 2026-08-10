@@ -192,21 +192,21 @@ export function AttachmentBubble({
 
   if (attachment.isImage) {
     return (
-      <div
-        className="group relative overflow-hidden rounded-xl border border-border/50 bg-surface"
-        style={{ aspectRatio: "4 / 3", width: 210 }}
-      >
+      <div className="group relative overflow-hidden rounded-xl border border-border/50 bg-surface">
         <button
           type="button"
           onClick={() => onOpenImage?.(attachment)}
-          className="block h-full w-full"
+          className="block"
           aria-label={`Open ${attachment.name}`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={attachment.url}
             alt={attachment.name}
-            className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
+            loading="lazy"
+            // Natural aspect ratio, capped — a portrait screenshot shows whole
+            // rather than being cropped to fit a fixed landscape frame.
+            className="block h-auto max-h-80 w-auto max-w-full object-contain transition-transform group-hover:scale-[1.02]"
           />
         </button>
         {menu && (

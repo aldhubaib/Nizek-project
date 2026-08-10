@@ -1422,6 +1422,32 @@ export function ThreadChat({
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
+  // On some phones (iOS standalone PWA above all) focusing the composer makes
+  // the OS scroll the whole window up to keep the input above the keyboard —
+  // and when the keyboard closes, that offset can stick. The thread header
+  // ends up above the screen and messages render under the status bar. The
+  // layout never wants a window scroll (the message list scrolls internally),
+  // so whenever the keyboard is gone, put the window back.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const keyboardClosed = () => !vv || vv.height >= window.innerHeight - 60;
+    const restore = () => {
+      if (!keyboardClosed()) return;
+      if (window.scrollY !== 0 || (vv?.offsetTop ?? 0) !== 0) {
+        window.scrollTo(0, 0);
+      }
+    };
+    restore();
+    vv?.addEventListener("resize", restore);
+    vv?.addEventListener("scroll", restore);
+    window.addEventListener("focusout", restore);
+    return () => {
+      vv?.removeEventListener("resize", restore);
+      vv?.removeEventListener("scroll", restore);
+      window.removeEventListener("focusout", restore);
+    };
+  }, []);
+
   const replyingTo = replyTo ? byId.get(replyTo) : null;
 
   // First link in the draft — previewed above the composer until dismissed.
