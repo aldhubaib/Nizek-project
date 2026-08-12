@@ -39,6 +39,18 @@ export async function acceptPendingInvitations(userId: string, email: string) {
       data: { status: "ACCEPTED" },
     }),
   ]);
+
+  if (newMembers.length > 0) {
+    const { syncClientConversationParticipants } = await import("@/lib/client-chat");
+    const projectIds = [...new Set(newMembers.map((m) => m.projectId))];
+    const enabled = await prisma.project.findMany({
+      where: { id: { in: projectIds }, clientChatEnabled: true },
+      select: { id: true },
+    });
+    await Promise.all(
+      enabled.map((p) => syncClientConversationParticipants(p.id).catch(() => {})),
+    );
+  }
 }
 
 // The user actually signed in with Clerk — never affected by impersonation.
@@ -144,6 +156,19 @@ export async function requireUser() {
   if (!user) throw new Error("Unauthorized");
   if (user.blocked) throw new Error("ACCOUNT_BLOCKED");
   return user;
+}
+
+/**
+ * True when the signed-in Clerk account has no custom profile photo yet.
+ * Clerk always provides a default imageUrl, so we use hasImage — not imageUrl.
+ * Skipped during admin impersonation so admins can still browse as that user.
+ */
+export async function needsProfilePhoto(): Promise<boolean> {
+  const impersonation = await getImpersonation();
+  if (impersonation) return false;
+  const clerkUser = await currentUser();
+  if (!clerkUser) return false;
+  return !clerkUser.hasImage;
 }
 
 // Wrapped in React cache() so repeated calls within a single request/render

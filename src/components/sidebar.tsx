@@ -43,6 +43,7 @@ interface SidebarProps {
   canAudit?: boolean;
   canEquity?: boolean;
   canVault?: boolean;
+  isClient?: boolean;
 }
 
 export function Sidebar({
@@ -53,6 +54,7 @@ export function Sidebar({
   canAudit = false,
   canEquity = false,
   canVault = false,
+  isClient = false,
 }: SidebarProps) {
   const pathname = usePathname();
 
@@ -120,14 +122,16 @@ export function Sidebar({
       {/* Nav */}
       <nav className="flex-1 py-1.5 px-2 overflow-y-auto">
         {navigation
-          .filter(
-            (item) =>
+          .filter((item) => {
+            if (isClient) return item.href === "/dashboard/messages";
+            return (
               (!item.adminOnly || isAdmin) &&
               (!item.auditOnly || canAudit) &&
               (!item.equityOnly || canEquity) &&
               (!item.vaultOnly || canVault) &&
-              (!item.trashOnly || canSeeTrash),
-          )
+              (!item.trashOnly || canSeeTrash)
+            );
+          })
           .map((item) => {
           const active = isActive(item.href);
           const linkContent = (

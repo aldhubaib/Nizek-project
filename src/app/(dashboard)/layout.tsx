@@ -3,10 +3,11 @@ import { redirect } from "next/navigation";
 import { SignOutButton } from "@clerk/nextjs";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
-import { getCurrentUser, getImpersonation } from "@/lib/auth";
+import { getCurrentUser, getImpersonation, needsProfilePhoto } from "@/lib/auth";
 import { canAccessEquity } from "@/lib/equity-access";
 import { canAccessAnyVault } from "@/lib/vault-access";
 import { getNotificationSoundUrl } from "@/lib/branding";
+import { isClientUser } from "@/lib/client-chat";
 import { prisma } from "@/lib/prisma";
 
 export default async function DashboardLayout({
@@ -41,6 +42,13 @@ export default async function DashboardLayout({
     );
   }
 
+  // First thing after sign-in: require a real profile photo before the app.
+  if (await needsProfilePhoto()) {
+    redirect("/setup-photo");
+  }
+
+  const isClient = isClientUser(user);
+
   const [notificationSoundUrl, impersonation] = await Promise.all([
     getNotificationSoundUrl(),
     getImpersonation(),
@@ -59,7 +67,15 @@ export default async function DashboardLayout({
   const canVault = await canAccessAnyVault(user?.id);
 
   return (
-    <DashboardShell isAdmin={isAdmin} canAudit={canAudit} canEquity={canEquity} canVault={canVault} currentUserId={user?.id} notificationSoundUrl={notificationSoundUrl}>
+    <DashboardShell
+      isAdmin={isAdmin}
+      canAudit={canAudit}
+      canEquity={canEquity}
+      canVault={canVault}
+      isClient={isClient}
+      currentUserId={user?.id}
+      notificationSoundUrl={notificationSoundUrl}
+    >
       {children}
       {impersonation && <ImpersonationBanner targetName={impersonation.targetName} />}
     </DashboardShell>

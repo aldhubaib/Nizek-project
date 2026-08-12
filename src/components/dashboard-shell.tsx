@@ -12,10 +12,29 @@ import { InstallPrompt } from "@/components/install-prompt";
 import { OfflineNotice } from "@/components/offline-notice";
 import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
 import { PAGE_HEADER_ACTIONS_SLOT } from "@/components/page-header-actions";
+import { ClientRouteGuard } from "@/components/client-route-guard";
 
 const DESKTOP_BREAKPOINT = 1024;
 
-export function DashboardShell({ children, isAdmin = false, canAudit = false, canEquity = false, canVault = false, currentUserId, notificationSoundUrl }: { children: React.ReactNode; isAdmin?: boolean; canAudit?: boolean; canEquity?: boolean; canVault?: boolean; currentUserId?: string; notificationSoundUrl?: string | null }) {
+export function DashboardShell({
+  children,
+  isAdmin = false,
+  canAudit = false,
+  canEquity = false,
+  canVault = false,
+  isClient = false,
+  currentUserId,
+  notificationSoundUrl,
+}: {
+  children: React.ReactNode;
+  isAdmin?: boolean;
+  canAudit?: boolean;
+  canEquity?: boolean;
+  canVault?: boolean;
+  isClient?: boolean;
+  currentUserId?: string;
+  notificationSoundUrl?: string | null;
+}) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -73,6 +92,7 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, ca
             canAudit={canAudit}
             canEquity={canEquity}
             canVault={canVault}
+            isClient={isClient}
           />
         </div>
       )}
@@ -101,7 +121,13 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, ca
             drawerOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
-          <Sidebar isAdmin={isAdmin} canAudit={canAudit} canEquity={canEquity} canVault={canVault} />
+          <Sidebar
+            isAdmin={isAdmin}
+            canAudit={canAudit}
+            canEquity={canEquity}
+            canVault={canVault}
+            isClient={isClient}
+          />
         </div>
       )}
 
@@ -111,6 +137,7 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, ca
           isDesktop ? (onTaskPage ? "" : "rounded-l-2xl") : onInbox ? "" : "pt-12"
         } ${showBottomNav && !onInbox ? "pb-[calc(4rem+env(safe-area-inset-bottom))]" : ""}`}
       >
+        <ClientRouteGuard enabled={isClient} />
         {isDesktop && !onInbox && (
           <div className="fixed top-3 right-4 z-[100] flex items-center gap-1">
             <NotificationBell currentUserId={currentUserId} />
@@ -130,6 +157,7 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, ca
           canAudit={canAudit}
           canEquity={canEquity}
           canVault={canVault}
+          isClient={isClient}
           currentUserId={currentUserId}
           onOpenMenu={() => setDrawerOpen(true)}
         />

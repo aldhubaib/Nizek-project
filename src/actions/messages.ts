@@ -14,7 +14,7 @@ import {
   NIZEK_BOT_NAME,
   type DeadlineReminderPayload,
 } from "@/lib/deadline-reminder-payload";
-import { ALL_MENTION_NAME } from "@/lib/mentions";
+import { ALL_MENTION_ID, ALL_MENTION_NAME } from "@/lib/mentions";
 import {
   broadcast,
   publish,
@@ -24,6 +24,11 @@ import {
   userChannel,
 } from "@/lib/centrifugo";
 import { NOTIFICATION_READ } from "@/lib/channels";
+import {
+  canAccessClientConversation,
+  CLIENT_CONVERSATION_KIND,
+  isClientUser,
+} from "@/lib/client-chat";
 
 const CONTRACT_SELECT = {
   id: true,
@@ -194,18 +199,33 @@ export async function getThreadMessages(input: {
 }): Promise<ThreadMessagesPage> {
   const user = await requireUser();
 
-  let where: { taskId?: string; projectId?: string; conversationId?: string };
+  let where: {
+    taskId?: string;
+    projectId?: string;
+    conversationId?: string | null;
+  };
   if (input.conversationId) {
-    const convo = await prisma.conversation.findFirst({
-      where: {
-        id: input.conversationId,
-        participants: { some: { memberId: user.id } },
-      },
-      select: { id: true },
+    const convoMeta = await prisma.conversation.findUnique({
+      where: { id: input.conversationId },
+      select: { id: true, kind: true },
     });
-    if (!convo) throw new Error("Permission denied");
+    if (!convoMeta) throw new Error("Permission denied");
+    if (convoMeta.kind === CLIENT_CONVERSATION_KIND) {
+      const access = await canAccessClientConversation(input.conversationId, user);
+      if (!access.ok) throw new Error("Permission denied");
+    } else {
+      const convo = await prisma.conversation.findFirst({
+        where: {
+          id: input.conversationId,
+          participants: { some: { memberId: user.id } },
+        },
+        select: { id: true },
+      });
+      if (!convo) throw new Error("Permission denied");
+    }
     where = { conversationId: input.conversationId };
   } else if (input.taskId) {
+    if (isClientUser(user)) throw new Error("Permission denied");
     const task = await prisma.task.findFirst({
       where: { id: input.taskId },
       select: { projectId: true },
@@ -215,9 +235,11 @@ export async function getThreadMessages(input: {
       throw new Error("Permission denied");
     where = { taskId: input.taskId };
   } else if (input.projectId) {
+    if (isClientUser(user)) throw new Error("Permission denied");
     if (!(await hasProjectAccess(input.projectId)))
       throw new Error("Permission denied");
-    where = { projectId: input.projectId };
+    // Internal project chat only — never fold client-room messages in.
+    where = { projectId: input.projectId, conversationId: null };
   } else {
     throw new Error("No thread specified");
   }
@@ -303,6 +325,8 @@ export type TaskPickerItem = {
 export async function getProjectTaskRefs(
   projectId: string,
 ): Promise<TaskPickerItem[]> {
+  const user = await requireUser();
+  if (isClientUser(user)) throw new Error("Permission denied");
   if (!(await hasProjectAccess(projectId))) throw new Error("Permission denied");
 
   const tasks = await prisma.task.findMany({
@@ -345,21 +369,53 @@ export async function sendMessage(
     /** Group-conversation name for notification titles; "" for 1:1 DMs. */
     let groupName = "";
     let participantIds: string[] = [];
+    let isClientRoom = false;
 
     if (conversationId) {
-      const convo = await prisma.conversation.findFirst({
-        where: {
-          id: conversationId,
-          participants: { some: { memberId: user.id } },
+      const convoMeta = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: {
+          id: true,
+          kind: true,
+          isGroup: true,
+          title: true,
+          projectId: true,
+          participants: { select: { memberId: true } },
+          project: { select: { name: true, logoUrl: true, clientChatEnabled: true } },
         },
-        include: { participants: { select: { memberId: true } } },
       });
-      if (!convo) throw new Error("Conversation not found");
-      participantIds = convo.participants.map((p) => p.memberId);
-      if (convo.isGroup) groupName = convo.title || "Group chat";
-      taskId = null;
-      projectId = null;
+      if (!convoMeta) throw new Error("Conversation not found");
+
+      if (convoMeta.kind === CLIENT_CONVERSATION_KIND) {
+        const access = await canAccessClientConversation(conversationId, user);
+        if (!access.ok || !access.canPost) {
+          throw new Error(
+            access.ok
+              ? "Client chat is disabled for this project"
+              : "Conversation not found",
+          );
+        }
+        isClientRoom = true;
+        participantIds = convoMeta.participants.map((p) => p.memberId);
+        // Ensure the sender is in the notify set even for admins without a row.
+        if (!participantIds.includes(user.id)) participantIds.push(user.id);
+        taskId = null;
+        projectId = convoMeta.projectId;
+        projectName = access.project?.name ?? convoMeta.project?.name ?? "Client chat";
+        projectLogoUrl = access.project?.logoUrl ?? convoMeta.project?.logoUrl ?? null;
+        groupName = `${projectName} · Client`;
+      } else {
+        const isParticipant = convoMeta.participants.some(
+          (p) => p.memberId === user.id,
+        );
+        if (!isParticipant) throw new Error("Conversation not found");
+        participantIds = convoMeta.participants.map((p) => p.memberId);
+        if (convoMeta.isGroup) groupName = convoMeta.title || "Group chat";
+        taskId = null;
+        projectId = null;
+      }
     } else if (taskId) {
+      if (isClientUser(user)) throw new Error("Permission denied");
       const task = await prisma.task.findFirst({
         where: { id: taskId },
         select: {
@@ -387,6 +443,7 @@ export async function sendMessage(
       projectName = task.project.name;
       projectLogoUrl = task.project.logoUrl;
     } else if (projectId) {
+      if (isClientUser(user)) throw new Error("Permission denied");
       if (!(await hasProjectAccess(projectId)))
         throw new Error("Permission denied");
       const project = await prisma.project.findUnique({
@@ -406,7 +463,24 @@ export async function sendMessage(
       throw new Error("No thread specified");
     }
 
-    const mentionedIds = await resolveProjectMentionIds(body, projectId);
+    let mentionedIds: string[];
+    if (isClientRoom) {
+      // Mentions resolve against room participants only (@all = everyone in room).
+      const raw = body.match(/@\[([^\]]+)\]\(([^)]+)\)/g) ?? [];
+      const ids = new Set<string>();
+      for (const token of raw) {
+        const m = /@\[([^\]]+)\]\(([^)]+)\)/.exec(token);
+        if (!m) continue;
+        if (m[2] === ALL_MENTION_ID) {
+          for (const id of participantIds) ids.add(id);
+        } else if (participantIds.includes(m[2])) {
+          ids.add(m[2]);
+        }
+      }
+      mentionedIds = [...ids];
+    } else {
+      mentionedIds = await resolveProjectMentionIds(body, projectId);
+    }
 
     const message = await prisma.message.create({
       data: {
@@ -516,9 +590,11 @@ export async function sendMessage(
     // DMs and groups show the sender's face; project threads show the project
     // logo. The service worker falls back to the app icon when neither exists.
     const notifIcon =
-      (conversationId
-        ? message.author.imageUrl
-        : (projectLogoUrl ?? message.author.imageUrl)) ?? undefined;
+      (isClientRoom
+        ? (projectLogoUrl ?? message.author.imageUrl)
+        : conversationId
+          ? message.author.imageUrl
+          : (projectLogoUrl ?? message.author.imageUrl)) ?? undefined;
 
     const uniqueRecipients = [...new Set(recipients)];
     if (uniqueRecipients.length > 0) {
@@ -555,11 +631,19 @@ export async function sendMessage(
     }
 
     // Live delivery: thread channels for open views, user channels for inbox.
+    // Never publish client-room messages onto the internal project channel.
     const threadChannels: string[] = [];
     if (taskId) threadChannels.push(taskChannel(taskId));
-    if (projectId) threadChannels.push(projectChannel(projectId));
+    if (projectId && !conversationId) threadChannels.push(projectChannel(projectId));
     if (conversationId) threadChannels.push(conversationChannel(conversationId));
     void broadcast(threadChannels, { type: "message.new", message: dto });
+
+    if (conversationId) {
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { updatedAt: new Date() },
+      });
+    }
 
     const inboxTargets = conversationId
       ? participantIds
@@ -570,6 +654,7 @@ export async function sendMessage(
       projectId,
       taskId,
       conversationId,
+      kind: isClientRoom ? "client" : conversationId ? "direct" : "project",
       // Delta payload so the inbox sidebar can patch the row in place instead of
       // refetching the whole RSC tree.
       authorId: user.id,
@@ -832,7 +917,7 @@ export async function deleteMessage(
 
 export type InboxThread = {
   id: string; // project-<id> | conv-<id>
-  kind: "project" | "direct";
+  kind: "project" | "direct" | "client";
   name: string;
   subtitle: string;
   projectId: string | null;
@@ -852,12 +937,76 @@ export type InboxThread = {
 export async function getInboxThreads(): Promise<InboxThread[]> {
   const user = await requireUser();
   const isAdmin = user.systemRole === "ADMIN";
+  const client = isClientUser(user);
+
+  const unreadCounts = await prisma.notification.groupBy({
+    by: ["linkUrl"],
+    where: { recipientId: user.id, read: false, linkUrl: { not: null } },
+    _count: true,
+  });
+  const unreadMap = new Map<string, number>();
+  for (const row of unreadCounts) {
+    if (!row.linkUrl) continue;
+    unreadMap.set(row.linkUrl, row._count);
+  }
+
+  // Clients only see enabled client rooms they participate in.
+  if (client) {
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        kind: CLIENT_CONVERSATION_KIND,
+        participants: { some: { memberId: user.id } },
+        project: { clientChatEnabled: true },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 200,
+      include: {
+        project: {
+          select: {
+            id: true,
+            name: true,
+            logoUrl: true,
+            clientChatEnabled: true,
+            contracts: { select: CONTRACT_SELECT },
+          },
+        },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: { author: { select: { id: true, name: true, email: true } } },
+        },
+      },
+    });
+
+    return conversations.map((c) => {
+      const last = c.messages[0];
+      const name = c.project?.name ?? c.title ?? "Client chat";
+      return {
+        id: `conv-${c.id}`,
+        kind: "client" as const,
+        name,
+        subtitle: "Client chat",
+        projectId: c.project?.id ?? null,
+        conversationId: c.id,
+        logoUrl: c.project?.logoUrl ?? null,
+        peerImageUrl: null,
+        peerMemberIds: [],
+        lastMessage: last ? toDisplayBody(last.body) || "📎 Attachment" : "",
+        lastAuthor: last ? (last.author.name ?? last.author.email) : "",
+        lastAt: last ? last.createdAt.toISOString() : "",
+        unread: unreadMap.get(`/dashboard/messages/conv-${c.id}`) ?? 0,
+        avatar: generateColor(name),
+        initials: name.charAt(0).toUpperCase(),
+        inactive: c.project ? !getActiveContract(c.project.contracts) : false,
+      };
+    });
+  }
 
   const projectWhere = isAdmin
     ? {}
     : { members: { some: { userId: user.id } } };
 
-  const [projects, conversations, unreadCounts] = await Promise.all([
+  const [projects, conversations, clientConversations] = await Promise.all([
     prisma.project.findMany({
       where: projectWhere,
       select: {
@@ -874,7 +1023,10 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       },
     }),
     prisma.conversation.findMany({
-      where: { participants: { some: { memberId: user.id } } },
+      where: {
+        kind: { not: CLIENT_CONVERSATION_KIND },
+        participants: { some: { memberId: user.id } },
+      },
       orderBy: { updatedAt: "desc" },
       take: 200,
       include: {
@@ -888,25 +1040,40 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         },
       },
     }),
-    prisma.notification.groupBy({
-      by: ["linkUrl"],
-      where: { recipientId: user.id, read: false, linkUrl: { not: null } },
-      _count: true,
+    prisma.conversation.findMany({
+      where: {
+        kind: CLIENT_CONVERSATION_KIND,
+        OR: [
+          { participants: { some: { memberId: user.id } } },
+          ...(isAdmin ? [{ projectId: { not: null } }] : []),
+        ],
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 200,
+      include: {
+        project: {
+          select: {
+            id: true,
+            name: true,
+            logoUrl: true,
+            clientChatEnabled: true,
+            contracts: { select: CONTRACT_SELECT },
+            members: isAdmin
+              ? { where: { userId: user.id }, select: { id: true } }
+              : false,
+          },
+        },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: { author: { select: { id: true, name: true, email: true } } },
+        },
+      },
     }),
   ]);
 
-  const unreadMap = new Map<string, number>();
-  for (const row of unreadCounts) {
-    if (!row.linkUrl) continue;
-    unreadMap.set(row.linkUrl, row._count);
-  }
-
   const projectThreads: InboxThread[] = projects.map((p) => {
     const last = p.messages[0];
-    // Only notifications that opening this thread clears count toward its
-    // badge. Task-comment notifications link to the task page and are cleared
-    // there — folding them in here made the badge impossible to clear from
-    // the inbox.
     const unread = unreadMap.get(`/dashboard/messages/project-${p.id}`) ?? 0;
     return {
       id: `project-${p.id}`,
@@ -946,7 +1113,6 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         projectId: null,
         conversationId: c.id,
         logoUrl: null,
-        // 1:1 DMs show the other person's photo; groups keep the initial.
         peerImageUrl: !c.isGroup && others.length === 1 ? (others[0].imageUrl ?? null) : null,
         peerMemberIds: others.map((m) => m.id),
         lastMessage: last ? toDisplayBody(last.body) || "📎 Attachment" : "",
@@ -959,7 +1125,38 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       };
     });
 
-  return [...projectThreads, ...dmThreads].sort((a, b) => {
+  const clientThreads: InboxThread[] = clientConversations
+    .filter((c) => {
+      if (!c.project) return false;
+      // Admins see all client rooms; others only ones they participate in (query already filters).
+      // Hide rooms for projects the admin isn't on only if we want — plan says admins keep access.
+      return true;
+    })
+    .map((c) => {
+      const last = c.messages[0];
+      const name = c.project!.name;
+      const enabled = c.project!.clientChatEnabled;
+      return {
+        id: `conv-${c.id}`,
+        kind: "client" as const,
+        name,
+        subtitle: enabled ? "Client chat" : "Client chat (disabled)",
+        projectId: c.project!.id,
+        conversationId: c.id,
+        logoUrl: c.project!.logoUrl ?? null,
+        peerImageUrl: null,
+        peerMemberIds: [],
+        lastMessage: last ? toDisplayBody(last.body) || "📎 Attachment" : "",
+        lastAuthor: last ? (last.author.name ?? last.author.email) : "",
+        lastAt: last ? last.createdAt.toISOString() : "",
+        unread: unreadMap.get(`/dashboard/messages/conv-${c.id}`) ?? 0,
+        avatar: generateColor(name),
+        initials: name.charAt(0).toUpperCase(),
+        inactive: !enabled || !getActiveContract(c.project!.contracts),
+      };
+    });
+
+  return [...projectThreads, ...dmThreads, ...clientThreads].sort((a, b) => {
     const ta = a.lastAt ? new Date(a.lastAt).getTime() : 0;
     const tb = b.lastAt ? new Date(b.lastAt).getTime() : 0;
     return tb - ta;
@@ -973,17 +1170,20 @@ export async function getOrCreateDirectConversation(
 ): Promise<ActionResult<string>> {
   return safeAction("Open Conversation", async () => {
     const user = await requireUser();
+    if (isClientUser(user)) throw new Error("Permission denied");
     if (otherMemberId === user.id) throw new Error("Cannot message yourself");
 
     const other = await prisma.user.findUnique({
       where: { id: otherMemberId },
-      select: { id: true },
+      select: { id: true, systemRole: true },
     });
     if (!other) throw new Error("Member not found");
+    if (isClientUser(other)) throw new Error("Cannot message clients here");
 
     const existing = await prisma.conversation.findFirst({
       where: {
         isGroup: false,
+        kind: { not: CLIENT_CONVERSATION_KIND },
         AND: [
           { participants: { some: { memberId: user.id } } },
           { participants: { some: { memberId: otherMemberId } } },
@@ -996,6 +1196,7 @@ export async function getOrCreateDirectConversation(
     const convo = await prisma.conversation.create({
       data: {
         isGroup: false,
+        kind: "direct",
         participants: {
           create: [{ memberId: user.id }, { memberId: otherMemberId }],
         },
@@ -1007,8 +1208,13 @@ export async function getOrCreateDirectConversation(
 
 export async function getMessageableMembers() {
   const user = await requireUser();
+  if (isClientUser(user)) return [];
   return prisma.user.findMany({
-    where: { id: { not: user.id }, blocked: false },
+    where: {
+      id: { not: user.id },
+      blocked: false,
+      systemRole: { not: "CLIENT" },
+    },
     select: { id: true, name: true, email: true, imageUrl: true },
     orderBy: { name: "asc" },
     take: 500,

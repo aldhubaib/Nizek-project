@@ -56,6 +56,8 @@ export async function updateMyAvatar(
       data: { imageUrl: updated.imageUrl },
     });
     revalidatePath("/dashboard/account");
+    revalidatePath("/setup-photo");
+    revalidatePath("/dashboard");
     return { ok: true, data: { imageUrl: updated.imageUrl } };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed" };

@@ -15,6 +15,11 @@ import {
   getAdminPermissions,
   getPermissionsFromRole,
 } from "@/lib/permissions";
+import {
+  canAccessClientConversation,
+  CLIENT_CONVERSATION_KIND,
+  isClientUser,
+} from "@/lib/client-chat";
 import { ThreadChat, type ThreadTarget } from "./thread-chat";
 
 const CONTRACT_SELECT = {
@@ -33,6 +38,7 @@ export default async function ThreadPage({
 }) {
   const { threadId } = await params;
   const user = await requireUser();
+  const client = isClientUser(user);
 
   // Thread id encodes the kind: task-<id>, project-<id>, or conv-<id>.
   let target: ThreadTarget = {};
@@ -47,6 +53,8 @@ export default async function ThreadPage({
   // Project chat/task threads are read-only when the project has no active
   // contract (mirrors Falak: inactive projects have a read-only channel).
   let inactive = false;
+  let readOnly = false;
+  let isClientRoom = false;
 
   let canCreateTask = false;
   let allowedTaskTypes: string[] = [];
@@ -56,6 +64,7 @@ export default async function ThreadPage({
   let contractsForPerms: Parameters<typeof getActiveContract>[0] = [];
 
   if (threadId.startsWith("task-")) {
+    if (client) notFound();
     const taskId = threadId.slice(5);
     const task = await prisma.task.findFirst({
       where: { id: taskId },
@@ -79,6 +88,7 @@ export default async function ThreadPage({
     inactive = !getActiveContract(task.project.contracts);
     contractsForPerms = task.project.contracts;
   } else if (threadId.startsWith("project-")) {
+    if (client) notFound();
     const projectId = threadId.slice(8);
     if (!(await hasProjectAccess(projectId))) notFound();
     const project = await prisma.project.findUnique({
@@ -96,40 +106,102 @@ export default async function ThreadPage({
     contractsForPerms = project.contracts;
   } else if (threadId.startsWith("conv-")) {
     const conversationId = threadId.slice(5);
-    const convo = await prisma.conversation.findFirst({
-      where: {
-        id: conversationId,
-        participants: { some: { memberId: user.id } },
-      },
-      include: {
-        participants: {
-          include: { member: { select: { id: true, name: true, email: true } } },
-        },
-      },
+    const convoMeta = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { id: true, kind: true },
     });
-    if (!convo) notFound();
-    const others = convo.participants
-      .map((p) => p.member)
-      .filter((m) => m.id !== user.id);
-    for (const p of convo.participants) {
-      memberNames[p.member.id] = p.member.name ?? p.member.email;
-    }
-    peerMemberIds = others.map((m) => m.id);
-    mentionables = others.map((m) => ({ id: m.id, name: m.name ?? m.email }));
-    target = { conversationId: convo.id };
-    channel = conversationChannel(convo.id);
-    presenceChannel = globalPresenceChannel();
-    title =
-      convo.title ??
-      (others.map((m) => m.name ?? m.email).join(", ") || "Direct message");
-    subtitle = convo.isGroup ? `${convo.participants.length} members` : "Direct message";
+    if (!convoMeta) notFound();
 
-    // Max lastReadAt among other participants (1:1 read receipts).
-    const peerReads = convo.participants
-      .filter((p) => p.memberId !== user.id && p.lastReadAt)
-      .map((p) => p.lastReadAt!.getTime());
-    if (peerReads.length > 0) {
-      peerLastReadAt = new Date(Math.max(...peerReads)).toISOString();
+    if (convoMeta.kind === CLIENT_CONVERSATION_KIND) {
+      const access = await canAccessClientConversation(conversationId, user);
+      if (!access.ok || !access.conversation || !access.project) notFound();
+
+      const convo = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        include: {
+          participants: {
+            include: {
+              member: { select: { id: true, name: true, email: true } },
+            },
+          },
+          project: {
+            select: { contracts: { select: CONTRACT_SELECT } },
+          },
+        },
+      });
+      if (!convo) notFound();
+
+      isClientRoom = true;
+      const others = convo.participants
+        .map((p) => p.member)
+        .filter((m) => m.id !== user.id);
+      for (const p of convo.participants) {
+        memberNames[p.member.id] = p.member.name ?? p.member.email;
+      }
+      peerMemberIds = others.map((m) => m.id);
+      mentionables = others
+        .map((m) => ({ id: m.id, name: m.name ?? m.email }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      target = {
+        conversationId: convo.id,
+        projectId: access.project.id,
+      };
+      channel = conversationChannel(convo.id);
+      presenceChannel = globalPresenceChannel();
+      title = access.project.name;
+      subtitle = access.project.clientChatEnabled
+        ? "Client chat"
+        : "Client chat (disabled)";
+      projectName = access.project.name;
+      readOnly = !access.canPost;
+      inactive =
+        !access.project.clientChatEnabled ||
+        !getActiveContract(convo.project?.contracts ?? []);
+      // Never allow create-task from client rooms in v1.
+      canCreateTask = false;
+    } else {
+      if (client) notFound();
+      const convo = await prisma.conversation.findFirst({
+        where: {
+          id: conversationId,
+          participants: { some: { memberId: user.id } },
+        },
+        include: {
+          participants: {
+            include: {
+              member: { select: { id: true, name: true, email: true } },
+            },
+          },
+        },
+      });
+      if (!convo) notFound();
+      const others = convo.participants
+        .map((p) => p.member)
+        .filter((m) => m.id !== user.id);
+      for (const p of convo.participants) {
+        memberNames[p.member.id] = p.member.name ?? p.member.email;
+      }
+      peerMemberIds = others.map((m) => m.id);
+      mentionables = others.map((m) => ({
+        id: m.id,
+        name: m.name ?? m.email,
+      }));
+      target = { conversationId: convo.id };
+      channel = conversationChannel(convo.id);
+      presenceChannel = globalPresenceChannel();
+      title =
+        convo.title ??
+        (others.map((m) => m.name ?? m.email).join(", ") || "Direct message");
+      subtitle = convo.isGroup
+        ? `${convo.participants.length} members`
+        : "Direct message";
+
+      const peerReads = convo.participants
+        .filter((p) => p.memberId !== user.id && p.lastReadAt)
+        .map((p) => p.lastReadAt!.getTime());
+      if (peerReads.length > 0) {
+        peerLastReadAt = new Date(Math.max(...peerReads)).toISOString();
+      }
     }
   } else {
     notFound();
@@ -137,7 +209,8 @@ export default async function ThreadPage({
 
   // People involved in a project/task thread: project members plus system
   // admins (who can access every project without being explicit members).
-  if (target.projectId) {
+  // Skip for client rooms — mentionables are conversation participants only.
+  if (target.projectId && !isClientRoom) {
     const [projectMembers, admins, { user: memberUser, member }] =
       await Promise.all([
         prisma.projectMember.findMany({
@@ -153,8 +226,6 @@ export default async function ThreadPage({
     const map = new Map<string, { id: string; name: string }>();
     for (const m of [...projectMembers.map((pm) => pm.user), ...admins]) {
       map.set(m.id, { id: m.id, name: m.name ?? m.email });
-      // Names the typing indicator can show — "Sara is typing…" rather than
-      // "Someone is typing…".
       memberNames[m.id] = m.name ?? m.email;
     }
     map.delete(user.id);
@@ -197,12 +268,13 @@ export default async function ThreadPage({
       peerMemberIds={peerMemberIds}
       mentionables={mentionables}
       inactive={inactive}
-      readOnly={false}
+      readOnly={readOnly}
       canCreateTask={canCreateTask}
       allowedTaskTypes={allowedTaskTypes}
       activeContractType={activeContractType}
       projectName={projectName}
       peerLastReadAt={peerLastReadAt}
+      isClientRoom={isClientRoom}
     />
   );
 }

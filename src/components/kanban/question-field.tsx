@@ -161,9 +161,42 @@ interface Props {
   showRequiredAs?: "all" | "mandatory" | "transition";
 }
 
-function parseClientValue(raw: string): { needed: boolean | null; note: string; completed: boolean } {
-  if (!raw) return { needed: null, note: "", completed: false };
-  try { return { needed: null, note: "", completed: false, ...JSON.parse(raw) }; } catch { return { needed: null, note: "", completed: false }; }
+function parseClientValue(raw: string): {
+  needed: boolean | null;
+  note: string;
+  completed: boolean;
+  /** ISO timestamp set when the answer was marked received. */
+  completedAt: string | null;
+} {
+  if (!raw) return { needed: null, note: "", completed: false, completedAt: null };
+  try {
+    const parsed = JSON.parse(raw) as {
+      needed?: boolean | null;
+      note?: string;
+      completed?: boolean;
+      completedAt?: string | null;
+    };
+    return {
+      needed: parsed.needed ?? null,
+      note: parsed.note ?? "",
+      completed: Boolean(parsed.completed),
+      completedAt:
+        typeof parsed.completedAt === "string" ? parsed.completedAt : null,
+    };
+  } catch {
+    return { needed: null, note: "", completed: false, completedAt: null };
+  }
+}
+
+function formatReceivedAt(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 export function QuestionField({ question, index, value, onChange, compact, readonly: isReadonly, showRequiredAs = "all" }: Props) {
@@ -306,7 +339,9 @@ export function QuestionField({ question, index, value, onChange, compact, reado
           )}
           {cv.needed === true && (
             <span className={cn("text-[11px]", cv.completed ? "text-emerald-400" : "text-muted-foreground/60")}>
-              {cv.completed ? "Received from client" : "Waiting on client"}
+              {cv.completed
+                ? `Received from client${formatReceivedAt(cv.completedAt) ? ` · ${formatReceivedAt(cv.completedAt)}` : ""}`
+                : "Waiting on client"}
             </span>
           )}
         </div>
@@ -400,7 +435,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
               </button>
               <button
                 type="button"
-                onClick={() => updateClient({ needed: false, note: "", completed: false })}
+                onClick={() => updateClient({ needed: false, note: "", completed: false, completedAt: null })}
                 className={cn(
                   "flex-1 rounded-lg border px-3 py-2 text-[12px] font-medium transition-colors",
                   cv.needed === false
@@ -422,7 +457,13 @@ export function QuestionField({ question, index, value, onChange, compact, reado
                 />
                 <button
                   type="button"
-                  onClick={() => updateClient({ completed: !cv.completed })}
+                  onClick={() =>
+                    updateClient(
+                      cv.completed
+                        ? { completed: false, completedAt: null }
+                        : { completed: true, completedAt: new Date().toISOString() },
+                    )
+                  }
                   className={cn(
                     "flex items-center gap-2 rounded-lg border px-3 py-2 text-[12px] font-medium transition-colors w-full",
                     cv.completed
@@ -431,12 +472,19 @@ export function QuestionField({ question, index, value, onChange, compact, reado
                   )}
                 >
                   <div className={cn(
-                    "w-4 h-4 rounded border flex items-center justify-center transition-colors",
+                    "w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0",
                     cv.completed ? "bg-emerald-500 border-emerald-500" : "border-muted-foreground/40"
                   )}>
                     {cv.completed && <Check className="w-3 h-3 text-white" strokeWidth={2.5} />}
                   </div>
-                  {cv.completed ? "Received from client" : "Waiting on client"}
+                  <span className="min-w-0 flex-1 text-left">
+                    {cv.completed ? "Received from client" : "Waiting on client"}
+                    {cv.completed && formatReceivedAt(cv.completedAt) && (
+                      <span className="ml-1.5 font-normal opacity-80">
+                        · {formatReceivedAt(cv.completedAt)}
+                      </span>
+                    )}
+                  </span>
                 </button>
               </>
             )}

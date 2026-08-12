@@ -46,6 +46,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { ClientChatPeopleManager } from "@/components/messages/client-chat-people";
 import {
   toggleReaction,
   deleteMessage as deleteMessageAction,
@@ -887,6 +888,7 @@ export function ThreadChat({
   activeContractType = null,
   projectName,
   peerLastReadAt: initialPeerLastReadAt = null,
+  isClientRoom = false,
 }: {
   channel: string;
   presenceChannel: string | null;
@@ -907,6 +909,8 @@ export function ThreadChat({
   activeContractType?: string | null;
   projectName?: string;
   peerLastReadAt?: string | null;
+  /** Isolated client-facing room — shows curated people manager. */
+  isClientRoom?: boolean;
 }) {
   const frameRef = useVisualViewportFrame<HTMLDivElement>();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -923,6 +927,7 @@ export function ThreadChat({
   const [dragging, setDragging] = useState(false);
   const [view, setView] = useState<"chat" | "files">("chat");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [peopleOpen, setPeopleOpen] = useState(false);
   const [peerLastReadAt, setPeerLastReadAt] = useState<string | null>(
     initialPeerLastReadAt,
   );
@@ -2107,6 +2112,17 @@ export function ThreadChat({
               <FilesIcon className="h-4 w-4" />
               <span className="flex-1">Files</span>
             </DropdownMenuItem>
+            {isClientRoom && target.projectId && (
+              <DropdownMenuItem
+                onClick={() => {
+                  setPeopleOpen(true);
+                  setSearchOpen(false);
+                }}
+              >
+                <Users className="h-4 w-4" />
+                <span className="flex-1">People</span>
+              </DropdownMenuItem>
+            )}
             {threadKey && (
               <DropdownMenuItem onClick={toggleMute}>
                 {muted ? (
@@ -2123,8 +2139,8 @@ export function ThreadChat({
 
       {/* Messages */}
       <div className="relative min-h-0 flex-1">
-        <div ref={scrollerRef} className="h-full overflow-y-auto px-4 py-4">
-          <div className="mx-auto flex max-w-3xl flex-col gap-1.5">
+        <div ref={scrollerRef} className="h-full overflow-y-auto px-4 py-4 lg:px-8">
+          <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-1.5">
             <div ref={topSentinelRef} className="h-px w-full" aria-hidden />
             {hasMore && (
               <div className="flex justify-center pb-2">
@@ -2229,8 +2245,8 @@ export function ThreadChat({
       </div>
 
       {/* Composer */}
-      <div className="shrink-0 border-t border-border/60 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="mx-auto max-w-3xl">
+      <div className="shrink-0 border-t border-border/60 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:px-8">
+        <div className="mx-auto w-full max-w-[1100px]">
           {inactive || readOnly ? (
             <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-surface/30 px-4 py-3 text-xs text-muted-foreground">
               {inactive
@@ -2861,6 +2877,30 @@ export function ThreadChat({
             messages={messages.filter((m) => m.attachments.length > 0)}
             onClose={() => setView("chat")}
           />
+        </div>
+      )}
+
+      {peopleOpen && isClientRoom && target.projectId && (
+        <div className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80">
+          <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border/60 px-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full"
+              onClick={() => setPeopleOpen(false)}
+              aria-label="Close people"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-semibold">People</span>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+            <ClientChatPeopleManager
+              projectId={target.projectId}
+              enabled
+              compact
+            />
+          </div>
         </div>
       )}
 

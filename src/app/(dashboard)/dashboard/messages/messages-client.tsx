@@ -12,6 +12,7 @@ import {
   PenSquare,
   Archive,
   ChevronDown,
+  Handshake,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,12 +71,18 @@ export function MessagesMain({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
+export function ThreadSidebar({
+  threads,
+  isClient = false,
+}: {
+  threads: InboxThread[];
+  isClient?: boolean;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const onThread = useOnThread();
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState<"all" | "project" | "direct">("all");
+  const [tab, setTab] = useState<"all" | "project" | "direct" | "client">("all");
   const [composeOpen, setComposeOpen] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
   // On mobile/tablet the search field is collapsed behind a header icon.
@@ -208,10 +215,12 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
   return (
     <aside
       className={cn(
-        "flex-col border-r border-border/60 lg:flex lg:w-80 lg:shrink-0",
+        // ~WhatsApp list column: wider than w-80, ~30% of a typical desktop pane.
+        "flex-col border-r border-border/60 lg:flex lg:w-[min(420px,32vw)] lg:min-w-[360px] lg:shrink-0",
         onThread ? "hidden lg:flex" : "flex w-full",
       )}
     >
+
       <div className="flex h-14 items-center gap-1 border-b border-border/60 px-4">
         <div className="text-sm font-semibold">Inbox</div>
         <Button
@@ -232,6 +241,7 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
           className="rounded-full max-lg:ml-0 lg:ml-auto"
           aria-label="New message"
           onClick={() => setComposeOpen(true)}
+          hidden={isClient}
         >
           <PenSquare className="h-4 w-4" />
         </Button>
@@ -249,11 +259,13 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
             className="h-9 pl-8 text-sm"
           />
         </div>
+        {!isClient && (
         <div className="mt-2 flex items-center gap-1 rounded-md bg-surface/60 p-0.5">
           {(
             [
               { id: "all" as const, label: "All", icon: Users },
               { id: "project" as const, label: "Projects", icon: Folder },
+              { id: "client" as const, label: "Client", icon: Handshake },
               { id: "direct" as const, label: "Direct", icon: MessageSquare },
             ] as const
           ).map((t) => (
@@ -272,6 +284,7 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
             </button>
           ))}
         </div>
+        )}
       </div>
 
       {/* Bottom padding clears the mobile bottom navigation bar. */}
@@ -281,12 +294,15 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
             <MessageSquare className="h-8 w-8 text-muted-foreground/50" />
             <div>
               <div className="text-sm font-medium text-foreground">
-                No conversations yet
+                {isClient ? "No client chats yet" : "No conversations yet"}
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Start a direct message with the compose button.
+                {isClient
+                  ? "Waiting for your project team to enable client chat."
+                  : "Start a direct message with the compose button."}
               </p>
             </div>
+            {!isClient && (
             <Button
               variant="outline"
               size="sm"
@@ -296,6 +312,7 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
               <PenSquare className="h-3.5 w-3.5" />
               New message
             </Button>
+            )}
           </li>
         )}
         {rows.map((thread) => (
@@ -404,6 +421,11 @@ function ThreadRow({
           <span className={cn("truncate text-sm font-medium", thread.inactive && "text-muted-foreground")}>
             {thread.name}
           </span>
+          {thread.kind === "client" && !thread.inactive && (
+            <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-amber-400">
+              Client
+            </span>
+          )}
           {thread.inactive && (
             <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
               Inactive

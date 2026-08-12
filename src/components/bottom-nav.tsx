@@ -38,6 +38,7 @@ interface BottomNavProps {
   canAudit?: boolean;
   canEquity?: boolean;
   canVault?: boolean;
+  isClient?: boolean;
   currentUserId?: string;
   onOpenMenu: () => void;
 }
@@ -51,6 +52,7 @@ export function BottomNav({
   canAudit = false,
   canEquity = false,
   canVault = false,
+  isClient = false,
   currentUserId,
   onOpenMenu,
 }: BottomNavProps) {
@@ -77,14 +79,16 @@ export function BottomNav({
   });
 
   const canSeeTrash = canEquity || isAdmin;
-  const allowed = NAV_ITEMS.filter(
-    (item) =>
+  const allowed = NAV_ITEMS.filter((item) => {
+    if (isClient) return item.href === "/dashboard/messages";
+    return (
       (!item.adminOnly || isAdmin) &&
       (!item.auditOnly || canAudit) &&
       (!item.equityOnly || canEquity) &&
       (!item.vaultOnly || canVault) &&
-      (!item.trashOnly || canSeeTrash),
-  );
+      (!item.trashOnly || canSeeTrash)
+    );
+  });
   let visible = allowed.slice(0, MAX_TABS - 1);
   const inbox = allowed.find((item) => item.name === "Inbox");
   if (inbox && !visible.includes(inbox)) {

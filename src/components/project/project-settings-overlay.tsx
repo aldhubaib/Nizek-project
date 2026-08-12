@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { deleteProject, updateProject, deleteContract, toggleLatePayment } from "@/actions/project";
+import { deleteProject, updateProject, deleteContract, toggleLatePayment, setProjectClientChat } from "@/actions/project";
 import { getArchivedTasks, restoreTask, permanentlyDeleteTask } from "@/actions/task";
 import { ContractBadge } from "@/components/project/contract-badge";
 import { AddContractDialog } from "@/components/project/add-contract-dialog";
 import { EditContractDialog } from "@/components/project/edit-contract-dialog";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
+import { ClientChatPeopleManager } from "@/components/messages/client-chat-people";
 
 interface Team {
   id: string;
@@ -53,6 +54,7 @@ interface ProjectSettingsProps {
     contracts: Contract[];
     defaultClientReviewerId?: string | null;
     maxPipelineTasks?: number;
+    clientChatEnabled?: boolean;
   };
   teams?: Team[];
   contractPrefixes?: ContractPrefixOption[];
@@ -78,6 +80,8 @@ export function ProjectSettingsOverlay({
   const [teamId, setTeamId] = useState(project.team?.id || "");
   const [clientReviewerId, setClientReviewerId] = useState(project.defaultClientReviewerId || "");
   const [maxPipelineTasks, setMaxPipelineTasks] = useState(String(project.maxPipelineTasks ?? 3));
+  const [clientChatEnabled, setClientChatEnabled] = useState(!!project.clientChatEnabled);
+  const [clientChatSaving, setClientChatSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -310,6 +314,68 @@ export function ProjectSettingsOverlay({
                   <option key={c.id} value={c.id}>{c.name ?? c.id}</option>
                 ))}
               </select>
+            )}
+          </div>
+
+          {/* Client chat */}
+          <div className="space-y-2 rounded-md border border-border/60 bg-surface/40 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <Label htmlFor="proj-client-chat" className="text-[13px] font-semibold">
+                  Enable client chat
+                </Label>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Opens a separate chat room for clients — isolated from internal project chat.
+                  Clients on the project join automatically; add staff from your side below.
+                </p>
+              </div>
+              <button
+                id="proj-client-chat"
+                type="button"
+                role="switch"
+                aria-checked={clientChatEnabled}
+                disabled={clientChatSaving}
+                onClick={async () => {
+                  const next = !clientChatEnabled;
+                  setClientChatSaving(true);
+                  setSaveError(null);
+                  try {
+                    await setProjectClientChat({
+                      projectId: project.id,
+                      enabled: next,
+                    });
+                    setClientChatEnabled(next);
+                    router.refresh();
+                  } catch (err) {
+                    setSaveError(
+                      err instanceof Error ? err.message : "Failed to update client chat",
+                    );
+                  } finally {
+                    setClientChatSaving(false);
+                  }
+                }}
+                className={cn(
+                  "relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors",
+                  clientChatEnabled ? "bg-primary" : "bg-muted",
+                  clientChatSaving && "opacity-60",
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-background shadow transition-transform",
+                    clientChatEnabled && "translate-x-5",
+                  )}
+                />
+              </button>
+            </div>
+            {clientChatSaving && (
+              <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Updating…
+              </p>
+            )}
+            {clientChatEnabled && (
+              <ClientChatPeopleManager projectId={project.id} enabled />
             )}
           </div>
 

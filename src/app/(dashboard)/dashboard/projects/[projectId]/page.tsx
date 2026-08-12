@@ -7,7 +7,8 @@ import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import { isDeadlineTestProjectByName } from "@/lib/deadline-reminders";
 import { isProjectAccessError } from "@/lib/project-access";
 import { canAccessProjectVault } from "@/lib/vault-access";
-import { notFound } from "next/navigation";
+import { isClientUser } from "@/lib/client-chat";
+import { notFound, redirect } from "next/navigation";
 import { ProjectDetailClient } from "./project-detail-client";
 import type { KanbanTask } from "@/store/kanban";
 
@@ -27,6 +28,8 @@ export default async function ProjectDetailPage({ params }: Props) {
     if (isProjectAccessError(err)) notFound();
     throw err;
   });
+
+  if (isClientUser(user)) redirect("/dashboard/messages");
 
   const canAccessVault = await canAccessProjectVault(user.id, projectId);
 

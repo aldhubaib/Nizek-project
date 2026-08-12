@@ -1,4 +1,6 @@
 import { requireUser } from "@/lib/auth";
+import { isClientUser } from "@/lib/client-chat";
+import { redirect } from "next/navigation";
 import { DashboardTabs } from "@/components/dashboard/dashboard-tabs";
 import { LazyManagementTab } from "@/components/dashboard/lazy-management-tab";
 import { LazyProductTab } from "@/components/dashboard/lazy-product-tab";
@@ -7,6 +9,7 @@ import { DashboardOverview } from "@/components/dashboard/dashboard-overview";
 
 export default async function DashboardPage() {
   const user = await requireUser();
+  if (isClientUser(user)) redirect("/dashboard/messages");
 
   return (
     <div>

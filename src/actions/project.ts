@@ -5,6 +5,12 @@ import { requireUser, requireProjectMember, requireProjectRole, acceptPendingInv
 import { revalidatePath } from "next/cache";
 import { Resend } from "resend";
 import { validateContractDates } from "@/lib/contract-rules";
+import {
+  disableClientChat,
+  enableClientChat,
+  syncClientConversationParticipants,
+  CLIENT_CONVERSATION_KIND,
+} from "@/lib/client-chat";
 
 async function requireMemberManagement(projectId: string) {
   const { user, member } = await requireProjectMember(projectId);
@@ -167,9 +173,46 @@ export async function updateProject(data: {
     },
   });
 
+  if (data.name?.trim()) {
+    await prisma.conversation.updateMany({
+      where: { projectId: data.projectId, kind: CLIENT_CONVERSATION_KIND },
+      data: { title: data.name.trim() },
+    });
+  }
+
   revalidatePath(`/dashboard/projects/${data.projectId}`);
   revalidatePath("/dashboard/projects");
+  revalidatePath("/dashboard/messages");
   return updated;
+}
+
+/** Enable or disable the project's isolated client chat room. */
+export async function setProjectClientChat(data: {
+  projectId: string;
+  enabled: boolean;
+}) {
+  const { user } = await requireProjectMember(data.projectId);
+  await requireProjectRole(data.projectId, ["ADMIN", "PROJECT_MANAGER"]);
+
+  if (data.enabled) {
+    await enableClientChat(data.projectId, user.id);
+  } else {
+    await disableClientChat(data.projectId);
+  }
+
+  revalidatePath(`/dashboard/projects/${data.projectId}`);
+  revalidatePath("/dashboard/messages");
+  return { enabled: data.enabled };
+}
+
+async function syncClientChatIfEnabled(projectId: string) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { clientChatEnabled: true },
+  });
+  if (project?.clientChatEnabled) {
+    await syncClientConversationParticipants(projectId).catch(() => {});
+  }
 }
 
 export async function addContract(data: {
@@ -509,7 +552,10 @@ export async function removeMember(data: {
     where: { id: data.memberId },
   });
 
+  await syncClientChatIfEnabled(data.projectId);
+
   revalidatePath(`/dashboard/projects/${data.projectId}`);
+  revalidatePath("/dashboard/messages");
   return { success: true };
   } catch (err) {
     return { success: false, error: (err as Error).message };
@@ -594,7 +640,10 @@ export async function addMemberToProject(data: {
     },
   });
 
+  await syncClientChatIfEnabled(data.projectId);
+
   revalidatePath(`/dashboard/projects/${data.projectId}`);
+  revalidatePath("/dashboard/messages");
 }
 
 export async function getAvailableUsers(projectId: string) {

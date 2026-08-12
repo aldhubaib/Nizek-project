@@ -165,6 +165,9 @@ model Project {
 
   maxPipelineTasks Int @default(3)
 
+  /// When true, a sibling Conversation (kind=client) is the client-facing room.
+  clientChatEnabled Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -175,6 +178,7 @@ model Project {
   assets       Asset[]
   invitations  Invitation[]
   messages     Message[]
+  conversations Conversation[]
   equityPortfolio EquityPortfolio?
   vaultCredentials VaultCredential[]
   vaultPermissions VaultPermission[]
@@ -1350,11 +1354,19 @@ model Conversation {
   id        String   @id @default(cuid())
   isGroup   Boolean  @default(false)
   title     String?
+  /// "direct" (DM/group) or "client" (per-project client room).
+  kind      String   @default("direct")
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   participants ConversationParticipant[]
   messages     Message[]
+
+  @@unique([projectId, kind])
+  @@index([projectId])
+  @@index([kind])
 }
 
 model ConversationParticipant {
