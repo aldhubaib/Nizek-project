@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth";
+import { requireUser, requireProjectMember } from "@/lib/auth";
 import { hasProjectAccess } from "@/lib/project-access";
 import {
   taskChannel,
@@ -9,7 +9,12 @@ import {
   globalPresenceChannel,
 } from "@/lib/channels";
 import { getThreadMessages } from "@/actions/messages";
-import { getActiveContract } from "@/lib/contract-rules";
+import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
+import {
+  canCreateInStage,
+  getAdminPermissions,
+  getPermissionsFromRole,
+} from "@/lib/permissions";
 import { ThreadChat, type ThreadTarget } from "./thread-chat";
 
 const CONTRACT_SELECT = {
@@ -43,6 +48,13 @@ export default async function ThreadPage({
   // contract (mirrors Falak: inactive projects have a read-only channel).
   let inactive = false;
 
+  let canCreateTask = false;
+  let allowedTaskTypes: string[] = [];
+  let activeContractType: string | null = null;
+  let projectName: string | undefined;
+  let peerLastReadAt: string | null = null;
+  let contractsForPerms: Parameters<typeof getActiveContract>[0] = [];
+
   if (threadId.startsWith("task-")) {
     const taskId = threadId.slice(5);
     const task = await prisma.task.findFirst({
@@ -51,7 +63,9 @@ export default async function ThreadPage({
         id: true,
         title: true,
         projectId: true,
-        project: { select: { name: true, contracts: { select: CONTRACT_SELECT } } },
+        project: {
+          select: { name: true, contracts: { select: CONTRACT_SELECT } },
+        },
       },
     });
     if (!task) notFound();
@@ -61,7 +75,9 @@ export default async function ThreadPage({
     presenceChannel = taskChannel(task.id);
     title = task.title;
     subtitle = task.project.name;
+    projectName = task.project.name;
     inactive = !getActiveContract(task.project.contracts);
+    contractsForPerms = task.project.contracts;
   } else if (threadId.startsWith("project-")) {
     const projectId = threadId.slice(8);
     if (!(await hasProjectAccess(projectId))) notFound();
@@ -75,7 +91,9 @@ export default async function ThreadPage({
     presenceChannel = projectChannel(project.id);
     title = project.name;
     subtitle = "Project chat";
+    projectName = project.name;
     inactive = !getActiveContract(project.contracts);
+    contractsForPerms = project.contracts;
   } else if (threadId.startsWith("conv-")) {
     const conversationId = threadId.slice(5);
     const convo = await prisma.conversation.findFirst({
@@ -105,6 +123,14 @@ export default async function ThreadPage({
       convo.title ??
       (others.map((m) => m.name ?? m.email).join(", ") || "Direct message");
     subtitle = convo.isGroup ? `${convo.participants.length} members` : "Direct message";
+
+    // Max lastReadAt among other participants (1:1 read receipts).
+    const peerReads = convo.participants
+      .filter((p) => p.memberId !== user.id && p.lastReadAt)
+      .map((p) => p.lastReadAt!.getTime());
+    if (peerReads.length > 0) {
+      peerLastReadAt = new Date(Math.max(...peerReads)).toISOString();
+    }
   } else {
     notFound();
   }
@@ -112,16 +138,18 @@ export default async function ThreadPage({
   // People involved in a project/task thread: project members plus system
   // admins (who can access every project without being explicit members).
   if (target.projectId) {
-    const [projectMembers, admins] = await Promise.all([
-      prisma.projectMember.findMany({
-        where: { projectId: target.projectId },
-        select: { user: { select: { id: true, name: true, email: true } } },
-      }),
-      prisma.user.findMany({
-        where: { systemRole: "ADMIN" },
-        select: { id: true, name: true, email: true },
-      }),
-    ]);
+    const [projectMembers, admins, { user: memberUser, member }] =
+      await Promise.all([
+        prisma.projectMember.findMany({
+          where: { projectId: target.projectId },
+          select: { user: { select: { id: true, name: true, email: true } } },
+        }),
+        prisma.user.findMany({
+          where: { systemRole: "ADMIN" },
+          select: { id: true, name: true, email: true },
+        }),
+        requireProjectMember(target.projectId),
+      ]);
     const map = new Map<string, { id: string; name: string }>();
     for (const m of [...projectMembers.map((pm) => pm.user), ...admins]) {
       map.set(m.id, { id: m.id, name: m.name ?? m.email });
@@ -131,6 +159,19 @@ export default async function ThreadPage({
     }
     map.delete(user.id);
     mentionables = [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+    const isSystemAdmin = memberUser.systemRole === "ADMIN";
+    const perms = isSystemAdmin
+      ? getAdminPermissions()
+      : getPermissionsFromRole(member.projectRole);
+    canCreateTask =
+      isSystemAdmin || canCreateInStage(perms, "NEW_REQUEST");
+
+    const activeContract = getActiveContract(contractsForPerms);
+    activeContractType = activeContract?.contractType ?? null;
+    allowedTaskTypes = activeContract
+      ? getAllowedTaskTypes(activeContract.contractType, isSystemAdmin)
+      : [];
   }
 
   // Latest page only (50 messages) — older pages load on demand in the client.
@@ -157,6 +198,11 @@ export default async function ThreadPage({
       mentionables={mentionables}
       inactive={inactive}
       readOnly={false}
+      canCreateTask={canCreateTask}
+      allowedTaskTypes={allowedTaskTypes}
+      activeContractType={activeContractType}
+      projectName={projectName}
+      peerLastReadAt={peerLastReadAt}
     />
   );
 }

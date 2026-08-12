@@ -125,7 +125,14 @@ export function DashboardShell({ children, isAdmin = false, canAudit = false, ca
 
       {/* Mobile/tablet bottom navigation — same permission rules as the sidebar */}
       {showBottomNav && (
-        <BottomNav isAdmin={isAdmin} canAudit={canAudit} canEquity={canEquity} canVault={canVault} onOpenMenu={() => setDrawerOpen(true)} />
+        <BottomNav
+          isAdmin={isAdmin}
+          canAudit={canAudit}
+          canEquity={canEquity}
+          canVault={canVault}
+          currentUserId={currentUserId}
+          onOpenMenu={() => setDrawerOpen(true)}
+        />
       )}
       <NotificationSound currentUserId={currentUserId} soundUrl={notificationSoundUrl} />
       <NotificationSync currentUserId={currentUserId} />

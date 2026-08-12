@@ -170,6 +170,8 @@ export type ThreadMessage = {
   authorImageUrl: string | null;
   body: string;
   createdAt: string;
+  updatedAt: string;
+  edited: boolean;
   replyToId: string | null;
   attachments: MessageAttachment[];
   reactions: ReactionSummary[];
@@ -250,6 +252,8 @@ export async function getThreadMessages(input: {
       byEmoji.set(r.emoji, list);
     }
     const mapped = mapDeadlineReminderMessage(c);
+    const edited =
+      c.updatedAt.getTime() - c.createdAt.getTime() > 2000;
     return {
       id: c.id,
       authorId: mapped.authorId,
@@ -257,6 +261,8 @@ export async function getThreadMessages(input: {
       authorImageUrl: mapped.authorImageUrl,
       body: mapped.body,
       createdAt: c.createdAt.toISOString(),
+      updatedAt: c.updatedAt.toISOString(),
+      edited,
       replyToId: c.replyToId ?? null,
       attachments: c.attachments.map((a) => ({
         id: a.id,
@@ -601,6 +607,21 @@ export async function markThreadRead(target: {
         : null;
   if (!linkUrl) return;
 
+  const now = new Date();
+
+  // DMs: advance lastReadAt so senders can show read receipts.
+  if (target.conversationId) {
+    await prisma.conversationParticipant.updateMany({
+      where: { conversationId: target.conversationId, memberId: user.id },
+      data: { lastReadAt: now },
+    });
+    void broadcast([conversationChannel(target.conversationId)], {
+      type: "thread.read",
+      memberId: user.id,
+      lastReadAt: now.toISOString(),
+    });
+  }
+
   // Only the caller's own notification rows are touched, so no further access
   // checks are needed.
   const toMark = await prisma.notification.findMany({
@@ -611,7 +632,7 @@ export async function markThreadRead(target: {
 
   await prisma.notification.updateMany({
     where: { recipientId: user.id, read: false, linkUrl },
-    data: { read: true, readAt: new Date() },
+    data: { read: true, readAt: now },
   });
   const unread = await prisma.notification.count({
     where: { recipientId: user.id, read: false },
@@ -625,6 +646,81 @@ export async function markThreadRead(target: {
       ...new Set(toMark.map((n) => n.tag).filter((t): t is string => !!t)),
     ],
     unread,
+  });
+}
+
+/** Sum of unread notification counts for inbox thread links. */
+export async function getInboxUnreadCount(): Promise<number> {
+  const user = await requireUser();
+  const rows = await prisma.notification.groupBy({
+    by: ["linkUrl"],
+    where: {
+      recipientId: user.id,
+      read: false,
+      linkUrl: { startsWith: "/dashboard/messages/" },
+    },
+    _count: true,
+  });
+  return rows.reduce((sum, r) => sum + r._count, 0);
+}
+
+/**
+ * Edit own message body (within a reasonable window). Sets updatedAt via Prisma.
+ */
+export async function editMessage(
+  messageId: string,
+  body: string,
+): Promise<ActionResult<{ id: string; body: string; updatedAt: string }>> {
+  return safeAction("Edit message", async () => {
+    const user = await requireUser();
+    const trimmed = body.trim();
+    if (!trimmed) throw new Error("Message cannot be empty");
+
+    const message = await prisma.message.findFirst({
+      where: { id: messageId },
+      select: {
+        id: true,
+        authorId: true,
+        createdAt: true,
+        conversationId: true,
+        projectId: true,
+        taskId: true,
+        kind: true,
+      },
+    });
+    if (!message) throw new Error("Message not found");
+    if (message.authorId !== user.id)
+      throw new Error("You can only edit your own messages");
+    if (message.kind !== "message")
+      throw new Error("This message cannot be edited");
+    const ageMs = Date.now() - message.createdAt.getTime();
+    if (ageMs > 24 * 60 * 60 * 1000)
+      throw new Error("Messages can only be edited within 24 hours");
+
+    const updated = await prisma.message.update({
+      where: { id: message.id },
+      data: { body: trimmed },
+      select: { id: true, body: true, updatedAt: true },
+    });
+
+    const channels: string[] = [];
+    if (message.taskId) channels.push(taskChannel(message.taskId));
+    if (message.projectId) channels.push(projectChannel(message.projectId));
+    if (message.conversationId)
+      channels.push(conversationChannel(message.conversationId));
+    void broadcast(channels, {
+      type: "message.updated",
+      messageId: updated.id,
+      body: toDisplayBody(updated.body),
+      updatedAt: updated.updatedAt.toISOString(),
+      edited: true,
+    });
+
+    return {
+      id: updated.id,
+      body: toDisplayBody(updated.body),
+      updatedAt: updated.updatedAt.toISOString(),
+    };
   });
 }
 

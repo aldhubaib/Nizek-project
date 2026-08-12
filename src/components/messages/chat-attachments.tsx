@@ -210,7 +210,7 @@ export function AttachmentBubble({
           />
         </button>
         {menu && (
-          <div className="absolute left-2 top-2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+          <div className="absolute left-2 top-2 opacity-0 transition-opacity focus-within:opacity-100 max-lg:opacity-100 group-hover:opacity-100">
             {menu}
           </div>
         )}
@@ -220,7 +220,7 @@ export function AttachmentBubble({
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="absolute bottom-2 right-2 grid size-8 place-items-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 group-hover:opacity-100"
+          className="absolute bottom-2 right-2 grid size-8 place-items-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 max-lg:opacity-100 group-hover:opacity-100"
           aria-label="Download"
         >
           <Download className="h-4 w-4" />
@@ -244,7 +244,7 @@ export function AttachmentBubble({
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="absolute right-2 top-2 grid size-8 place-items-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 group-hover:opacity-100"
+          className="absolute right-2 top-2 grid size-8 place-items-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 max-lg:opacity-100 group-hover:opacity-100"
           aria-label="Download"
         >
           <Download className="h-4 w-4" />
@@ -314,8 +314,8 @@ export function AttachmentBubble({
         className="flex items-center gap-3 rounded-2xl border border-border/60 bg-surface/60 p-3 text-foreground transition-colors hover:bg-surface"
       >
         <div className="relative grid size-11 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
-          <Icon className="h-5 w-5 transition-opacity group-hover:opacity-0" />
-          <Download className="absolute h-5 w-5 opacity-0 transition-opacity group-hover:opacity-100" />
+          <Icon className="h-5 w-5 transition-opacity max-lg:opacity-0 group-hover:opacity-0" />
+          <Download className="absolute h-5 w-5 opacity-0 transition-opacity max-lg:opacity-100 group-hover:opacity-100" />
         </div>
         <div className="min-w-0 flex-1 pr-6">
           <div className="truncate text-sm font-semibold">{attachment.name}</div>

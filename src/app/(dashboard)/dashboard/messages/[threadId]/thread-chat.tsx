@@ -20,9 +20,6 @@ import {
   ChevronDown,
   Reply,
   Copy,
-  Forward,
-  Pin,
-  Star,
   Trash2,
   Clock,
   RotateCcw,
@@ -33,6 +30,11 @@ import {
   Users,
   Bell,
   BellOff,
+  Check,
+  CheckCheck,
+  Pencil,
+  Camera,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,6 +50,7 @@ import { cn } from "@/lib/utils";
 import {
   toggleReaction,
   deleteMessage as deleteMessageAction,
+  editMessage,
   getThreadMessages,
   getProjectTaskRefs,
   markThreadRead,
@@ -57,6 +60,11 @@ import {
   type ReactionSummary,
   type TaskPickerItem,
 } from "@/actions/messages";
+import {
+  CreateTaskFromMessageDialog,
+  type CreateTaskFromMessagePayload,
+} from "@/components/messages/create-task-from-message";
+import { useVisualViewportFrame } from "@/hooks/use-visual-viewport-frame";
 import {
   isThreadMuted,
   setThreadMuted,
@@ -171,6 +179,8 @@ export type ChatMessage = {
   authorImageUrl?: string | null;
   body: string;
   createdAt: string;
+  updatedAt?: string;
+  edited?: boolean;
   attachments: MessageAttachment[];
   reactions: ReactionSummary[];
   replyToId?: string | null;
@@ -349,6 +359,42 @@ type PendingFile = { key: string; file: File; previewUrl: string | null };
 // presence, composer keystrokes, recording timer) don't re-render every row —
 // a row only re-renders when its own `m`/derived props change. Callbacks are
 // stable (useCallback in the parent), so `memo` holds.
+function MessageMeta({
+  createdAt,
+  edited,
+  mine,
+  blue,
+  peerLastReadAt,
+}: {
+  createdAt: string;
+  edited?: boolean;
+  mine: boolean;
+  blue: boolean;
+  peerLastReadAt?: string | null;
+}) {
+  const read =
+    mine &&
+    peerLastReadAt != null &&
+    new Date(createdAt).getTime() <= new Date(peerLastReadAt).getTime();
+  return (
+    <span
+      className={cn(
+        "ml-1 inline-flex shrink-0 translate-y-0.5 items-center gap-0.5 text-[10px] leading-none",
+        blue ? "text-primary-foreground/70" : "text-muted-foreground",
+      )}
+    >
+      {edited && <span className="italic opacity-80">edited</span>}
+      <span>{formatTime(createdAt)}</span>
+      {mine &&
+        (read ? (
+          <CheckCheck className="h-3 w-3" aria-label="Read" />
+        ) : (
+          <Check className="h-3 w-3" aria-label="Sent" />
+        ))}
+    </span>
+  );
+}
+
 const MessageRow = memo(function MessageRow({
   m,
   mine,
@@ -360,10 +406,19 @@ const MessageRow = memo(function MessageRow({
   replied,
   showTaskCard,
   currentMemberId,
+  peerLastReadAt,
+  canCreateTask,
+  editing,
+  editDraft,
   react,
   handleReply,
   handleCopy,
   handleDelete,
+  handleEdit,
+  handleCreateTask,
+  onEditDraftChange,
+  onSaveEdit,
+  onCancelEdit,
   scrollToMessage,
   openImage,
 }: {
@@ -377,15 +432,85 @@ const MessageRow = memo(function MessageRow({
   replied: ChatMessage | null | undefined;
   showTaskCard: boolean;
   currentMemberId: string;
+  peerLastReadAt?: string | null;
+  canCreateTask?: boolean;
+  editing: boolean;
+  editDraft: string;
   react: (id: string, emoji: string) => void;
   handleReply: (id: string) => void;
   handleCopy: (text: string) => void;
   handleDelete: (id: string) => void;
+  handleEdit: (id: string) => void;
+  handleCreateTask: (m: ChatMessage) => void;
+  onEditDraftChange: (v: string) => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
   scrollToMessage: (id: string) => void;
   openImage: (att: MessageAttachment) => void;
 }) {
   const imageAtts = m.attachments.filter((a) => a.isImage);
   const fileAtts = m.attachments.filter((a) => !a.isImage);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [swipeX, setSwipeX] = useState(0);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const swiped = useRef(false);
+
+  const clearLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const actionHandlers: MessageActionHandlers = {
+    onReact: (emoji) => react(m.id, emoji),
+    onReply: () => handleReply(m.id),
+    onCopy: () => handleCopy(m.body),
+    onDelete: () => handleDelete(m.id),
+    onEdit: mine && m.kind !== "rejection" ? () => handleEdit(m.id) : undefined,
+    onCreateTask: canCreateTask ? () => handleCreateTask(m) : undefined,
+  };
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchStart.current = { x: t.clientX, y: t.clientY };
+    swiped.current = false;
+    clearLongPress();
+    longPressTimer.current = setTimeout(() => {
+      longPressTimer.current = null;
+      if (!swiped.current) {
+        setMenuOpen(true);
+        if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+          try {
+            navigator.vibrate(12);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }, 450);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!touchStart.current) return;
+    const t = e.touches[0];
+    const dx = t.clientX - touchStart.current.x;
+    const dy = t.clientY - touchStart.current.y;
+    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearLongPress();
+    if (Math.abs(dy) > Math.abs(dx)) return;
+    if (dx > 0) {
+      swiped.current = true;
+      setSwipeX(Math.min(72, dx));
+    }
+  };
+
+  const onTouchEnd = () => {
+    clearLongPress();
+    if (swipeX > 60) handleReply(m.id);
+    setSwipeX(0);
+    touchStart.current = null;
+  };
 
   if (m.deadlineReminder) {
     return (
@@ -429,10 +554,19 @@ const MessageRow = memo(function MessageRow({
       )}
       <div
         className={cn(
-          "flex gap-2",
+          "flex gap-2 touch-pan-y",
           mine ? "justify-end" : "justify-start",
           newGroup && !showDay && notFirst && "mt-3",
         )}
+        style={swipeX ? { transform: `translateX(${swipeX}px)` } : undefined}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={() => {
+          clearLongPress();
+          setSwipeX(0);
+          touchStart.current = null;
+        }}
       >
         {!mine && (
           <div className="w-8 shrink-0 self-start">
@@ -465,7 +599,7 @@ const MessageRow = memo(function MessageRow({
           {showAuthor && (
             <div className="px-1 text-tiny text-muted-foreground">{m.authorName}</div>
           )}
-          {(m.body || replied || (m.task && showTaskCard)) && (() => {
+          {(m.body || replied || (m.task && showTaskCard) || editing) && (() => {
             const notice = (!!m.task && showTaskCard) || m.kind === "rejection";
             const blue = mine && !notice;
             return (
@@ -527,7 +661,34 @@ const MessageRow = memo(function MessageRow({
                     </span>
                   </button>
                 )}
-                {m.body &&
+                {editing ? (
+                  <div className="flex flex-col gap-2">
+                    <textarea
+                      value={editDraft}
+                      onChange={(e) => onEditDraftChange(e.target.value)}
+                      className="min-h-[4rem] w-full resize-none rounded-md border border-border/60 bg-background px-2 py-1.5 text-sm text-foreground"
+                      rows={3}
+                      autoFocus
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={onCancelEdit}
+                        className="rounded-full px-3 py-1 text-xs text-muted-foreground hover:bg-surface"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onSaveEdit}
+                        className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  m.body &&
                   (m.kind === "rejection" ? (
                     (() => {
                       const who = (m.mentions ?? []).find((n) =>
@@ -569,25 +730,22 @@ const MessageRow = memo(function MessageRow({
                       <span className="whitespace-pre-wrap break-words">
                         {renderMessageBody(m.body, m.mentions, blue)}
                       </span>
-                      <span
-                        className={cn(
-                          "ml-1 shrink-0 translate-y-0.5 text-[10px] leading-none",
-                          blue
-                            ? "text-primary-foreground/70"
-                            : "text-muted-foreground",
-                        )}
-                      >
-                        {formatTime(m.createdAt)}
-                      </span>
+                      <MessageMeta
+                        createdAt={m.createdAt}
+                        edited={m.edited}
+                        mine={mine}
+                        blue={blue}
+                        peerLastReadAt={peerLastReadAt}
+                      />
                     </div>
-                  ))}
+                  ))
+                )}
               </div>
               <MessageCaret
                 mine={mine}
-                onReact={(emoji) => react(m.id, emoji)}
-                onReply={() => handleReply(m.id)}
-                onCopy={() => handleCopy(m.body)}
-                onDelete={() => handleDelete(m.id)}
+                open={menuOpen}
+                onOpenChange={setMenuOpen}
+                {...actionHandlers}
               />
             </div>
             );
@@ -611,14 +769,7 @@ const MessageRow = memo(function MessageRow({
                   attachment={a}
                   mine={mine}
                   onOpenImage={openImage}
-                  menu={
-                    <ImageActionsMenu
-                      onReact={(emoji) => react(m.id, emoji)}
-                      onReply={() => handleReply(m.id)}
-                      onCopy={() => handleCopy(m.body)}
-                      onDelete={() => handleDelete(m.id)}
-                    />
-                  }
+                  menu={<ImageActionsMenu {...actionHandlers} />}
                 />
               ))}
             </div>
@@ -632,18 +783,26 @@ const MessageRow = memo(function MessageRow({
                   mine={mine}
                   onOpenImage={openImage}
                   timeLabel={
-                    isVoiceAttachment(a) ? formatTime(m.createdAt) : undefined
+                    // Own attachment-only voice uses MessageMeta (read receipts).
+                    isVoiceAttachment(a) && !(!m.body && mine)
+                      ? formatTime(m.createdAt)
+                      : undefined
                   }
-                  menu={
-                    <FileCaretMenu
-                      onReact={(emoji) => react(m.id, emoji)}
-                      onReply={() => handleReply(m.id)}
-                      onCopy={() => handleCopy(m.body)}
-                      onDelete={() => handleDelete(m.id)}
-                    />
-                  }
+                  menu={<FileCaretMenu {...actionHandlers} />}
                 />
               ))}
+            </div>
+          )}
+          {/* Attachment-only bubbles: time + read receipts for mine. */}
+          {!m.body && !editing && (imageAtts.length > 0 || fileAtts.length > 0) && (
+            <div className={cn("px-1", mine && "self-end")}>
+              <MessageMeta
+                createdAt={m.createdAt}
+                edited={m.edited}
+                mine={mine}
+                blue={false}
+                peerLastReadAt={peerLastReadAt}
+              />
             </div>
           )}
           {m.reactions.length > 0 && (
@@ -689,6 +848,11 @@ export function ThreadChat({
   mentionables = [],
   inactive = false,
   readOnly = false,
+  canCreateTask = false,
+  allowedTaskTypes = [],
+  activeContractType = null,
+  projectName,
+  peerLastReadAt: initialPeerLastReadAt = null,
 }: {
   channel: string;
   presenceChannel: string | null;
@@ -704,11 +868,20 @@ export function ThreadChat({
   mentionables?: { id: string; name: string }[];
   inactive?: boolean;
   readOnly?: boolean;
+  canCreateTask?: boolean;
+  allowedTaskTypes?: string[];
+  activeContractType?: string | null;
+  projectName?: string;
+  peerLastReadAt?: string | null;
 }) {
+  const frameRef = useVisualViewportFrame<HTMLDivElement>();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [hasMore, setHasMore] = useState(hasMoreOlder);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const skipAutoScrollRef = useRef(false);
+  const nearBottomRef = useRef(true);
+  const [nearBottom, setNearBottom] = useState(true);
+  const [newBelow, setNewBelow] = useState(0);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingFile[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -716,6 +889,25 @@ export function ThreadChat({
   const [dragging, setDragging] = useState(false);
   const [view, setView] = useState<"chat" | "files">("chat");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [peerLastReadAt, setPeerLastReadAt] = useState<string | null>(
+    initialPeerLastReadAt,
+  );
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [createTaskPayload, setCreateTaskPayload] =
+    useState<CreateTaskFromMessagePayload | null>(null);
+  const [holdRecording, setHoldRecording] = useState(false);
+  const [slideCancelArmed, setSlideCancelArmed] = useState(false);
+  const holdStartXRef = useRef<number | null>(null);
+  /** Set when pointer-up happens before MediaRecorder is ready. */
+  const holdEndedRef = useRef<{ ended: boolean; cancel: boolean }>({
+    ended: false,
+    cancel: false,
+  });
+  const topSentinelRef = useRef<HTMLDivElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const photosInputRef = useRef<HTMLInputElement>(null);
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Thread mute: server-stored, all devices. Muted threads produce no
   // notification row, push, or chime — the thread itself still updates live.
   const threadKey = target.conversationId
@@ -769,6 +961,42 @@ export function ThreadChat({
     setMessages(initialMessages);
     setHasMore(hasMoreOlder);
   }
+
+  const [prevPeerRead, setPrevPeerRead] = useState(initialPeerLastReadAt);
+  if (prevPeerRead !== initialPeerLastReadAt) {
+    setPrevPeerRead(initialPeerLastReadAt);
+    setPeerLastReadAt(initialPeerLastReadAt);
+  }
+
+  // Restore composer draft for this thread from sessionStorage.
+  useEffect(() => {
+    if (!threadKey) return;
+    try {
+      const saved = sessionStorage.getItem(`nizek-chat-draft:${threadKey}`);
+      if (saved) setDraft(saved);
+    } catch {
+      /* private mode */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadKey]);
+
+  // Persist draft (debounced).
+  useEffect(() => {
+    if (!threadKey) return;
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      try {
+        const key = `nizek-chat-draft:${threadKey}`;
+        if (draft.trim()) sessionStorage.setItem(key, draft);
+        else sessionStorage.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+    }, 250);
+    return () => {
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    };
+  }, [draft, threadKey]);
 
   // Fetch the previous page (older messages) and prepend it, keeping the
   // viewport anchored so the list doesn't jump.
@@ -835,6 +1063,8 @@ export function ThreadChat({
                 authorImageUrl: m.authorImageUrl ?? null,
                 body: m.body,
                 createdAt: m.createdAt,
+                updatedAt: (m as { updatedAt?: string }).updatedAt,
+                edited: (m as { edited?: boolean }).edited,
                 attachments: m.attachments,
                 reactions: [],
                 replyToId,
@@ -929,6 +1159,11 @@ export function ThreadChat({
           message?: MessageDTO;
           messageId?: string;
           reactions?: ReactionSummary[];
+          body?: string;
+          updatedAt?: string;
+          edited?: boolean;
+          memberId?: string;
+          lastReadAt?: string;
         }
       | null;
     if (!d) return;
@@ -936,7 +1171,12 @@ export function ThreadChat({
       const m = d.message;
       // A message arriving while the user is watching this thread counts as
       // read — otherwise it stays unread in the DB until the next page load.
-      if (m.authorId !== currentMemberId) requestMarkRead();
+      if (m.authorId !== currentMemberId) {
+        requestMarkRead();
+        if (!nearBottomRef.current) {
+          setNewBelow((n) => n + 1);
+        }
+      }
       setMessages((prev) => {
         if (prev.some((x) => x.id === m.id)) return prev;
         return [
@@ -948,6 +1188,8 @@ export function ThreadChat({
             authorImageUrl: m.authorImageUrl ?? null,
             body: m.body,
             createdAt: m.createdAt,
+            updatedAt: (m as MessageDTO & { updatedAt?: string }).updatedAt,
+            edited: (m as MessageDTO & { edited?: boolean }).edited,
             attachments: m.attachments ?? [],
             reactions: [],
             replyToId: m.replyToId ?? null,
@@ -958,6 +1200,29 @@ export function ThreadChat({
           },
         ];
       });
+    } else if (d.type === "message.updated" && d.messageId) {
+      const { messageId, body, updatedAt, edited } = d;
+      setMessages((prev) =>
+        prev.map((x) =>
+          x.id === messageId
+            ? {
+                ...x,
+                body: body ?? x.body,
+                updatedAt: updatedAt ?? x.updatedAt,
+                edited: edited ?? true,
+              }
+            : x,
+        ),
+      );
+    } else if (d.type === "thread.read" && d.memberId && d.memberId !== currentMemberId) {
+      if (d.lastReadAt) {
+        setPeerLastReadAt((prev) => {
+          if (!prev) return d.lastReadAt!;
+          return new Date(d.lastReadAt!).getTime() > new Date(prev).getTime()
+            ? d.lastReadAt!
+            : prev;
+        });
+      }
     } else if (d.type === "reaction.updated" && d.messageId) {
       const { messageId, reactions } = d;
       setMessages((prev) =>
@@ -972,15 +1237,56 @@ export function ThreadChat({
     // Reconnected but the missed events couldn't be replayed — refetch.
   }, () => void refreshLatest());
 
+  // Track whether the user is near the bottom of the scroller.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+      const near = dist < 120;
+      nearBottomRef.current = near;
+      setNearBottom(near);
+      if (near) setNewBelow(0);
+    };
+    onScroll();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
   useEffect(() => {
     // Prepending older pages must not yank the user to the bottom.
     if (skipAutoScrollRef.current) {
       skipAutoScrollRef.current = false;
       return;
     }
+    if (!nearBottomRef.current) return;
     const el = scrollerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length, typing.length, outbox.length]);
+
+  // Infinite load older via top sentinel.
+  useEffect(() => {
+    const root = scrollerRef.current;
+    const sentinel = topSentinelRef.current;
+    if (!root || !sentinel || !hasMore) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void loadOlder();
+      },
+      { root, rootMargin: "120px 0px 0px 0px", threshold: 0 },
+    );
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [hasMore, loadOlder]);
+
+  const scrollToBottom = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    setNewBelow(0);
+    nearBottomRef.current = true;
+    setNearBottom(true);
+  }, []);
 
   const byId = useMemo(() => {
     const map = new Map<string, ChatMessage>();
@@ -1163,6 +1469,11 @@ export function ThreadChat({
     setReplyTo(null);
     setPendingTaskRef(null);
     setDismissedPreview(null);
+    try {
+      sessionStorage.removeItem(`nizek-chat-draft:${threadKey}`);
+    } catch {
+      /* ignore */
+    }
 
     // The app-wide outbox uploads and delivers this even if the user leaves
     // the thread; this component only renders the entry's progress bubble.
@@ -1230,8 +1541,15 @@ export function ThreadChat({
       setTimeout(() => setRecordError(null), 4000);
       return;
     }
+    holdEndedRef.current = { ended: false, cancel: false };
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Pointer already released while waiting for mic permission.
+      if (holdEndedRef.current.ended) {
+        stream.getTracks().forEach((t) => t.stop());
+        setHoldRecording(false);
+        return;
+      }
       const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(
         (t) => MediaRecorder.isTypeSupported(t),
       );
@@ -1284,7 +1602,11 @@ export function ThreadChat({
           : 0;
         setRecordSecs(Math.floor((recordAccumulatedRef.current + running) / 1000));
       }, 250);
+      if (holdEndedRef.current.ended) {
+        stopRecording(!holdEndedRef.current.cancel);
+      }
     } catch {
+      setHoldRecording(false);
       setRecordError("Microphone access was denied. Allow it in your browser settings to send voice messages.");
       setTimeout(() => setRecordError(null), 5000);
     }
@@ -1374,6 +1696,96 @@ export function ThreadChat({
     });
   }, []);
 
+  const handleEdit = useCallback(
+    (id: string) => {
+      const msg = messages.find((m) => m.id === id);
+      if (!msg) return;
+      setEditingId(id);
+      setEditDraft(msg.body);
+    },
+    [messages],
+  );
+
+  const onSaveEdit = useCallback(() => {
+    if (!editingId) return;
+    const id = editingId;
+    const body = editDraft.trim();
+    if (!body) return;
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === id
+          ? { ...m, body, edited: true, updatedAt: new Date().toISOString() }
+          : m,
+      ),
+    );
+    setEditingId(null);
+    setEditDraft("");
+    startTransition(async () => {
+      const res = await editMessage(id, body);
+      if (res.ok) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === id
+              ? {
+                  ...m,
+                  body: res.data.body,
+                  updatedAt: res.data.updatedAt,
+                  edited: true,
+                }
+              : m,
+          ),
+        );
+      }
+    });
+  }, [editingId, editDraft]);
+
+  const onCancelEdit = useCallback(() => {
+    setEditingId(null);
+    setEditDraft("");
+  }, []);
+
+  const handleCreateTask = useCallback(
+    (m: ChatMessage) => {
+      if (!canCreateTask || !target.projectId || inactive) return;
+      const selection = window.getSelection()?.toString()?.trim() ?? "";
+      const msgEl = document.getElementById(`msg-${m.id}`);
+      const selectionInMessage =
+        selection &&
+        msgEl &&
+        window.getSelection()?.anchorNode &&
+        msgEl.contains(window.getSelection()!.anchorNode);
+      const titleSource = selectionInMessage
+        ? selection
+        : (m.body.split("\n").find((l) => l.trim()) ?? m.body).trim();
+      const title =
+        titleSource.length > 120
+          ? `${titleSource.slice(0, 120)}…`
+          : titleSource || "New task";
+      const threadPath = target.taskId
+        ? `/dashboard/projects/${target.projectId}/tasks/${target.taskId}`
+        : `/dashboard/messages/project-${target.projectId}`;
+      setCreateTaskPayload({
+        projectId: target.projectId,
+        projectName: projectName ?? title,
+        allowedTaskTypes,
+        activeContractType: activeContractType ?? "",
+        title,
+        description: m.body,
+        sourceAuthor: m.authorName,
+        threadPath,
+      });
+    },
+    [
+      canCreateTask,
+      target.projectId,
+      target.taskId,
+      inactive,
+      projectName,
+      allowedTaskTypes,
+      activeContractType,
+    ],
+  );
+
   const peersOnline = peerMemberIds.some((id) => online.has(id));
   const typingLabel = useMemo(() => {
     const names = typing.map((id) => memberNames[id] ?? "Someone");
@@ -1422,33 +1834,46 @@ export function ThreadChat({
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
-  // On some phones (iOS standalone PWA above all) focusing the composer makes
-  // the OS scroll the whole window up to keep the input above the keyboard —
-  // and when the keyboard closes, that offset can stick. The thread header
-  // ends up above the screen and messages render under the status bar. The
-  // layout never wants a window scroll (the message list scrolls internally),
-  // so whenever the keyboard is gone, put the window back.
-  useEffect(() => {
-    const vv = window.visualViewport;
-    const keyboardClosed = () => !vv || vv.height >= window.innerHeight - 60;
-    const restore = () => {
-      if (!keyboardClosed()) return;
-      if (window.scrollY !== 0 || (vv?.offsetTop ?? 0) !== 0) {
-        window.scrollTo(0, 0);
+  const replyingTo = replyTo ? byId.get(replyTo) : null;
+
+  const isCoarsePointer = () =>
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: coarse)").matches;
+
+  // Hold-to-record: track pointer on window so the composer UI can swap to the
+  // recording bar without losing pointerup / slide-to-cancel.
+  const onMicPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    holdStartXRef.current = e.clientX;
+    setSlideCancelArmed(false);
+    setHoldRecording(true);
+    let cancelled = false;
+    const onMove = (ev: PointerEvent) => {
+      if (holdStartXRef.current == null) return;
+      const dx = ev.clientX - holdStartXRef.current;
+      cancelled = dx < -80;
+      setSlideCancelArmed(cancelled);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      setHoldRecording(false);
+      setSlideCancelArmed(false);
+      holdStartXRef.current = null;
+      if (recorderRef.current) {
+        stopRecording(!cancelled);
+      } else {
+        // Mic permission / recorder still starting — finish when ready.
+        holdEndedRef.current = { ended: true, cancel: cancelled };
       }
     };
-    restore();
-    vv?.addEventListener("resize", restore);
-    vv?.addEventListener("scroll", restore);
-    window.addEventListener("focusout", restore);
-    return () => {
-      vv?.removeEventListener("resize", restore);
-      vv?.removeEventListener("scroll", restore);
-      window.removeEventListener("focusout", restore);
-    };
-  }, []);
-
-  const replyingTo = replyTo ? byId.get(replyTo) : null;
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    void startRecording();
+  };
 
   // First link in the draft — previewed above the composer until dismissed.
   const composerUrl = useMemo(() => {
@@ -1458,6 +1883,7 @@ export function ThreadChat({
 
   return (
     <div
+      ref={frameRef}
       className="relative flex min-h-0 flex-1 flex-col"
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
@@ -1538,84 +1964,112 @@ export function ThreadChat({
       </div>
 
       {/* Messages */}
-      <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        <div className="mx-auto flex max-w-3xl flex-col gap-1.5">
-          {hasMore && (
-            <div className="flex justify-center pb-2">
-              <button
-                type="button"
-                onClick={loadOlder}
-                disabled={loadingOlder}
-                className="flex items-center gap-2 rounded-full border border-border/60 bg-surface/60 px-4 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:opacity-60"
-              >
-                {loadingOlder && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                {loadingOlder ? "Loading…" : "Load earlier messages"}
-              </button>
-            </div>
-          )}
-          {messages.map((m, i) => {
-            const prev = messages[i - 1];
-            const showDay = !prev || !sameDay(prev.createdAt, m.createdAt);
-            const newGroup = !prev || prev.authorId !== m.authorId || showDay;
-            const mine =
-              m.kind === "deadline_reminder"
-                ? false
-                : m.authorId === currentMemberId;
-            return (
-              <MessageRow
-                key={m.id}
-                m={m}
-                mine={mine}
-                showDay={showDay}
-                newGroup={newGroup}
-                showAuthor={!mine && newGroup}
-                notFirst={i > 0}
-                dimmed={Boolean(sq && matchIds && !matchIds.has(m.id))}
-                replied={m.replyToId ? byId.get(m.replyToId) : null}
-                showTaskCard={!target.taskId}
-                currentMemberId={currentMemberId}
-                react={react}
-                handleReply={handleReply}
-                handleCopy={handleCopy}
-                handleDelete={handleDelete}
-                scrollToMessage={scrollToMessage}
-                openImage={openImage}
-              />
-            );
-          })}
-          {outbox.map((o) => (
-            <OutboxBubble
-              key={o.tempId}
-              entry={o}
-              onRetry={() => retryOutboxEntry(o.tempId)}
-              onDiscard={() => discardOutboxEntry(o.tempId)}
-            />
-          ))}
-          {messages.length === 0 && outbox.length === 0 && (
-            <div className="py-16 text-center text-xs text-muted-foreground">
-              No messages yet. Say hi!
-            </div>
-          )}
-          {typingLabel && (
-            <div className="flex items-end gap-2">
-              <div className="w-8 shrink-0" />
-              <div className="flex flex-col gap-1">
-                <div className="rounded-2xl rounded-bl-md bg-surface-2 px-3.5 py-2.5">
-                  <div className="flex items-center gap-1" aria-label={typingLabel}>
-                    <span className="size-1.5 animate-[typing_1.4s_ease-in-out_infinite] rounded-full bg-primary [animation-delay:-0.32s]" />
-                    <span className="size-1.5 animate-[typing_1.4s_ease-in-out_infinite] rounded-full bg-primary [animation-delay:-0.16s]" />
-                    <span className="size-1.5 animate-[typing_1.4s_ease-in-out_infinite] rounded-full bg-primary" />
-                  </div>
-                </div>
-                <span className="px-1 text-tiny text-muted-foreground">{typingLabel}</span>
+      <div className="relative min-h-0 flex-1">
+        <div ref={scrollerRef} className="h-full overflow-y-auto px-4 py-4">
+          <div className="mx-auto flex max-w-3xl flex-col gap-1.5">
+            <div ref={topSentinelRef} className="h-px w-full" aria-hidden />
+            {hasMore && (
+              <div className="flex justify-center pb-2">
+                <button
+                  type="button"
+                  onClick={loadOlder}
+                  disabled={loadingOlder}
+                  className="flex items-center gap-2 rounded-full border border-border/60 bg-surface/60 px-4 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:opacity-60"
+                >
+                  {loadingOlder && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {loadingOlder ? "Loading…" : "Load earlier messages"}
+                </button>
               </div>
-            </div>
-          )}
+            )}
+            {messages.map((m, i) => {
+              const prev = messages[i - 1];
+              const showDay = !prev || !sameDay(prev.createdAt, m.createdAt);
+              const newGroup = !prev || prev.authorId !== m.authorId || showDay;
+              const mine =
+                m.kind === "deadline_reminder"
+                  ? false
+                  : m.authorId === currentMemberId;
+              return (
+                <MessageRow
+                  key={m.id}
+                  m={m}
+                  mine={mine}
+                  showDay={showDay}
+                  newGroup={newGroup}
+                  showAuthor={!mine && newGroup}
+                  notFirst={i > 0}
+                  dimmed={Boolean(sq && matchIds && !matchIds.has(m.id))}
+                  replied={m.replyToId ? byId.get(m.replyToId) : null}
+                  showTaskCard={!target.taskId}
+                  currentMemberId={currentMemberId}
+                  peerLastReadAt={peerLastReadAt}
+                  canCreateTask={
+                    canCreateTask && !!target.projectId && !inactive
+                  }
+                  editing={editingId === m.id}
+                  editDraft={editingId === m.id ? editDraft : ""}
+                  react={react}
+                  handleReply={handleReply}
+                  handleCopy={handleCopy}
+                  handleDelete={handleDelete}
+                  handleEdit={handleEdit}
+                  handleCreateTask={handleCreateTask}
+                  onEditDraftChange={setEditDraft}
+                  onSaveEdit={onSaveEdit}
+                  onCancelEdit={onCancelEdit}
+                  scrollToMessage={scrollToMessage}
+                  openImage={openImage}
+                />
+              );
+            })}
+            {outbox.map((o) => (
+              <OutboxBubble
+                key={o.tempId}
+                entry={o}
+                onRetry={() => retryOutboxEntry(o.tempId)}
+                onDiscard={() => discardOutboxEntry(o.tempId)}
+              />
+            ))}
+            {messages.length === 0 && outbox.length === 0 && (
+              <div className="flex flex-col items-center gap-1 py-16 text-center">
+                <div className="text-sm font-medium text-foreground">
+                  No messages yet
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Send a message to start the conversation.
+                </p>
+              </div>
+            )}
+            {typingLabel && (
+              <div className="flex items-end gap-2">
+                <div className="w-8 shrink-0" />
+                <div className="flex flex-col gap-1">
+                  <div className="rounded-2xl rounded-bl-md bg-surface-2 px-3.5 py-2.5">
+                    <div className="flex items-center gap-1" aria-label={typingLabel}>
+                      <span className="size-1.5 animate-[typing_1.4s_ease-in-out_infinite] rounded-full bg-primary [animation-delay:-0.32s]" />
+                      <span className="size-1.5 animate-[typing_1.4s_ease-in-out_infinite] rounded-full bg-primary [animation-delay:-0.16s]" />
+                      <span className="size-1.5 animate-[typing_1.4s_ease-in-out_infinite] rounded-full bg-primary" />
+                    </div>
+                  </div>
+                  <span className="px-1 text-tiny text-muted-foreground">{typingLabel}</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+        {newBelow > 0 && !nearBottom && (
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-lg"
+          >
+            ↓ New messages{newBelow > 1 ? ` (${newBelow})` : ""}
+          </button>
+        )}
       </div>
 
       {/* Composer */}
-      <div className="shrink-0 border-t border-border/60 p-3">
+      <div className="shrink-0 border-t border-border/60 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto max-w-3xl">
           {inactive || readOnly ? (
             <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-surface/30 px-4 py-3 text-xs text-muted-foreground">
@@ -1809,49 +2263,89 @@ export function ThreadChat({
           )}
           {recording ? (
             <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-surface/40 p-2 sm:gap-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="shrink-0 rounded-full text-muted-foreground hover:text-destructive"
-                aria-label="Discard recording"
-                onClick={() => stopRecording(false)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-              <div className="flex shrink-0 items-center gap-1.5 text-sm">
-                <span
-                  className={cn(
-                    "h-2 w-2 rounded-full bg-destructive",
-                    !recordPaused && "animate-pulse",
-                  )}
-                  aria-hidden
-                />
-                <span className="font-medium tabular-nums">
-                  {Math.floor(recordSecs / 60)}:{String(recordSecs % 60).padStart(2, "0")}
-                </span>
-              </div>
-              <VoiceVisualizer
-                analyserRef={analyserRef}
-                pausedRef={recordPausedRef}
-                paused={recordPaused}
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="shrink-0 rounded-full text-destructive hover:text-destructive"
-                onClick={togglePauseRecording}
-                aria-label={recordPaused ? "Resume recording" : "Pause recording"}
-              >
-                {recordPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-              </Button>
-              <Button
-                size="icon"
-                className="shrink-0 rounded-full bg-success text-background hover:bg-success/90"
-                onClick={() => stopRecording(true)}
-                aria-label="Send voice message"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
+              {holdRecording ? (
+                <>
+                  <div className="flex shrink-0 items-center gap-1.5 text-sm">
+                    <span
+                      className={cn(
+                        "h-2 w-2 rounded-full bg-destructive",
+                        !slideCancelArmed && "animate-pulse",
+                      )}
+                      aria-hidden
+                    />
+                    <span className="font-medium tabular-nums">
+                      {Math.floor(recordSecs / 60)}:
+                      {String(recordSecs % 60).padStart(2, "0")}
+                    </span>
+                  </div>
+                  <VoiceVisualizer
+                    analyserRef={analyserRef}
+                    pausedRef={recordPausedRef}
+                    paused={false}
+                  />
+                  <span
+                    className={cn(
+                      "shrink-0 text-xs",
+                      slideCancelArmed
+                        ? "font-medium text-destructive"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {slideCancelArmed ? "Release to cancel" : "Slide left to cancel"}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 rounded-full text-muted-foreground hover:text-destructive"
+                    aria-label="Discard recording"
+                    onClick={() => stopRecording(false)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                  <div className="flex shrink-0 items-center gap-1.5 text-sm">
+                    <span
+                      className={cn(
+                        "h-2 w-2 rounded-full bg-destructive",
+                        !recordPaused && "animate-pulse",
+                      )}
+                      aria-hidden
+                    />
+                    <span className="font-medium tabular-nums">
+                      {Math.floor(recordSecs / 60)}:
+                      {String(recordSecs % 60).padStart(2, "0")}
+                    </span>
+                  </div>
+                  <VoiceVisualizer
+                    analyserRef={analyserRef}
+                    pausedRef={recordPausedRef}
+                    paused={recordPaused}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 rounded-full text-destructive hover:text-destructive"
+                    onClick={togglePauseRecording}
+                    aria-label={recordPaused ? "Resume recording" : "Pause recording"}
+                  >
+                    {recordPaused ? (
+                      <Play className="h-4 w-4" />
+                    ) : (
+                      <Pause className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    size="icon"
+                    className="shrink-0 rounded-full bg-success text-background hover:bg-success/90"
+                    onClick={() => stopRecording(true)}
+                    aria-label="Send voice message"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
             </div>
           ) : (
           <div className="flex items-end gap-2 rounded-2xl border border-border/60 bg-surface/40 p-2">
@@ -1859,24 +2353,74 @@ export function ThreadChat({
               ref={fileInputRef}
               type="file"
               multiple
+              accept="*/*"
               className="hidden"
               onChange={(e) => {
                 pickFiles(e.target.files);
                 e.target.value = "";
-                // Hand focus back to the composer so Enter sends the message
-                // instead of re-activating the attach button.
                 composerRef.current?.focus();
               }}
             />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                pickFiles(e.target.files);
+                e.target.value = "";
+                composerRef.current?.focus();
+              }}
+            />
+            <input
+              ref={photosInputRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                pickFiles(e.target.files);
+                e.target.value = "";
+                composerRef.current?.focus();
+              }}
+            />
+            {/* Mobile: attach sheet; desktop: direct files. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Attach"
+                className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    send();
+                  }
+                }}
+              >
+                <Paperclip className="h-4 w-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-44">
+                <DropdownMenuItem onClick={() => cameraInputRef.current?.click()}>
+                  <Camera className="h-4 w-4" />
+                  <span className="flex-1">Camera</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => photosInputRef.current?.click()}>
+                  <ImageIcon className="h-4 w-4" />
+                  <span className="flex-1">Photos</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                  <FileText className="h-4 w-4" />
+                  <span className="flex-1">Files</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full"
+              className="hidden rounded-full lg:inline-flex"
               aria-label="Attach"
               onClick={() => fileInputRef.current?.click()}
               onKeyDown={(e) => {
-                // Focus lands back on this button when the file dialog closes;
-                // Enter should still send rather than reopen the picker.
                 if (e.key === "Enter") {
                   e.preventDefault();
                   send();
@@ -1897,6 +2441,7 @@ export function ThreadChat({
             <Textarea
               ref={composerRef}
               value={draft}
+              enterKeyHint="send"
               onScroll={(e) => {
                 const m = mirrorRef.current;
                 if (m) {
@@ -1909,8 +2454,6 @@ export function ThreadChat({
                 notifyTyping();
               }}
               onPaste={(e) => {
-                // Pasted images/screenshots (and copied files) go through the
-                // same pending-attachment flow as drag-and-drop.
                 const items = e.clipboardData?.items;
                 if (!items) return;
                 const files: File[] = [];
@@ -1918,8 +2461,6 @@ export function ThreadChat({
                   if (item.kind !== "file") continue;
                   const file = item.getAsFile();
                   if (!file) continue;
-                  // Clipboard screenshots arrive as a generic "image.png" —
-                  // give them a distinct, dated name.
                   if (file.type.startsWith("image/") && (!file.name || file.name === "image.png")) {
                     const ext = file.type.split("/")[1]?.split("+")[0] || "png";
                     const stamp = new Date()
@@ -1986,7 +2527,8 @@ export function ThreadChat({
                     return;
                   }
                 }
-                if (e.key === "Enter" && !e.shiftKey) {
+                // Enter sends on desktop only; coarse/touch keeps Enter as newline.
+                if (e.key === "Enter" && !e.shiftKey && !isCoarsePointer()) {
                   e.preventDefault();
                   send();
                 }
@@ -2019,9 +2561,9 @@ export function ThreadChat({
               <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-full"
-                onClick={startRecording}
-                aria-label="Record voice message"
+                className="rounded-full touch-none select-none"
+                onPointerDown={onMicPointerDown}
+                aria-label="Hold to record voice message"
               >
                 <Mic className="h-4 w-4" />
               </Button>
@@ -2042,6 +2584,7 @@ export function ThreadChat({
           renderMenu={(att) => {
             const msg = msgByAttachmentId.get(att.id);
             if (!msg) return null;
+            const mine = msg.authorId === currentMemberId;
             return (
               <ImageActionsMenu
                 onReact={(emoji) => react(msg.id, emoji)}
@@ -2050,6 +2593,22 @@ export function ThreadChat({
                   handleReply(msg.id);
                 }}
                 onCopy={() => handleCopy(msg.body)}
+                onEdit={
+                  mine
+                    ? () => {
+                        lb.close();
+                        handleEdit(msg.id);
+                      }
+                    : undefined
+                }
+                onCreateTask={
+                  canCreateTask && target.projectId && !inactive
+                    ? () => {
+                        lb.close();
+                        handleCreateTask(msg);
+                      }
+                    : undefined
+                }
                 onDelete={() => {
                   lb.close();
                   handleDelete(msg.id);
@@ -2060,7 +2619,7 @@ export function ThreadChat({
         />
       )}
       {searchOpen && (
-        <div className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl">
+        <div className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80">
           <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border/60 px-3">
             <Button
               variant="ghost"
@@ -2137,13 +2696,41 @@ export function ThreadChat({
         </div>
       )}
       {view === "files" && (
-        <div className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col bg-background shadow-xl">
+        <div className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80">
           <FilesPanel
             messages={messages.filter((m) => m.attachments.length > 0)}
             onClose={() => setView("chat")}
           />
         </div>
       )}
+
+      <CreateTaskFromMessageDialog
+        open={!!createTaskPayload}
+        onClose={() => setCreateTaskPayload(null)}
+        payload={createTaskPayload}
+        onCreated={(task) => {
+          if (!threadKey || !target.projectId) return;
+          // Project channel: optionally post a task reference via outbox.
+          if (isProjectChannel) {
+            enqueueOutboxMessage({
+              threadKey,
+              target,
+              body: `Created task #${fmtTaskNumber(task.taskNumber)} · ${task.title}`,
+              taskRefId: task.id,
+              files: [],
+            });
+          } else {
+            setPendingTaskRef({
+              id: task.id,
+              number: task.taskNumber,
+              title: task.title,
+              statusName: null,
+              statusColor: null,
+            });
+          }
+          setCreateTaskPayload(null);
+        }}
+      />
     </div>
   );
 }
@@ -2264,9 +2851,18 @@ type MessageActionHandlers = {
   onReply: () => void;
   onCopy: () => void;
   onDelete: () => void;
+  onEdit?: () => void;
+  onCreateTask?: () => void;
 };
 
-function ActionsMenuContent({ onReact, onReply, onCopy, onDelete }: MessageActionHandlers) {
+function ActionsMenuContent({
+  onReact,
+  onReply,
+  onCopy,
+  onDelete,
+  onEdit,
+  onCreateTask,
+}: MessageActionHandlers) {
   return (
     <DropdownMenuContent align="end" className="w-52 p-1" sideOffset={4}>
       <div className="flex items-center gap-0.5 px-1 py-1">
@@ -2291,18 +2887,18 @@ function ActionsMenuContent({ onReact, onReply, onCopy, onDelete }: MessageActio
         <Copy className="h-4 w-4" />
         <span className="flex-1">Copy</span>
       </DropdownMenuItem>
-      <DropdownMenuItem onClick={onReply}>
-        <Forward className="h-4 w-4" />
-        <span className="flex-1">Forward</span>
-      </DropdownMenuItem>
-      <DropdownMenuItem>
-        <Pin className="h-4 w-4" />
-        <span className="flex-1">Pin</span>
-      </DropdownMenuItem>
-      <DropdownMenuItem>
-        <Star className="h-4 w-4" />
-        <span className="flex-1">Star</span>
-      </DropdownMenuItem>
+      {onEdit && (
+        <DropdownMenuItem onClick={onEdit}>
+          <Pencil className="h-4 w-4" />
+          <span className="flex-1">Edit</span>
+        </DropdownMenuItem>
+      )}
+      {onCreateTask && (
+        <DropdownMenuItem onClick={onCreateTask}>
+          <CheckSquare className="h-4 w-4" />
+          <span className="flex-1">Create task</span>
+        </DropdownMenuItem>
+      )}
       <DropdownMenuSeparator />
       <DropdownMenuItem onClick={onDelete} variant="destructive">
         <Trash2 className="h-4 w-4" />
@@ -2314,14 +2910,20 @@ function ActionsMenuContent({ onReact, onReply, onCopy, onDelete }: MessageActio
 
 function MessageCaret({
   mine,
+  open,
+  onOpenChange,
   ...handlers
-}: { mine: boolean } & MessageActionHandlers) {
+}: {
+  mine: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+} & MessageActionHandlers) {
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger
         aria-label="Message actions"
         className={cn(
-          "absolute top-1 grid size-6 place-items-center rounded-full opacity-0 shadow-sm backdrop-blur transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[popup-open]:opacity-100",
+          "absolute top-1 grid size-6 place-items-center rounded-full opacity-0 shadow-sm backdrop-blur transition-opacity focus-visible:opacity-100 max-lg:opacity-100 group-hover:opacity-100 data-[popup-open]:opacity-100",
           mine
             ? "right-1 bg-primary/70 text-primary-foreground hover:bg-primary/90"
             : "right-1 bg-background/80 text-muted-foreground hover:bg-background hover:text-foreground",
@@ -2340,7 +2942,7 @@ function FileCaretMenu(handlers: MessageActionHandlers) {
       <DropdownMenuTrigger
         onClick={(e) => e.stopPropagation()}
         aria-label="Message actions"
-        className="grid size-7 place-items-center rounded-full bg-surface-2 text-muted-foreground opacity-0 shadow-sm backdrop-blur transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 data-[popup-open]:opacity-100"
+        className="grid size-7 place-items-center rounded-full bg-surface-2 text-muted-foreground opacity-0 shadow-sm backdrop-blur transition-opacity hover:text-foreground focus-visible:opacity-100 max-lg:opacity-100 group-hover:opacity-100 data-[popup-open]:opacity-100"
       >
         <ChevronDown className="h-4 w-4" />
       </DropdownMenuTrigger>

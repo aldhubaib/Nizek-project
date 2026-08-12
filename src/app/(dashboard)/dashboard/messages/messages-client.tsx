@@ -277,8 +277,25 @@ export function ThreadSidebar({ threads }: { threads: InboxThread[] }) {
       {/* Bottom padding clears the mobile bottom navigation bar. */}
       <ul className="min-h-0 flex-1 overflow-y-auto max-lg:pb-[calc(4rem+env(safe-area-inset-bottom))]">
         {rows.length === 0 && !showInactiveSection && (
-          <li className="p-6 text-center text-xs text-muted-foreground">
-            No conversations
+          <li className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+            <MessageSquare className="h-8 w-8 text-muted-foreground/50" />
+            <div>
+              <div className="text-sm font-medium text-foreground">
+                No conversations yet
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Start a direct message with the compose button.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setComposeOpen(true)}
+            >
+              <PenSquare className="h-3.5 w-3.5" />
+              New message
+            </Button>
           </li>
         )}
         {rows.map((thread) => (

@@ -20,6 +20,9 @@ const geistMono = Geist_Mono({
 
 export const viewport: Viewport = {
   themeColor: "#000000",
+  // Shrink the layout viewport when the soft keyboard opens (Android Chrome).
+  // iOS still needs the visualViewport frame hook in ThreadChat.
+  interactiveWidget: "resizes-content",
 };
 
 export async function generateMetadata(): Promise<Metadata> {

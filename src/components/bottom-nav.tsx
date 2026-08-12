@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -14,8 +15,11 @@ import {
   Trash,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getInboxUnreadCount } from "@/actions/messages";
+import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
+import { useChannel } from "@/components/realtime/hooks";
+import { userChannel, NOTIFICATION_READ, NOTIFICATION_NEW } from "@/lib/channels";
 
-// Same items + permission flags as the desktop sidebar.
 const NAV_ITEMS = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
   { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
@@ -27,7 +31,6 @@ const NAV_ITEMS = [
   { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
 ];
 
-// Tabs shown at once, including the trailing Menu tab.
 const MAX_TABS = 5;
 
 interface BottomNavProps {
@@ -35,17 +38,43 @@ interface BottomNavProps {
   canAudit?: boolean;
   canEquity?: boolean;
   canVault?: boolean;
-  /** Opens the drawer with the full sidebar (account, plus any overflow items). */
+  currentUserId?: string;
   onOpenMenu: () => void;
 }
 
 /**
- * Mobile/tablet bottom navigation. Applies the same permission filtering as
- * the sidebar. The Inbox tab is always kept visible; if there are ever more
- * items than tab slots, the extras stay reachable through the Menu drawer.
+ * Mobile/tablet bottom navigation. Inbox shows an unread badge when message
+ * notifications are pending.
  */
-export function BottomNav({ isAdmin = false, canAudit = false, canEquity = false, canVault = false, onOpenMenu }: BottomNavProps) {
+export function BottomNav({
+  isAdmin = false,
+  canAudit = false,
+  canEquity = false,
+  canVault = false,
+  currentUserId,
+  onOpenMenu,
+}: BottomNavProps) {
   const pathname = usePathname();
+  const [inboxUnread, setInboxUnread] = useState(0);
+  const cent = useCentrifugo();
+
+  useEffect(() => {
+    getInboxUnreadCount()
+      .then(setInboxUnread)
+      .catch(() => {});
+  }, [pathname]);
+
+  useChannel(cent && currentUserId ? userChannel(currentUserId) : null, (data) => {
+    const payload = data as { type?: string };
+    if (
+      payload.type === NOTIFICATION_READ ||
+      payload.type === NOTIFICATION_NEW ||
+      payload.type === "notification" ||
+      payload.type === "notification.created"
+    ) {
+      getInboxUnreadCount().then(setInboxUnread).catch(() => {});
+    }
+  });
 
   const canSeeTrash = canEquity || isAdmin;
   const allowed = NAV_ITEMS.filter(
@@ -76,6 +105,7 @@ export function BottomNav({ isAdmin = false, canAudit = false, canEquity = false
       <div className="flex h-16 items-stretch">
         {visible.map((item) => {
           const active = isActive(item.href);
+          const showBadge = item.name === "Inbox" && inboxUnread > 0;
           return (
             <Link
               key={item.name}
@@ -87,11 +117,23 @@ export function BottomNav({ isAdmin = false, canAudit = false, canEquity = false
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              <item.icon
-                className="h-5 w-5"
-                strokeWidth={active ? 2 : 1.5}
-              />
-              <span className={cn("text-[10px] leading-none", active && "font-semibold")}>
+              <span className="relative">
+                <item.icon
+                  className="h-5 w-5"
+                  strokeWidth={active ? 2 : 1.5}
+                />
+                {showBadge && (
+                  <span className="absolute -right-2.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-none text-primary-foreground">
+                    {inboxUnread > 9 ? "9+" : inboxUnread}
+                  </span>
+                )}
+              </span>
+              <span
+                className={cn(
+                  "text-[10px] leading-none",
+                  active && "font-semibold",
+                )}
+              >
                 {item.name}
               </span>
             </Link>
