@@ -17,7 +17,6 @@ import {
   Pause,
   Play,
   MoreVertical,
-  ChevronDown,
   Reply,
   Copy,
   Trash2,
@@ -408,6 +407,8 @@ const MessageRow = memo(function MessageRow({
   currentMemberId,
   peerLastReadAt,
   canCreateTask,
+  selected,
+  onSelect,
   editing,
   editDraft,
   react,
@@ -434,6 +435,9 @@ const MessageRow = memo(function MessageRow({
   currentMemberId: string;
   peerLastReadAt?: string | null;
   canCreateTask?: boolean;
+  /** Mobile selection mode (WhatsApp-style). */
+  selected: boolean;
+  onSelect: (id: string | null) => void;
   editing: boolean;
   editDraft: string;
   react: (id: string, emoji: string) => void;
@@ -450,7 +454,6 @@ const MessageRow = memo(function MessageRow({
 }) {
   const imageAtts = m.attachments.filter((a) => a.isImage);
   const fileAtts = m.attachments.filter((a) => !a.isImage);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [swipeX, setSwipeX] = useState(0);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -473,6 +476,8 @@ const MessageRow = memo(function MessageRow({
   };
 
   const onTouchStart = (e: React.TouchEvent) => {
+    // Desktop hover menu handles actions; mobile long-press enters selection.
+    if (window.matchMedia("(min-width: 1024px)").matches) return;
     const t = e.touches[0];
     touchStart.current = { x: t.clientX, y: t.clientY };
     swiped.current = false;
@@ -480,7 +485,7 @@ const MessageRow = memo(function MessageRow({
     longPressTimer.current = setTimeout(() => {
       longPressTimer.current = null;
       if (!swiped.current) {
-        setMenuOpen(true);
+        onSelect(m.id);
         if (typeof navigator !== "undefined" && "vibrate" in navigator) {
           try {
             navigator.vibrate(12);
@@ -554,9 +559,11 @@ const MessageRow = memo(function MessageRow({
       )}
       <div
         className={cn(
-          "flex gap-2 touch-pan-y",
+          "relative flex gap-2 touch-pan-y rounded-xl transition-colors",
           mine ? "justify-end" : "justify-start",
           newGroup && !showDay && notFirst && "mt-3",
+          // WhatsApp-style selection wash across the row on mobile.
+          selected && "bg-primary/15 ring-1 ring-inset ring-primary/25 lg:bg-transparent lg:ring-0",
         )}
         style={swipeX ? { transform: `translateX(${swipeX}px)` } : undefined}
         onTouchStart={onTouchStart}
@@ -595,7 +602,30 @@ const MessageRow = memo(function MessageRow({
             )}
           </div>
         )}
-        <div className={cn("flex max-w-[70%] flex-col gap-1.5", mine && "items-end")}>
+        <div className={cn("relative flex max-w-[70%] flex-col gap-1.5", mine && "items-end")}>
+          {selected && (
+            <div
+              className={cn(
+                "absolute z-20 flex -translate-y-[calc(100%+6px)] items-center gap-0.5 rounded-full border border-border/60 bg-popover px-1.5 py-1 shadow-lg lg:hidden",
+                mine ? "right-0" : "left-0",
+              )}
+            >
+              {QUICK_EMOJIS.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => {
+                    react(m.id, e);
+                    onSelect(null);
+                  }}
+                  className="grid size-10 place-items-center rounded-full text-xl transition-transform active:scale-125"
+                  aria-label={`React ${e}`}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          )}
           {showAuthor && (
             <div className="px-1 text-tiny text-muted-foreground">{m.authorName}</div>
           )}
@@ -741,12 +771,8 @@ const MessageRow = memo(function MessageRow({
                   ))
                 )}
               </div>
-              <MessageCaret
-                mine={mine}
-                open={menuOpen}
-                onOpenChange={setMenuOpen}
-                {...actionHandlers}
-              />
+              {/* Desktop only — WhatsApp hover ⋮. Mobile uses selection header. */}
+              <MessageCaret mine={mine} {...actionHandlers} />
             </div>
             );
           })()}
@@ -769,7 +795,11 @@ const MessageRow = memo(function MessageRow({
                   attachment={a}
                   mine={mine}
                   onOpenImage={openImage}
-                  menu={<ImageActionsMenu {...actionHandlers} />}
+                  menu={
+                    <span className="hidden lg:contents">
+                      <ImageActionsMenu {...actionHandlers} />
+                    </span>
+                  }
                 />
               ))}
             </div>
@@ -788,7 +818,11 @@ const MessageRow = memo(function MessageRow({
                       ? formatTime(m.createdAt)
                       : undefined
                   }
-                  menu={<FileCaretMenu {...actionHandlers} />}
+                  menu={
+                    <span className="hidden lg:contents">
+                      <FileCaretMenu {...actionHandlers} />
+                    </span>
+                  }
                 />
               ))}
             </div>
@@ -894,6 +928,8 @@ export function ThreadChat({
   );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  /** Mobile WhatsApp-style selection — replaces the thread header with actions. */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createTaskPayload, setCreateTaskPayload] =
     useState<CreateTaskFromMessagePayload | null>(null);
   const [holdRecording, setHoldRecording] = useState(false);
@@ -1680,16 +1716,30 @@ export function ThreadChat({
     [currentMemberId],
   );
 
+  const clearSelection = useCallback(() => setSelectedId(null), []);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedId]);
+
   const handleReply = useCallback((id: string) => {
+    setSelectedId(null);
     setReplyTo(id);
     setTimeout(() => composerRef.current?.focus(), 0);
   }, []);
 
   const handleCopy = useCallback((text: string) => {
     navigator.clipboard.writeText(text);
+    setSelectedId(null);
   }, []);
 
   const handleDelete = useCallback((id: string) => {
+    setSelectedId(null);
     setMessages((prev) => prev.filter((m) => m.id !== id));
     startTransition(async () => {
       await deleteMessageAction(id);
@@ -1700,6 +1750,7 @@ export function ThreadChat({
     (id: string) => {
       const msg = messages.find((m) => m.id === id);
       if (!msg) return;
+      setSelectedId(null);
       setEditingId(id);
       setEditDraft(msg.body);
     },
@@ -1764,6 +1815,7 @@ export function ThreadChat({
       const threadPath = target.taskId
         ? `/dashboard/projects/${target.projectId}/tasks/${target.taskId}`
         : `/dashboard/messages/project-${target.projectId}`;
+      setSelectedId(null);
       setCreateTaskPayload({
         projectId: target.projectId,
         projectName: projectName ?? title,
@@ -1783,8 +1835,16 @@ export function ThreadChat({
       projectName,
       allowedTaskTypes,
       activeContractType,
+      title,
     ],
   );
+
+  const selectedMessage = useMemo(
+    () => (selectedId ? messages.find((m) => m.id === selectedId) ?? null : null),
+    [selectedId, messages],
+  );
+  const selectedMine =
+    selectedMessage != null && selectedMessage.authorId === currentMemberId;
 
   const peersOnline = peerMemberIds.some((id) => online.has(id));
   const typingLabel = useMemo(() => {
@@ -1899,14 +1959,112 @@ export function ThreadChat({
         </div>
       )}
 
-      {/* Thread header */}
-      <div className="flex h-14 items-center gap-2 border-b border-border/60 px-3 sm:gap-3 sm:px-4">
+      {/* Thread header — swaps to WhatsApp-style selection toolbar on mobile. */}
+      {selectedMessage ? (
+        <div className="flex h-14 items-center gap-0.5 border-b border-border/60 bg-surface/80 px-1 sm:px-2 lg:hidden">
+          <button
+            type="button"
+            onClick={clearSelection}
+            aria-label="Cancel selection"
+            className="grid size-11 shrink-0 place-items-center rounded-full text-foreground transition-colors hover:bg-muted"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <span className="min-w-[1.5rem] px-1 text-base font-semibold tabular-nums">
+            1
+          </span>
+          <div className="ml-auto flex items-center">
+            <button
+              type="button"
+              onClick={() => handleReply(selectedMessage.id)}
+              aria-label="Reply"
+              className="grid size-11 place-items-center rounded-full text-foreground transition-colors hover:bg-muted"
+            >
+              <Reply className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleCopy(selectedMessage.body)}
+              aria-label="Copy"
+              className="grid size-11 place-items-center rounded-full text-foreground transition-colors hover:bg-muted"
+            >
+              <Copy className="h-5 w-5" />
+            </button>
+            {canCreateTask && target.projectId && !inactive && (
+              <button
+                type="button"
+                onClick={() => handleCreateTask(selectedMessage)}
+                aria-label="Create task"
+                className="grid size-11 place-items-center rounded-full text-foreground transition-colors hover:bg-muted"
+              >
+                <CheckSquare className="h-5 w-5" />
+              </button>
+            )}
+            {selectedMine && selectedMessage.kind !== "rejection" && (
+              <button
+                type="button"
+                onClick={() => handleEdit(selectedMessage.id)}
+                aria-label="Edit"
+                className="grid size-11 place-items-center rounded-full text-foreground transition-colors hover:bg-muted"
+              >
+                <Pencil className="h-5 w-5" />
+              </button>
+            )}
+            {selectedMine && (
+              <button
+                type="button"
+                onClick={() => handleDelete(selectedMessage.id)}
+                aria-label="Delete"
+                className="grid size-11 place-items-center rounded-full text-destructive transition-colors hover:bg-destructive/10"
+              >
+                <Trash2 className="h-5 w-5" />
+              </button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="More actions"
+                className="grid size-11 place-items-center rounded-full text-foreground transition-colors hover:bg-muted"
+              >
+                <MoreVertical className="h-5 w-5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52 p-1">
+                <DropdownMenuItem
+                  onClick={() => {
+                    clearSelection();
+                    setView("chat");
+                    setSearchOpen(true);
+                  }}
+                  className="min-h-11 gap-3 text-sm"
+                >
+                  <Search className="h-4 w-4" />
+                  <span className="flex-1">Search in chat</span>
+                </DropdownMenuItem>
+                {canCreateTask && target.projectId && !inactive && (
+                  <DropdownMenuItem
+                    onClick={() => handleCreateTask(selectedMessage)}
+                    className="min-h-11 gap-3 text-sm"
+                  >
+                    <CheckSquare className="h-4 w-4" />
+                    <span className="flex-1">Create task</span>
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      ) : null}
+      <div
+        className={cn(
+          "flex h-14 items-center gap-2 border-b border-border/60 px-3 sm:gap-3 sm:px-4",
+          selectedMessage && "hidden lg:flex",
+        )}
+      >
         <Link
           href="/dashboard/messages"
           aria-label="Back to inbox"
-          className="grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
+          className="grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden lg:size-8"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-5 w-5 lg:h-4 lg:w-4" />
         </Link>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -1936,9 +2094,9 @@ export function ThreadChat({
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label="More options"
-            className="grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:size-8"
           >
-            <MoreVertical className="h-4 w-4" />
+            <MoreVertical className="h-5 w-5 lg:h-4 lg:w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem onClick={() => { setView("chat"); setSearchOpen(true); }}>
@@ -2006,6 +2164,8 @@ export function ThreadChat({
                   canCreateTask={
                     canCreateTask && !!target.projectId && !inactive
                   }
+                  selected={selectedId === m.id}
+                  onSelect={setSelectedId}
                   editing={editingId === m.id}
                   editDraft={editingId === m.id ? editDraft : ""}
                   react={react}
@@ -2864,14 +3024,14 @@ function ActionsMenuContent({
   onCreateTask,
 }: MessageActionHandlers) {
   return (
-    <DropdownMenuContent align="end" className="w-52 p-1" sideOffset={4}>
-      <div className="flex items-center gap-0.5 px-1 py-1">
+    <DropdownMenuContent align="end" className="min-w-56 p-1.5" sideOffset={6}>
+      <div className="flex items-center gap-0.5 px-1 py-1.5">
         {QUICK_EMOJIS.map((e) => (
           <button
             key={e}
             type="button"
             onClick={() => onReact(e)}
-            className="grid size-8 place-items-center rounded-full text-lg transition-transform hover:scale-125 hover:bg-surface"
+            className="grid size-9 place-items-center rounded-full text-lg transition-transform hover:scale-125 hover:bg-surface"
             aria-label={`React ${e}`}
           >
             {e}
@@ -2879,28 +3039,28 @@ function ActionsMenuContent({
         ))}
       </div>
       <DropdownMenuSeparator />
-      <DropdownMenuItem onClick={onReply}>
+      <DropdownMenuItem onClick={onReply} className="min-h-10 gap-3 text-sm">
         <Reply className="h-4 w-4" />
         <span className="flex-1">Reply</span>
       </DropdownMenuItem>
-      <DropdownMenuItem onClick={onCopy}>
+      <DropdownMenuItem onClick={onCopy} className="min-h-10 gap-3 text-sm">
         <Copy className="h-4 w-4" />
         <span className="flex-1">Copy</span>
       </DropdownMenuItem>
       {onEdit && (
-        <DropdownMenuItem onClick={onEdit}>
+        <DropdownMenuItem onClick={onEdit} className="min-h-10 gap-3 text-sm">
           <Pencil className="h-4 w-4" />
           <span className="flex-1">Edit</span>
         </DropdownMenuItem>
       )}
       {onCreateTask && (
-        <DropdownMenuItem onClick={onCreateTask}>
+        <DropdownMenuItem onClick={onCreateTask} className="min-h-10 gap-3 text-sm">
           <CheckSquare className="h-4 w-4" />
           <span className="flex-1">Create task</span>
         </DropdownMenuItem>
       )}
       <DropdownMenuSeparator />
-      <DropdownMenuItem onClick={onDelete} variant="destructive">
+      <DropdownMenuItem onClick={onDelete} variant="destructive" className="min-h-10 gap-3 text-sm">
         <Trash2 className="h-4 w-4" />
         <span className="flex-1">Delete</span>
       </DropdownMenuItem>
@@ -2908,28 +3068,23 @@ function ActionsMenuContent({
   );
 }
 
+/** Desktop hover ⋮ only — mobile uses the selection header instead. */
 function MessageCaret({
   mine,
-  open,
-  onOpenChange,
   ...handlers
-}: {
-  mine: boolean;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-} & MessageActionHandlers) {
+}: { mine: boolean } & MessageActionHandlers) {
   return (
-    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+    <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Message actions"
         className={cn(
-          "absolute top-1 grid size-6 place-items-center rounded-full opacity-0 shadow-sm backdrop-blur transition-opacity focus-visible:opacity-100 max-lg:opacity-100 group-hover:opacity-100 data-[popup-open]:opacity-100",
+          "absolute top-1 hidden size-8 place-items-center rounded-full opacity-0 shadow-sm backdrop-blur transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[popup-open]:opacity-100 lg:grid",
           mine
-            ? "right-1 bg-primary/70 text-primary-foreground hover:bg-primary/90"
-            : "right-1 bg-background/80 text-muted-foreground hover:bg-background hover:text-foreground",
+            ? "right-1 bg-primary/80 text-primary-foreground hover:bg-primary"
+            : "right-1 bg-background/90 text-muted-foreground hover:bg-background hover:text-foreground",
         )}
       >
-        <ChevronDown className="h-3.5 w-3.5" />
+        <MoreVertical className="h-4 w-4" />
       </DropdownMenuTrigger>
       <ActionsMenuContent {...handlers} />
     </DropdownMenu>
@@ -2942,9 +3097,9 @@ function FileCaretMenu(handlers: MessageActionHandlers) {
       <DropdownMenuTrigger
         onClick={(e) => e.stopPropagation()}
         aria-label="Message actions"
-        className="grid size-7 place-items-center rounded-full bg-surface-2 text-muted-foreground opacity-0 shadow-sm backdrop-blur transition-opacity hover:text-foreground focus-visible:opacity-100 max-lg:opacity-100 group-hover:opacity-100 data-[popup-open]:opacity-100"
+        className="hidden size-8 place-items-center rounded-full bg-surface-2 text-muted-foreground opacity-0 shadow-sm backdrop-blur transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 data-[popup-open]:opacity-100 lg:grid"
       >
-        <ChevronDown className="h-4 w-4" />
+        <MoreVertical className="h-4 w-4" />
       </DropdownMenuTrigger>
       <ActionsMenuContent {...handlers} />
     </DropdownMenu>
@@ -2957,7 +3112,7 @@ function ImageActionsMenu(handlers: MessageActionHandlers) {
       <DropdownMenuTrigger
         onClick={(e) => e.stopPropagation()}
         aria-label="Message actions"
-        className="grid size-8 place-items-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-black/80"
+        className="grid size-9 place-items-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-black/80"
       >
         <MoreVertical className="h-4 w-4" />
       </DropdownMenuTrigger>
