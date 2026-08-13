@@ -227,40 +227,40 @@ export function ThreadSidebar({
           variant="ghost"
           size="icon"
           className={cn(
-            "ml-auto rounded-full lg:hidden",
+            "ml-auto size-11 rounded-full lg:size-9 lg:hidden",
             searchOpen && "text-foreground bg-surface/80",
           )}
           aria-label="Search conversations"
           onClick={toggleSearch}
         >
-          <Search className="h-4 w-4" />
+          <Search className="h-5 w-5 lg:h-4 lg:w-4" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="rounded-full max-lg:ml-0 lg:ml-auto"
+          className="size-11 rounded-full max-lg:ml-0 lg:ml-auto lg:size-9"
           aria-label="New message"
           onClick={() => setComposeOpen(true)}
           hidden={isClient}
         >
-          <PenSquare className="h-4 w-4" />
+          <PenSquare className="h-5 w-5 lg:h-4 lg:w-4" />
         </Button>
       </div>
 
-      <div className="border-b border-border/60 p-3">
+      <div className="border-b border-border/60 p-3 max-lg:px-4 max-lg:pb-3.5">
         {/* Always shown on desktop; on mobile/tablet only when toggled open. */}
         <div className={cn("relative", !searchOpen && "max-lg:hidden")}>
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             ref={searchInputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search conversations"
-            className="h-9 pl-8 text-sm"
+            className="h-11 pl-10 text-sm lg:h-9 lg:pl-8"
           />
         </div>
         {!isClient && (
-        <div className="mt-2 flex items-center gap-1 rounded-md bg-surface/60 p-0.5">
+        <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto">
           {(
             [
               { id: "all" as const, label: "All", icon: Users },
@@ -273,10 +273,10 @@ export function ThreadSidebar({
               key={t.id}
               onClick={() => setTab(t.id)}
               className={cn(
-                "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1 text-xs transition-colors",
+                "flex shrink-0 items-center justify-center gap-1.5 rounded-full px-3.5 py-2.5 text-xs font-medium transition-colors lg:rounded-md lg:px-2.5 lg:py-1.5",
                 tab === t.id
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? "bg-primary/15 text-primary lg:bg-background lg:text-foreground lg:shadow-sm"
+                  : "bg-surface/80 text-muted-foreground hover:text-foreground lg:bg-transparent",
               )}
             >
               <t.icon className="h-3.5 w-3.5" />
@@ -387,7 +387,8 @@ function ThreadRow({
     <Link
       href={`/dashboard/messages/${thread.id}`}
       className={cn(
-        "flex items-start gap-3 border-b border-border/40 px-3 py-3 transition-colors hover:bg-surface/60",
+        // WhatsApp-like row: tall touch target (~72–80px), large avatar, roomy padding.
+        "flex min-h-[76px] items-center gap-3.5 border-b border-border/30 px-4 py-3.5 transition-colors active:bg-surface/70 hover:bg-surface/60 max-lg:min-h-[80px] max-lg:gap-4 max-lg:px-4 max-lg:py-4 lg:min-h-[68px] lg:py-3",
         active && "bg-surface/80",
         !thread.inactive && thread.unread > 0 && !active && "bg-primary/[0.05]",
         thread.inactive && "opacity-70 hover:opacity-100",
@@ -399,13 +400,13 @@ function ThreadRow({
           <Image
             src={(thread.logoUrl ?? thread.peerImageUrl) as string}
             alt=""
-            width={36}
-            height={36}
-            className="h-9 w-9 rounded-full object-cover"
+            width={52}
+            height={52}
+            className="h-12 w-12 rounded-full object-cover max-lg:h-[52px] max-lg:w-[52px] lg:h-11 lg:w-11"
           />
         ) : (
           <div
-            className="grid h-9 w-9 place-items-center rounded-full text-tiny font-semibold text-white"
+            className="grid h-12 w-12 place-items-center rounded-full text-sm font-semibold text-white max-lg:h-[52px] max-lg:w-[52px] lg:h-11 lg:w-11 lg:text-xs"
             style={{ background: thread.avatar }}
             aria-hidden
           >
@@ -413,12 +414,18 @@ function ThreadRow({
           </div>
         )}
         {isOnline && (
-          <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background bg-emerald-500" />
+          <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-background bg-emerald-500" />
         )}
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
-          <span className={cn("truncate text-sm font-medium", thread.inactive && "text-muted-foreground")}>
+          <span
+            className={cn(
+              "truncate text-[15px] font-medium leading-tight max-lg:text-base",
+              thread.unread > 0 && !active && "font-semibold text-foreground",
+              thread.inactive && "text-muted-foreground",
+            )}
+          >
             {thread.name}
           </span>
           {thread.kind === "client" && !thread.inactive && (
@@ -431,21 +438,37 @@ function ThreadRow({
               Inactive
             </span>
           )}
-          <span className="ml-auto shrink-0 text-xxs text-muted-foreground">
+          <span
+            className={cn(
+              "ml-auto shrink-0 text-[11px] leading-none",
+              thread.unread > 0 && !active
+                ? "font-medium text-primary"
+                : "text-muted-foreground",
+            )}
+          >
             {formatRelative(thread.lastAt)}
           </span>
         </div>
-        <div className="truncate text-xs text-muted-foreground">
-          {thread.lastAuthor
-            ? `${thread.lastAuthor}: ${thread.lastMessage}`
-            : thread.subtitle}
+        <div className="flex items-center gap-2">
+          <div
+            className={cn(
+              "min-w-0 flex-1 truncate text-[13px] leading-snug max-lg:text-sm",
+              thread.unread > 0 && !active
+                ? "text-foreground/80"
+                : "text-muted-foreground",
+            )}
+          >
+            {thread.lastAuthor
+              ? `${thread.lastAuthor}: ${thread.lastMessage}`
+              : thread.subtitle}
+          </div>
+          {thread.unread > 0 && (
+            <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-none text-primary-foreground">
+              {thread.unread > 9 ? "9+" : thread.unread}
+            </span>
+          )}
         </div>
       </div>
-      {thread.unread > 0 && (
-        <span className="mt-2 inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-none text-primary-foreground">
-          {thread.unread > 9 ? "9+" : thread.unread}
-        </span>
-      )}
     </Link>
   );
 }
