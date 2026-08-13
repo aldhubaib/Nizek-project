@@ -1006,7 +1006,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
     ? {}
     : { members: { some: { userId: user.id } } };
 
-  const [projects, conversations, clientConversations] = await Promise.all([
+  const [projects, clientConversations] = await Promise.all([
     prisma.project.findMany({
       where: projectWhere,
       select: {
@@ -1016,24 +1016,6 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         contracts: { select: CONTRACT_SELECT },
         messages: {
           where: { conversationId: null },
-          orderBy: { createdAt: "desc" },
-          take: 1,
-          include: { author: { select: { id: true, name: true, email: true } } },
-        },
-      },
-    }),
-    prisma.conversation.findMany({
-      where: {
-        kind: { not: CLIENT_CONVERSATION_KIND },
-        participants: { some: { memberId: user.id } },
-      },
-      orderBy: { updatedAt: "desc" },
-      take: 200,
-      include: {
-        participants: {
-          include: { member: { select: { id: true, name: true, email: true, imageUrl: true } } },
-        },
-        messages: {
           orderBy: { createdAt: "desc" },
           take: 1,
           include: { author: { select: { id: true, name: true, email: true } } },
@@ -1095,41 +1077,10 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
     };
   });
 
-  const dmThreads: InboxThread[] = conversations
-    .filter((c) => c.messages.length > 0 || c.isGroup)
-    .map((c) => {
-      const others = c.participants
-        .map((pp) => pp.member)
-        .filter((m) => m.id !== user.id);
-      const name =
-        c.title ??
-        (others.map((m) => m.name ?? m.email).join(", ") || "Direct message");
-      const last = c.messages[0];
-      return {
-        id: `conv-${c.id}`,
-        kind: "direct" as const,
-        name,
-        subtitle: c.isGroup ? `${c.participants.length} members` : "Direct message",
-        projectId: null,
-        conversationId: c.id,
-        logoUrl: null,
-        peerImageUrl: !c.isGroup && others.length === 1 ? (others[0].imageUrl ?? null) : null,
-        peerMemberIds: others.map((m) => m.id),
-        lastMessage: last ? toDisplayBody(last.body) || "📎 Attachment" : "",
-        lastAuthor: last ? (last.author.name ?? last.author.email) : "",
-        lastAt: last ? last.createdAt.toISOString() : "",
-        unread: unreadMap.get(`/dashboard/messages/conv-${c.id}`) ?? 0,
-        avatar: generateColor(name),
-        initials: name.charAt(0).toUpperCase(),
-        inactive: false,
-      };
-    });
-
+  // One group chat per project (+ optional client room). No inbox DMs.
   const clientThreads: InboxThread[] = clientConversations
     .filter((c) => {
       if (!c.project) return false;
-      // Admins see all client rooms; others only ones they participate in (query already filters).
-      // Hide rooms for projects the admin isn't on only if we want — plan says admins keep access.
       return true;
     })
     .map((c) => {
@@ -1156,7 +1107,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       };
     });
 
-  return [...projectThreads, ...dmThreads, ...clientThreads].sort((a, b) => {
+  return [...projectThreads, ...clientThreads].sort((a, b) => {
     const ta = a.lastAt ? new Date(a.lastAt).getTime() : 0;
     const tb = b.lastAt ? new Date(b.lastAt).getTime() : 0;
     return tb - ta;
@@ -1166,59 +1117,19 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
 // ─── Direct conversations ─────────────────────────────────────────────────────
 
 export async function getOrCreateDirectConversation(
-  otherMemberId: string,
+  _otherMemberId: string,
 ): Promise<ActionResult<string>> {
   return safeAction("Open Conversation", async () => {
-    const user = await requireUser();
-    if (isClientUser(user)) throw new Error("Permission denied");
-    if (otherMemberId === user.id) throw new Error("Cannot message yourself");
-
-    const other = await prisma.user.findUnique({
-      where: { id: otherMemberId },
-      select: { id: true, systemRole: true },
-    });
-    if (!other) throw new Error("Member not found");
-    if (isClientUser(other)) throw new Error("Cannot message clients here");
-
-    const existing = await prisma.conversation.findFirst({
-      where: {
-        isGroup: false,
-        kind: { not: CLIENT_CONVERSATION_KIND },
-        AND: [
-          { participants: { some: { memberId: user.id } } },
-          { participants: { some: { memberId: otherMemberId } } },
-        ],
-      },
-      include: { _count: { select: { participants: true } } },
-    });
-    if (existing && existing._count.participants === 2) return existing.id;
-
-    const convo = await prisma.conversation.create({
-      data: {
-        isGroup: false,
-        kind: "direct",
-        participants: {
-          create: [{ memberId: user.id }, { memberId: otherMemberId }],
-        },
-      },
-    });
-    return convo.id;
+    // Direct messages are disabled — chats are project rooms only
+    // (one internal group chat per project, plus optional client room).
+    throw new Error("Direct messages are disabled. Open a project chat instead.");
   });
 }
 
 export async function getMessageableMembers() {
-  const user = await requireUser();
-  if (isClientUser(user)) return [];
-  return prisma.user.findMany({
-    where: {
-      id: { not: user.id },
-      blocked: false,
-      systemRole: { not: "CLIENT" },
-    },
-    select: { id: true, name: true, email: true, imageUrl: true },
-    orderBy: { name: "asc" },
-    take: 500,
-  });
+  // Compose-from-inbox was removed; keep the stub for any leftover callers.
+  await requireUser();
+  return [] as { id: string; name: string | null; email: string; imageUrl: string | null }[];
 }
 
 const PALETTE = [

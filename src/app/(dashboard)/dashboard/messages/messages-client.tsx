@@ -9,25 +9,14 @@ import {
   Users,
   Folder,
   MessageSquare,
-  PenSquare,
   Archive,
   ChevronDown,
   Handshake,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import {
-  getMessageableMembers,
-  getOrCreateDirectConversation,
-  type InboxThread,
-} from "@/actions/messages";
+import { type InboxThread } from "@/actions/messages";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { useChannel, usePresence } from "@/components/realtime/hooks";
 import { userChannel, globalPresenceChannel } from "@/lib/channels";
@@ -43,8 +32,6 @@ function formatRelative(iso: string) {
   const days = Math.floor(h / 24);
   return `${days}d`;
 }
-
-type Member = { id: string; name: string | null; email: string; imageUrl?: string | null };
 
 // True when the user is viewing a specific thread (not the inbox index).
 function useOnThread() {
@@ -82,8 +69,7 @@ export function ThreadSidebar({
   const router = useRouter();
   const onThread = useOnThread();
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState<"all" | "project" | "direct" | "client">("all");
-  const [composeOpen, setComposeOpen] = useState(false);
+  const [tab, setTab] = useState<"all" | "project" | "client">("all");
   const [showInactive, setShowInactive] = useState(false);
   // On mobile/tablet the search field is collapsed behind a header icon.
   const [searchOpen, setSearchOpen] = useState(false);
@@ -190,6 +176,8 @@ export function ThreadSidebar({
 
   const allRows = useMemo(() => {
     return liveThreads
+      // Inbox is project (+ client) rooms only — no ad-hoc DMs from compose.
+      .filter((t) => t.kind !== "direct")
       .filter((t) => (tab === "all" ? true : t.kind === tab))
       .filter((t) =>
         q
@@ -210,7 +198,7 @@ export function ThreadSidebar({
     () => allRows.filter((t) => t.inactive),
     [allRows],
   );
-  const showInactiveSection = tab !== "direct" && inactiveRows.length > 0;
+  const showInactiveSection = inactiveRows.length > 0;
 
   return (
     <aside
@@ -235,16 +223,6 @@ export function ThreadSidebar({
         >
           <Search className="h-5 w-5 lg:h-4 lg:w-4" />
         </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-11 rounded-full max-lg:ml-0 lg:ml-auto lg:size-9"
-          aria-label="New message"
-          onClick={() => setComposeOpen(true)}
-          hidden={isClient}
-        >
-          <PenSquare className="h-5 w-5 lg:h-4 lg:w-4" />
-        </Button>
       </div>
 
       <div className="border-b border-border/60 p-3 max-lg:px-4 max-lg:pb-3.5">
@@ -266,7 +244,6 @@ export function ThreadSidebar({
               { id: "all" as const, label: "All", icon: Users },
               { id: "project" as const, label: "Projects", icon: Folder },
               { id: "client" as const, label: "Client", icon: Handshake },
-              { id: "direct" as const, label: "Direct", icon: MessageSquare },
             ] as const
           ).map((t) => (
             <button
@@ -299,20 +276,9 @@ export function ThreadSidebar({
               <p className="mt-1 text-xs text-muted-foreground">
                 {isClient
                   ? "Waiting for your project team to enable client chat."
-                  : "Start a direct message with the compose button."}
+                  : "Project chats open from each project — one group chat per project."}
               </p>
             </div>
-            {!isClient && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setComposeOpen(true)}
-            >
-              <PenSquare className="h-3.5 w-3.5" />
-              New message
-            </Button>
-            )}
           </li>
         )}
         {rows.map((thread) => (
@@ -364,12 +330,6 @@ export function ThreadSidebar({
           </li>
         )}
       </ul>
-
-      <ComposeDialog
-        open={composeOpen}
-        onClose={() => setComposeOpen(false)}
-        online={online}
-      />
     </aside>
   );
 }
@@ -470,119 +430,5 @@ function ThreadRow({
         </div>
       </div>
     </Link>
-  );
-}
-
-function ComposeDialog({
-  open,
-  onClose,
-  online,
-}: {
-  open: boolean;
-  onClose: () => void;
-  online: Set<string>;
-}) {
-  const router = useRouter();
-  const [members, setMembers] = useState<Member[]>([]);
-  const [q, setQ] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [opening, setOpening] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    setLoading(true);
-    getMessageableMembers()
-      .then((m) => setMembers(m))
-      .finally(() => setLoading(false));
-  }, [open]);
-
-  const filtered = members.filter((m) => {
-    if (!q) return true;
-    const name = (m.name ?? m.email).toLowerCase();
-    return name.includes(q.toLowerCase());
-  });
-
-  const openWith = async (memberId: string) => {
-    if (opening) return;
-    setOpening(true);
-    const res = await getOrCreateDirectConversation(memberId);
-    setOpening(false);
-    if (res.ok) {
-      onClose();
-      setQ("");
-      router.push(`/dashboard/messages/conv-${res.data}`);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>New message</DialogTitle>
-        </DialogHeader>
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search people"
-            className="h-9 pl-8 text-sm"
-            autoFocus
-          />
-        </div>
-        <ul className="max-h-80 overflow-y-auto">
-          {loading && (
-            <li className="p-4 text-center text-xs text-muted-foreground">
-              Loading…
-            </li>
-          )}
-          {!loading && filtered.length === 0 && (
-            <li className="p-4 text-center text-xs text-muted-foreground">
-              No people found
-            </li>
-          )}
-          {filtered.map((m) => {
-            const name = m.name ?? m.email;
-            return (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  disabled={opening}
-                  onClick={() => openWith(m.id)}
-                  className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-surface/60 disabled:opacity-60"
-                >
-                  <div className="relative shrink-0">
-                    {m.imageUrl ? (
-                      <Image
-                        src={m.imageUrl}
-                        alt=""
-                        width={32}
-                        height={32}
-                        className="h-8 w-8 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="grid h-8 w-8 place-items-center rounded-full bg-primary/20 text-xxs font-semibold text-primary">
-                        {name
-                          .split(" ")
-                          .map((s) => s[0])
-                          .slice(0, 2)
-                          .join("")
-                          .toUpperCase()}
-                      </div>
-                    )}
-                    {online.has(m.id) && (
-                      <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-emerald-500" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{name}</div>
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </DialogContent>
-    </Dialog>
   );
 }
