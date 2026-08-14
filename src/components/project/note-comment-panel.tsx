@@ -32,6 +32,7 @@ export function NoteCommentPopover({
   onClose,
   onChanged,
   hideChatLink = false,
+  onViewNote,
   className,
 }: {
   thread: NoteCommentThreadView;
@@ -39,6 +40,7 @@ export function NoteCommentPopover({
   onClose: () => void;
   onChanged: () => void;
   hideChatLink?: boolean;
+  onViewNote?: () => void;
   className?: string;
 }) {
   const [draft, setDraft] = useState("");
@@ -128,6 +130,17 @@ export function NoteCommentPopover({
           >
             Open in chat →
           </Link>
+        </div>
+      )}
+      {onViewNote && (
+        <div className="border-b border-border px-3 py-1.5">
+          <button
+            type="button"
+            onClick={onViewNote}
+            className="text-[11px] font-medium text-primary hover:underline"
+          >
+            View full note
+          </button>
         </div>
       )}
 

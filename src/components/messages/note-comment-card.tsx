@@ -49,6 +49,7 @@ export function NoteCommentCard({
         noteId={payload.noteId}
         threadId={payload.threadId}
         noteTitle={payload.noteTitle}
+        projectId={payload.projectId}
       />
     </>
   );
