@@ -34,6 +34,7 @@ import {
   Pencil,
   Camera,
   Image as ImageIcon,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,7 +46,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { shouldCommitSwipeReply } from "@/lib/swipe-reply";
 import { ClientChatPeopleManager } from "@/components/messages/client-chat-people";
 import {
   toggleReaction,
@@ -54,11 +61,14 @@ import {
   getThreadMessages,
   getProjectTaskRefs,
   markThreadRead,
+  toggleImportantMessage,
+  listImportantMessages,
   type MessageDTO,
   type MessageAttachment,
   type MessageTaskRef,
   type ReactionSummary,
   type TaskPickerItem,
+  type ImportantMessageDTO,
 } from "@/actions/messages";
 import {
   CreateTaskFromMessageDialog,
@@ -92,7 +102,12 @@ import {
   DeadlineReminderCard,
   NizekBotAvatar,
 } from "@/components/messages/deadline-reminder-card";
+import { NoteCommentCard } from "@/components/messages/note-comment-card";
 import type { DeadlineReminderPayload } from "@/lib/deadline-reminder-payload";
+import type { NoteCommentPayload } from "@/lib/note-comment-payload";
+import { closePushBannersByTags } from "@/lib/close-push-banners";
+import { threadPushTag } from "@/lib/notification-read";
+import { updateAppBadge } from "@/lib/app-badge";
 import {
   ALL_MENTION_ID,
   ALL_MENTION_NAME,
@@ -190,6 +205,8 @@ export type ChatMessage = {
   /** Display names mentioned in the body, highlighted as @chips. */
   mentions?: string[];
   deadlineReminder?: DeadlineReminderPayload | null;
+  noteComment?: NoteCommentPayload | null;
+  important?: boolean;
 };
 
 const fmtTaskNumber = (n: number) => `T-${String(n).padStart(3, "0")}`;
@@ -348,6 +365,109 @@ function sameDay(a: string, b: string) {
   );
 }
 
+function initialsFrom(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function ReactionChips({
+  reactions,
+  mine,
+  currentMemberId,
+  memberNames,
+  onToggle,
+}: {
+  reactions: ReactionSummary[];
+  mine: boolean;
+  currentMemberId: string;
+  memberNames: Record<string, string>;
+  onToggle: (emoji: string) => void;
+}) {
+  return (
+    <div className={cn("flex flex-wrap gap-1", mine ? "justify-end" : "justify-start")}>
+      {reactions.map((r) => {
+        const mineReacted = r.memberIds.includes(currentMemberId);
+        const ids = [...r.memberIds].sort((a, b) => {
+          if (a === currentMemberId) return -1;
+          if (b === currentMemberId) return 1;
+          return (memberNames[a] ?? "").localeCompare(memberNames[b] ?? "");
+        });
+        const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+        return (
+          <Popover key={r.emoji}>
+            <PopoverTrigger
+              onClick={stop}
+              onPointerDown={stop}
+              onTouchStart={stop}
+              aria-label={
+                r.memberIds.length === 1
+                  ? `${r.emoji} 1 reaction`
+                  : `${r.emoji} ${r.memberIds.length} reactions`
+              }
+              className={cn(
+                "flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs leading-none transition-colors",
+                mineReacted
+                  ? "border-primary/50 bg-primary/15 text-foreground"
+                  : "border-border/60 bg-surface/60 text-muted-foreground hover:bg-surface",
+              )}
+            >
+              <span>{r.emoji}</span>
+              <span className="text-[10px] font-medium">{r.memberIds.length}</span>
+            </PopoverTrigger>
+            <PopoverContent
+              align={mine ? "end" : "start"}
+              side="top"
+              className="w-56 gap-0 p-1.5"
+            >
+              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                {r.emoji}{" "}
+                {r.memberIds.length === 1
+                  ? "1 reaction"
+                  : `${r.memberIds.length} reactions`}
+              </div>
+              <ul className="max-h-56 overflow-y-auto">
+                {ids.map((id) => {
+                  const fullName = memberNames[id] ?? "Someone";
+                  const label = id === currentMemberId ? "You" : fullName;
+                  return (
+                    <li
+                      key={id}
+                      className="flex items-center gap-2 rounded-md px-2 py-1.5"
+                    >
+                      <div
+                        className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/20 text-[10px] font-semibold text-primary"
+                        aria-hidden
+                      >
+                        {initialsFrom(
+                          id === currentMemberId
+                            ? (memberNames[id] ?? "You")
+                            : fullName,
+                        )}
+                      </div>
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        {label}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <button
+                type="button"
+                onClick={() => onToggle(r.emoji)}
+                className="mt-0.5 w-full rounded-md px-2 py-2 text-left text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
+              >
+                {mineReacted ? "Remove your reaction" : `React with ${r.emoji}`}
+              </button>
+            </PopoverContent>
+          </Popover>
+        );
+      })}
+    </div>
+  );
+}
+
 // A file picked in the composer, held locally until the user presses Send.
 type PendingFile = { key: string; file: File; previewUrl: string | null };
 
@@ -365,12 +485,14 @@ function MessageMeta({
   mine,
   blue,
   peerLastReadAt,
+  important,
 }: {
   createdAt: string;
   edited?: boolean;
   mine: boolean;
   blue: boolean;
   peerLastReadAt?: string | null;
+  important?: boolean;
 }) {
   const read =
     mine &&
@@ -383,6 +505,12 @@ function MessageMeta({
         blue ? "text-primary-foreground/70" : "text-muted-foreground",
       )}
     >
+      {important && (
+        <Star
+          className="h-3 w-3 fill-amber-400 text-amber-400"
+          aria-label="Important"
+        />
+      )}
       {edited && <span className="italic opacity-80">edited</span>}
       <span>{formatTime(createdAt)}</span>
       {mine &&
@@ -418,11 +546,13 @@ const MessageRow = memo(function MessageRow({
   handleDelete,
   handleEdit,
   handleCreateTask,
+  handleToggleImportant,
   onEditDraftChange,
   onSaveEdit,
   onCancelEdit,
   scrollToMessage,
   openImage,
+  memberNames,
 }: {
   m: ChatMessage;
   mine: boolean;
@@ -447,17 +577,21 @@ const MessageRow = memo(function MessageRow({
   handleDelete: (id: string) => void;
   handleEdit: (id: string) => void;
   handleCreateTask: (m: ChatMessage) => void;
+  handleToggleImportant: (id: string) => void;
   onEditDraftChange: (v: string) => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
   scrollToMessage: (id: string) => void;
   openImage: (att: MessageAttachment) => void;
+  memberNames: Record<string, string>;
 }) {
   const imageAtts = m.attachments.filter((a) => a.isImage);
   const fileAtts = m.attachments.filter((a) => !a.isImage);
   const [swipeX, setSwipeX] = useState(0);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const swipeXRef = useRef(0);
+  const lastDelta = useRef({ dx: 0, dy: 0 });
   const swiped = useRef(false);
 
   const clearLongPress = () => {
@@ -474,6 +608,8 @@ const MessageRow = memo(function MessageRow({
     onDelete: () => handleDelete(m.id),
     onEdit: mine && m.kind !== "rejection" ? () => handleEdit(m.id) : undefined,
     onCreateTask: canCreateTask ? () => handleCreateTask(m) : undefined,
+    onToggleImportant: () => handleToggleImportant(m.id),
+    important: Boolean(m.important),
   };
 
   const onTouchStart = (e: React.TouchEvent) => {
@@ -481,6 +617,8 @@ const MessageRow = memo(function MessageRow({
     if (window.matchMedia("(min-width: 1024px)").matches) return;
     const t = e.touches[0];
     touchStart.current = { x: t.clientX, y: t.clientY };
+    lastDelta.current = { dx: 0, dy: 0 };
+    swipeXRef.current = 0;
     swiped.current = false;
     clearLongPress();
     longPressTimer.current = setTimeout(() => {
@@ -503,20 +641,63 @@ const MessageRow = memo(function MessageRow({
     const t = e.touches[0];
     const dx = t.clientX - touchStart.current.x;
     const dy = t.clientY - touchStart.current.y;
+    lastDelta.current = { dx, dy };
     if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearLongPress();
-    if (Math.abs(dy) > Math.abs(dx)) return;
+    // Vertical scroll — drop any in-progress swipe so it can't become a reply.
+    if (Math.abs(dy) > Math.abs(dx)) {
+      if (swipeXRef.current !== 0) {
+        swipeXRef.current = 0;
+        setSwipeX(0);
+      }
+      return;
+    }
     if (dx > 0) {
       swiped.current = true;
-      setSwipeX(Math.min(72, dx));
+      const next = Math.min(80, dx);
+      swipeXRef.current = next;
+      setSwipeX(next);
     }
   };
 
   const onTouchEnd = () => {
     clearLongPress();
-    if (swipeX > 60) handleReply(m.id);
+    const { dx, dy } = lastDelta.current;
+    swipeXRef.current = 0;
+    lastDelta.current = { dx: 0, dy: 0 };
     setSwipeX(0);
     touchStart.current = null;
+    if (swiped.current && shouldCommitSwipeReply(dx, dy)) handleReply(m.id);
+    swiped.current = false;
   };
+
+  if (m.noteComment) {
+    return (
+      <div id={`msg-${m.id}`} className={cn("contents", dimmed && "opacity-30")}>
+        {showDay && (
+          <div className="my-2 flex items-center justify-center">
+            <span className="rounded-full bg-surface px-3 py-1 text-tiny font-medium text-muted-foreground">
+              {formatDay(m.createdAt)}
+            </span>
+          </div>
+        )}
+        <div
+          className={cn(
+            "flex gap-2",
+            mine ? "justify-end" : "justify-start",
+            newGroup && !showDay && notFirst && "mt-3",
+          )}
+        >
+          {!mine && <div className="w-8 shrink-0" aria-hidden />}
+          <div className="flex min-w-0 max-w-[min(100%,420px)] flex-col gap-1">
+            {showAuthor && (
+              <div className="px-1 text-tiny text-muted-foreground">{m.authorName}</div>
+            )}
+            <NoteCommentCard payload={m.noteComment} createdAt={m.createdAt} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (m.deadlineReminder) {
     return (
@@ -572,6 +753,9 @@ const MessageRow = memo(function MessageRow({
         onTouchEnd={onTouchEnd}
         onTouchCancel={() => {
           clearLongPress();
+          swipeXRef.current = 0;
+          lastDelta.current = { dx: 0, dy: 0 };
+          swiped.current = false;
           setSwipeX(0);
           touchStart.current = null;
         }}
@@ -767,6 +951,7 @@ const MessageRow = memo(function MessageRow({
                         mine={mine}
                         blue={blue}
                         peerLastReadAt={peerLastReadAt}
+                        important={m.important}
                       />
                     </div>
                   ))
@@ -837,31 +1022,18 @@ const MessageRow = memo(function MessageRow({
                 mine={mine}
                 blue={false}
                 peerLastReadAt={peerLastReadAt}
+                important={m.important}
               />
             </div>
           )}
           {m.reactions.length > 0 && (
-            <div className={cn("flex flex-wrap gap-1", mine ? "justify-end" : "justify-start")}>
-              {m.reactions.map((r) => {
-                const mineReacted = r.memberIds.includes(currentMemberId);
-                return (
-                  <button
-                    key={r.emoji}
-                    type="button"
-                    onClick={() => react(m.id, r.emoji)}
-                    className={cn(
-                      "flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs leading-none transition-colors",
-                      mineReacted
-                        ? "border-primary/50 bg-primary/15 text-foreground"
-                        : "border-border/60 bg-surface/60 text-muted-foreground hover:bg-surface",
-                    )}
-                  >
-                    <span>{r.emoji}</span>
-                    <span className="text-[10px] font-medium">{r.memberIds.length}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <ReactionChips
+              reactions={m.reactions}
+              mine={mine}
+              currentMemberId={currentMemberId}
+              memberNames={memberNames}
+              onToggle={(emoji) => react(m.id, emoji)}
+            />
           )}
         </div>
       </div>
@@ -889,6 +1061,7 @@ export function ThreadChat({
   projectName,
   peerLastReadAt: initialPeerLastReadAt = null,
   isClientRoom = false,
+  focusMessageId,
 }: {
   channel: string;
   presenceChannel: string | null;
@@ -911,6 +1084,8 @@ export function ThreadChat({
   peerLastReadAt?: string | null;
   /** Isolated client-facing room — shows curated people manager. */
   isClientRoom?: boolean;
+  /** Scroll to this message after open (inbox Important tab). */
+  focusMessageId?: string;
 }) {
   const frameRef = useVisualViewportFrame<HTMLDivElement>();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -925,9 +1100,12 @@ export function ThreadChat({
   const [fileError, setFileError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const [dragging, setDragging] = useState(false);
-  const [view, setView] = useState<"chat" | "files">("chat");
+  const [view, setView] = useState<"chat" | "files" | "important">("chat");
   const [searchOpen, setSearchOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
+  const [importantList, setImportantList] = useState<ImportantMessageDTO[]>([]);
+  const [importantLoading, setImportantLoading] = useState(false);
+  const pendingFocusRef = useRef<string | null>(focusMessageId ?? null);
   const [peerLastReadAt, setPeerLastReadAt] = useState<string | null>(
     initialPeerLastReadAt,
   );
@@ -1011,6 +1189,7 @@ export function ThreadChat({
 
   // Restore composer draft for this thread from sessionStorage.
   useEffect(() => {
+    setReplyTo(null);
     if (!threadKey) return;
     try {
       const saved = sessionStorage.getItem(`nizek-chat-draft:${threadKey}`);
@@ -1112,6 +1291,7 @@ export function ThreadChat({
                 kind: m.kind,
                 task: m.task ?? null,
                 mentions: m.mentions ?? [],
+                important: false,
               },
             ],
       );
@@ -1154,7 +1334,15 @@ export function ThreadChat({
   // and (debounced) when messages arrive while the user is watching.
   const markRead = useCallback(() => {
     if (document.visibilityState !== "visible") return;
-    void markThreadRead(target).catch(() => {});
+    const tag = threadPushTag(target);
+    if (tag) void closePushBannersByTags([tag]);
+    void markThreadRead(target)
+      .then((counts) => {
+        if (counts && typeof counts.unread === "number") {
+          updateAppBadge(Math.max(0, counts.unread));
+        }
+      })
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target.taskId, target.projectId, target.conversationId]);
 
@@ -1238,6 +1426,8 @@ export function ThreadChat({
             task: m.task ?? null,
             mentions: m.mentions ?? [],
             deadlineReminder: m.deadlineReminder ?? null,
+            noteComment: m.noteComment ?? null,
+            important: false,
           },
         ];
       });
@@ -1334,6 +1524,16 @@ export function ThreadChat({
     for (const m of messages) map.set(m.id, m);
     return map;
   }, [messages]);
+
+  const peopleNames = useMemo(() => {
+    const map: Record<string, string> = { ...memberNames };
+    for (const m of messages) {
+      if (m.authorId && m.authorName && !map[m.authorId]) {
+        map[m.authorId] = m.authorName;
+      }
+    }
+    return map;
+  }, [memberNames, messages]);
 
   // Detect a trailing "#query" token in the draft — opens the task picker.
   const taskToken = useMemo(() => {
@@ -1844,6 +2044,39 @@ export function ThreadChat({
     ],
   );
 
+  const handleToggleImportant = useCallback((id: string) => {
+    setSelectedId(null);
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, important: !m.important } : m)),
+    );
+    startTransition(async () => {
+      const res = await toggleImportantMessage(id);
+      if (!res.ok) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === id ? { ...m, important: !m.important } : m,
+          ),
+        );
+        return;
+      }
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === id ? { ...m, important: res.important } : m,
+        ),
+      );
+      try {
+        const rows = await listImportantMessages({
+          taskId: target.taskId,
+          projectId: target.projectId,
+          conversationId: target.conversationId,
+        });
+        setImportantList(rows);
+      } catch {
+        // Overlay refetches the next time it opens.
+      }
+    });
+  }, [target.taskId, target.projectId, target.conversationId]);
+
   const selectedMessage = useMemo(
     () => (selectedId ? messages.find((m) => m.id === selectedId) ?? null : null),
     [selectedId, messages],
@@ -1879,6 +2112,61 @@ export function ThreadChat({
     setTimeout(() => el.classList.remove("ring-2", "ring-primary/60", "rounded-2xl"), 1500);
   }, []);
 
+  const jumpToMessage = useCallback(
+    (id: string) => {
+      setView("chat");
+      setSearchOpen(false);
+      pendingFocusRef.current = id;
+      if (document.getElementById(`msg-${id}`)) {
+        scrollToMessage(id);
+        pendingFocusRef.current = null;
+      }
+    },
+    [scrollToMessage],
+  );
+
+  useEffect(() => {
+    if (focusMessageId) pendingFocusRef.current = focusMessageId;
+  }, [focusMessageId]);
+
+  useEffect(() => {
+    const id = pendingFocusRef.current;
+    if (!id) return;
+    if (document.getElementById(`msg-${id}`)) {
+      scrollToMessage(id);
+      pendingFocusRef.current = null;
+      return;
+    }
+    if (hasMore && !loadingOlder) {
+      void loadOlder();
+      return;
+    }
+    if (!loadingOlder && !hasMore) pendingFocusRef.current = null;
+  }, [messages, hasMore, loadingOlder, loadOlder, scrollToMessage]);
+
+  useEffect(() => {
+    if (view !== "important") return;
+    let cancelled = false;
+    setImportantLoading(true);
+    listImportantMessages({
+      taskId: target.taskId,
+      projectId: target.projectId,
+      conversationId: target.conversationId,
+    })
+      .then((rows) => {
+        if (!cancelled) setImportantList(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setImportantList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setImportantLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, target.taskId, target.projectId, target.conversationId]);
+
   const allImages = useMemo(
     () => messages.flatMap((m) => m.attachments.filter((a) => a.isImage)),
     [messages],
@@ -1900,10 +2188,6 @@ export function ThreadChat({
   }, [searchOpen]);
 
   const replyingTo = replyTo ? byId.get(replyTo) : null;
-
-  const isCoarsePointer = () =>
-    typeof window !== "undefined" &&
-    window.matchMedia("(pointer: coarse)").matches;
 
   // Hold-to-record: track pointer on window so the composer UI can swap to the
   // recording bar without losing pointerup / slide-to-cancel.
@@ -1949,7 +2233,7 @@ export function ThreadChat({
   return (
     <div
       ref={frameRef}
-      className="relative flex min-h-0 flex-1 flex-col"
+      className="relative flex min-h-0 flex-1 flex-col touch-manipulation"
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -1994,6 +2278,23 @@ export function ThreadChat({
               className="grid size-11 place-items-center rounded-full text-foreground transition-colors hover:bg-muted"
             >
               <Copy className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleImportant(selectedMessage.id)}
+              aria-label={
+                selectedMessage.important
+                  ? "Remove from important"
+                  : "Mark as important"
+              }
+              className="grid size-11 place-items-center rounded-full text-foreground transition-colors hover:bg-muted"
+            >
+              <Star
+                className={cn(
+                  "h-5 w-5",
+                  selectedMessage.important && "fill-amber-400 text-amber-400",
+                )}
+              />
             </button>
             {canCreateTask && target.projectId && !inactive && (
               <button
@@ -2112,6 +2413,16 @@ export function ThreadChat({
               <FilesIcon className="h-4 w-4" />
               <span className="flex-1">Files</span>
             </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                setSearchOpen(false);
+                setPeopleOpen(false);
+                setView(view === "important" ? "chat" : "important");
+              }}
+            >
+              <Star className="h-4 w-4" />
+              <span className="flex-1">Important</span>
+            </DropdownMenuItem>
             {isClientRoom && target.projectId && (
               <DropdownMenuItem
                 onClick={() => {
@@ -2190,11 +2501,13 @@ export function ThreadChat({
                   handleDelete={handleDelete}
                   handleEdit={handleEdit}
                   handleCreateTask={handleCreateTask}
+                  handleToggleImportant={handleToggleImportant}
                   onEditDraftChange={setEditDraft}
                   onSaveEdit={onSaveEdit}
                   onCancelEdit={onCancelEdit}
                   scrollToMessage={scrollToMessage}
                   openImage={openImage}
+                  memberNames={peopleNames}
                 />
               );
             })}
@@ -2609,7 +2922,7 @@ export function ThreadChat({
               <div
                 aria-hidden
                 ref={mirrorRef}
-                className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words p-2 text-sm text-foreground"
+                className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words p-2 text-[16px] leading-5 text-foreground md:text-sm md:leading-normal"
               >
                 {renderComposerHighlight(draft, composerMentionNames)}
                 {"\u200b"}
@@ -2618,6 +2931,8 @@ export function ThreadChat({
               ref={composerRef}
               value={draft}
               enterKeyHint="send"
+              inputMode="text"
+              autoCapitalize="sentences"
               onScroll={(e) => {
                 const m = mirrorRef.current;
                 if (m) {
@@ -2703,8 +3018,12 @@ export function ThreadChat({
                     return;
                   }
                 }
-                // Enter sends on desktop only; coarse/touch keeps Enter as newline.
-                if (e.key === "Enter" && !e.shiftKey && !isCoarsePointer()) {
+                // Return / iOS keyboard Send sends. Shift+Enter stays a newline.
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !e.nativeEvent.isComposing
+                ) {
                   e.preventDefault();
                   send();
                 }
@@ -2720,14 +3039,24 @@ export function ThreadChat({
                     ? `Message ${title} — type # to link a task`
                     : `Message ${title}`
               }
-              className="relative min-h-10 w-full resize-none border-0 !bg-transparent p-2 text-sm !text-transparent caret-foreground shadow-none focus-visible:ring-0 dark:!bg-transparent"
+              onBlur={() => {
+                if (window.scrollY !== 0 || window.scrollX !== 0) {
+                  window.scrollTo(0, 0);
+                }
+              }}
+              className="relative max-h-32 min-h-10 w-full resize-none overflow-y-auto border-0 !bg-transparent p-2 text-[16px] leading-5 !text-transparent caret-foreground shadow-none [field-sizing:fixed] focus-visible:ring-0 dark:!bg-transparent md:text-sm md:leading-normal"
               rows={1}
             />
             </div>
             {draft.trim() || pending.length > 0 ? (
               <Button
                 size="icon"
-                className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+                className="size-11 shrink-0 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 lg:size-9"
+                onPointerDown={(e) => {
+                  // Keep the textarea focused so the keyboard stays open
+                  // between sends (iOS otherwise collapses it on this tap).
+                  e.preventDefault();
+                }}
                 onClick={send}
                 aria-label="Send"
               >
@@ -2785,6 +3114,11 @@ export function ThreadChat({
                       }
                     : undefined
                 }
+                onToggleImportant={() => {
+                  lb.close();
+                  handleToggleImportant(msg.id);
+                }}
+                important={Boolean(msg.important)}
                 onDelete={() => {
                   lb.close();
                   handleDelete(msg.id);
@@ -2877,6 +3211,60 @@ export function ThreadChat({
             messages={messages.filter((m) => m.attachments.length > 0)}
             onClose={() => setView("chat")}
           />
+        </div>
+      )}
+      {view === "important" && (
+        <div className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80">
+          <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border/60 px-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full"
+              onClick={() => setView("chat")}
+              aria-label="Close important"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-semibold">Important</span>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {importantLoading && (
+              <div className="flex justify-center py-10">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {!importantLoading && importantList.length === 0 && (
+              <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+                No important messages in this chat. Star a message from its menu to find it here.
+              </div>
+            )}
+            {!importantLoading && importantList.length > 0 && (
+              <ul className="flex flex-col">
+                {importantList.map((m) => (
+                  <li key={m.id}>
+                    <button
+                      type="button"
+                      onClick={() => jumpToMessage(m.id)}
+                      className="flex w-full flex-col gap-1 border-b border-border/40 px-4 py-3 text-left hover:bg-surface/60"
+                    >
+                      <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                        {new Date(m.createdAt).toLocaleDateString([], {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                        })}
+                      </span>
+                      <span className="line-clamp-2 text-sm text-foreground">
+                        <span className="text-muted-foreground">{m.authorName}:</span>{" "}
+                        {m.body}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
 
@@ -3053,6 +3441,8 @@ type MessageActionHandlers = {
   onDelete: () => void;
   onEdit?: () => void;
   onCreateTask?: () => void;
+  onToggleImportant?: () => void;
+  important?: boolean;
 };
 
 function ActionsMenuContent({
@@ -3062,6 +3452,8 @@ function ActionsMenuContent({
   onDelete,
   onEdit,
   onCreateTask,
+  onToggleImportant,
+  important,
 }: MessageActionHandlers) {
   return (
     <DropdownMenuContent align="end" className="min-w-56 p-1.5" sideOffset={6}>
@@ -3087,6 +3479,19 @@ function ActionsMenuContent({
         <Copy className="h-4 w-4" />
         <span className="flex-1">Copy</span>
       </DropdownMenuItem>
+      {onToggleImportant && (
+        <DropdownMenuItem onClick={onToggleImportant} className="min-h-10 gap-3 text-sm">
+          <Star
+            className={cn(
+              "h-4 w-4",
+              important && "fill-amber-400 text-amber-400",
+            )}
+          />
+          <span className="flex-1">
+            {important ? "Remove from important" : "Mark as important"}
+          </span>
+        </DropdownMenuItem>
+      )}
       {onEdit && (
         <DropdownMenuItem onClick={onEdit} className="min-h-10 gap-3 text-sm">
           <Pencil className="h-4 w-4" />

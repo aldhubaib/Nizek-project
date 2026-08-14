@@ -11,6 +11,7 @@ import {
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, moveTask as moveTaskAction, declineTask, deleteTask } from "@/actions/task";
 import { createMeetingNote, getTaskNotes } from "@/actions/meeting-note";
+import { AttachExistingNoteDialog } from "@/components/project/attach-existing-note-dialog";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { formatDistanceToNow } from "date-fns";
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
@@ -19,6 +20,10 @@ import { StageConfirmDialog, getCheckpoint } from "@/components/kanban/stage-con
 import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
+import { markThreadRead } from "@/actions/messages";
+import { closePushBannersByTags } from "@/lib/close-push-banners";
+import { threadPushTag } from "@/lib/notification-read";
+import { updateAppBadge } from "@/lib/app-badge";
 
 const ACCURACY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   WAY_OVER:  { label: "Way Over",  color: "text-destructive",  bg: "bg-destructive/20 border-destructive/40" },
@@ -165,6 +170,26 @@ export function TaskDetailPage({
   const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
+  // Opening the task counts as reading its mention notifications — same
+  // client-owned read path as chat (prefetch must never mark read).
+  useEffect(() => {
+    const mark = () => {
+      if (document.visibilityState !== "visible") return;
+      const tag = threadPushTag({ taskId: initialTask.id, projectId });
+      if (tag) void closePushBannersByTags([tag]);
+      void markThreadRead({ taskId: initialTask.id, projectId })
+        .then((counts) => {
+          if (counts && typeof counts.unread === "number") {
+            updateAppBadge(Math.max(0, counts.unread));
+          }
+        })
+        .catch(() => {});
+    };
+    mark();
+    document.addEventListener("visibilitychange", mark);
+    return () => document.removeEventListener("visibilitychange", mark);
+  }, [initialTask.id, projectId]);
+
   // Header actions menu
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -173,6 +198,7 @@ export function TaskDetailPage({
   // Notes
   const [notes, setNotes] = useState<NoteData[]>(initialNotes);
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
+  const [attachNoteOpen, setAttachNoteOpen] = useState(false);
 
   // Time tracking
   const startedAt = stageLogData.startedAt ? new Date(stageLogData.startedAt).toISOString() : null;
@@ -855,10 +881,15 @@ export function TaskDetailPage({
                 </span>
               )}
             </div>
-            <Button size="sm" variant="ghost" onClick={() => setNoteEditorOpen(true)} className="h-7 text-xs">
-              <Plus className="w-3 h-3 mr-1" />
-              New
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="ghost" onClick={() => setAttachNoteOpen(true)} className="h-7 text-xs">
+                Attach
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setNoteEditorOpen(true)} className="h-7 text-xs">
+                <Plus className="w-3 h-3 mr-1" />
+                New
+              </Button>
+            </div>
           </div>
           {notes.length === 0 ? (
             <p className="text-[12px] text-muted-foreground/60 py-2">No notes attached</p>
@@ -935,6 +966,14 @@ export function TaskDetailPage({
           onSaved={() => { setNoteEditorOpen(false); refreshNotes(); setActivityKey((k) => k + 1); }}
         />
       )}
+
+      <AttachExistingNoteDialog
+        open={attachNoteOpen}
+        onClose={() => setAttachNoteOpen(false)}
+        projectId={projectId}
+        taskId={initialTask.id}
+        onAttached={() => { refreshNotes(); setActivityKey((k) => k + 1); }}
+      />
     </div>
   );
 }

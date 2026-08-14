@@ -10,16 +10,20 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypt
 
 const ALGO = "aes-256-gcm";
 const KEY_LEN = 32;
+const KEY_MISSING =
+  "Vault encryption is not configured. Set VAULT_ENCRYPTION_KEY and restart the app.";
+
+let cachedKey: Buffer | null = null;
 
 function getKey(): Buffer {
+  if (cachedKey) return cachedKey;
   const raw = process.env.VAULT_ENCRYPTION_KEY?.trim();
   if (!raw) {
-    throw new Error(
-      "VAULT_ENCRYPTION_KEY is not set. Add it to .env before using the Vault.",
-    );
+    throw new Error(KEY_MISSING);
   }
   // Fixed salt so the same passphrase always yields the same key across deploys.
-  return scryptSync(raw, "nizek-vault-v1", KEY_LEN);
+  cachedKey = scryptSync(raw, "nizek-vault-v1", KEY_LEN);
+  return cachedKey;
 }
 
 export function encryptVaultSecret(plaintext: string): string {

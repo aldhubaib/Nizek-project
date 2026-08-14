@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { getInboxUnreadCount } from "@/actions/messages";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { useChannel } from "@/components/realtime/hooks";
-import { userChannel, NOTIFICATION_READ, NOTIFICATION_NEW } from "@/lib/channels";
+import { userChannel, NOTIFICATION_READ, NOTIFICATION_READ_ALL, NOTIFICATION_NEW } from "@/lib/channels";
 
 const NAV_ITEMS = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
@@ -40,6 +40,7 @@ interface BottomNavProps {
   canVault?: boolean;
   isClient?: boolean;
   currentUserId?: string;
+  hidden?: boolean;
   onOpenMenu: () => void;
 }
 
@@ -54,6 +55,7 @@ export function BottomNav({
   canVault = false,
   isClient = false,
   currentUserId,
+  hidden = false,
   onOpenMenu,
 }: BottomNavProps) {
   const pathname = usePathname();
@@ -61,13 +63,41 @@ export function BottomNav({
   const cent = useCentrifugo();
 
   useEffect(() => {
-    getInboxUnreadCount()
-      .then(setInboxUnread)
-      .catch(() => {});
-  }, [pathname]);
+    const load = () => {
+      getInboxUnreadCount().then(setInboxUnread).catch(() => {});
+    };
+    load();
+    const onVis = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
 
   useChannel(cent && currentUserId ? userChannel(currentUserId) : null, (data) => {
-    const payload = data as { type?: string };
+    const payload = data as {
+      type?: string;
+      inboxUnread?: number;
+      notification?: { linkUrl?: string | null };
+    };
+    if (payload.type === NOTIFICATION_READ_ALL) {
+      setInboxUnread(0);
+      return;
+    }
+    if (
+      payload.type === NOTIFICATION_READ &&
+      typeof payload.inboxUnread === "number"
+    ) {
+      setInboxUnread(Math.max(0, payload.inboxUnread));
+      return;
+    }
+    if (
+      payload.type === NOTIFICATION_NEW &&
+      payload.notification?.linkUrl?.startsWith("/dashboard/messages/")
+    ) {
+      setInboxUnread((c) => c + 1);
+      return;
+    }
     if (
       payload.type === NOTIFICATION_READ ||
       payload.type === NOTIFICATION_NEW ||
@@ -103,8 +133,12 @@ export function BottomNav({
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-[400] border-t border-border bg-sidebar pb-[env(safe-area-inset-bottom)]"
+      className={cn(
+        "fixed inset-x-0 bottom-0 z-[400] border-t border-border bg-sidebar pb-[env(safe-area-inset-bottom)]",
+        hidden && "hidden",
+      )}
       aria-label="Primary"
+      aria-hidden={hidden}
     >
       <div className="flex h-16 items-stretch">
         {visible.map((item) => {

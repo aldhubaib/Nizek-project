@@ -50,6 +50,41 @@ export type VaultMember = {
 
 const CATEGORIES = new Set(["LOGIN", "EMAIL", "API_KEY", "OTHER"]);
 
+type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+async function vaultAction<T>(
+  label: string,
+  fn: () => Promise<T>,
+): Promise<ActionResult<T>> {
+  try {
+    return { ok: true, data: await fn() };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : "Something went wrong";
+    console.error(`[vault:${label}]`, err);
+    if (error.includes("VAULT_ENCRYPTION_KEY") || error.includes("not configured")) {
+      return {
+        ok: false,
+        error:
+          "Vault encryption is not configured. Ask an admin to set VAULT_ENCRYPTION_KEY and restart the app.",
+      };
+    }
+    if (error === "Unauthorized") {
+      return { ok: false, error: "You don't have vault access for this project." };
+    }
+    return { ok: false, error };
+  }
+}
+
+async function logVaultQuietly(
+  fn: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    console.error("[vault] activity log failed", err);
+  }
+}
+
 function toDTO(row: {
   id: string;
   projectId: string;
@@ -183,39 +218,43 @@ export async function createVaultCredential(input: {
   url?: string | null;
   notes?: string | null;
   category?: string | null;
-}): Promise<VaultCredentialDTO> {
-  const user = await requireVaultAccess(input.projectId);
-  const title = input.title.trim();
-  if (!title) throw new Error("Title is required");
+}): Promise<ActionResult<VaultCredentialDTO>> {
+  return vaultAction("create", async () => {
+    const user = await requireVaultAccess(input.projectId);
+    const title = input.title.trim();
+    if (!title) throw new Error("Title is required");
 
-  const password = input.password?.trim() || null;
-  const notes = input.notes?.trim() || null;
+    const password = input.password?.trim() || null;
+    const notes = input.notes?.trim() || null;
 
-  const row = await prisma.vaultCredential.create({
-    data: {
-      projectId: input.projectId,
-      title,
-      username: input.username?.trim() || null,
-      passwordEnc: password ? encryptVaultSecret(password) : null,
-      url: input.url?.trim() || null,
-      notesEnc: notes ? encryptVaultSecret(notes) : null,
-      category: normalizeCategory(input.category),
-      createdById: user.id,
-    },
-    include: CREDENTIAL_INCLUDE,
+    const row = await prisma.vaultCredential.create({
+      data: {
+        projectId: input.projectId,
+        title,
+        username: input.username?.trim() || null,
+        passwordEnc: password ? encryptVaultSecret(password) : null,
+        url: input.url?.trim() || null,
+        notesEnc: notes ? encryptVaultSecret(notes) : null,
+        category: normalizeCategory(input.category),
+        createdById: user.id,
+      },
+      include: CREDENTIAL_INCLUDE,
+    });
+
+    await logVaultQuietly(() =>
+      logVaultEvent({
+        credentialId: row.id,
+        userId: user.id,
+        action: "created",
+        label: "Credential",
+        newValue: title,
+      }),
+    );
+
+    revalidatePath("/dashboard/vault");
+    revalidatePath(`/dashboard/projects/${input.projectId}`);
+    return toDTO(row);
   });
-
-  await logVaultEvent({
-    credentialId: row.id,
-    userId: user.id,
-    action: "created",
-    label: "Credential",
-    newValue: title,
-  });
-
-  revalidatePath("/dashboard/vault");
-  revalidatePath(`/dashboard/projects/${input.projectId}`);
-  return toDTO(row);
 }
 
 export async function updateVaultCredential(
@@ -231,91 +270,95 @@ export async function updateVaultCredential(
     clearPassword?: boolean;
     clearNotes?: boolean;
   },
-): Promise<VaultCredentialDTO> {
-  const existing = await prisma.vaultCredential.findUnique({ where: { id } });
-  if (!existing || existing.deletedAt) throw new Error("Credential not found");
+): Promise<ActionResult<VaultCredentialDTO>> {
+  return vaultAction("update", async () => {
+    const existing = await prisma.vaultCredential.findUnique({ where: { id } });
+    if (!existing || existing.deletedAt) throw new Error("Credential not found");
 
-  const user = await requireVaultAccess(existing.projectId);
+    const user = await requireVaultAccess(existing.projectId);
 
-  const title =
-    input.title !== undefined ? input.title.trim() : existing.title;
-  if (!title) throw new Error("Title is required");
+    const title =
+      input.title !== undefined ? input.title.trim() : existing.title;
+    if (!title) throw new Error("Title is required");
 
-  const username =
-    input.username !== undefined
-      ? input.username?.trim() || null
-      : existing.username;
-  const url =
-    input.url !== undefined ? input.url?.trim() || null : existing.url;
-  const category =
-    input.category !== undefined
-      ? normalizeCategory(input.category)
-      : existing.category;
+    const username =
+      input.username !== undefined
+        ? input.username?.trim() || null
+        : existing.username;
+    const url =
+      input.url !== undefined ? input.url?.trim() || null : existing.url;
+    const category =
+      input.category !== undefined
+        ? normalizeCategory(input.category)
+        : existing.category;
 
-  let passwordEnc = existing.passwordEnc;
-  let passwordChanged = false;
-  if (input.clearPassword) {
-    passwordEnc = null;
-    passwordChanged = Boolean(existing.passwordEnc);
-  } else if (input.password != null && input.password.trim()) {
-    passwordEnc = encryptVaultSecret(input.password.trim());
-    passwordChanged = true;
-  }
-
-  let notesEnc = existing.notesEnc;
-  let notesChanged = false;
-  if (input.clearNotes) {
-    notesEnc = null;
-    notesChanged = Boolean(existing.notesEnc);
-  } else if (input.notes !== undefined) {
-    const notes = (input.notes ?? "").trim() || null;
-    if (notes) {
-      notesEnc = encryptVaultSecret(notes);
-      notesChanged = true;
-    } else if (existing.notesEnc) {
-      notesEnc = null;
-      notesChanged = true;
+    let passwordEnc = existing.passwordEnc;
+    let passwordChanged = false;
+    if (input.clearPassword) {
+      passwordEnc = null;
+      passwordChanged = Boolean(existing.passwordEnc);
+    } else if (input.password != null && input.password.trim()) {
+      passwordEnc = encryptVaultSecret(input.password.trim());
+      passwordChanged = true;
     }
-  }
 
-  const changes = [
-    fieldDiff("Title", existing.title, title),
-    fieldDiff("Username / email", existing.username, username),
-    fieldDiff("URL", existing.url, url),
-    fieldDiff("Category", existing.category, category),
-  ].filter(Boolean) as { label: string; old: string | null; new: string | null }[];
+    let notesEnc = existing.notesEnc;
+    let notesChanged = false;
+    if (input.clearNotes) {
+      notesEnc = null;
+      notesChanged = Boolean(existing.notesEnc);
+    } else if (input.notes !== undefined) {
+      const notes = (input.notes ?? "").trim() || null;
+      if (notes) {
+        notesEnc = encryptVaultSecret(notes);
+        notesChanged = true;
+      } else if (existing.notesEnc) {
+        notesEnc = null;
+        notesChanged = true;
+      }
+    }
 
-  if (passwordChanged) {
-    changes.push({
-      label: "Password",
-      old: existing.passwordEnc ? SECRET_MASK : null,
-      new: passwordEnc ? SECRET_MASK : null,
+    const changes = [
+      fieldDiff("Title", existing.title, title),
+      fieldDiff("Username / email", existing.username, username),
+      fieldDiff("URL", existing.url, url),
+      fieldDiff("Category", existing.category, category),
+    ].filter(Boolean) as { label: string; old: string | null; new: string | null }[];
+
+    if (passwordChanged) {
+      changes.push({
+        label: "Password",
+        old: existing.passwordEnc ? SECRET_MASK : null,
+        new: passwordEnc ? SECRET_MASK : null,
+      });
+    }
+    if (notesChanged) {
+      changes.push({
+        label: "Notes",
+        old: existing.notesEnc ? SECRET_MASK : null,
+        new: notesEnc ? SECRET_MASK : null,
+      });
+    }
+
+    const row = await prisma.vaultCredential.update({
+      where: { id },
+      data: { title, username, url, category, passwordEnc, notesEnc },
+      include: CREDENTIAL_INCLUDE,
     });
-  }
-  if (notesChanged) {
-    changes.push({
-      label: "Notes",
-      old: existing.notesEnc ? SECRET_MASK : null,
-      new: notesEnc ? SECRET_MASK : null,
-    });
-  }
 
-  const row = await prisma.vaultCredential.update({
-    where: { id },
-    data: { title, username, url, category, passwordEnc, notesEnc },
-    include: CREDENTIAL_INCLUDE,
+    await logVaultQuietly(() =>
+      logVaultChanges({
+        credentialId: id,
+        userId: user.id,
+        action: "updated",
+        changes,
+      }),
+    );
+
+    revalidatePath("/dashboard/vault");
+    revalidatePath(`/dashboard/projects/${existing.projectId}`);
+    return toDTO(row);
   });
-
-  await logVaultChanges({
-    credentialId: id,
-    userId: user.id,
-    action: "updated",
-    changes,
-  });
-
-  revalidatePath("/dashboard/vault");
-  revalidatePath(`/dashboard/projects/${existing.projectId}`);
-  return toDTO(row);
 }
 
 /**
@@ -325,59 +368,70 @@ export async function updateVaultCredential(
 export async function revealVaultSecret(
   id: string,
   field: "password" | "notes",
-): Promise<{ value: string | null }> {
-  const existing = await prisma.vaultCredential.findUnique({ where: { id } });
-  if (!existing || existing.deletedAt) throw new Error("Credential not found");
+): Promise<ActionResult<{ value: string | null }>> {
+  return vaultAction("reveal", async () => {
+    const existing = await prisma.vaultCredential.findUnique({ where: { id } });
+    if (!existing || existing.deletedAt) throw new Error("Credential not found");
 
-  const user = await requireVaultAccess(existing.projectId);
-  const enc = field === "password" ? existing.passwordEnc : existing.notesEnc;
-  const value = enc ? decryptVaultSecret(enc) : null;
+    const user = await requireVaultAccess(existing.projectId);
+    const enc = field === "password" ? existing.passwordEnc : existing.notesEnc;
+    const value = enc ? decryptVaultSecret(enc) : null;
 
-  await logVaultEvent({
-    credentialId: id,
-    userId: user.id,
-    action: "revealed",
-    label: field === "password" ? "Password" : "Notes",
-    newValue: "Revealed",
+    await logVaultQuietly(() =>
+      logVaultEvent({
+        credentialId: id,
+        userId: user.id,
+        action: "revealed",
+        label: field === "password" ? "Password" : "Notes",
+        newValue: "Revealed",
+      }),
+    );
+
+    return { value };
   });
-
-  return { value };
 }
 
 /** Soft-delete → trash. Only system admins can restore or permanently delete. */
-export async function deleteVaultCredential(id: string): Promise<void> {
-  const existing = await prisma.vaultCredential.findUnique({
-    where: { id },
-    include: { project: { select: { name: true } } },
+export async function deleteVaultCredential(
+  id: string,
+): Promise<ActionResult<{ id: string }>> {
+  return vaultAction("delete", async () => {
+    const existing = await prisma.vaultCredential.findUnique({
+      where: { id },
+      include: { project: { select: { name: true } } },
+    });
+    if (!existing || existing.deletedAt) throw new Error("Credential not found");
+
+    const user = await requireVaultAccess(existing.projectId);
+
+    await prisma.vaultCredential.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+
+    await addToTrash({
+      entityType: "VAULT_CREDENTIAL",
+      entityId: id,
+      label: existing.title,
+      sublabel: existing.project.name,
+      deletedById: user.id,
+    });
+
+    await logVaultQuietly(() =>
+      logVaultEvent({
+        credentialId: id,
+        userId: user.id,
+        action: "deleted",
+        label: "Credential",
+        newValue: "Moved to the trash",
+      }),
+    );
+
+    revalidatePath("/dashboard/vault");
+    revalidatePath("/dashboard/trash");
+    revalidatePath(`/dashboard/projects/${existing.projectId}`);
+    return { id };
   });
-  if (!existing || existing.deletedAt) throw new Error("Credential not found");
-
-  const user = await requireVaultAccess(existing.projectId);
-
-  await prisma.vaultCredential.update({
-    where: { id },
-    data: { deletedAt: new Date() },
-  });
-
-  await addToTrash({
-    entityType: "VAULT_CREDENTIAL",
-    entityId: id,
-    label: existing.title,
-    sublabel: existing.project.name,
-    deletedById: user.id,
-  });
-
-  await logVaultEvent({
-    credentialId: id,
-    userId: user.id,
-    action: "deleted",
-    label: "Credential",
-    newValue: "Moved to the trash",
-  });
-
-  revalidatePath("/dashboard/vault");
-  revalidatePath("/dashboard/trash");
-  revalidatePath(`/dashboard/projects/${existing.projectId}`);
 }
 
 export async function getVaultActivity(

@@ -5,7 +5,10 @@ import { requireUser } from "@/lib/auth";
 import { hasProjectAccess } from "@/lib/project-access";
 import { getActiveContract } from "@/lib/contract-rules";
 import { sendPush } from "@/lib/push";
-import { createAndPublishNotifications } from "@/lib/notify";
+import {
+  createAndPublishNotifications,
+  unreadCountsFor,
+} from "@/lib/notify";
 import { resolveProjectMentionIds } from "@/lib/project-mentions";
 import {
   decodeDeadlineReminderPayload,
@@ -14,6 +17,12 @@ import {
   NIZEK_BOT_NAME,
   type DeadlineReminderPayload,
 } from "@/lib/deadline-reminder-payload";
+import {
+  decodeNoteCommentPayload,
+  isNoteCommentMessage,
+  noteCommentPreview,
+  type NoteCommentPayload,
+} from "@/lib/note-comment-payload";
 import { ALL_MENTION_ID, ALL_MENTION_NAME } from "@/lib/mentions";
 import {
   broadcast,
@@ -82,13 +91,22 @@ function mapDeadlineReminderMessage<T extends { kind: string; body: string; auth
 ) {
   const payload = decodeDeadlineReminderPayload(c.body);
   const isBot = isDeadlineReminderMessage(c.kind);
+  const noteComment = isNoteCommentMessage(c.kind)
+    ? decodeNoteCommentPayload(c.body)
+    : null;
   return {
     authorId: isBot ? NIZEK_BOT_AUTHOR_ID : c.authorId,
     authorName: isBot ? NIZEK_BOT_NAME : (c.author.name ?? c.author.email),
     authorImageUrl: isBot ? null : (c.author.imageUrl ?? null),
-    body: isBot && payload ? `@${ALL_MENTION_NAME}` : toDisplayBody(c.body),
+    body:
+      isBot && payload
+        ? `@${ALL_MENTION_NAME}`
+        : noteComment
+          ? noteComment.comment
+          : toDisplayBody(c.body),
     mentions: isBot && payload ? [ALL_MENTION_NAME] : parseMentionNames(c.body),
     deadlineReminder: payload,
+    noteComment,
   };
 }
 
@@ -145,6 +163,7 @@ export type MessageDTO = {
   task?: MessageTaskRef | null;
   mentions?: string[];
   deadlineReminder?: DeadlineReminderPayload | null;
+  noteComment?: NoteCommentPayload | null;
 };
 
 type AttachmentInput = {
@@ -184,6 +203,8 @@ export type ThreadMessage = {
   task: MessageTaskRef | null;
   mentions: string[];
   deadlineReminder?: DeadlineReminderPayload | null;
+  noteComment?: NoteCommentPayload | null;
+  important: boolean;
 };
 
 export type ThreadMessagesPage = {
@@ -266,6 +287,15 @@ export async function getThreadMessages(input: {
   const hasMore = rows.length > THREAD_PAGE_SIZE;
   const page = rows.slice(0, THREAD_PAGE_SIZE).reverse();
 
+  const importantRows = await prisma.importantMessage.findMany({
+    where: {
+      userId: user.id,
+      messageId: { in: page.map((m) => m.id) },
+    },
+    select: { messageId: true },
+  });
+  const importantIds = new Set(importantRows.map((r) => r.messageId));
+
   const messages: ThreadMessage[] = page.map((c) => {
     const byEmoji = new Map<string, string[]>();
     for (const r of c.reactions) {
@@ -306,10 +336,263 @@ export async function getThreadMessages(input: {
         : null,
       mentions: mapped.mentions,
       deadlineReminder: mapped.deadlineReminder,
+      noteComment: mapped.noteComment,
+      important: importantIds.has(c.id),
     };
   });
 
   return { messages, hasMore };
+}
+
+export type ImportantMessageDTO = {
+  id: string;
+  body: string;
+  createdAt: string;
+  authorName: string;
+  threadId: string;
+  threadName: string;
+};
+
+function threadIdForMessage(m: {
+  conversationId: string | null;
+  taskId: string | null;
+  projectId: string | null;
+}): string | null {
+  if (m.conversationId) return `conv-${m.conversationId}`;
+  if (m.taskId) return `task-${m.taskId}`;
+  if (m.projectId) return `project-${m.projectId}`;
+  return null;
+}
+
+async function userCanAccessMessage(
+  user: { id: string; systemRole: string },
+  message: {
+    conversationId: string | null;
+    projectId: string | null;
+    taskId: string | null;
+  },
+): Promise<boolean> {
+  if (message.conversationId) {
+    const convo = await prisma.conversation.findUnique({
+      where: { id: message.conversationId },
+      select: { kind: true },
+    });
+    if (!convo) return false;
+    if (convo.kind === CLIENT_CONVERSATION_KIND) {
+      const access = await canAccessClientConversation(
+        message.conversationId,
+        user,
+      );
+      return access.ok;
+    }
+    const part = await prisma.conversationParticipant.findFirst({
+      where: {
+        conversationId: message.conversationId,
+        memberId: user.id,
+      },
+      select: { id: true },
+    });
+    return Boolean(part);
+  }
+  const projectId = message.projectId;
+  if (!projectId) return false;
+  if (isClientUser(user)) return false;
+  return hasProjectAccess(projectId);
+}
+
+export async function toggleImportantMessage(
+  messageId: string,
+): Promise<{ ok: true; important: boolean } | { ok: false; error: string }> {
+  try {
+    const user = await requireUser();
+    const message = await prisma.message.findUnique({
+      where: { id: messageId },
+      select: {
+        id: true,
+        conversationId: true,
+        projectId: true,
+        taskId: true,
+      },
+    });
+    if (!message) return { ok: false, error: "Message not found" };
+    if (!(await userCanAccessMessage(user, message))) {
+      return { ok: false, error: "Permission denied" };
+    }
+
+    const existing = await prisma.importantMessage.findUnique({
+      where: {
+        messageId_userId: { messageId, userId: user.id },
+      },
+    });
+    if (existing) {
+      await prisma.importantMessage.delete({ where: { id: existing.id } });
+      return { ok: true, important: false };
+    }
+    await prisma.importantMessage.create({
+      data: { messageId, userId: user.id },
+    });
+    return { ok: true, important: true };
+  } catch (err) {
+    console.error("[toggleImportantMessage]", err);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not update",
+    };
+  }
+}
+
+export async function listImportantMessages(target?: {
+  taskId?: string | null;
+  projectId?: string | null;
+  conversationId?: string | null;
+}): Promise<ImportantMessageDTO[]> {
+  const user = await requireUser();
+
+  const threadFilter = target?.conversationId
+    ? { conversationId: target.conversationId }
+    : target?.taskId
+      ? { taskId: target.taskId }
+      : target?.projectId
+        ? { projectId: target.projectId, conversationId: null }
+        : undefined;
+
+  const rows = await prisma.importantMessage.findMany({
+    where: {
+      userId: user.id,
+      ...(threadFilter ? { message: threadFilter } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    include: {
+      message: {
+        select: {
+          id: true,
+          body: true,
+          createdAt: true,
+          conversationId: true,
+          projectId: true,
+          taskId: true,
+          author: { select: { name: true, email: true } },
+          project: { select: { name: true } },
+          conversation: {
+            select: {
+              title: true,
+              kind: true,
+              project: { select: { name: true } },
+            },
+          },
+          task: { select: { title: true, taskNumber: true } },
+        },
+      },
+    },
+  });
+
+  const accessible = await filterAccessibleMessageIds(
+    user,
+    rows.map((r) => r.message),
+  );
+
+  const out: ImportantMessageDTO[] = [];
+  for (const row of rows) {
+    const m = row.message;
+    if (!accessible.has(m.id)) continue;
+    const threadId = threadIdForMessage(m);
+    if (!threadId) continue;
+    const threadName = m.conversation
+      ? (m.conversation.title ??
+        m.conversation.project?.name ??
+        m.project?.name ??
+        "Chat")
+      : m.task
+        ? `#${m.task.taskNumber} ${m.task.title}`
+        : (m.project?.name ?? "Chat");
+    out.push({
+      id: m.id,
+      body: toDisplayBody(m.body),
+      createdAt: m.createdAt.toISOString(),
+      authorName: m.author.name ?? m.author.email ?? "Someone",
+      threadId,
+      threadName,
+    });
+  }
+  return out;
+}
+
+async function filterAccessibleMessageIds(
+  user: { id: string; systemRole: string },
+  messages: Array<{
+    id: string;
+    conversationId: string | null;
+    projectId: string | null;
+    taskId: string | null;
+  }>,
+): Promise<Set<string>> {
+  const convIds = [
+    ...new Set(
+      messages
+        .map((m) => m.conversationId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const projectIds = [
+    ...new Set(
+      messages
+        .map((m) => m.projectId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  const [parts, convos] = await Promise.all([
+    convIds.length
+      ? prisma.conversationParticipant.findMany({
+          where: { memberId: user.id, conversationId: { in: convIds } },
+          select: { conversationId: true },
+        })
+      : [],
+    convIds.length
+      ? prisma.conversation.findMany({
+          where: { id: { in: convIds } },
+          select: { id: true, kind: true },
+        })
+      : [],
+  ]);
+  const partSet = new Set(parts.map((p) => p.conversationId));
+  const convoById = new Map(convos.map((c) => [c.id, c]));
+  const client = isClientUser(user);
+
+  const projectOk = new Map<string, boolean>();
+  await Promise.all(
+    projectIds.map(async (pid) => {
+      projectOk.set(pid, client ? false : await hasProjectAccess(pid));
+    }),
+  );
+
+  const clientOk = new Map<string, boolean>();
+  const clientConvIds = convos
+    .filter((c) => c.kind === CLIENT_CONVERSATION_KIND)
+    .map((c) => c.id);
+  await Promise.all(
+    clientConvIds.map(async (id) => {
+      const access = await canAccessClientConversation(id, user);
+      clientOk.set(id, access.ok);
+    }),
+  );
+
+  const allowed = new Set<string>();
+  for (const m of messages) {
+    if (m.conversationId) {
+      const convo = convoById.get(m.conversationId);
+      if (!convo) continue;
+      if (convo.kind === CLIENT_CONVERSATION_KIND) {
+        if (clientOk.get(m.conversationId)) allowed.add(m.id);
+        continue;
+      }
+      if (partSet.has(m.conversationId)) allowed.add(m.id);
+      continue;
+    }
+    if (m.projectId && projectOk.get(m.projectId)) allowed.add(m.id);
+  }
+  return allowed;
 }
 
 // ─── Task references (# picker in project channels) ─────────────────────────
@@ -370,6 +653,8 @@ export async function sendMessage(
     let groupName = "";
     let participantIds: string[] = [];
     let isClientRoom = false;
+    let noteCommentThreadId: string | null = null;
+    let mentionProjectId: string | null = null;
 
     if (conversationId) {
       const convoMeta = await prisma.conversation.findUnique({
@@ -413,6 +698,37 @@ export async function sendMessage(
         if (convoMeta.isGroup) groupName = convoMeta.title || "Group chat";
         taskId = null;
         projectId = null;
+
+        const noteThread = await prisma.noteCommentThread.findUnique({
+          where: { conversationId },
+          select: {
+            id: true,
+            note: { select: { projectId: true, title: true } },
+          },
+        });
+        if (noteThread) {
+          noteCommentThreadId = noteThread.id;
+          mentionProjectId = noteThread.note.projectId;
+          if (!groupName) groupName = convoMeta.title || noteThread.note.title;
+          const extraIds = await resolveProjectMentionIds(body, mentionProjectId);
+          const newIds = extraIds.filter((id) => !participantIds.includes(id));
+          if (newIds.length > 0) {
+            await prisma.conversationParticipant.createMany({
+              data: newIds.map((memberId) => ({ conversationId, memberId })),
+              skipDuplicates: true,
+            });
+            participantIds.push(...newIds);
+          }
+          if (extraIds.length > 0) {
+            await prisma.noteCommentSubscriber.createMany({
+              data: extraIds.map((userId) => ({
+                threadId: noteThread.id,
+                userId,
+              })),
+              skipDuplicates: true,
+            });
+          }
+        }
       }
     } else if (taskId) {
       if (isClientUser(user)) throw new Error("Permission denied");
@@ -479,7 +795,10 @@ export async function sendMessage(
       }
       mentionedIds = [...ids];
     } else {
-      mentionedIds = await resolveProjectMentionIds(body, projectId);
+      mentionedIds = await resolveProjectMentionIds(
+        body,
+        mentionProjectId ?? projectId,
+      );
     }
 
     const message = await prisma.message.create({
@@ -523,11 +842,36 @@ export async function sendMessage(
     }));
 
     const authorName = message.author.name ?? message.author.email ?? "Someone";
-    const display = toDisplayBody(body);
+    const noteCommentPayload = isNoteCommentMessage(message.kind)
+      ? decodeNoteCommentPayload(body)
+      : null;
+    const display = noteCommentPayload
+      ? noteCommentPayload.comment
+      : toDisplayBody(body);
     const previewText =
-      display || (attachments.length > 0 ? `📎 ${attachments[0].name}` : "");
+      (noteCommentPayload
+        ? noteCommentPreview(noteCommentPayload)
+        : display) || (attachments.length > 0 ? `📎 ${attachments[0].name}` : "");
     const preview =
       previewText.length > 80 ? previewText.slice(0, 80) + "…" : previewText;
+
+    if (noteCommentThreadId) {
+      await prisma.noteComment.create({
+        data: {
+          threadId: noteCommentThreadId,
+          userId: user.id,
+          content: display,
+          messageId: message.id,
+          ...(mentionedIds.length
+            ? {
+                mentions: {
+                  create: mentionedIds.map((id) => ({ userId: id })),
+                },
+              }
+            : {}),
+        },
+      });
+    }
 
     const dto: MessageDTO = {
       id: message.id,
@@ -547,6 +891,7 @@ export async function sendMessage(
           ? { id: taskId, projectId, number: taskNumber, title: taskTitle }
           : null,
       mentions: parseMentionNames(body),
+      noteComment: noteCommentPayload,
     };
 
     // Recipients + notification (mention-driven; DMs notify all participants).
@@ -680,7 +1025,7 @@ export async function markThreadRead(target: {
   taskId?: string | null;
   projectId?: string | null;
   conversationId?: string | null;
-}): Promise<void> {
+}): Promise<{ unread: number; inboxUnread: number } | void> {
   const user = await requireUser();
 
   const linkUrl = target.conversationId
@@ -719,19 +1064,20 @@ export async function markThreadRead(target: {
     where: { recipientId: user.id, read: false, linkUrl },
     data: { read: true, readAt: now },
   });
-  const unread = await prisma.notification.count({
-    where: { recipientId: user.id, read: false },
-  });
-  // Sync read-state to the user's other devices/tabs (bell + app badge) and
-  // let them close the matching OS push banners by tag.
+  const { unread, inboxUnread } = await unreadCountsFor(user.id);
+  // Sync read-state to the user's other devices/tabs (bell + app badge +
+  // inbox list) and let them close the matching OS push banners by tag.
   void publish(userChannel(user.id), {
     type: NOTIFICATION_READ,
     ids: toMark.map((n) => n.id),
     tags: [
       ...new Set(toMark.map((n) => n.tag).filter((t): t is string => !!t)),
     ],
+    linkUrls: [linkUrl],
     unread,
+    inboxUnread,
   });
+  return { unread, inboxUnread };
 }
 
 /** Sum of unread notification counts for inbox thread links. */
@@ -1006,7 +1352,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
     ? {}
     : { members: { some: { userId: user.id } } };
 
-  const [projects, clientConversations] = await Promise.all([
+  const [projects, clientConversations, noteCommentConversations] = await Promise.all([
     prisma.project.findMany({
       where: projectWhere,
       select: {
@@ -1049,6 +1395,34 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
           orderBy: { createdAt: "desc" },
           take: 1,
           include: { author: { select: { id: true, name: true, email: true } } },
+        },
+      },
+    }),
+    prisma.conversation.findMany({
+      where: {
+        noteCommentThread: { isNot: null },
+        participants: { some: { memberId: user.id } },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 100,
+      include: {
+        noteCommentThread: {
+          select: {
+            note: {
+              select: {
+                title: true,
+                project: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: { author: { select: { id: true, name: true, email: true } } },
+        },
+        participants: {
+          select: { memberId: true, member: { select: { imageUrl: true } } },
         },
       },
     }),
@@ -1107,7 +1481,42 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       };
     });
 
-  return [...projectThreads, ...clientThreads].sort((a, b) => {
+  const noteCommentThreads: InboxThread[] = noteCommentConversations.map((c) => {
+    const last = c.messages[0];
+    const note = c.noteCommentThread?.note;
+    const name = note?.title ?? c.title ?? "Note comment";
+    const payload = last ? decodeNoteCommentPayload(last.body) : null;
+    const lastBody = payload
+      ? payload.comment
+      : last
+        ? toDisplayBody(last.body) || "📎 Attachment"
+        : "";
+    const peer = c.participants.find((p) => p.memberId !== user.id);
+    return {
+      id: `conv-${c.id}`,
+      kind: "direct" as const,
+      name,
+      subtitle: note?.project.name
+        ? `${note.project.name} · Note comment`
+        : "Note comment",
+      projectId: note?.project.id ?? null,
+      conversationId: c.id,
+      logoUrl: null,
+      peerImageUrl: peer?.member.imageUrl ?? null,
+      peerMemberIds: c.participants
+        .map((p) => p.memberId)
+        .filter((id) => id !== user.id),
+      lastMessage: lastBody,
+      lastAuthor: last ? (last.author.name ?? last.author.email) : "",
+      lastAt: last ? last.createdAt.toISOString() : "",
+      unread: unreadMap.get(`/dashboard/messages/conv-${c.id}`) ?? 0,
+      avatar: generateColor(name),
+      initials: name.charAt(0).toUpperCase(),
+      inactive: false,
+    };
+  });
+
+  return [...projectThreads, ...clientThreads, ...noteCommentThreads].sort((a, b) => {
     const ta = a.lastAt ? new Date(a.lastAt).getTime() : 0;
     const tb = b.lastAt ? new Date(b.lastAt).getTime() : 0;
     return tb - ta;

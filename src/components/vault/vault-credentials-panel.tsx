@@ -83,6 +83,7 @@ export function VaultCredentialsPanel({
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
+  const [showPassword, setShowPassword] = useState(false);
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyFor, setHistoryFor] = useState<VaultCredentialDTO | null>(null);
@@ -107,6 +108,7 @@ export function VaultCredentialsPanel({
     setEditing(null);
     setForm(EMPTY_FORM);
     setError(null);
+    setShowPassword(false);
     setEditorOpen(true);
   }
 
@@ -121,6 +123,7 @@ export function VaultCredentialsPanel({
       category: c.category ?? "LOGIN",
     });
     setError(null);
+    setShowPassword(false);
     setEditorOpen(true);
   }
 
@@ -129,7 +132,7 @@ export function VaultCredentialsPanel({
     startSaving(async () => {
       try {
         if (editing) {
-          const updated = await updateVaultCredential(editing.id, {
+          const result = await updateVaultCredential(editing.id, {
             title: form.title,
             username: form.username,
             url: form.url,
@@ -139,8 +142,12 @@ export function VaultCredentialsPanel({
               : {}),
             ...(form.notes.trim() ? { notes: form.notes } : {}),
           });
+          if (!result.ok) {
+            setError(result.error);
+            return;
+          }
           setCredentials((prev) =>
-            prev.map((c) => (c.id === updated.id ? updated : c)),
+            prev.map((c) => (c.id === result.data.id ? result.data : c)),
           );
         } else {
           const targetProjectId = projectId;
@@ -148,7 +155,7 @@ export function VaultCredentialsPanel({
             setError("Pick a project first");
             return;
           }
-          const created = await createVaultCredential({
+          const result = await createVaultCredential({
             projectId: targetProjectId,
             title: form.title,
             username: form.username,
@@ -157,8 +164,12 @@ export function VaultCredentialsPanel({
             notes: form.notes,
             category: form.category,
           });
+          if (!result.ok) {
+            setError(result.error);
+            return;
+          }
           setCredentials((prev) =>
-            [...prev, created].sort((a, b) =>
+            [...prev, result.data].sort((a, b) =>
               a.title.localeCompare(b.title),
             ),
           );
@@ -189,8 +200,12 @@ export function VaultCredentialsPanel({
     }
     setBusyId(c.id);
     try {
-      const { value } = await revealVaultSecret(c.id, "password");
-      setRevealed((prev) => ({ ...prev, [c.id]: value ?? "" }));
+      const result = await revealVaultSecret(c.id, "password");
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+      setRevealed((prev) => ({ ...prev, [c.id]: result.data.value ?? "" }));
     } catch (err) {
       alert((err as Error).message || "Could not reveal password");
     } finally {
@@ -204,7 +219,11 @@ export function VaultCredentialsPanel({
       let value = revealed[c.id];
       if (value === undefined) {
         const res = await revealVaultSecret(c.id, "password");
-        value = res.value ?? "";
+        if (!res.ok) {
+          alert(res.error);
+          return;
+        }
+        value = res.data.value ?? "";
       }
       if (!value) {
         alert("No password stored");
@@ -228,7 +247,11 @@ export function VaultCredentialsPanel({
     }
     setBusyId(c.id);
     try {
-      await deleteVaultCredential(c.id);
+      const result = await deleteVaultCredential(c.id);
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
       setCredentials((prev) => prev.filter((x) => x.id !== c.id));
       router.refresh();
     } catch (err) {
@@ -411,13 +434,31 @@ export function VaultCredentialsPanel({
                   : "Password"
               }
             >
-              <Input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                placeholder={editing ? "••••••••" : ""}
-                autoComplete="new-password"
-              />
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={(e) =>
+                    setForm({ ...form, password: e.target.value })
+                  }
+                  placeholder={editing ? "••••••••" : ""}
+                  autoComplete="new-password"
+                  className="pr-9"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-3.5 w-3.5" />
+                  ) : (
+                    <Eye className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </div>
             </Field>
             <Field label="URL">
               <Input

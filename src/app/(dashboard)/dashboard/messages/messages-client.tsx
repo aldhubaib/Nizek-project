@@ -12,14 +12,25 @@ import {
   Archive,
   ChevronDown,
   Handshake,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { type InboxThread } from "@/actions/messages";
+import {
+  listImportantMessages,
+  type InboxThread,
+  type ImportantMessageDTO,
+} from "@/actions/messages";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { useChannel, usePresence } from "@/components/realtime/hooks";
-import { userChannel, globalPresenceChannel } from "@/lib/channels";
+import {
+  userChannel,
+  globalPresenceChannel,
+  NOTIFICATION_READ,
+  NOTIFICATION_READ_ALL,
+} from "@/lib/channels";
+import { inboxThreadIdsFromReadPayload } from "@/lib/notification-read";
 
 function formatRelative(iso: string) {
   if (!iso) return "";
@@ -69,8 +80,14 @@ export function ThreadSidebar({
   const router = useRouter();
   const onThread = useOnThread();
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState<"all" | "project" | "client">("all");
+  const [tab, setTab] = useState<"all" | "project" | "client" | "important">(
+    "all",
+  );
   const [showInactive, setShowInactive] = useState(false);
+  const [importantMessages, setImportantMessages] = useState<
+    ImportantMessageDTO[]
+  >([]);
+  const [importantLoading, setImportantLoading] = useState(false);
   // On mobile/tablet the search field is collapsed behind a header icon.
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -86,18 +103,65 @@ export function ThreadSidebar({
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
+  useEffect(() => {
+    if (tab !== "important") return;
+    let cancelled = false;
+    setImportantLoading(true);
+    listImportantMessages()
+      .then((rows) => {
+        if (!cancelled) setImportantMessages(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setImportantMessages([]);
+      })
+      .finally(() => {
+        if (!cancelled) setImportantLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
+
   const cent = useCentrifugo();
   const online = usePresence(cent ? globalPresenceChannel() : null);
 
   // Local copy so realtime inbox events can patch rows in place. Server truth
   // (the `threads` prop) wins on navigation / RSC re-render. Reset via the
   // React-sanctioned "store previous prop in state" pattern (no effect).
+  const activeThreadId =
+    pathname.startsWith("/dashboard/messages/") &&
+    pathname !== "/dashboard/messages"
+      ? pathname.slice("/dashboard/messages/".length)
+      : null;
+
   const [liveThreads, setLiveThreads] = useState<InboxThread[]>(threads);
   const [prevThreads, setPrevThreads] = useState(threads);
   if (prevThreads !== threads) {
     setPrevThreads(threads);
-    setLiveThreads(threads);
+    // Opening a thread is a client navigation inside this layout — the
+    // server `threads` snapshot can still have unread. Keep the open row
+    // cleared so the badge never flashes back.
+    setLiveThreads(
+      activeThreadId
+        ? threads.map((t) =>
+            t.id === activeThreadId && t.unread > 0 ? { ...t, unread: 0 } : t,
+          )
+        : threads,
+    );
   }
+
+  // Instant: the unread pill disappears the moment the user opens the thread,
+  // without waiting for markThreadRead or a Centrifugo round-trip.
+  useEffect(() => {
+    if (!activeThreadId) return;
+    setLiveThreads((prev) => {
+      const idx = prev.findIndex((t) => t.id === activeThreadId);
+      if (idx === -1 || prev[idx].unread === 0) return prev;
+      const next = [...prev];
+      next[idx] = { ...next[idx], unread: 0 };
+      return next;
+    });
+  }, [activeThreadId]);
 
   // Reconcile the whole list after a realtime coverage gap: the user channel
   // reconnected but its history replay failed (backgrounded longer than the
@@ -136,9 +200,37 @@ export function ThreadSidebar({
           lastAuthor?: string;
           lastMessage?: string;
           lastAt?: string;
+          tags?: string[];
+          linkUrls?: string[];
         }
       | null;
-    if (d?.type !== "inbox") return;
+    if (!d) return;
+
+    if (d.type === NOTIFICATION_READ_ALL) {
+      setLiveThreads((prev) =>
+        prev.some((t) => t.unread > 0)
+          ? prev.map((t) => (t.unread > 0 ? { ...t, unread: 0 } : t))
+          : prev,
+      );
+      return;
+    }
+
+    if (d.type === NOTIFICATION_READ) {
+      const ids = new Set(inboxThreadIdsFromReadPayload(d));
+      if (ids.size === 0) return;
+      setLiveThreads((prev) => {
+        let changed = false;
+        const next = prev.map((t) => {
+          if (!ids.has(t.id) || t.unread === 0) return t;
+          changed = true;
+          return { ...t, unread: 0 };
+        });
+        return changed ? next : prev;
+      });
+      return;
+    }
+
+    if (d.type !== "inbox") return;
 
     const rowId = d.conversationId
       ? `conv-${d.conversationId}`
@@ -176,9 +268,9 @@ export function ThreadSidebar({
 
   const allRows = useMemo(() => {
     return liveThreads
-      // Inbox is project (+ client) rooms only — no ad-hoc DMs from compose.
-      .filter((t) => t.kind !== "direct")
-      .filter((t) => (tab === "all" ? true : t.kind === tab))
+      .filter((t) =>
+        tab === "all" || tab === "important" ? true : t.kind === tab,
+      )
       .filter((t) =>
         q
           ? t.name.toLowerCase().includes(q.toLowerCase()) ||
@@ -198,7 +290,18 @@ export function ThreadSidebar({
     () => allRows.filter((t) => t.inactive),
     [allRows],
   );
-  const showInactiveSection = inactiveRows.length > 0;
+  const showInactiveSection = tab !== "important" && inactiveRows.length > 0;
+
+  const importantRows = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return importantMessages;
+    return importantMessages.filter(
+      (m) =>
+        m.body.toLowerCase().includes(query) ||
+        m.authorName.toLowerCase().includes(query) ||
+        m.threadName.toLowerCase().includes(query),
+    );
+  }, [importantMessages, q]);
 
   return (
     <aside
@@ -233,18 +336,26 @@ export function ThreadSidebar({
             ref={searchInputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search conversations"
+            placeholder={
+              tab === "important"
+                ? "Search important messages"
+                : "Search conversations"
+            }
             className="h-11 pl-10 text-sm lg:h-9 lg:pl-8"
           />
         </div>
-        {!isClient && (
         <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto">
-          {(
-            [
-              { id: "all" as const, label: "All", icon: Users },
-              { id: "project" as const, label: "Projects", icon: Folder },
-              { id: "client" as const, label: "Client", icon: Handshake },
-            ] as const
+          {(isClient
+            ? ([
+                { id: "all" as const, label: "All", icon: MessageSquare },
+                { id: "important" as const, label: "Important", icon: Star },
+              ] as const)
+            : ([
+                { id: "all" as const, label: "All", icon: Users },
+                { id: "project" as const, label: "Projects", icon: Folder },
+                { id: "client" as const, label: "Client", icon: Handshake },
+                { id: "important" as const, label: "Important", icon: Star },
+              ] as const)
           ).map((t) => (
             <button
               key={t.id}
@@ -261,11 +372,41 @@ export function ThreadSidebar({
             </button>
           ))}
         </div>
-        )}
       </div>
 
       {/* Bottom padding clears the mobile bottom navigation bar. */}
       <ul className="min-h-0 flex-1 overflow-y-auto max-lg:pb-[calc(4rem+env(safe-area-inset-bottom))]">
+        {tab === "important" ? (
+          <>
+            {importantLoading && importantRows.length === 0 && (
+              <li className="px-6 py-12 text-center text-sm text-muted-foreground">
+                Loading…
+              </li>
+            )}
+            {!importantLoading && importantRows.length === 0 && (
+              <li className="flex flex-col items-center gap-3 px-6 py-12 text-center">
+                <Star className="h-8 w-8 text-muted-foreground/50" />
+                <div>
+                  <div className="text-sm font-medium text-foreground">
+                    No important messages
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Star a message from its menu to find it here.
+                  </p>
+                </div>
+              </li>
+            )}
+            {importantRows.map((m) => (
+              <li key={m.id}>
+                <ImportantMessageRow
+                  message={m}
+                  active={pathname === `/dashboard/messages/${m.threadId}`}
+                />
+              </li>
+            ))}
+          </>
+        ) : (
+          <>
         {rows.length === 0 && !showInactiveSection && (
           <li className="flex flex-col items-center gap-3 px-6 py-12 text-center">
             <MessageSquare className="h-8 w-8 text-muted-foreground/50" />
@@ -329,8 +470,46 @@ export function ThreadSidebar({
             )}
           </li>
         )}
+          </>
+        )}
       </ul>
     </aside>
+  );
+}
+
+function ImportantMessageRow({
+  message,
+  active,
+}: {
+  message: ImportantMessageDTO;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={`/dashboard/messages/${message.threadId}?msg=${message.id}`}
+      className={cn(
+        "flex min-h-[76px] items-center gap-3.5 border-b border-border/30 px-4 py-3.5 transition-colors active:bg-surface/70 hover:bg-surface/60 max-lg:min-h-[80px] max-lg:gap-4 max-lg:px-4 max-lg:py-4 lg:min-h-[68px] lg:py-3",
+        active && "bg-surface/80",
+      )}
+    >
+      <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-amber-500/15 max-lg:h-[52px] max-lg:w-[52px] lg:h-11 lg:w-11">
+        <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+      </div>
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-[15px] font-medium leading-tight max-lg:text-base">
+            {message.threadName}
+          </span>
+          <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+            {formatRelative(message.createdAt)}
+          </span>
+        </div>
+        <p className="truncate text-sm text-muted-foreground">
+          <span className="text-foreground/80">{message.authorName}:</span>{" "}
+          {message.body}
+        </p>
+      </div>
+    </Link>
   );
 }
 
@@ -422,7 +601,7 @@ function ThreadRow({
               ? `${thread.lastAuthor}: ${thread.lastMessage}`
               : thread.subtitle}
           </div>
-          {thread.unread > 0 && (
+          {thread.unread > 0 && !active && (
             <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-none text-primary-foreground">
               {thread.unread > 9 ? "9+" : thread.unread}
             </span>

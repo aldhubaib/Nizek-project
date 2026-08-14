@@ -146,3 +146,23 @@ export async function unreadCountFor(recipientId: string): Promise<number> {
     where: { recipientId, read: false },
   });
 }
+
+/** Bell badge + inbox-nav badge after a read, so clients can update without a refetch. */
+export async function unreadCountsFor(recipientId: string): Promise<{
+  unread: number;
+  inboxUnread: number;
+}> {
+  const [unread, inboxUnread] = await Promise.all([
+    prisma.notification.count({
+      where: { recipientId, read: false },
+    }),
+    prisma.notification.count({
+      where: {
+        recipientId,
+        read: false,
+        linkUrl: { startsWith: "/dashboard/messages/" },
+      },
+    }),
+  ]);
+  return { unread, inboxUnread };
+}

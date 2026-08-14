@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { requireProjectMember, requireProjectRole } from "@/lib/auth";
 import { logTaskActivity } from "@/lib/activity";
 import { revalidatePath } from "next/cache";
+import { createTask } from "@/actions/task";
+import { taskMarkTag, wrapFirstPlainText } from "@/lib/html-annotate";
 
 export async function createMeetingNote(data: {
   projectId: string;
@@ -35,6 +37,13 @@ export async function createMeetingNote(data: {
   });
 
   if (data.taskId) {
+    await prisma.noteTaskLink.create({
+      data: {
+        noteId: note.id,
+        taskId: data.taskId,
+        createdById: user.id,
+      },
+    });
     await logTaskActivity({
       taskId: data.taskId,
       userId: user.id,
@@ -70,6 +79,8 @@ export async function updateMeetingNote(data: {
   title?: string;
   content?: string;
   date?: string;
+  /** Highlight marks only — don't write a history row. */
+  skipHistory?: boolean;
 }) {
   const note = await prisma.meetingNote.findUnique({
     where: { id: data.noteId },
@@ -81,6 +92,19 @@ export async function updateMeetingNote(data: {
   if (member.role === "CLIENT") throw new Error("Clients cannot edit notes");
 
   const historyEntries: { field: string; oldValue: string | null; newValue: string | null; noteId: string; userId: string }[] = [];
+
+  if (data.skipHistory) {
+    const updated = await prisma.meetingNote.update({
+      where: { id: data.noteId },
+      data: {
+        ...(data.title && { title: data.title }),
+        ...(data.content !== undefined && { content: data.content }),
+        ...(data.date && { date: new Date(data.date) }),
+      },
+    });
+    revalidatePath(`/dashboard/projects/${note.projectId}`);
+    return updated;
+  }
 
   if (data.title && data.title !== note.title) {
     historyEntries.push({
@@ -123,19 +147,50 @@ export async function updateMeetingNote(data: {
 export async function deleteMeetingNote(noteId: string) {
   const note = await prisma.meetingNote.findUnique({
     where: { id: noteId },
-    include: { project: true },
+    include: {
+      project: true,
+      commentThreads: { select: { conversationId: true } },
+    },
   });
   if (!note) throw new Error("Note not found");
 
   await requireProjectRole(note.projectId, ["ADMIN", "PROJECT_MANAGER"]);
 
+  const convoIds = note.commentThreads
+    .map((t) => t.conversationId)
+    .filter((id): id is string => Boolean(id));
+
   await prisma.meetingNote.delete({ where: { id: noteId } });
+  if (convoIds.length > 0) {
+    await prisma.conversation.deleteMany({ where: { id: { in: convoIds } } });
+  }
   revalidatePath(`/dashboard/projects/${note.projectId}`);
 }
 
+const linkedTaskSelect = {
+  id: true,
+  title: true,
+  taskNumber: true,
+  taskType: true,
+  projectId: true,
+} as const;
+
 const noteActivityInclude = {
   author: true,
-  task: { select: { id: true, title: true, taskNumber: true, taskType: true } },
+  task: { select: linkedTaskSelect },
+  taskLinks: {
+    include: { task: { select: linkedTaskSelect } },
+    orderBy: { createdAt: "desc" as const },
+  },
+  commentThreads: {
+    select: {
+      id: true,
+      quoteText: true,
+      conversationId: true,
+      _count: { select: { comments: true } },
+    },
+    orderBy: { createdAt: "asc" as const },
+  },
   history: {
     include: { user: true },
     orderBy: { createdAt: "desc" as const },
@@ -176,7 +231,9 @@ export async function getTaskNotes(taskId: string) {
   await requireProjectMember(task.projectId);
 
   return prisma.meetingNote.findMany({
-    where: { taskId },
+    where: {
+      OR: [{ taskId }, { taskLinks: { some: { taskId } } }],
+    },
     include: {
       author: true,
       history: {
@@ -195,4 +252,196 @@ export async function getTaskNotes(taskId: string) {
 export async function getNoteHistory(noteId: string) {
   const note = await getMeetingNote(noteId);
   return note.history;
+}
+
+export async function annotateNoteContent(noteId: string, content: string) {
+  return updateMeetingNote({ noteId, content, skipHistory: true });
+}
+
+export async function attachNoteToTask(data: {
+  noteId: string;
+  taskId: string;
+  quoteText?: string;
+}) {
+  const note = await prisma.meetingNote.findUnique({
+    where: { id: data.noteId },
+    select: { id: true, title: true, projectId: true },
+  });
+  if (!note) throw new Error("Note not found");
+
+  const { user, member } = await requireProjectMember(note.projectId);
+  if (member.role === "CLIENT") throw new Error("Clients cannot attach notes");
+
+  const task = await prisma.task.findUnique({
+    where: { id: data.taskId },
+    select: { id: true, projectId: true, title: true, archivedAt: true },
+  });
+  if (!task || task.archivedAt) throw new Error("Task not found");
+  if (task.projectId !== note.projectId) {
+    throw new Error("Note and task must belong to the same project");
+  }
+
+  const link = await prisma.noteTaskLink.upsert({
+    where: { noteId_taskId: { noteId: note.id, taskId: task.id } },
+    create: {
+      noteId: note.id,
+      taskId: task.id,
+      quoteText: data.quoteText ?? null,
+      createdById: user.id,
+    },
+    update: {
+      ...(data.quoteText !== undefined && { quoteText: data.quoteText }),
+    },
+    include: {
+      task: {
+        select: {
+          id: true,
+          title: true,
+          taskNumber: true,
+          taskType: true,
+          projectId: true,
+        },
+      },
+    },
+  });
+
+  await logTaskActivity({
+    taskId: task.id,
+    userId: user.id,
+    action: "note_attached",
+    field: "note",
+    newValue: note.title,
+  });
+
+  revalidatePath(`/dashboard/projects/${note.projectId}`);
+  return link;
+}
+
+export async function detachNoteFromTask(noteId: string, taskId: string) {
+  const note = await prisma.meetingNote.findUnique({
+    where: { id: noteId },
+    select: { projectId: true, taskId: true },
+  });
+  if (!note) throw new Error("Note not found");
+
+  const { member } = await requireProjectMember(note.projectId);
+  if (member.role === "CLIENT") throw new Error("Clients cannot detach notes");
+
+  await prisma.noteTaskLink.deleteMany({ where: { noteId, taskId } });
+  if (note.taskId === taskId) {
+    await prisma.meetingNote.update({
+      where: { id: noteId },
+      data: { taskId: null },
+    });
+  }
+
+  revalidatePath(`/dashboard/projects/${note.projectId}`);
+}
+
+export async function searchProjectTasksForLink(projectId: string, query = "") {
+  await requireProjectMember(projectId);
+  const q = query.trim();
+  return prisma.task.findMany({
+    where: {
+      projectId,
+      archivedAt: null,
+      ...(q
+        ? {
+            OR: [
+              { title: { contains: q, mode: "insensitive" } },
+              ...(Number.isFinite(Number(q)) ? [{ taskNumber: Number(q) }] : []),
+            ],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      title: true,
+      taskNumber: true,
+      taskType: true,
+      stage: true,
+    },
+    orderBy: { taskNumber: "desc" },
+    take: 40,
+  });
+}
+
+export async function searchProjectNotesForLink(projectId: string, taskId: string, query = "") {
+  await requireProjectMember(projectId);
+  const q = query.trim();
+  return prisma.meetingNote.findMany({
+    where: {
+      projectId,
+      NOT: {
+        OR: [{ taskId }, { taskLinks: { some: { taskId } } }],
+      },
+      ...(q ? { title: { contains: q, mode: "insensitive" } } : {}),
+    },
+    select: {
+      id: true,
+      title: true,
+      noteType: true,
+      date: true,
+      author: { select: { name: true } },
+    },
+    orderBy: { date: "desc" },
+    take: 40,
+  });
+}
+
+export async function createTaskFromNoteHighlight(data: {
+  noteId: string;
+  quoteText: string;
+  title: string;
+  description?: string;
+  priority?: number;
+  taskType?: "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+  answers?: { questionId: string; answer: string }[];
+}) {
+  const note = await prisma.meetingNote.findUnique({
+    where: { id: data.noteId },
+    select: { id: true, title: true, content: true, projectId: true },
+  });
+  if (!note) throw new Error("Note not found");
+
+  const { member } = await requireProjectMember(note.projectId);
+  if (member.role === "CLIENT") throw new Error("Clients cannot create tasks");
+
+  const quote = data.quoteText.trim();
+  const description = [
+    data.description?.trim() || quote,
+    "",
+    `— From note "${note.title}"`,
+  ]
+    .filter((line, i, arr) => !(line === "" && i === arr.length - 1))
+    .join("\n");
+
+  const task = await createTask({
+    projectId: note.projectId,
+    title: data.title.trim(),
+    description,
+    priority: data.priority,
+    taskType: data.taskType,
+    answers: data.answers,
+  });
+
+  await attachNoteToTask({
+    noteId: note.id,
+    taskId: task.id,
+    quoteText: quote || undefined,
+  });
+
+  if (quote) {
+    const mark = taskMarkTag(task.id);
+    const next = wrapFirstPlainText(note.content, quote, mark.open, mark.close);
+    if (next !== note.content) {
+      await prisma.meetingNote.update({
+        where: { id: note.id },
+        data: { content: next },
+      });
+    }
+  }
+
+  revalidatePath(`/dashboard/projects/${note.projectId}`);
+  return task;
 }

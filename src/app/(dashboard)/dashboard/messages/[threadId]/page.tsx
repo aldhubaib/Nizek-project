@@ -33,10 +33,13 @@ const CONTRACT_SELECT = {
 
 export default async function ThreadPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ threadId: string }>;
+  searchParams: Promise<{ msg?: string }>;
 }) {
   const { threadId } = await params;
+  const { msg: focusMessageId } = await searchParams;
   const user = await requireUser();
   const client = isClientUser(user);
 
@@ -172,6 +175,13 @@ export default async function ThreadPage({
               member: { select: { id: true, name: true, email: true } },
             },
           },
+          noteCommentThread: {
+            select: {
+              note: {
+                select: { projectId: true, title: true, project: { select: { name: true } } },
+              },
+            },
+          },
         },
       });
       if (!convo) notFound();
@@ -186,15 +196,33 @@ export default async function ThreadPage({
         id: m.id,
         name: m.name ?? m.email,
       }));
+      if (convo.noteCommentThread) {
+        const projectId = convo.noteCommentThread.note.projectId;
+        const members = await prisma.projectMember.findMany({
+          where: { projectId },
+          include: { user: { select: { id: true, name: true, email: true } } },
+        });
+        mentionables = members
+          .map((m) => ({
+            id: m.user.id,
+            name: m.user.name ?? m.user.email,
+          }))
+          .filter((m) => m.id !== user.id)
+          .sort((a, b) => a.name.localeCompare(b.name));
+        subtitle = `${convo.noteCommentThread.note.project.name} · Note comment`;
+        title = convo.noteCommentThread.note.title;
+      }
       target = { conversationId: convo.id };
       channel = conversationChannel(convo.id);
       presenceChannel = globalPresenceChannel();
-      title =
-        convo.title ??
-        (others.map((m) => m.name ?? m.email).join(", ") || "Direct message");
-      subtitle = convo.isGroup
-        ? `${convo.participants.length} members`
-        : "Direct message";
+      if (!convo.noteCommentThread) {
+        title =
+          convo.title ??
+          (others.map((m) => m.name ?? m.email).join(", ") || "Direct message");
+        subtitle = convo.isGroup
+          ? `${convo.participants.length} members`
+          : "Direct message";
+      }
 
       const peerReads = convo.participants
         .filter((p) => p.memberId !== user.id && p.lastReadAt)
@@ -275,6 +303,7 @@ export default async function ThreadPage({
       projectName={projectName}
       peerLastReadAt={peerLastReadAt}
       isClientRoom={isClientRoom}
+      focusMessageId={focusMessageId}
     />
   );
 }

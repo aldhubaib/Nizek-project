@@ -8,21 +8,7 @@ import {
   NOTIFICATION_READ_ALL,
 } from "@/lib/channels";
 import { updateAppBadge } from "@/lib/app-badge";
-
-/** Close any OS push banners shown by our service worker that match `tags`. */
-async function closeBannersByTags(tags: string[]): Promise<void> {
-  if (!tags.length || !("serviceWorker" in navigator)) return;
-  try {
-    const reg = await navigator.serviceWorker.ready;
-    const shown = await reg.getNotifications();
-    const wanted = new Set(tags);
-    for (const n of shown) {
-      if (n.tag && wanted.has(n.tag)) n.close();
-    }
-  } catch {
-    // Best-effort — banners will be replaced by the next push for that thread.
-  }
-}
+import { closePushBannersByTags } from "@/lib/close-push-banners";
 
 interface Props {
   currentUserId?: string;
@@ -50,7 +36,7 @@ export function NotificationSync({ currentUserId }: Props) {
         payload.type === NOTIFICATION_READ ||
         payload.type === NOTIFICATION_READ_ALL
       ) {
-        void closeBannersByTags(payload.tags ?? []);
+        void closePushBannersByTags(payload.tags ?? []);
         if (typeof payload.unread === "number") {
           updateAppBadge(Math.max(0, payload.unread));
         }

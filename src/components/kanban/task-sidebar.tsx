@@ -7,6 +7,7 @@ import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, getTaskStageLogs, deleteTask } from "@/actions/task";
 import { createMeetingNote, updateMeetingNote, getTaskNotes, getMeetingNote } from "@/actions/meeting-note";
+import { AttachExistingNoteDialog } from "@/components/project/attach-existing-note-dialog";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
@@ -1005,6 +1006,7 @@ function TaskNotesPanel({
   const [notes, setNotes] = useState<{ id: string; title: string; content: string; createdAt: Date; author: { name: string | null } }[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(true);
   const [viewingNote, setViewingNote] = useState<typeof notes[number] | null>(null);
+  const [attachOpen, setAttachOpen] = useState(false);
 
   useEffect(() => {
     getTaskNotes(task.id).then((data) => {
@@ -1048,6 +1050,7 @@ function TaskNotesPanel({
   }
 
   return (
+    <>
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md mx-4 max-h-[80vh] bg-popover rounded-xl border border-border shadow-2xl flex flex-col overflow-hidden">
@@ -1060,6 +1063,9 @@ function TaskNotesPanel({
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setAttachOpen(true)} className="h-7 text-xs">
+              Attach
+            </Button>
             <Button size="sm" variant="ghost" onClick={onCreateNote} className="h-7 text-xs">
               <Plus className="w-3 h-3 mr-1" />
               New
@@ -1102,6 +1108,22 @@ function TaskNotesPanel({
         </div>
       </div>
     </div>
+    <AttachExistingNoteDialog
+      open={attachOpen}
+      onClose={() => setAttachOpen(false)}
+      projectId={projectId}
+      taskId={task.id}
+      onAttached={() => {
+        setLoadingNotes(true);
+        getTaskNotes(task.id)
+          .then((data) => {
+            setNotes(data);
+            setLoadingNotes(false);
+          })
+          .catch(() => setLoadingNotes(false));
+      }}
+    />
+    </>
   );
 }
 

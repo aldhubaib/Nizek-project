@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
+import { NoteAnnotation } from "@/components/tiptap/note-annotation-mark";
 
 export interface RichTextEditorProps {
   content: string;
@@ -52,6 +53,7 @@ export function RichTextEditor({
       }),
       Placeholder.configure({ placeholder }),
       Image.configure({ inline: false }),
+      NoteAnnotation,
     ],
     content,
     onUpdate: ({ editor }) => {

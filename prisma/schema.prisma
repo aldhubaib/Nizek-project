@@ -104,6 +104,7 @@ model User {
   messages          Message[]                 @relation("MessageAuthor")
   messageMentions   MessageMention[]          @relation("MessageMentionedUser")
   messageReactions  MessageReaction[]         @relation("MessageReactionAuthor")
+  importantMessages ImportantMessage[]        @relation("UserImportantMessages")
   notifications     Notification[]            @relation("NotificationRecipient")
   pushSubscriptions PushSubscription[]        @relation("PushSubscriptionMember")
   pushDeliveryLogs  PushDeliveryLog[]         @relation("PushDeliveryLogRecipient")
@@ -118,6 +119,11 @@ model User {
   auditBlames       TaskAuditItem[]           @relation("AuditBlamedUser")
   equityActivities  EquityActivity[]          @relation("EquityActivityUser")
   trashedItems      TrashItem[]               @relation("TrashDeletedBy")
+  noteCommentThreads NoteCommentThread[]      @relation("NoteCommentThreadAuthor")
+  noteComments       NoteComment[]            @relation("NoteCommentAuthor")
+  noteCommentMentions NoteCommentMention[]    @relation("NoteCommentMentionedUser")
+  noteCommentSubs    NoteCommentSubscriber[]  @relation("NoteCommentSubscriber")
+  noteTaskLinks      NoteTaskLink[]           @relation("NoteTaskLinkCreator")
 
   @@index([systemRole])
   @@index([blocked])
@@ -293,6 +299,7 @@ model Task {
   comments   TaskComment[]
   stageLogs  StageLog[]
   notes      MeetingNote[]
+  noteLinks  NoteTaskLink[]
   messages   Message[]
 
   @@unique([projectId, taskNumber])
@@ -411,6 +418,8 @@ model MeetingNote {
 
   history         NoteHistory[]
   reminderLogs    DeadlineReminderLog[]
+  taskLinks       NoteTaskLink[]
+  commentThreads  NoteCommentThread[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -449,6 +458,86 @@ model NoteHistory {
   createdAt DateTime @default(now())
 
   @@index([noteId])
+}
+
+// Many-to-many: a note can spawn / attach to many tasks, and a task can show
+// every linked note. MeetingNote.taskId remains the original "created from
+// this task" pointer; this table is the two-way relation.
+model NoteTaskLink {
+  id          String @id @default(cuid())
+  noteId      String
+  note        MeetingNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  taskId      String
+  task        Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  quoteText   String?
+  createdById String
+  createdBy   User        @relation("NoteTaskLinkCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([noteId, taskId])
+  @@index([noteId])
+  @@index([taskId])
+}
+
+// Highlighted excerpt on a note. Replies live as NoteComment rows and also as
+// messages in `conversation` so the thread shows up in the owner's inbox.
+model NoteCommentThread {
+  id             String   @id @default(cuid())
+  noteId         String
+  note           MeetingNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  quoteText      String
+  conversationId String?  @unique
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  createdById    String
+  createdBy      User     @relation("NoteCommentThreadAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  comments    NoteComment[]
+  subscribers NoteCommentSubscriber[]
+
+  createdAt DateTime @default(now())
+
+  @@index([noteId])
+}
+
+model NoteComment {
+  id        String @id @default(cuid())
+  threadId  String
+  thread    NoteCommentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User   @relation("NoteCommentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  messageId String? @unique
+
+  mentions NoteCommentMention[]
+
+  createdAt DateTime @default(now())
+
+  @@index([threadId])
+}
+
+model NoteCommentMention {
+  id        String @id @default(cuid())
+  commentId String
+  comment   NoteComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User   @relation("NoteCommentMentionedUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([userId])
+}
+
+model NoteCommentSubscriber {
+  id       String @id @default(cuid())
+  threadId String
+  thread   NoteCommentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation("NoteCommentSubscriber", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([threadId, userId])
+  @@index([userId])
 }
 
 model Asset {
@@ -1363,6 +1452,7 @@ model Conversation {
 
   participants ConversationParticipant[]
   messages     Message[]
+  noteCommentThread NoteCommentThread?
 
   @@unique([projectId, kind])
   @@index([projectId])
@@ -1401,11 +1491,24 @@ model Message {
   mentions    MessageMention[]
   reactions   MessageReaction[]
   attachments MessageAttachment[]
+  importantFor ImportantMessage[]
 
   @@index([taskId, createdAt])
   @@index([projectId, createdAt])
   @@index([conversationId, createdAt])
   @@index([authorId])
+}
+
+model ImportantMessage {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("UserImportantMessages", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, userId])
+  @@index([userId, createdAt])
 }
 
 model MessageMention {

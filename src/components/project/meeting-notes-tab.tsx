@@ -5,11 +5,17 @@ import { useSearchParams } from "next/navigation";
 import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, FileText, Trash2, Gavel, ArrowLeft, Clock, History, User, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, MoreVertical } from "lucide-react";
+import { Plus, FileText, Trash2, Gavel, ArrowLeft, Clock, History, User, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, MoreVertical, Link2 } from "lucide-react";
 import { createMeetingNote, updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete, getMeetingNote } from "@/actions/meeting-note";
+import { getNoteCommentThreads } from "@/actions/note-comment";
 import { testDeadlineReminder } from "@/actions/deadline-reminder";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
+import { NoteAnnotatedContent } from "@/components/project/note-annotated-content-lazy";
+import { NoteCommentPanel } from "@/components/project/note-comment-panel";
+import { AttachToTaskDialog } from "@/components/project/attach-to-task-dialog";
+import { CreateTaskFromNoteDialog } from "@/components/project/create-task-from-note";
 import { NotificationBell } from "@/components/notification-bell";
+import { taskCode } from "@/lib/task-label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -74,6 +80,14 @@ interface ReminderLogEntry {
   sentAt: Date;
 }
 
+interface LinkedTask {
+  id: string;
+  title: string;
+  taskNumber: number;
+  taskType: string;
+  projectId?: string;
+}
+
 interface MeetingNote {
   id: string;
   title: string;
@@ -85,9 +99,18 @@ interface MeetingNote {
   createdAt: Date;
   updatedAt: Date;
   author: { id: string; name: string | null; imageUrl: string | null };
-  task: { id: string; title: string; taskNumber: number; taskType: string } | null;
+  task: LinkedTask | null;
+  taskLinks?: { task: LinkedTask }[];
+  commentThreads?: { id: string; quoteText: string; conversationId: string | null; _count: { comments: number } }[];
   history?: NoteHistoryEntry[];
   reminderLogs?: ReminderLogEntry[];
+}
+
+function allLinkedTasks(note: MeetingNote): LinkedTask[] {
+  const map = new Map<string, LinkedTask>();
+  if (note.task) map.set(note.task.id, note.task);
+  for (const link of note.taskLinks ?? []) map.set(link.task.id, link.task);
+  return [...map.values()];
 }
 
 interface Props {
@@ -97,6 +120,9 @@ interface Props {
   currentUserId?: string;
   isSystemAdmin?: boolean;
   isDeadlineTestProject?: boolean;
+  allowedTaskTypes?: string[];
+  activeContractType?: string | null;
+  isActive?: boolean;
 }
 
 const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "DEADLINE", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
@@ -109,6 +135,9 @@ export function MeetingNotesTab({
   currentUserId,
   isSystemAdmin = false,
   isDeadlineTestProject = false,
+  allowedTaskTypes = [],
+  activeContractType = null,
+  isActive = true,
 }: Props) {
   const [notes, setNotes] = useState(initialNotes);
   const [filter, setFilter] = useState<NoteType | "ALL">("ALL");
@@ -182,9 +211,14 @@ export function MeetingNotesTab({
     return (
       <NoteFullScreenDetail
         note={selectedNote}
+        projectId={projectId}
         canEdit={canEdit}
         isSystemAdmin={isSystemAdmin}
         isDeadlineTestProject={isDeadlineTestProject}
+        allowedTaskTypes={allowedTaskTypes}
+        activeContractType={activeContractType}
+        isActive={isActive}
+        initialThreadId={searchParams.get("threadId")}
         onBack={goBack}
         onToggleComplete={() => toggleComplete(selectedNote.id)}
         onRefresh={() => refreshNote(selectedNote.id)}
@@ -300,9 +334,9 @@ export function MeetingNotesTab({
                 <button onClick={() => openNote(note)} className="w-full text-left">
                   <p className="mt-1 text-xs text-muted-foreground">
                     by {note.author.name ?? "Unknown"}
-                    {note.task && (
+                    {allLinkedTasks(note).length > 0 && (
                       <span className="ml-2 text-muted-foreground/50">
-                        · linked to {note.task.taskType === "BUG" ? "B" : note.task.taskType === "REPORTED_BUG" ? "RB" : note.task.taskType === "ENHANCEMENT" ? "E" : note.task.taskType === "DESIGN" ? "D" : "F"}-{String(note.task.taskNumber).padStart(3, "0")}
+                        · {allLinkedTasks(note).map((t) => taskCode(t.taskType, t.taskNumber)).join(", ")}
                       </span>
                     )}
                     {(note.history?.length ?? 0) > 0 && (
@@ -470,18 +504,28 @@ function NoteFullScreenCreate({
 
 function NoteFullScreenDetail({
   note,
+  projectId,
   canEdit,
   isSystemAdmin,
   isDeadlineTestProject,
+  allowedTaskTypes,
+  activeContractType,
+  isActive,
+  initialThreadId,
   onBack,
   onToggleComplete,
   onRefresh,
   onDelete,
 }: {
   note: MeetingNote;
+  projectId: string;
   canEdit: boolean;
   isSystemAdmin?: boolean;
   isDeadlineTestProject?: boolean;
+  allowedTaskTypes: string[];
+  activeContractType: string | null;
+  isActive: boolean;
+  initialThreadId: string | null;
   onBack: () => void;
   onToggleComplete: () => Promise<void>;
   onRefresh: () => Promise<void>;
@@ -499,6 +543,24 @@ function NoteFullScreenDetail({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [createQuote, setCreateQuote] = useState<string | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(initialThreadId);
+  const [threads, setThreads] = useState<
+    { id: string; quoteText: string; conversationId: string | null; comments: { id: string; content: string; createdAt: Date; user: { id: string; name: string | null; imageUrl: string | null } }[] }[]
+  >([]);
+
+  const linked = allLinkedTasks(note);
+  const activeThread = threads.find((t) => t.id === activeThreadId) ?? null;
+
+  const loadThreads = useCallback(async () => {
+    const data = await getNoteCommentThreads(note.id);
+    setThreads(data as typeof threads);
+  }, [note.id]);
+
+  useEffect(() => {
+    void loadThreads();
+  }, [loadThreads]);
 
   const timeline = useMemo(
     () =>
@@ -584,7 +646,7 @@ function NoteFullScreenDetail({
   }
 
   return (
-    <div className="fixed inset-0 z-[110] bg-background flex flex-col">
+    <div className="relative fixed inset-0 z-[110] flex flex-col bg-background">
       {/* Top bar */}
       <div className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0">
         <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -624,6 +686,10 @@ function NoteFullScreenDetail({
                     <DropdownMenuItem onClick={() => setIsEditing(true)}>
                       <Pencil className="h-4 w-4" />
                       <span className="flex-1">Edit</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setAttachOpen(true)}>
+                      <Link2 className="h-4 w-4" />
+                      <span className="flex-1">Attach to task</span>
                     </DropdownMenuItem>
                     {showReminderTests && (
                       <>
@@ -737,21 +803,22 @@ function NoteFullScreenDetail({
                 <Clock className="w-3 h-3" />
                 {format(new Date(note.createdAt), "MMM d, yyyy 'at' h:mm a")}
               </span>
-              {note.task && (
+              {linked.length > 0 && (
                 <>
                   <span>·</span>
-                  <button
-                    onClick={() => {
-                      onBack();
-                      window.history.replaceState(null, "", `?tab=board&task=${note.task!.id}`);
-                      window.location.href = `?tab=board&task=${note.task!.id}`;
-                    }}
-                    className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    <span className="font-mono font-medium">{note.task.taskType === "BUG" ? "B" : note.task.taskType === "REPORTED_BUG" ? "RB" : note.task.taskType === "ENHANCEMENT" ? "E" : note.task.taskType === "DESIGN" ? "D" : "F"}-{String(note.task.taskNumber).padStart(3, "0")}</span>
-                    {note.task.title}
-                  </button>
+                  <span className="inline-flex flex-wrap items-center gap-1.5">
+                    {linked.map((t) => (
+                      <a
+                        key={t.id}
+                        href={`/dashboard/projects/${projectId}/tasks/${t.id}`}
+                        className="inline-flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span className="font-mono font-medium">{taskCode(t.taskType, t.taskNumber)}</span>
+                        <span className="max-w-[180px] truncate">{t.title}</span>
+                      </a>
+                    ))}
+                  </span>
                 </>
               )}
               {(note.history?.length ?? 0) > 0 && (
@@ -782,17 +849,83 @@ function NoteFullScreenDetail({
             {isEditing ? (
               <RichTextEditor content={content} onChange={setContent} borderless />
             ) : (
-              <div
-                className="prose prose-invert max-w-none text-base leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: note.content }}
+              <NoteAnnotatedContent
+                content={note.content}
+                noteId={note.id}
+                projectId={projectId}
+                canCreateTask={isActive && allowedTaskTypes.length > 0}
+                onOpenThread={(id) => setActiveThreadId(id)}
+                onOpenTask={(taskId) => {
+                  window.location.href = `/dashboard/projects/${projectId}/tasks/${taskId}`;
+                }}
+                onCreateTask={(quote) => setCreateQuote(quote)}
+                onChanged={async () => {
+                  await onRefresh();
+                  await loadThreads();
+                }}
               />
+            )}
+
+            {!isEditing && linked.length > 0 && (
+              <div className="mt-10 rounded-xl border border-border/60 bg-card p-4">
+                <h2 className="mb-3 text-[13px] font-semibold">Linked tasks</h2>
+                <div className="space-y-2">
+                  {linked.map((t) => (
+                    <a
+                      key={t.id}
+                      href={`/dashboard/projects/${projectId}/tasks/${t.id}`}
+                      className="flex items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-sm hover:border-border"
+                    >
+                      <span className="font-mono text-[11px] font-semibold text-primary">
+                        {taskCode(t.taskType, t.taskNumber)}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                    </a>
+                  ))}
+                </div>
+              </div>
             )}
         </div>
       </div>
 
+      {activeThread && (
+        <div className="absolute inset-y-12 right-0 z-[111] w-full max-w-sm shadow-2xl">
+          <NoteCommentPanel
+            thread={activeThread}
+            noteId={note.id}
+            onClose={() => setActiveThreadId(null)}
+            onChanged={async () => {
+              await onRefresh();
+              await loadThreads();
+            }}
+          />
+        </div>
+      )}
+
       {showHistory && (
         <NoteHistoryDialog events={timeline} onClose={() => setShowHistory(false)} />
       )}
+
+      <AttachToTaskDialog
+        open={attachOpen}
+        onClose={() => setAttachOpen(false)}
+        noteId={note.id}
+        projectId={projectId}
+        excludeTaskIds={linked.map((t) => t.id)}
+        onAttached={() => void onRefresh()}
+      />
+
+      <CreateTaskFromNoteDialog
+        open={createQuote !== null}
+        onClose={() => setCreateQuote(null)}
+        noteId={note.id}
+        projectId={projectId}
+        quote={createQuote ?? ""}
+        allowedTaskTypes={allowedTaskTypes}
+        activeContractType={activeContractType}
+        onCreated={() => void onRefresh()}
+      />
     </div>
   );
 }

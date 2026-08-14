@@ -21,6 +21,7 @@ import {
   NOTIFICATION_READ_ALL,
 } from "@/lib/channels";
 import { updateAppBadge } from "@/lib/app-badge";
+import { closePushBannersByTags } from "@/lib/close-push-banners";
 
 const POLL_FALLBACK_INTERVAL = 60_000;
 
@@ -102,7 +103,13 @@ export function NotificationBell({ currentUserId }: Props) {
   // Payload-driven live updates: prepend on new, mark items + set count on read.
   useChannel(cent && currentUserId ? userChannel(currentUserId) : null, (data) => {
     const payload = data as
-      | { type?: string; notification?: NotificationDTO; ids?: string[]; unread?: number }
+      | {
+          type?: string;
+          notification?: NotificationDTO;
+          ids?: string[];
+          linkUrls?: string[];
+          unread?: number;
+        }
       | null;
     if (!payload || typeof payload !== "object") return;
 
@@ -118,8 +125,13 @@ export function NotificationBell({ currentUserId }: Props) {
 
     if (payload.type === NOTIFICATION_READ) {
       const ids = new Set(payload.ids ?? []);
+      const urls = new Set(payload.linkUrls ?? []);
       setItems((prev) =>
-        prev.map((x) => (ids.has(x.id) ? { ...x, read: true } : x)),
+        prev.map((x) =>
+          ids.has(x.id) || (x.linkUrl && urls.has(x.linkUrl))
+            ? { ...x, read: true }
+            : x,
+        ),
       );
       if (typeof payload.unread === "number") setCount(Math.max(0, payload.unread));
       return;
@@ -154,24 +166,25 @@ export function NotificationBell({ currentUserId }: Props) {
 
   function handleClick(n: NotificationDTO) {
     if (!n.read) {
-      startTransition(async () => {
-        // The action publishes notification.read to our other devices/tabs;
-        // this optimistic update keeps the current tab instant.
-        await markNotificationRead(n.id);
-        setItems((prev) =>
-          prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)),
-        );
-        setCount((c) => Math.max(0, c - 1));
+      // Optimistic: badge and row update before the server round-trip so the
+      // current tab never waits on mark-read / Centrifugo.
+      setItems((prev) =>
+        prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)),
+      );
+      setCount((c) => Math.max(0, c - 1));
+      if (n.tag) void closePushBannersByTags([n.tag]);
+      startTransition(() => {
+        void markNotificationRead(n.id);
       });
     }
     setOpen(false);
   }
 
   function handleMarkAllRead() {
-    startTransition(async () => {
-      await markAllNotificationsRead();
+    startTransition(() => {
       setItems((prev) => prev.map((x) => ({ ...x, read: true })));
       setCount(0);
+      void markAllNotificationsRead();
     });
   }
 

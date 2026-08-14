@@ -255,6 +255,25 @@
   animation: scroll-down 30s linear infinite;
 }
 
+mark.note-annotation {
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+  cursor: pointer;
+}
+mark.note-annotation-comment {
+  background: rgb(251 191 36 / 0.28);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  border-bottom: 2px solid rgb(251 191 36 / 0.75);
+}
+mark.note-annotation-task {
+  background: rgb(74 222 128 / 0.22);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  border-bottom: 2px solid rgb(74 222 128 / 0.75);
+}
+
 @keyframes typing {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
   30% { transform: translateY(-4px); opacity: 1; }

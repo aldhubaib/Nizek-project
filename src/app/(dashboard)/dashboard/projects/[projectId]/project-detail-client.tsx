@@ -387,6 +387,9 @@ export function ProjectDetailClient({
                 currentUserId={currentUserId}
                 isSystemAdmin={isSystemAdmin}
                 isDeadlineTestProject={isDeadlineTestProject}
+                allowedTaskTypes={allowedTaskTypes ?? []}
+                activeContractType={activeContractType ?? null}
+                isActive={isActive}
               />
             )}
           </TabsContent>

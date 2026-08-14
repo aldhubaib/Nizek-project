@@ -51,7 +51,10 @@ export function DashboardShell({
   // The expanded task page is a focus screen with its own back button, so the
   // navigation (sidebar rail and bottom nav) gets out of the way entirely.
   const onTaskPage = /^\/dashboard\/projects\/[^/]+\/tasks\/./.test(pathname);
-  const showBottomNav = !isDesktop && !onThread && !onTaskPage;
+  // Stay mounted on an open thread so the inbox badge can clear live; hide it
+  // so the composer still owns the bottom edge.
+  const showBottomNav = !isDesktop && !onTaskPage;
+  const bottomNavVisible = showBottomNav && !onThread;
 
   useEffect(() => {
     const handleResize = () =>
@@ -135,7 +138,7 @@ export function DashboardShell({
       <main
         className={`flex-1 min-w-0 bg-background relative z-10 ${
           isDesktop ? (onTaskPage ? "" : "rounded-l-2xl") : onInbox ? "" : "pt-12"
-        } ${showBottomNav && !onInbox ? "pb-[calc(4rem+env(safe-area-inset-bottom))]" : ""}`}
+        } ${bottomNavVisible && !onInbox ? "pb-[calc(4rem+env(safe-area-inset-bottom))]" : ""}`}
       >
         <ClientRouteGuard enabled={isClient} />
         {isDesktop && !onInbox && (
@@ -159,6 +162,7 @@ export function DashboardShell({
           canVault={canVault}
           isClient={isClient}
           currentUserId={currentUserId}
+          hidden={!bottomNavVisible}
           onOpenMenu={() => setDrawerOpen(true)}
         />
       )}
