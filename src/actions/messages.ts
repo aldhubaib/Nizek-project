@@ -94,6 +94,10 @@ function parseMentions(body: string): string[] {
 }
 
 /** Strip mention markup down to plain "@Name" for display/previews. */
+function toDisplayBody(body: string): string {
+  return body.replace(MENTION_RE, "@$1");
+}
+
 function inboxPreview(body: string): string {
   const activity = decodeNoteActivityPayload(body);
   if (activity) return noteActivityPreview(activity);
@@ -1437,7 +1441,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         logoUrl: c.project?.logoUrl ?? null,
         peerImageUrl: null,
         peerMemberIds: [],
-        lastMessage: last ? toDisplayBody(last.body) || "📎 Attachment" : "",
+        lastMessage: last ? inboxPreview(last.body) : "",
         lastAuthor: last ? (last.author.name ?? last.author.email) : "",
         lastAt: last ? last.createdAt.toISOString() : "",
         unread: unreadMap.get(`/dashboard/messages/conv-${c.id}`) ?? 0,
@@ -1585,7 +1589,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         logoUrl: c.project!.logoUrl ?? null,
         peerImageUrl: null,
         peerMemberIds: [],
-        lastMessage: last ? toDisplayBody(last.body) || "📎 Attachment" : "",
+        lastMessage: last ? inboxPreview(last.body) : "",
         lastAuthor: last ? (last.author.name ?? last.author.email) : "",
         lastAt: last ? last.createdAt.toISOString() : "",
         unread: unreadMap.get(`/dashboard/messages/conv-${c.id}`) ?? 0,
@@ -1608,7 +1612,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       : taskPayload
         ? taskPayload.comment
         : last
-          ? toDisplayBody(last.body) || "📎 Attachment"
+          ? inboxPreview(last.body)
           : "";
     const peer = c.participants.find((p) => p.memberId !== user.id);
     const projectName = note?.project.name ?? task?.project.name;

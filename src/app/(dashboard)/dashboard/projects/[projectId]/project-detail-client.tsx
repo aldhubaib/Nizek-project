@@ -20,6 +20,7 @@ import { getTeams } from "@/actions/team";
 import { listProjectVaultCredentials, type VaultCredentialDTO } from "@/actions/vault";
 
 import type { TaskQuestion } from "@/components/kanban/question-field";
+import type { KanbanTask } from "@/store/kanban";
 import Link from "next/link";
 import { LayoutGrid, FileText, Paperclip, Users, KeyRound, Settings, Loader2, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
