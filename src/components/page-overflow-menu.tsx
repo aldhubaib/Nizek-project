@@ -9,7 +9,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { MoreVertical } from "lucide-react";
@@ -25,83 +24,68 @@ import {
  * items into it instead of drawing their own menu trigger — so project
  * settings, note actions, and equity actions all land in the same place.
  *
- * Register/unregister live on a stable context object. The menu reads entries
- * through an external store, so adding an item cannot rebuild the context that
- * the registrars subscribe to (that loop is React error #185).
+ * Actions (register/unregister) live on a stable context. The item list is a
+ * second context, so adding an item re-renders the menu without tearing down
+ * the registrars (that loop was React error #185).
  */
 
 type Getter = () => ReactNode;
 
 type Entry = { id: string; order: number; getNode: Getter };
 
-type OverflowRegistry = {
+type OverflowActions = {
   register: (id: string, order: number, getNode: Getter) => void;
   unregister: (id: string) => void;
-  subscribe: (onStoreChange: () => void) => () => void;
-  getSnapshot: () => Entry[];
 };
 
-const OverflowContext = createContext<OverflowRegistry | null>(null);
+const OverflowActionsContext = createContext<OverflowActions | null>(null);
 const EMPTY_ENTRIES: Entry[] = [];
-
-function subscribeNoop() {
-  return () => {};
-}
-function getEmptySnapshot(): Entry[] {
-  return EMPTY_ENTRIES;
-}
+const OverflowEntriesContext = createContext<Entry[]>(EMPTY_ENTRIES);
 
 function snapshotFrom(map: Map<string, Omit<Entry, "id">>): Entry[] {
-  return Array.from(map.entries())
+  const next = Array.from(map.entries())
     .map(([id, value]) => ({ id, ...value }))
     .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+  return next.length === 0 ? EMPTY_ENTRIES : next;
 }
 
 export function PageOverflowMenuProvider({ children }: { children: ReactNode }) {
   const mapRef = useRef(new Map<string, Omit<Entry, "id">>());
-  const snapshotRef = useRef<Entry[]>(EMPTY_ENTRIES);
-  const listenersRef = useRef(new Set<() => void>());
+  const [entries, setEntries] = useState<Entry[]>(EMPTY_ENTRIES);
 
-  const emit = useCallback(() => {
-    const next = snapshotFrom(mapRef.current);
-    snapshotRef.current = next.length === 0 ? EMPTY_ENTRIES : next;
-    listenersRef.current.forEach((listener) => listener());
+  const sync = useCallback(() => {
+    setEntries(snapshotFrom(mapRef.current));
   }, []);
 
   const register = useCallback(
     (id: string, order: number, getNode: Getter) => {
       const prev = mapRef.current.get(id);
       mapRef.current.set(id, { order, getNode });
-      if (!prev || prev.order !== order) emit();
+      if (!prev || prev.order !== order) sync();
     },
-    [emit],
+    [sync],
   );
 
   const unregister = useCallback(
     (id: string) => {
       if (!mapRef.current.has(id)) return;
       mapRef.current.delete(id);
-      emit();
+      sync();
     },
-    [emit],
+    [sync],
   );
 
-  const subscribe = useCallback((onStoreChange: () => void) => {
-    listenersRef.current.add(onStoreChange);
-    return () => {
-      listenersRef.current.delete(onStoreChange);
-    };
-  }, []);
-
-  const getSnapshot = useCallback(() => snapshotRef.current, []);
-
-  const registry = useMemo<OverflowRegistry>(
-    () => ({ register, unregister, subscribe, getSnapshot }),
-    [register, unregister, subscribe, getSnapshot],
+  const actions = useMemo<OverflowActions>(
+    () => ({ register, unregister }),
+    [register, unregister],
   );
 
   return (
-    <OverflowContext.Provider value={registry}>{children}</OverflowContext.Provider>
+    <OverflowActionsContext.Provider value={actions}>
+      <OverflowEntriesContext.Provider value={entries}>
+        {children}
+      </OverflowEntriesContext.Provider>
+    </OverflowActionsContext.Provider>
   );
 }
 
@@ -114,13 +98,13 @@ export function PageOverflowItems({
   order?: number;
   children: ReactNode;
 }) {
-  const registry = useContext(OverflowContext);
+  const actions = useContext(OverflowActionsContext);
   const childrenRef = useRef(children);
   childrenRef.current = children;
   const getNode = useCallback(() => childrenRef.current, []);
 
-  const register = registry?.register;
-  const unregister = registry?.unregister;
+  const register = actions?.register;
+  const unregister = actions?.unregister;
 
   useLayoutEffect(() => {
     if (!register || !unregister) return;
@@ -131,17 +115,8 @@ export function PageOverflowItems({
   return null;
 }
 
-function useOverflowEntries(): Entry[] {
-  const registry = useContext(OverflowContext);
-  return useSyncExternalStore(
-    registry?.subscribe ?? subscribeNoop,
-    registry?.getSnapshot ?? getEmptySnapshot,
-    getEmptySnapshot,
-  );
-}
-
 export function PageOverflowMenu() {
-  const entries = useOverflowEntries();
+  const entries = useContext(OverflowEntriesContext);
   const [openTick, setOpenTick] = useState(0);
 
   if (entries.length === 0) return null;
