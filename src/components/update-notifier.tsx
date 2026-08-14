@@ -1,17 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
+import {
+  APP_UPDATE_STORAGE_KEY,
+  NOTIF_SOUND_CACHE,
+  applyPoll,
+  decideMountAction,
+  parseRelease,
+  parseStoredUpdate,
+  pickLatest,
+  shouldSkipUpdateCheck,
+  stripCacheBust,
+  withCacheBust,
+  type AppRelease,
+  type StoredUpdate,
+} from "@/lib/app-release";
 
 // Primarily event-driven: we check on tab focus / visibility changes (which
 // covers the common "user came back to the app" case). A long backstop interval
 // catches deploys while the tab stays focused, without a chatty 60s poll.
 const POLL_INTERVAL_MS = 10 * 60_000;
-
-interface VersionResponse {
-  version: string;
-  logo: string;
-}
 
 function setFavicon(href: string) {
   if (typeof document === "undefined") return;
@@ -28,37 +37,153 @@ function setFavicon(href: string) {
   });
 }
 
+function readStored(): StoredUpdate | null {
+  try {
+    return parseStoredUpdate(sessionStorage.getItem(APP_UPDATE_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function persist(target: StoredUpdate) {
+  try {
+    sessionStorage.setItem(APP_UPDATE_STORAGE_KEY, JSON.stringify(target));
+  } catch {
+    // Private mode / quota — in-memory state still drives this page.
+  }
+}
+
+function clearStored() {
+  try {
+    sessionStorage.removeItem(APP_UPDATE_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function stripCacheBustFromUrl() {
+  const next = stripCacheBust(window.location.href);
+  if (next !== window.location.href) {
+    window.history.replaceState(null, "", next);
+  }
+}
+
+async function clearAppCaches() {
+  if (!("caches" in window)) return;
+  try {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys.filter((k) => k !== NOTIF_SOUND_CACHE).map((k) => caches.delete(k)),
+    );
+  } catch {
+    // Cache API can throw in some private-browsing modes.
+  }
+}
+
+async function fetchLiveRelease(): Promise<{
+  release: AppRelease;
+  logo?: string;
+} | null> {
+  const res = await fetch("/api/version", { cache: "no-store" });
+  if (!res.ok) return null;
+  const data: unknown = await res.json();
+  const release = parseRelease(data);
+  if (!release) return null;
+  const logo =
+    data && typeof data === "object" && "logo" in data
+      ? typeof (data as { logo: unknown }).logo === "string"
+        ? (data as { logo: string }).logo
+        : undefined
+      : undefined;
+  return { release, logo };
+}
+
+async function hardNavigate(target: AppRelease) {
+  await clearAppCaches();
+  window.location.replace(withCacheBust(window.location.href, target.version));
+}
+
 /**
  * Watches for new deployments and prompts the user to update.
  *
- * `currentVersion` is the build identifier baked into the page the user loaded.
- * We poll `/api/version` (served by whatever container is currently live); when it
- * reports a different version, a newer build has shipped. We surface a popup so the
- * user can reload into it, and we also swap the favicon so a changed app logo shows
- * up immediately — even before they choose to update.
+ * `currentVersion` / `releasedAt` are baked into the page the user loaded.
+ * We poll `/api/version` (served by whatever container is currently live) and
+ * keep a single latest target by `releasedAt`, so older replicas and
+ * intermediate deploys never step the user through multiple prompts. "Update
+ * now" hard-navigates to that target and silently retries if the next document
+ * is still behind.
  */
-export function UpdateNotifier({ currentVersion }: { currentVersion: string }) {
-  const [newVersion, setNewVersion] = useState<string | null>(null);
+export function UpdateNotifier({
+  currentVersion,
+  releasedAt,
+}: {
+  currentVersion: string;
+  releasedAt: number;
+}) {
+  const page: AppRelease = { version: currentVersion, releasedAt };
+  const [pending, setPending] = useState<AppRelease | null>(null);
+  const [applying, setApplying] = useState(false);
+  const pendingRef = useRef<AppRelease | null>(null);
+  pendingRef.current = pending;
 
   const check = useCallback(async () => {
     try {
-      const res = await fetch("/api/version", { cache: "no-store" });
-      if (!res.ok) return;
-      const data = (await res.json()) as VersionResponse;
-      if (!data?.version || data.version === currentVersion) return;
+      const live = await fetchLiveRelease();
+      if (!live) return;
+      if (live.logo) setFavicon(live.logo);
 
-      // A changed logo should apply right away.
-      if (data.logo) setFavicon(data.logo);
-
-      setNewVersion(data.version);
+      const next = applyPoll(page, pendingRef.current, live.release);
+      setPending(next);
+      if (!next) {
+        clearStored();
+        stripCacheBustFromUrl();
+      }
     } catch {
       // Network hiccup — ignore and retry on the next interval.
     }
-  }, [currentVersion]);
+  }, [page.version, page.releasedAt]);
 
   useEffect(() => {
-    // Skip polling in local/dev where there is no real deploy version to compare.
-    if (currentVersion === "dev" || currentVersion.startsWith("dev.")) return;
+    if (shouldSkipUpdateCheck(currentVersion)) return;
+
+    const stored = readStored();
+    const action = decideMountAction(page, stored);
+
+    if (action.type === "caught_up") {
+      clearStored();
+      stripCacheBustFromUrl();
+    } else if (action.type === "silent_retry") {
+      setApplying(true);
+      let cancelled = false;
+      (async () => {
+        let target = action.target;
+        try {
+          const live = await fetchLiveRelease();
+          if (live) {
+            if (live.logo) setFavicon(live.logo);
+            const latest = pickLatest(target, live.release);
+            target = { ...latest, attempts: target.attempts };
+          }
+        } catch {
+          // Navigate to whatever we already stored.
+        }
+        if (cancelled) return;
+        try {
+          persist(target);
+          await hardNavigate(target);
+        } catch {
+          if (!cancelled) {
+            setPending(target);
+            setApplying(false);
+          }
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    } else if (action.type === "show_banner") {
+      setPending(action.target);
+    }
 
     check();
     const interval = setInterval(check, POLL_INTERVAL_MS);
@@ -74,13 +199,39 @@ export function UpdateNotifier({ currentVersion }: { currentVersion: string }) {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", check);
     };
-  }, [check, currentVersion]);
+    // Mount-only: the baked page identity does not change without a navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  if (!newVersion) return null;
-
-  const update = () => {
-    window.location.reload();
+  const update = async () => {
+    if (applying) return;
+    setApplying(true);
+    try {
+      let target = pendingRef.current;
+      try {
+        const live = await fetchLiveRelease();
+        if (live) {
+          if (live.logo) setFavicon(live.logo);
+          target = pickLatest(target, live.release);
+        }
+      } catch {
+        // Use the banner target if the refresh fails.
+      }
+      if (!target || applyPoll(page, null, target) === null) {
+        setPending(null);
+        setApplying(false);
+        clearStored();
+        stripCacheBustFromUrl();
+        return;
+      }
+      persist({ ...target, attempts: 1 });
+      await hardNavigate(target);
+    } catch {
+      setApplying(false);
+    }
   };
+
+  if (applying || !pending) return null;
 
   return (
     <div className="fixed bottom-4 left-4 z-[1000] w-[calc(100%-2rem)] max-w-[320px] animate-in fade-in slide-in-from-bottom-2">

@@ -4,7 +4,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdateNotifier } from "@/components/update-notifier";
-import { getClientVersion } from "@/lib/version";
+import { getClientRelease } from "@/lib/version";
 import { getBrandingMap, brandingUrlWithBust } from "@/lib/branding";
 import "./globals.css";
 
@@ -64,7 +64,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const clientVersion = await getClientVersion();
+  const release = await getClientRelease();
   return (
     <html
       lang="en"
@@ -73,7 +73,10 @@ export default async function RootLayout({
       <body className="min-h-full bg-background text-foreground">
         <ClerkProvider appearance={{ baseTheme: dark }}>
           <TooltipProvider>{children}</TooltipProvider>
-          <UpdateNotifier currentVersion={clientVersion} />
+          <UpdateNotifier
+            currentVersion={release.version}
+            releasedAt={release.releasedAt}
+          />
         </ClerkProvider>
       </body>
     </html>

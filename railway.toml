@@ -1,5 +1,8 @@
 [build]
-buildCommand = "npm run build && cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public"
+# NEXT_PUBLIC_APP_BUILD_TIME is inlined at `next build` so every replica of this
+# image shares one monotonic timestamp. The update prompt uses it to jump to the
+# newest deploy instead of stepping through rolling-replica SHAs.
+buildCommand = "NEXT_PUBLIC_APP_BUILD_TIME=$(date +%s)000 npm run build && cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public"
 
 [deploy]
 # Migrations run at deploy time (not build): the Postgres private network is only

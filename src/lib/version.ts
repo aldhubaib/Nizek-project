@@ -1,3 +1,5 @@
+import { computeReleasedAt, type AppRelease } from "@/lib/app-release";
+
 /**
  * A stable identifier for the currently deployed build.
  *
@@ -17,6 +19,19 @@ export function getAppVersion(): string {
 }
 
 /**
+ * Milliseconds stamped into the image at `next build` via
+ * `NEXT_PUBLIC_APP_BUILD_TIME`. Shared by every replica of the same deploy, and
+ * strictly newer on the next deploy — so clients can order releases even though
+ * git SHAs are not comparable. 0 when unset (local/dev).
+ */
+export function getBuildTimeMs(): number {
+  const raw = process.env.NEXT_PUBLIC_APP_BUILD_TIME;
+  if (!raw) return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
  * The version reported to clients for update detection. It's the deploy version
  * plus a token that changes when the admin swaps branding (logos or the
  * notification sound) — so those changes (no deploy) also trip the "new version
@@ -26,9 +41,23 @@ export function getAppVersion(): string {
  * the DB (uncached), so they only differ after an actual change.
  */
 export async function getClientVersion(): Promise<string> {
+  const release = await getClientRelease();
+  return release.version;
+}
+
+/**
+ * Comparable release identity: opaque `version` for equality, monotonic
+ * `releasedAt` so the client can always keep the newest target (a later deploy
+ * or a later branding change) and ignore older replicas.
+ */
+export async function getClientRelease(): Promise<AppRelease> {
   const { getBrandingChangeToken } = await import("@/lib/branding");
   const token = await getBrandingChangeToken();
-  return `${getAppVersion()}.b${token}`;
+  const brandingMs = Number(token) || 0;
+  return {
+    version: `${getAppVersion()}.b${token}`,
+    releasedAt: computeReleasedAt(getBuildTimeMs(), brandingMs),
+  };
 }
 
 /**
