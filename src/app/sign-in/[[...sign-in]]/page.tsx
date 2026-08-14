@@ -22,7 +22,9 @@ async function loadGallery(): Promise<{
         column: p.column === "b" ? "b" : "a",
         url: p.url,
       })),
-      logoUrl: branding.webLogo?.url ?? null,
+      logoUrl: branding.webLogo
+        ? `${branding.webLogo.url}?v=${branding.webLogo.updatedAt}`
+        : null,
     };
   } catch {
     return { photos: [], logoUrl: null };

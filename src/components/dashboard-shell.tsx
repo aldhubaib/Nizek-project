@@ -25,6 +25,7 @@ export function DashboardShell({
   isClient = false,
   currentUserId,
   notificationSoundUrl,
+  logoUrl,
 }: {
   children: React.ReactNode;
   isAdmin?: boolean;
@@ -34,6 +35,7 @@ export function DashboardShell({
   isClient?: boolean;
   currentUserId?: string;
   notificationSoundUrl?: string | null;
+  logoUrl?: string | null;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
@@ -96,6 +98,7 @@ export function DashboardShell({
             canEquity={canEquity}
             canVault={canVault}
             isClient={isClient}
+            logoUrl={logoUrl}
           />
         </div>
       )}
@@ -130,6 +133,7 @@ export function DashboardShell({
             canEquity={canEquity}
             canVault={canVault}
             isClient={isClient}
+            logoUrl={logoUrl}
           />
         </div>
       )}

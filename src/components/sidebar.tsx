@@ -44,6 +44,7 @@ interface SidebarProps {
   canEquity?: boolean;
   canVault?: boolean;
   isClient?: boolean;
+  logoUrl?: string | null;
 }
 
 export function Sidebar({
@@ -55,6 +56,7 @@ export function Sidebar({
   canEquity = false,
   canVault = false,
   isClient = false,
+  logoUrl = null,
 }: SidebarProps) {
   const pathname = usePathname();
 
@@ -77,9 +79,7 @@ export function Sidebar({
       <div className="relative px-3 h-12 flex items-center justify-between shrink-0">
         {!collapsed ? (
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-[11px] font-semibold text-primary shrink-0">
-              N
-            </div>
+            <BrandMark logoUrl={logoUrl} className="h-7 w-7" />
             <span className="font-semibold text-[13px] text-foreground truncate">
               Nizek Project
             </span>
@@ -87,9 +87,7 @@ export function Sidebar({
         ) : (
           <Tooltip>
             <TooltipTrigger className="mx-auto">
-              <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-[11px] font-semibold text-primary">
-                N
-              </div>
+              <BrandMark logoUrl={logoUrl} className="h-8 w-8" />
             </TooltipTrigger>
             <TooltipContent side="right">Nizek Project</TooltipContent>
           </Tooltip>
@@ -168,6 +166,35 @@ export function Sidebar({
       <div className={cn("px-2 py-2", collapsed && "px-1.5")}>
         <UserMenu collapsed={collapsed} />
       </div>
+    </div>
+  );
+}
+
+function BrandMark({
+  logoUrl,
+  className,
+}: {
+  logoUrl?: string | null;
+  className?: string;
+}) {
+  if (logoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={logoUrl}
+        alt=""
+        className={cn("shrink-0 rounded-lg object-contain", className)}
+      />
+    );
+  }
+  return (
+    <div
+      className={cn(
+        "shrink-0 rounded-full bg-primary/15 grid place-items-center text-[11px] font-semibold text-primary",
+        className,
+      )}
+    >
+      N
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getBrandingMap } from "@/lib/branding";
+import { brandingUrlWithBust, getBrandingMap } from "@/lib/branding";
 import type { BrandingStorageSlot } from "@/lib/branding-slots";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ export async function GET() {
     fallback: string,
     purpose?: string,
   ): Icon => ({
-    src: map[slot]?.url ?? fallback,
+    src: brandingUrlWithBust(map, slot) ?? fallback,
     sizes,
     type: "image/png",
     purpose,
@@ -31,7 +31,7 @@ export async function GET() {
   ];
   if (map.androidMonochrome) {
     icons.push({
-      src: map.androidMonochrome.url,
+      src: brandingUrlWithBust(map, "androidMonochrome")!,
       sizes: "512x512",
       type: "image/png",
       purpose: "monochrome",
@@ -55,7 +55,7 @@ export async function GET() {
     {
       headers: {
         "Content-Type": "application/manifest+json",
-        "Cache-Control": "public, max-age=300",
+        "Cache-Control": "no-store, max-age=0, must-revalidate",
       },
     },
   );

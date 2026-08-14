@@ -17,24 +17,29 @@ export function getAppVersion(): string {
 }
 
 /**
- * URL for the app logo / favicon, cache-busted by the current version so a deploy
- * that changes the logo is picked up by clients without a manual hard refresh.
- */
-export function getAppLogoUrl(version = getAppVersion()): string {
-  return `/favicon.ico?v=${encodeURIComponent(version)}`;
-}
-
-/**
  * The version reported to clients for update detection. It's the deploy version
- * plus a token that changes when the admin swaps the notification sound — so a
- * sound change (no deploy) also trips the "new version available" prompt,
- * letting us force clients to reload into the new sound.
+ * plus a token that changes when the admin swaps branding (logos or the
+ * notification sound) — so those changes (no deploy) also trip the "new version
+ * available" prompt and force clients to reload into the new assets.
  *
  * Both the baked-in page value and /api/version compute this the same way from
  * the DB (uncached), so they only differ after an actual change.
  */
 export async function getClientVersion(): Promise<string> {
-  const { getNotificationSoundToken } = await import("@/lib/branding");
-  const soundToken = await getNotificationSoundToken();
-  return `${getAppVersion()}.s${soundToken}`;
+  const { getBrandingChangeToken } = await import("@/lib/branding");
+  const token = await getBrandingChangeToken();
+  return `${getAppVersion()}.b${token}`;
+}
+
+/**
+ * URL for the app logo / favicon, cache-busted so a branding upload is picked
+ * up without a manual hard refresh.
+ */
+export async function getAppLogoUrl(): Promise<string> {
+  const { brandingUrlWithBust, getBrandingMap } = await import("@/lib/branding");
+  const map = await getBrandingMap();
+  return (
+    brandingUrlWithBust(map, "favicon") ??
+    `/favicon.ico?v=${encodeURIComponent(getAppVersion())}`
+  );
 }

@@ -5,7 +5,7 @@ import { dark } from "@clerk/themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdateNotifier } from "@/components/update-notifier";
 import { getClientVersion } from "@/lib/version";
-import { getBrandingMap } from "@/lib/branding";
+import { getBrandingMap, brandingUrlWithBust } from "@/lib/branding";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,16 +27,29 @@ export const viewport: Viewport = {
 
 export async function generateMetadata(): Promise<Metadata> {
   const map = await getBrandingMap();
-  const favicon = map.favicon?.url ?? "/favicon.ico";
-  const apple = map.appleTouchIcon?.url ?? "/apple-touch-icon.png";
-  const og = map.ogImage?.url;
+  const favicon = brandingUrlWithBust(map, "favicon") ?? "/favicon.ico";
+  const faviconDark = map.faviconDark
+    ? brandingUrlWithBust(map, "faviconDark")
+    : null;
+  const apple = brandingUrlWithBust(map, "appleTouchIcon") ?? "/apple-touch-icon.png";
+  const og = map.ogImage
+    ? brandingUrlWithBust(map, "ogImage")
+    : undefined;
 
   return {
     title: "Nizek Project",
     description: "Project management for teams",
     applicationName: "Nizek",
     manifest: "/manifest.json",
-    icons: { icon: favicon, apple },
+    icons: {
+      icon: faviconDark
+        ? [
+            { url: favicon, media: "(prefers-color-scheme: light)" },
+            { url: faviconDark, media: "(prefers-color-scheme: dark)" },
+          ]
+        : favicon,
+      apple,
+    },
     appleWebApp: {
       capable: true,
       title: "Nizek",

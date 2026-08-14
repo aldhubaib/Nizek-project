@@ -6,7 +6,7 @@ import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { getCurrentUser, getImpersonation, needsProfilePhoto } from "@/lib/auth";
 import { canAccessEquity } from "@/lib/equity-access";
 import { canAccessAnyVault } from "@/lib/vault-access";
-import { getNotificationSoundUrl } from "@/lib/branding";
+import { getNotificationSoundUrl, getBrandingMap, brandingUrlWithBust } from "@/lib/branding";
 import { isClientUser } from "@/lib/client-chat";
 import { prisma } from "@/lib/prisma";
 
@@ -49,10 +49,14 @@ export default async function DashboardLayout({
 
   const isClient = isClientUser(user);
 
-  const [notificationSoundUrl, impersonation] = await Promise.all([
+  const [notificationSoundUrl, impersonation, branding] = await Promise.all([
     getNotificationSoundUrl(),
     getImpersonation(),
+    getBrandingMap(),
   ]);
+  const logoUrl = branding.webLogo
+    ? brandingUrlWithBust(branding, "webLogo")
+    : null;
 
   // Audit module visibility: admins always, others need an AuditPermission grant.
   const isAdmin = user?.systemRole === "ADMIN";
@@ -75,6 +79,7 @@ export default async function DashboardLayout({
       isClient={isClient}
       currentUserId={user?.id}
       notificationSoundUrl={notificationSoundUrl}
+      logoUrl={logoUrl}
     >
       {children}
       {impersonation && <ImpersonationBanner targetName={impersonation.targetName} />}

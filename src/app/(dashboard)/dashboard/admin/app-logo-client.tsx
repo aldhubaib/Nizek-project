@@ -237,7 +237,7 @@ function SlotPreview({
     <div className={base}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={asset.url}
+        src={`${asset.url}${asset.url.includes("?") ? "&" : "?"}v=${asset.updatedAt}`}
         alt=""
         className={
           slot.previewShape === "wide"

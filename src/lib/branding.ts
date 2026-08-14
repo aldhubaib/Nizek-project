@@ -1,5 +1,11 @@
 import "server-only";
-import { unstable_cache } from "next/cache";
+import {
+  unstable_cache,
+  updateTag,
+  revalidateTag,
+  revalidatePath,
+  refresh,
+} from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { BrandingStorageSlot } from "@/lib/branding-slots";
 
@@ -10,15 +16,23 @@ export type BrandingMap = Partial<Record<BrandingStorageSlot, BrandingEntry>>;
 export const BRANDING_CACHE_TAG = "branding";
 
 // Cache the tiny BrandingAsset read so every page render (metadata + manifest +
-// layout all call getBrandingMap) doesn't hit the DB. Invalidated via
-// revalidateTag(BRANDING_CACHE_TAG) when branding assets change.
+// layout all call getBrandingMap) doesn't hit the DB. Bust with
+// invalidateBrandingCache() after any branding mutation.
 const getCachedBrandingRows = unstable_cache(
   async () => prisma.brandingAsset.findMany(),
   ["branding-map"],
-  // Tagged for on-demand invalidation on branding change; revalidate is a
-  // self-healing backstop so staleness is bounded even without the tag bust.
   { tags: [BRANDING_CACHE_TAG], revalidate: 300 },
 );
+
+/** Drop the branding read cache and the root layout so favicons/manifest update. */
+export function invalidateBrandingCache() {
+  updateTag(BRANDING_CACHE_TAG);
+  revalidateTag(BRANDING_CACHE_TAG, { expire: 0 });
+  revalidatePath("/", "layout");
+  revalidatePath("/manifest.json");
+  revalidatePath("/dashboard/admin");
+  refresh();
+}
 
 // Static fallbacks used before any custom asset is uploaded.
 export const BRANDING_FALLBACKS: Partial<Record<BrandingStorageSlot, string>> = {
@@ -55,6 +69,21 @@ export function brandingUrl(
   return map[slot]?.url ?? BRANDING_FALLBACKS[slot] ?? null;
 }
 
+/** Append a version query so browsers/CDNs don't keep serving a replaced asset. */
+export function withBrandingBust(url: string, updatedAt: number): string {
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}v=${updatedAt}`;
+}
+
+export function brandingUrlWithBust(
+  map: BrandingMap,
+  slot: BrandingStorageSlot,
+): string | null {
+  const entry = map[slot];
+  if (entry) return withBrandingBust(entry.url, entry.updatedAt);
+  return BRANDING_FALLBACKS[slot] ?? null;
+}
+
 // Storage slot for the admin-configured custom notification sound. Stored in the
 // same BrandingAsset table (singleton row) but kept out of BRANDING_SLOTS since
 // it's audio, not an image with dimension/sharp validation.
@@ -86,6 +115,23 @@ export async function getNotificationSoundToken(): Promise<string> {
       select: { updatedAt: true },
     });
     return row ? String(row.updatedAt.getTime()) : "0";
+  } catch {
+    return "0";
+  }
+}
+
+/**
+ * Uncached max(updatedAt) across every branding row (logos + notification sound).
+ * Folded into the app version so a logo swap trips the update prompt and
+ * clients reload into the new icons without waiting on a deploy.
+ */
+export async function getBrandingChangeToken(): Promise<string> {
+  try {
+    const rows = await prisma.brandingAsset.findMany({
+      select: { updatedAt: true },
+    });
+    if (rows.length === 0) return "0";
+    return String(Math.max(...rows.map((r) => r.updatedAt.getTime())));
   } catch {
     return "0";
   }

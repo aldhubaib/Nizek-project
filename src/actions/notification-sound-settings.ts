@@ -1,10 +1,9 @@
 "use server";
 
-import { updateTag } from "next/cache";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { BRANDING_CACHE_TAG, NOTIFICATION_SOUND_SLOT } from "@/lib/branding";
+import { invalidateBrandingCache, NOTIFICATION_SOUND_SLOT } from "@/lib/branding";
 import { generateR2Key, uploadToR2, deleteFromR2 } from "@/lib/r2";
 import { publish } from "@/lib/centrifugo";
 import { globalPresenceChannel, NOTIFICATION_SOUND_EVENT } from "@/lib/channels";
@@ -118,7 +117,7 @@ export async function setNotificationSound(formData: FormData): Promise<void> {
   });
 
   if (existing) await deleteFromR2(existing.r2Key).catch(() => {});
-  updateTag(BRANDING_CACHE_TAG);
+  invalidateBrandingCache();
   await announceSoundChange(url);
 }
 
@@ -131,6 +130,6 @@ export async function removeNotificationSound(): Promise<void> {
     await prisma.brandingAsset.delete({ where: { slot: NOTIFICATION_SOUND_SLOT } });
     await deleteFromR2(existing.r2Key).catch(() => {});
   }
-  updateTag(BRANDING_CACHE_TAG);
+  invalidateBrandingCache();
   await announceSoundChange(null);
 }

@@ -11,7 +11,9 @@ export default async function SetupPhotoPage() {
   }
 
   const branding = await getBrandingMap();
-  const logoUrl = branding.webLogo?.url ?? null;
+  const logoUrl = branding.webLogo
+    ? `${branding.webLogo.url}?v=${branding.webLogo.updatedAt}`
+    : null;
 
   return (
     <SetupPhotoClient
