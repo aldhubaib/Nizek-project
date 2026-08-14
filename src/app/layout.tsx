@@ -4,8 +4,9 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdateNotifier } from "@/components/update-notifier";
+import { BrandingProvider } from "@/components/branding-provider";
 import { getClientRelease } from "@/lib/version";
-import { getBrandingMap, brandingUrlWithBust } from "@/lib/branding";
+import { getLiveLogos, getBrandingMap, brandingUrlWithBust } from "@/lib/branding";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -32,6 +33,9 @@ export async function generateMetadata(): Promise<Metadata> {
     ? brandingUrlWithBust(map, "faviconDark")
     : null;
   const apple = brandingUrlWithBust(map, "appleTouchIcon") ?? "/apple-touch-icon.png";
+  const splash = map.iosSplash
+    ? brandingUrlWithBust(map, "iosSplash")
+    : undefined;
   const og = map.ogImage
     ? brandingUrlWithBust(map, "ogImage")
     : undefined;
@@ -54,6 +58,7 @@ export async function generateMetadata(): Promise<Metadata> {
       capable: true,
       title: "Nizek",
       statusBarStyle: "black-translucent",
+      startupImage: splash ? [{ url: splash }] : undefined,
     },
     openGraph: og ? { images: [{ url: og }] } : undefined,
   };
@@ -64,7 +69,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const release = await getClientRelease();
+  const [release, logos] = await Promise.all([
+    getClientRelease(),
+    getLiveLogos(),
+  ]);
   return (
     <html
       lang="en"
@@ -72,11 +80,13 @@ export default async function RootLayout({
     >
       <body className="min-h-full bg-background text-foreground">
         <ClerkProvider appearance={{ baseTheme: dark }}>
-          <TooltipProvider>{children}</TooltipProvider>
-          <UpdateNotifier
-            currentVersion={release.version}
-            releasedAt={release.releasedAt}
-          />
+          <BrandingProvider initialLogos={logos}>
+            <TooltipProvider>{children}</TooltipProvider>
+            <UpdateNotifier
+              currentVersion={release.version}
+              releasedAt={release.releasedAt}
+            />
+          </BrandingProvider>
         </ClerkProvider>
       </body>
     </html>

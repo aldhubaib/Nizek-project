@@ -9,6 +9,7 @@ import { AssetsTab } from "@/components/project/assets-tab";
 import { MemberList } from "@/components/team/member-list";
 import { InviteMemberDialog } from "@/components/team/invite-member-dialog";
 import { ProjectSettingsOverlay } from "@/components/project/project-settings-overlay";
+import { PageOverflowItems } from "@/components/page-overflow-menu";
 import { VaultTab } from "@/components/vault/vault-tab";
 import { createPortal } from "react-dom";
 import { getMeetingNotes } from "@/actions/meeting-note";
@@ -23,6 +24,7 @@ import type { TaskQuestion } from "@/components/kanban/question-field";
 import type { KanbanTask } from "@/store/kanban";
 import Link from "next/link";
 import { LayoutGrid, FileText, Paperclip, Users, KeyRound, Settings, Loader2, ArrowLeft } from "lucide-react";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 export interface UserPermissions {
   canCreateTask: boolean;
@@ -291,12 +293,13 @@ export function ProjectDetailClient({
 
   return (
     <div>
-      <div
-        className={cn(
-          "h-12 flex items-center justify-between px-6 border-b border-border shrink-0",
-          noteFullscreen ? "pr-24" : "pr-14",
-        )}
-      >
+      <PageOverflowItems id="project-settings" order={100}>
+        <DropdownMenuItem onClick={handleOpenSettings}>
+          <Settings className="h-4 w-4" />
+          <span className="flex-1">Settings</span>
+        </DropdownMenuItem>
+      </PageOverflowItems>
+      <div className="h-12 sticky top-0 z-10 flex items-center justify-between px-6 pr-24 border-b border-border bg-background shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
           {noteFullscreen ? (
             <button
@@ -338,14 +341,6 @@ export function ProjectDetailClient({
             </span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={handleOpenSettings}
-          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          title="Project Settings"
-        >
-          <Settings className="w-4 h-4" />
-        </button>
       </div>
 
       <div className={cn(noteFullscreen ? "px-0 py-0" : "px-6 py-4")}>

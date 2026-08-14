@@ -12,6 +12,10 @@ import { InstallPrompt } from "@/components/install-prompt";
 import { OfflineNotice } from "@/components/offline-notice";
 import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
 import { PAGE_HEADER_ACTIONS_SLOT } from "@/components/page-header-actions";
+import {
+  PageOverflowMenu,
+  PageOverflowMenuProvider,
+} from "@/components/page-overflow-menu";
 import { ClientRouteGuard } from "@/components/client-route-guard";
 
 const DESKTOP_BREAKPOINT = 1024;
@@ -81,8 +85,17 @@ export function DashboardShell({
 
   const expanded = pinned || hovered;
 
+  const headerActions = (
+    <>
+      <NotificationBell currentUserId={currentUserId} />
+      <div id={PAGE_HEADER_ACTIONS_SLOT} className="flex items-center gap-1" />
+      <PageOverflowMenu />
+    </>
+  );
+
   const shell = (
-    <div className="flex min-h-screen">
+    <PageOverflowMenuProvider>
+      <div className="flex min-h-screen">
       {/* Desktop sidebar — pushes content, not overlay */}
       {isDesktop && !onTaskPage && (
         <div
@@ -103,11 +116,10 @@ export function DashboardShell({
         </div>
       )}
 
-      {/* Mobile header — the bell, then whatever the page puts beside it */}
+      {/* Bell + ⋮ overlay the page's own header instead of stacking a second bar. */}
       {!isDesktop && !onInbox && (
-        <div className="fixed top-0 left-0 right-0 h-12 flex items-center justify-end gap-1 px-4 border-b border-border bg-background z-[100]">
-          <NotificationBell currentUserId={currentUserId} />
-          <div id={PAGE_HEADER_ACTIONS_SLOT} className="flex items-center gap-1" />
+        <div className="fixed top-0 right-0 z-[100] h-12 flex items-center gap-1 bg-background px-4">
+          {headerActions}
         </div>
       )}
 
@@ -141,17 +153,13 @@ export function DashboardShell({
       {/* Main content — pushed by sidebar, rounded corner */}
       <main
         className={`flex-1 min-w-0 bg-background relative z-10 ${
-          isDesktop ? (onTaskPage ? "" : "rounded-l-2xl") : onInbox ? "" : "pt-12"
+          isDesktop && !onTaskPage ? "rounded-l-2xl" : ""
         } ${bottomNavVisible && !onInbox ? "pb-[calc(4rem+env(safe-area-inset-bottom))]" : ""}`}
       >
         <ClientRouteGuard enabled={isClient} />
         {isDesktop && !onInbox && (
           <div className="fixed top-3 right-4 z-[100] flex items-center gap-1">
-            <NotificationBell currentUserId={currentUserId} />
-            <div
-              id={PAGE_HEADER_ACTIONS_SLOT}
-              className="flex items-center gap-1"
-            />
+            {headerActions}
           </div>
         )}
         {children}
@@ -175,7 +183,8 @@ export function DashboardShell({
       <PushNotifier />
       <InstallPrompt />
       <OfflineNotice />
-    </div>
+      </div>
+    </PageOverflowMenuProvider>
   );
 
   // Chat/inbox realtime runs over a single shared Centrifugo WebSocket for the

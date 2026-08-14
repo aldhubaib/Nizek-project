@@ -6,7 +6,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, FileText, Trash2, Gavel, Clock, History, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, MoreVertical, Link2, MessageSquare, Check, CheckSquare, Package } from "lucide-react";
+import { Plus, FileText, Trash2, Gavel, Clock, History, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, Link2, MessageSquare, Check, CheckSquare, Package } from "lucide-react";
 import { createMeetingNote, updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete, getMeetingNote } from "@/actions/meeting-note";
 import { getNoteCommentThreads } from "@/actions/note-comment";
 import { testDeadlineReminder } from "@/actions/deadline-reminder";
@@ -16,10 +16,9 @@ import { type NoteCommentThreadView } from "@/components/project/note-comment-pa
 import { AttachToTaskDialog } from "@/components/project/attach-to-task-dialog";
 import { CreateTaskFromNoteDialog } from "@/components/project/create-task-from-note";
 import { PageHeaderActions } from "@/components/page-header-actions";
+import { PageOverflowItems } from "@/components/page-overflow-menu";
 import { taskCode } from "@/lib/task-label";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -27,7 +26,6 @@ import {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   DEADLINE_REMINDER_TEST_SCENARIOS,
@@ -812,16 +810,8 @@ function NoteFullScreenDetail({
 
   return (
     <div className="flex flex-col bg-background">
-      <PageHeaderActions>
-        {!isEditing && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label="Note options"
-              className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <MoreVertical className="h-4 w-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
+      {!isEditing && (
+        <PageOverflowItems id="note-detail" order={0}>
               <DropdownMenuItem onClick={() => setShowHistory(true)}>
                 <History className="h-4 w-4" />
                 <span className="flex-1">History</span>
@@ -891,18 +881,16 @@ function NoteFullScreenDetail({
                   </DropdownMenuItem>
                 </>
               )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        {isEditing && (
-          <>
+        </PageOverflowItems>
+      )}
+      {isEditing && (
+        <PageHeaderActions>
             <Button variant="ghost" size="sm" onClick={() => { setIsEditing(false); setTitle(note.title); setContent(note.content); }}>Cancel</Button>
             <Button size="sm" onClick={handleSave} disabled={saving || !title.trim()}>
               {saving ? "Saving..." : "Save"}
             </Button>
-          </>
-        )}
-      </PageHeaderActions>
+        </PageHeaderActions>
+      )}
 
       <div className="max-w-4xl mx-auto w-full px-4 py-6 sm:px-8 sm:py-10 lg:px-16">
             {/* Type badge + meta */}

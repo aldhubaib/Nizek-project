@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { brandingUrlWithBust, getBrandingMap } from "@/lib/branding";
+import { brandingUrlWithBust, getBrandingMapUncached } from "@/lib/branding";
 import type { BrandingStorageSlot } from "@/lib/branding-slots";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const map = await getBrandingMap();
+  const map = await getBrandingMapUncached();
 
   type Icon = { src: string; sizes: string; type: string; purpose?: string };
 

@@ -1,16 +1,22 @@
 import { NextResponse } from "next/server";
-import { getAppLogoUrl, getClientRelease } from "@/lib/version";
+import { getLiveLogos } from "@/lib/branding";
+import { getClientRelease } from "@/lib/version";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET() {
-  const [release, logo] = await Promise.all([
+  const [release, logos] = await Promise.all([
     getClientRelease(),
-    getAppLogoUrl(),
+    getLiveLogos(),
   ]);
   return NextResponse.json(
-    { version: release.version, releasedAt: release.releasedAt, logo },
+    {
+      version: release.version,
+      releasedAt: release.releasedAt,
+      logo: logos.favicon,
+      logos,
+    },
     { headers: { "Cache-Control": "no-store, max-age=0" } }
   );
 }

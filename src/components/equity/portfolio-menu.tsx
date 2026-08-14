@@ -2,13 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, History, Loader2, MoreVertical, Trash2 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Eye, History, Loader2, Trash2 } from "lucide-react";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { PageHeaderActions } from "@/components/page-header-actions";
+import { PageOverflowItems } from "@/components/page-overflow-menu";
 import {
   deleteEquityPortfolio,
   getEquityActivity,
@@ -97,17 +92,8 @@ export function PortfolioMenu({
 
   return (
     <>
-      {/* Sits beside the notification bell in the corner, which is fixed there
-          and would otherwise cover anything at the right edge of the header. */}
-      <PageHeaderActions>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            aria-label="Portfolio actions"
-            className="w-8 h-8 rounded-lg grid place-items-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          >
-            <MoreVertical className="w-4 h-4" strokeWidth={1.5} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
+      {/* Sits in the shell's shared ⋮ beside the notification bell. */}
+      <PageOverflowItems id="portfolio-menu">
             <DropdownMenuItem
               onClick={() =>
                 router.push(`/dashboard/equity/${portfolioId}/preview`)
@@ -124,9 +110,7 @@ export function PortfolioMenu({
               <Trash2 className="h-4 w-4" />
               <span className="flex-1">Delete portfolio</span>
             </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </PageHeaderActions>
+      </PageOverflowItems>
 
       {/*
         Deleting takes the project's name typed back. A portfolio is years of

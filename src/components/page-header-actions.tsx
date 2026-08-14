@@ -5,7 +5,8 @@ import { createPortal } from "react-dom";
 
 /**
  * Buttons a page wants in the top-right corner, placed beside the notification
- * bell rather than underneath it.
+ * bell rather than underneath it. Overflow actions (settings, edit, delete)
+ * belong in `PageOverflowItems` so they share the shell's single ⋮ menu.
  *
  * The bell is fixed to the corner by the dashboard shell, so anything a page
  * draws at the right edge of its own header lands on top of it. The shell keeps

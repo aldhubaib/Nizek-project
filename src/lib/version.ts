@@ -33,12 +33,9 @@ export function getBuildTimeMs(): number {
 
 /**
  * The version reported to clients for update detection. It's the deploy version
- * plus a token that changes when the admin swaps branding (logos or the
- * notification sound) — so those changes (no deploy) also trip the "new version
- * available" prompt and force clients to reload into the new assets.
- *
- * Both the baked-in page value and /api/version compute this the same way from
- * the DB (uncached), so they only differ after an actual change.
+ * plus a token that changes when the admin swaps the notification sound — so
+ * that change (no deploy) still trips the "new version available" prompt.
+ * Image logos apply live and are not part of this string.
  */
 export async function getClientVersion(): Promise<string> {
   const release = await getClientRelease();
@@ -47,26 +44,28 @@ export async function getClientVersion(): Promise<string> {
 
 /**
  * Comparable release identity: opaque `version` for equality, monotonic
- * `releasedAt` so the client can always keep the newest target (a later deploy
- * or a later branding change) and ignore older replicas.
+ * `releasedAt` so the client can always keep the newest target.
  */
 export async function getClientRelease(): Promise<AppRelease> {
-  const { getBrandingChangeToken } = await import("@/lib/branding");
-  const token = await getBrandingChangeToken();
-  const brandingMs = Number(token) || 0;
+  const { getNotificationSoundToken } = await import("@/lib/branding");
+  const token = await getNotificationSoundToken();
+  const soundMs = Number(token) || 0;
   return {
-    version: `${getAppVersion()}.b${token}`,
-    releasedAt: computeReleasedAt(getBuildTimeMs(), brandingMs),
+    version: `${getAppVersion()}.s${token}`,
+    releasedAt: computeReleasedAt(getBuildTimeMs(), soundMs),
   };
 }
 
 /**
  * URL for the app logo / favicon, cache-busted so a branding upload is picked
- * up without a manual hard refresh.
+ * up without a manual hard refresh. Uncached so /api/version never lags the
+ * live R2 object.
  */
 export async function getAppLogoUrl(): Promise<string> {
-  const { brandingUrlWithBust, getBrandingMap } = await import("@/lib/branding");
-  const map = await getBrandingMap();
+  const { brandingUrlWithBust, getBrandingMapUncached } = await import(
+    "@/lib/branding"
+  );
+  const map = await getBrandingMapUncached();
   return (
     brandingUrlWithBust(map, "favicon") ??
     `/favicon.ico?v=${encodeURIComponent(getAppVersion())}`

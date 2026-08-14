@@ -216,7 +216,7 @@ export function AdminPageClient({
   // Detail view — the selected section's manager with a back link to the hub.
   return (
     <div>
-      <div className="h-12 flex items-center gap-3 px-6 pr-14 border-b border-border shrink-0">
+      <div className="h-12 sticky top-0 z-10 flex items-center gap-3 px-6 pr-14 border-b border-border bg-background shrink-0">
         <Link
           href="/dashboard/admin"
           className="flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"

@@ -32,6 +32,13 @@ export function AppLogoClient({ assets }: { assets: Assets }) {
         social sharing. Each slot enforces the required format and dimensions
         before it&apos;s accepted.
       </p>
+      <p className="text-[13px] text-muted-foreground rounded-lg border border-border bg-card/60 px-3 py-2.5 leading-relaxed">
+        Sidebar, login, the browser tab, and the logo inside the installed app
+        update within about a minute (or the next time someone focuses the app).
+        iOS and Android home-screen icons are cached by the OS when the app is
+        installed — users have to remove and re-add the app to get a new glyph.
+        That cannot be forced from the website.
+      </p>
       <div className="space-y-3">
         {BRANDING_SLOTS.map((slot) => (
           <SlotRow key={slot.id} slot={slot} asset={assets[slot.id]} />

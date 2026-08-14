@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { SignOutButton, useUser } from "@clerk/nextjs";
 import { Camera, Loader2 } from "lucide-react";
 import { updateMyAvatar } from "@/actions/account";
+import { useAppLogo } from "@/components/branding-provider";
 
 export function SetupPhotoClient({
   name,
@@ -21,6 +22,7 @@ export function SetupPhotoClient({
   const [preview, setPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mark = useAppLogo(logoUrl);
 
   const initials =
     (name || email)
@@ -71,9 +73,9 @@ export function SetupPhotoClient({
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6 py-12">
       <div className="w-full max-w-sm text-center">
-        {logoUrl ? (
+        {mark ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt="Nizek" className="mx-auto h-11 w-11 rounded-xl" />
+          <img src={mark} alt="Nizek" className="mx-auto h-11 w-11 rounded-xl" />
         ) : (
           <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15">
             <span className="text-base font-bold text-primary">N</span>

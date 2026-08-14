@@ -41,6 +41,19 @@ export const BRANDING_FALLBACKS: Partial<Record<BrandingStorageSlot, string>> = 
   webLogo: "/favicon.ico",
 };
 
+function rowsToMap(
+  rows: { slot: string; url: string; updatedAt: Date }[],
+): BrandingMap {
+  const map: BrandingMap = {};
+  for (const r of rows) {
+    map[r.slot as BrandingStorageSlot] = {
+      url: r.url,
+      updatedAt: r.updatedAt.getTime(),
+    };
+  }
+  return map;
+}
+
 /**
  * Current branding assets keyed by concrete storage slot. Reads the small
  * BrandingAsset table; returns {} on any error so metadata/manifest rendering
@@ -49,17 +62,52 @@ export const BRANDING_FALLBACKS: Partial<Record<BrandingStorageSlot, string>> = 
 export async function getBrandingMap(): Promise<BrandingMap> {
   try {
     const rows = await getCachedBrandingRows();
-    const map: BrandingMap = {};
-    for (const r of rows) {
-      map[r.slot as BrandingStorageSlot] = {
-        url: r.url,
-        updatedAt: r.updatedAt.getTime(),
-      };
-    }
-    return map;
+    return rowsToMap(rows);
   } catch {
     return {};
   }
+}
+
+/**
+ * Same as getBrandingMap but hits Postgres every time. Used by /api/version,
+ * the PWA manifest, and /favicon.ico so a logo upload is visible immediately
+ * even if another replica still has a warm 300s cache.
+ */
+export async function getBrandingMapUncached(): Promise<BrandingMap> {
+  try {
+    const rows = await prisma.brandingAsset.findMany();
+    return rowsToMap(rows);
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Cache-busted URLs for the surfaces we live-apply in open clients.
+ * Missing slots stay null so the UI can keep its letter-N fallback.
+ */
+export async function getLiveLogos(): Promise<
+  import("@/lib/live-branding").LiveLogos
+> {
+  const map = await getBrandingMapUncached();
+  const pick = (
+    slot:
+      | "favicon"
+      | "faviconDark"
+      | "appleTouchIcon"
+      | "webLogo"
+      | "iosSplash",
+  ) => {
+    const entry = map[slot];
+    return entry ? withBrandingBust(entry.url, entry.updatedAt) : null;
+  };
+  return {
+    favicon: pick("favicon"),
+    faviconDark: pick("faviconDark"),
+    appleTouchIcon: pick("appleTouchIcon"),
+    webLogo: pick("webLogo"),
+    iosSplash: pick("iosSplash"),
+  };
 }
 
 export function brandingUrl(
@@ -121,9 +169,8 @@ export async function getNotificationSoundToken(): Promise<string> {
 }
 
 /**
- * Uncached max(updatedAt) across every branding row (logos + notification sound).
- * Folded into the app version so a logo swap trips the update prompt and
- * clients reload into the new icons without waiting on a deploy.
+ * Uncached max(updatedAt) across every branding row. Kept for diagnostics;
+ * image logos apply live and no longer fold into the app version.
  */
 export async function getBrandingChangeToken(): Promise<string> {
   try {

@@ -1,5 +1,7 @@
 "use client";
 
+import { useAppLogo } from "@/components/branding-provider";
+
 export type GalleryPhoto = { id: string; column: "a" | "b"; url: string };
 
 const CARDS_A = [
@@ -27,15 +29,16 @@ export function AuthLayout({
   photos?: GalleryPhoto[];
   logoUrl?: string | null;
 }) {
+  const mark = useAppLogo(logoUrl);
   return (
     <div className="flex min-h-screen w-full bg-black text-white">
       {/* Left: auth form */}
       <div className="flex flex-1 items-center justify-center px-6 py-12">
         <div className="flex w-full max-w-[400px] flex-col items-center text-center">
           {/* Logo */}
-          {logoUrl ? (
+          {mark ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="Nizek" className="h-11 w-11 rounded-xl" />
+            <img src={mark} alt="Nizek" className="h-11 w-11 rounded-xl" />
           ) : (
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15">
               <span className="text-base font-bold text-primary">N</span>

@@ -21,6 +21,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useAppLogo } from "@/components/branding-provider";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
@@ -59,6 +60,7 @@ export function Sidebar({
   logoUrl = null,
 }: SidebarProps) {
   const pathname = usePathname();
+  const mark = useAppLogo(logoUrl);
 
   const isActive = (href: string) => {
     if (href === "/dashboard")
@@ -79,7 +81,7 @@ export function Sidebar({
       <div className="relative px-3 h-12 flex items-center justify-between shrink-0">
         {!collapsed ? (
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <BrandMark logoUrl={logoUrl} className="h-7 w-7" />
+            <BrandMark logoUrl={mark} className="h-7 w-7" />
             <span className="font-semibold text-[13px] text-foreground truncate">
               Nizek Project
             </span>
@@ -87,7 +89,7 @@ export function Sidebar({
         ) : (
           <Tooltip>
             <TooltipTrigger className="mx-auto">
-              <BrandMark logoUrl={logoUrl} className="h-8 w-8" />
+              <BrandMark logoUrl={mark} className="h-8 w-8" />
             </TooltipTrigger>
             <TooltipContent side="right">Nizek Project</TooltipContent>
           </Tooltip>

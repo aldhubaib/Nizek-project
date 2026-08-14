@@ -5,10 +5,11 @@ import { cn } from "@/lib/utils";
  * The bar at the top of a page: title on the left, actions on the right, a rule
  * under it, and it follows you down the page.
  *
- * The right padding is the part worth knowing about. The notification bell is
- * fixed to that corner by the dashboard shell, so a header that ran the full
- * width would put its own controls underneath it. `hasMenu` widens the gap for
- * pages that park a menu beside the bell through `PageHeaderActions`.
+ * The right padding is the part worth knowing about. The notification bell and
+ * the shared ⋮ sit in that corner (overlaid by the dashboard shell), so a
+ * header that ran the full width would put its own controls underneath them.
+ * `hasMenu` widens the gap for pages that fill the ⋮ or park a button beside
+ * the bell through `PageHeaderActions`.
  */
 export function PageHeader({
   hasMenu = false,

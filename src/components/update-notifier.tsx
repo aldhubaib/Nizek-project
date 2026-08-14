@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import {
   APP_UPDATE_STORAGE_KEY,
@@ -16,26 +16,7 @@ import {
   type AppRelease,
   type StoredUpdate,
 } from "@/lib/app-release";
-
-// Primarily event-driven: we check on tab focus / visibility changes (which
-// covers the common "user came back to the app" case). A long backstop interval
-// catches deploys while the tab stays focused, without a chatty 60s poll.
-const POLL_INTERVAL_MS = 10 * 60_000;
-
-function setFavicon(href: string) {
-  if (typeof document === "undefined") return;
-  const links = document.querySelectorAll<HTMLLinkElement>("link[rel~='icon']");
-  if (links.length === 0) {
-    const link = document.createElement("link");
-    link.rel = "icon";
-    link.href = href;
-    document.head.appendChild(link);
-    return;
-  }
-  links.forEach((link) => {
-    link.href = href;
-  });
-}
+import { useBranding } from "@/components/branding-provider";
 
 function readStored(): StoredUpdate | null {
   try {
@@ -80,22 +61,10 @@ async function clearAppCaches() {
   }
 }
 
-async function fetchLiveRelease(): Promise<{
-  release: AppRelease;
-  logo?: string;
-} | null> {
+async function fetchVersionJson(): Promise<unknown | null> {
   const res = await fetch("/api/version", { cache: "no-store" });
   if (!res.ok) return null;
-  const data: unknown = await res.json();
-  const release = parseRelease(data);
-  if (!release) return null;
-  const logo =
-    data && typeof data === "object" && "logo" in data
-      ? typeof (data as { logo: unknown }).logo === "string"
-        ? (data as { logo: string }).logo
-        : undefined
-      : undefined;
-  return { release, logo };
+  return res.json();
 }
 
 async function hardNavigate(target: AppRelease) {
@@ -106,12 +75,12 @@ async function hardNavigate(target: AppRelease) {
 /**
  * Watches for new deployments and prompts the user to update.
  *
+ * Logo URLs from the same /api/version poll are applied live by
+ * BrandingProvider — a logo swap is not an app update.
+ *
  * `currentVersion` / `releasedAt` are baked into the page the user loaded.
- * We poll `/api/version` (served by whatever container is currently live) and
- * keep a single latest target by `releasedAt`, so older replicas and
- * intermediate deploys never step the user through multiple prompts. "Update
- * now" hard-navigates to that target and silently retries if the next document
- * is still behind.
+ * BrandingProvider polls `/api/version`; we keep a single latest target by
+ * `releasedAt` so older replicas never step the user through multiple prompts.
  */
 export function UpdateNotifier({
   currentVersion,
@@ -120,28 +89,17 @@ export function UpdateNotifier({
   currentVersion: string;
   releasedAt: number;
 }) {
+  const branding = useBranding();
   const page: AppRelease = { version: currentVersion, releasedAt };
   const [pending, setPending] = useState<AppRelease | null>(null);
   const [applying, setApplying] = useState(false);
   const pendingRef = useRef<AppRelease | null>(null);
   pendingRef.current = pending;
 
-  const check = useCallback(async () => {
-    try {
-      const live = await fetchLiveRelease();
-      if (!live) return;
-      if (live.logo) setFavicon(live.logo);
-
-      const next = applyPoll(page, pendingRef.current, live.release);
-      setPending(next);
-      if (!next) {
-        clearStored();
-        stripCacheBustFromUrl();
-      }
-    } catch {
-      // Network hiccup — ignore and retry on the next interval.
-    }
-  }, [page.version, page.releasedAt]);
+  const applyLive = (data: unknown): AppRelease | null => {
+    branding?.applyPayload(data);
+    return parseRelease(data);
+  };
 
   useEffect(() => {
     if (shouldSkipUpdateCheck(currentVersion)) return;
@@ -152,17 +110,21 @@ export function UpdateNotifier({
     if (action.type === "caught_up") {
       clearStored();
       stripCacheBustFromUrl();
-    } else if (action.type === "silent_retry") {
+      return;
+    }
+    if (action.type === "silent_retry") {
       setApplying(true);
       let cancelled = false;
       (async () => {
         let target = action.target;
         try {
-          const live = await fetchLiveRelease();
-          if (live) {
-            if (live.logo) setFavicon(live.logo);
-            const latest = pickLatest(target, live.release);
-            target = { ...latest, attempts: target.attempts };
+          const data = await fetchVersionJson();
+          if (data) {
+            const live = applyLive(data);
+            if (live) {
+              const latest = pickLatest(target, live);
+              target = { ...latest, attempts: target.attempts };
+            }
           }
         } catch {
           // Navigate to whatever we already stored.
@@ -181,27 +143,27 @@ export function UpdateNotifier({
       return () => {
         cancelled = true;
       };
-    } else if (action.type === "show_banner") {
+    }
+    if (action.type === "show_banner") {
       setPending(action.target);
     }
-
-    check();
-    const interval = setInterval(check, POLL_INTERVAL_MS);
-
-    const onVisible = () => {
-      if (document.visibilityState === "visible") check();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", check);
-
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", check);
-    };
     // Mount-only: the baked page identity does not change without a navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (shouldSkipUpdateCheck(currentVersion)) return;
+    const live = branding?.liveRelease;
+    if (!live) return;
+    const next = applyPoll(page, pendingRef.current, live);
+    setPending(next);
+    if (!next) {
+      clearStored();
+      stripCacheBustFromUrl();
+    }
+    // page identity is stable for this document.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branding?.liveRelease, currentVersion]);
 
   const update = async () => {
     if (applying) return;
@@ -209,10 +171,10 @@ export function UpdateNotifier({
     try {
       let target = pendingRef.current;
       try {
-        const live = await fetchLiveRelease();
-        if (live) {
-          if (live.logo) setFavicon(live.logo);
-          target = pickLatest(target, live.release);
+        const data = await fetchVersionJson();
+        if (data) {
+          const live = applyLive(data);
+          if (live) target = pickLatest(target, live);
         }
       } catch {
         // Use the banner target if the refresh fails.
