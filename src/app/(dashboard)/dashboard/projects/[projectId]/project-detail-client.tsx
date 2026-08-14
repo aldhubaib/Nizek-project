@@ -222,6 +222,10 @@ export function ProjectDetailClient({
     noteBackRef.current = open && goBack ? goBack : null;
   }, []);
 
+  const handleNotesChange = useCallback((updater: (prev: MeetingNote[]) => MeetingNote[]) => {
+    setNotes((prev) => updater(prev ?? []));
+  }, []);
+
   useEffect(() => {
     if (activeTab === "notes" && notes === null) {
       startNotesTransition(async () => {
@@ -416,6 +420,7 @@ export function ProjectDetailClient({
                 activeContractType={activeContractType ?? null}
                 isActive={isActive}
                 onFullscreenChange={handleNoteFullscreen}
+                onNotesChange={handleNotesChange}
               />
             )}
           </TabsContent>

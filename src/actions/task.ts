@@ -1180,3 +1180,60 @@ export async function getTaskStageLogs(taskId: string) {
 
   return { startedAt: task.startedAt, logs };
 }
+
+export type TaskPreview = {
+  id: string;
+  title: string;
+  taskNumber: number;
+  taskType: string;
+  stage: string;
+  snippet: string | null;
+  projectId: string;
+  assigneeName: string | null;
+  assigneeImageUrl: string | null;
+};
+
+function descriptionSnippet(html: string | null): string | null {
+  if (!html) return null;
+  const text = html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return null;
+  return text.length > 280 ? `${text.slice(0, 280).trimEnd()}…` : text;
+}
+
+export async function getTaskPreview(taskId: string): Promise<TaskPreview> {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true,
+      title: true,
+      taskNumber: true,
+      taskType: true,
+      stage: true,
+      description: true,
+      projectId: true,
+      assignee: { select: { name: true, imageUrl: true } },
+    },
+  });
+  if (!task) throw new Error("Task not found");
+  await requireProjectMember(task.projectId);
+
+  return {
+    id: task.id,
+    title: task.title,
+    taskNumber: task.taskNumber,
+    taskType: task.taskType,
+    stage: task.stage,
+    snippet: descriptionSnippet(task.description),
+    projectId: task.projectId,
+    assigneeName: task.assignee?.name ?? null,
+    assigneeImageUrl: task.assignee?.imageUrl ?? null,
+  };
+}

@@ -14,6 +14,7 @@ import { formatDistanceToNow } from "date-fns";
 import { QuestionField, type TaskQuestion } from "./question-field";
 import { ActivityTimeline } from "./activity-timeline";
 import { CommentSection } from "./comment-section";
+import { TaskDescriptionComments } from "@/components/project/task-description-comments";
 import { NoteHistoryDialog } from "@/components/project/note-history-dialog";
 import { buildNoteTimeline } from "@/lib/note-timeline";
 import {
@@ -692,9 +693,11 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
               <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
                 Description
               </label>
-              <p className="text-[13px] text-muted-foreground">
-                {task.description}
-              </p>
+              <TaskDescriptionComments
+                description={task.description}
+                taskId={task.id}
+                projectId={projectId}
+              />
             </div>
           )}
 
@@ -1212,6 +1215,7 @@ function TaskNoteEditor({
             onChange={setContent}
             placeholder="Write your note... (type / for commands)"
             borderless
+            projectId={projectId}
           />
         </div>
       </div>

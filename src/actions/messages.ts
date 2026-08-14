@@ -23,6 +23,18 @@ import {
   noteCommentPreview,
   type NoteCommentPayload,
 } from "@/lib/note-comment-payload";
+import {
+  decodeTaskCommentPayload,
+  isTaskCommentMessage,
+  taskCommentPreview,
+  type TaskCommentPayload,
+} from "@/lib/task-comment-payload";
+import {
+  decodeNoteActivityPayload,
+  isNoteActivityMessage,
+  noteActivityPreview,
+  type NoteActivityPayload,
+} from "@/lib/note-activity-payload";
 import { ALL_MENTION_ID, ALL_MENTION_NAME } from "@/lib/mentions";
 import {
   broadcast,
@@ -82,8 +94,14 @@ function parseMentions(body: string): string[] {
 }
 
 /** Strip mention markup down to plain "@Name" for display/previews. */
-function toDisplayBody(body: string): string {
-  return body.replace(MENTION_RE, "@$1");
+function inboxPreview(body: string): string {
+  const activity = decodeNoteActivityPayload(body);
+  if (activity) return noteActivityPreview(activity);
+  const note = decodeNoteCommentPayload(body);
+  if (note?.comment) return note.comment;
+  const task = decodeTaskCommentPayload(body);
+  if (task?.comment) return task.comment;
+  return toDisplayBody(body) || "📎 Attachment";
 }
 
 function mapDeadlineReminderMessage<T extends { kind: string; body: string; authorId: string; author: { name: string | null; email: string; imageUrl: string | null } }>(
@@ -94,6 +112,13 @@ function mapDeadlineReminderMessage<T extends { kind: string; body: string; auth
   const noteComment = isNoteCommentMessage(c.kind)
     ? decodeNoteCommentPayload(c.body)
     : null;
+  const taskComment = isTaskCommentMessage(c.kind)
+    ? decodeTaskCommentPayload(c.body)
+    : null;
+  const noteActivity = isNoteActivityMessage(c.kind)
+    ? decodeNoteActivityPayload(c.body)
+    : null;
+  const highlight = noteComment ?? taskComment;
   return {
     authorId: isBot ? NIZEK_BOT_AUTHOR_ID : c.authorId,
     authorName: isBot ? NIZEK_BOT_NAME : (c.author.name ?? c.author.email),
@@ -101,12 +126,16 @@ function mapDeadlineReminderMessage<T extends { kind: string; body: string; auth
     body:
       isBot && payload
         ? `@${ALL_MENTION_NAME}`
-        : noteComment
-          ? noteComment.comment
-          : toDisplayBody(c.body),
+        : highlight
+          ? highlight.comment
+          : noteActivity
+            ? noteActivityPreview(noteActivity)
+            : toDisplayBody(c.body),
     mentions: isBot && payload ? [ALL_MENTION_NAME] : parseMentionNames(c.body),
     deadlineReminder: payload,
     noteComment,
+    taskComment,
+    noteActivity,
   };
 }
 
@@ -164,6 +193,8 @@ export type MessageDTO = {
   mentions?: string[];
   deadlineReminder?: DeadlineReminderPayload | null;
   noteComment?: NoteCommentPayload | null;
+  taskComment?: TaskCommentPayload | null;
+  noteActivity?: NoteActivityPayload | null;
 };
 
 type AttachmentInput = {
@@ -204,6 +235,8 @@ export type ThreadMessage = {
   mentions: string[];
   deadlineReminder?: DeadlineReminderPayload | null;
   noteComment?: NoteCommentPayload | null;
+  taskComment?: TaskCommentPayload | null;
+  noteActivity?: NoteActivityPayload | null;
   important: boolean;
 };
 
@@ -337,6 +370,8 @@ export async function getThreadMessages(input: {
       mentions: mapped.mentions,
       deadlineReminder: mapped.deadlineReminder,
       noteComment: mapped.noteComment,
+      taskComment: mapped.taskComment,
+      noteActivity: mapped.noteActivity,
       important: importantIds.has(c.id),
     };
   });
@@ -654,6 +689,7 @@ export async function sendMessage(
     let participantIds: string[] = [];
     let isClientRoom = false;
     let noteCommentThreadId: string | null = null;
+    let taskHighlightThreadId: string | null = null;
     let mentionProjectId: string | null = null;
 
     if (conversationId) {
@@ -727,6 +763,37 @@ export async function sendMessage(
               })),
               skipDuplicates: true,
             });
+          }
+        } else {
+          const taskThread = await prisma.taskHighlightThread.findUnique({
+            where: { conversationId },
+            select: {
+              id: true,
+              task: { select: { projectId: true, title: true } },
+            },
+          });
+          if (taskThread) {
+            taskHighlightThreadId = taskThread.id;
+            mentionProjectId = taskThread.task.projectId;
+            if (!groupName) groupName = convoMeta.title || taskThread.task.title;
+            const extraIds = await resolveProjectMentionIds(body, mentionProjectId);
+            const newIds = extraIds.filter((id) => !participantIds.includes(id));
+            if (newIds.length > 0) {
+              await prisma.conversationParticipant.createMany({
+                data: newIds.map((memberId) => ({ conversationId, memberId })),
+                skipDuplicates: true,
+              });
+              participantIds.push(...newIds);
+            }
+            if (extraIds.length > 0) {
+              await prisma.taskHighlightSubscriber.createMany({
+                data: extraIds.map((userId) => ({
+                  threadId: taskThread.id,
+                  userId,
+                })),
+                skipDuplicates: true,
+              });
+            }
           }
         }
       }
@@ -845,13 +912,26 @@ export async function sendMessage(
     const noteCommentPayload = isNoteCommentMessage(message.kind)
       ? decodeNoteCommentPayload(body)
       : null;
-    const display = noteCommentPayload
-      ? noteCommentPayload.comment
-      : toDisplayBody(body);
+    const taskCommentPayload = isTaskCommentMessage(message.kind)
+      ? decodeTaskCommentPayload(body)
+      : null;
+    const noteActivityPayload = isNoteActivityMessage(message.kind)
+      ? decodeNoteActivityPayload(body)
+      : null;
+    const highlightPayload = noteCommentPayload ?? taskCommentPayload;
+    const display = highlightPayload
+      ? highlightPayload.comment
+      : noteActivityPayload
+        ? noteActivityPreview(noteActivityPayload)
+        : toDisplayBody(body);
     const previewText =
       (noteCommentPayload
         ? noteCommentPreview(noteCommentPayload)
-        : display) || (attachments.length > 0 ? `📎 ${attachments[0].name}` : "");
+        : taskCommentPayload
+          ? taskCommentPreview(taskCommentPayload)
+          : noteActivityPayload
+            ? noteActivityPreview(noteActivityPayload)
+            : display) || (attachments.length > 0 ? `📎 ${attachments[0].name}` : "");
     const preview =
       previewText.length > 80 ? previewText.slice(0, 80) + "…" : previewText;
 
@@ -859,6 +939,24 @@ export async function sendMessage(
       await prisma.noteComment.create({
         data: {
           threadId: noteCommentThreadId,
+          userId: user.id,
+          content: display,
+          messageId: message.id,
+          ...(mentionedIds.length
+            ? {
+                mentions: {
+                  create: mentionedIds.map((id) => ({ userId: id })),
+                },
+              }
+            : {}),
+        },
+      });
+    }
+
+    if (taskHighlightThreadId) {
+      await prisma.taskHighlightComment.create({
+        data: {
+          threadId: taskHighlightThreadId,
           userId: user.id,
           content: display,
           messageId: message.id,
@@ -892,6 +990,8 @@ export async function sendMessage(
           : null,
       mentions: parseMentionNames(body),
       noteComment: noteCommentPayload,
+      taskComment: taskCommentPayload,
+      noteActivity: noteActivityPayload,
     };
 
     // Recipients + notification (mention-driven; DMs notify all participants).
@@ -1400,7 +1500,10 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
     }),
     prisma.conversation.findMany({
       where: {
-        noteCommentThread: { isNot: null },
+        OR: [
+          { noteCommentThread: { isNot: null } },
+          { taskHighlightThread: { isNot: null } },
+        ],
         participants: { some: { memberId: user.id } },
       },
       orderBy: { updatedAt: "desc" },
@@ -1411,6 +1514,17 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
             note: {
               select: {
                 title: true,
+                project: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+        taskHighlightThread: {
+          select: {
+            task: {
+              select: {
+                title: true,
+                projectId: true,
                 project: { select: { id: true, name: true } },
               },
             },
@@ -1441,7 +1555,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       logoUrl: p.logoUrl ?? null,
       peerImageUrl: null,
       peerMemberIds: [],
-      lastMessage: last ? toDisplayBody(last.body) || "📎 Attachment" : "",
+      lastMessage: last ? inboxPreview(last.body) : "",
       lastAuthor: last ? (last.author.name ?? last.author.email) : "",
       lastAt: last ? last.createdAt.toISOString() : "",
       unread,
@@ -1484,22 +1598,31 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
   const noteCommentThreads: InboxThread[] = noteCommentConversations.map((c) => {
     const last = c.messages[0];
     const note = c.noteCommentThread?.note;
-    const name = note?.title ?? c.title ?? "Note comment";
-    const payload = last ? decodeNoteCommentPayload(last.body) : null;
-    const lastBody = payload
-      ? payload.comment
-      : last
-        ? toDisplayBody(last.body) || "📎 Attachment"
-        : "";
+    const task = c.taskHighlightThread?.task;
+    const isTask = Boolean(task) && !note;
+    const name = note?.title ?? task?.title ?? c.title ?? (isTask ? "Task comment" : "Note comment");
+    const notePayload = last ? decodeNoteCommentPayload(last.body) : null;
+    const taskPayload = last ? decodeTaskCommentPayload(last.body) : null;
+    const lastBody = notePayload
+      ? notePayload.comment
+      : taskPayload
+        ? taskPayload.comment
+        : last
+          ? toDisplayBody(last.body) || "📎 Attachment"
+          : "";
     const peer = c.participants.find((p) => p.memberId !== user.id);
+    const projectName = note?.project.name ?? task?.project.name;
+    const projectId = note?.project.id ?? task?.project.id ?? task?.projectId ?? null;
     return {
       id: `conv-${c.id}`,
       kind: "direct" as const,
       name,
-      subtitle: note?.project.name
-        ? `${note.project.name} · Note comment`
-        : "Note comment",
-      projectId: note?.project.id ?? null,
+      subtitle: projectName
+        ? `${projectName} · ${isTask ? "Task comment" : "Note comment"}`
+        : isTask
+          ? "Task comment"
+          : "Note comment",
+      projectId,
       conversationId: c.id,
       logoUrl: null,
       peerImageUrl: peer?.member.imageUrl ?? null,

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import {
   Sparkles,
   Wrench,
@@ -86,7 +85,6 @@ export function CreateTaskFromNoteDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mandatoryErrors, setMandatoryErrors] = useState<string[]>([]);
-  const [createdHref, setCreatedHref] = useState<string | null>(null);
 
   const visibleTypes = useMemo(
     () => TASK_TYPES.filter((t) => allowedTaskTypes.includes(t.id)),
@@ -100,7 +98,6 @@ export function CreateTaskFromNoteDialog({
     setAnswers({});
     setError(null);
     setMandatoryErrors([]);
-    setCreatedHref(null);
     const first = TASK_TYPES.find((t) => allowedTaskTypes.includes(t.id));
     setTaskType(first?.id ?? "FEATURE");
     setLoadingQs(true);
@@ -108,7 +105,10 @@ export function CreateTaskFromNoteDialog({
       .then((qs) => setQuestions(qs as QuestionWithType[]))
       .catch(() => setQuestions([]))
       .finally(() => setLoadingQs(false));
-  }, [open, quote, allowedTaskTypes]);
+    // Only reset when the dialog opens — a refresh while it's open was
+    // wiping the success state and showing the form again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const filteredQuestions = useMemo(
     () => questions.filter((q) => q.taskType === taskType),
@@ -132,7 +132,7 @@ export function CreateTaskFromNoteDialog({
       const answersList = filteredQuestions
         .map((q) => ({ questionId: q.id, answer: answers[q.id] ?? "" }))
         .filter((a) => a.answer.trim());
-      const task = await createTaskFromNoteHighlight({
+      await createTaskFromNoteHighlight({
         noteId,
         quoteText: quote,
         title: title.trim(),
@@ -140,8 +140,8 @@ export function CreateTaskFromNoteDialog({
         priority: priority ?? undefined,
         answers: answersList.length > 0 ? answersList : undefined,
       });
-      setCreatedHref(`/dashboard/projects/${projectId}/tasks/${task.id}`);
       onCreated();
+      onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to create task";
       if (msg.startsWith("MANDATORY_QUESTIONS:")) {
@@ -168,24 +168,7 @@ export function CreateTaskFromNoteDialog({
           </DialogTitle>
         </DialogHeader>
 
-        {createdHref ? (
-          <div className="space-y-4 p-4">
-            <p className="text-sm">Task created and linked to this note.</p>
-            <Link
-              href={createdHref}
-              className="text-sm font-medium text-primary underline-offset-2 hover:underline"
-              onClick={onClose}
-            >
-              Open task →
-            </Link>
-            <div className="pt-2">
-              <Button type="button" variant="secondary" onClick={onClose}>
-                Done
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
               <div className="rounded-lg border border-border/60 bg-surface/40 px-3 py-2 text-xs text-muted-foreground">
                 <p className="line-clamp-4 whitespace-pre-wrap">{quote || "(empty)"}</p>
@@ -303,7 +286,6 @@ export function CreateTaskFromNoteDialog({
               </Button>
             </div>
           </form>
-        )}
       </DialogContent>
     </Dialog>
   );

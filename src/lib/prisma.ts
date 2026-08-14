@@ -10,6 +10,8 @@ const connectionString =
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
   pool: Pool | undefined;
+  /** The generated PrismaClient class this singleton was built from. */
+  prismaClientClass: typeof PrismaClient | undefined;
 };
 
 // Pool size is env-tunable so we can raise it per-replica when a Postgres
@@ -40,9 +42,27 @@ function createClient() {
   return new PrismaClient({ adapter });
 }
 
-export const prisma = globalForPrisma.prisma ?? createClient();
+function getClient() {
+  // `prisma generate` swaps in a new PrismaClient class (new DMMF). Next HMR
+  // re-runs this module, but globalThis still holds the old instance — which
+  // then rejects queries with "Unknown argument `taskHighlightThread`" etc.
+  if (
+    globalForPrisma.prisma &&
+    globalForPrisma.prismaClientClass === PrismaClient
+  ) {
+    return globalForPrisma.prisma;
+  }
+  if (globalForPrisma.pool) {
+    globalForPrisma.pool.end().catch(() => {});
+    globalForPrisma.pool = undefined;
+  }
+  globalForPrisma.prismaClientClass = PrismaClient;
+  const client = createClient();
+  globalForPrisma.prisma = client;
+  return client;
+}
 
-globalForPrisma.prisma = prisma;
+export const prisma = getClient();
 
 function gracefulShutdown() {
   globalForPrisma.pool?.end().catch(() => {});

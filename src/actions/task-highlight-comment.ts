@@ -7,10 +7,11 @@ import { DIRECT_CONVERSATION_KIND } from "@/lib/client-chat";
 import { getProjectMentionMembers } from "@/lib/project-mentions";
 import { toMentionTokens } from "@/lib/note-mentions";
 import {
-  encodeNoteCommentBody,
-  noteCommentUrl,
-} from "@/lib/note-comment-payload";
+  encodeTaskCommentBody,
+  taskCommentUrl,
+} from "@/lib/task-comment-payload";
 import {
+  asAnnotatableHtml,
   commentMarkTag,
   wrapFirstPlainText,
 } from "@/lib/html-annotate";
@@ -23,10 +24,10 @@ const commentInclude = {
 
 async function ensureThreadConversation(options: {
   threadId: string;
-  noteTitle: string;
+  taskTitle: string;
   participantIds: string[];
 }): Promise<string> {
-  const thread = await prisma.noteCommentThread.findUnique({
+  const thread = await prisma.taskHighlightThread.findUnique({
     where: { id: options.threadId },
     select: { conversationId: true },
   });
@@ -48,13 +49,13 @@ async function ensureThreadConversation(options: {
   const convo = await prisma.conversation.create({
     data: {
       isGroup: unique.length > 2,
-      title: `Note · ${options.noteTitle}`.slice(0, 80),
+      title: `Task · ${options.taskTitle}`.slice(0, 80),
       kind: DIRECT_CONVERSATION_KIND,
       participants: { create: unique.map((memberId) => ({ memberId })) },
     },
   });
 
-  await prisma.noteCommentThread.update({
+  await prisma.taskHighlightThread.update({
     where: { id: options.threadId },
     data: { conversationId: convo.id },
   });
@@ -62,30 +63,36 @@ async function ensureThreadConversation(options: {
   return convo.id;
 }
 
-export async function createNoteComment(data: {
-  noteId: string;
+export async function createTaskHighlightComment(data: {
+  taskId: string;
   quoteText: string;
   content: string;
   threadId?: string;
-  annotatedContent?: string;
 }) {
-  const note = await prisma.meetingNote.findUnique({
-    where: { id: data.noteId },
-    select: { id: true, title: true, content: true, projectId: true, authorId: true },
+  const task = await prisma.task.findUnique({
+    where: { id: data.taskId },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      projectId: true,
+      createdById: true,
+      assigneeId: true,
+    },
   });
-  if (!note) throw new Error("Note not found");
+  if (!task) throw new Error("Task not found");
 
-  const { user, member } = await requireProjectMember(note.projectId);
-  if (member.role === "CLIENT") throw new Error("Clients cannot comment on notes");
+  const { user, member } = await requireProjectMember(task.projectId);
+  if (member.role === "CLIENT") throw new Error("Clients cannot comment on tasks");
 
   const trimmed = data.content.trim();
   if (!trimmed) throw new Error("Comment is empty");
 
-  const members = await getProjectMentionMembers(note.projectId);
+  const members = await getProjectMentionMembers(task.projectId);
   const { body: tokenBody, mentionedIds } = toMentionTokens(trimmed, members);
 
   let thread = data.threadId
-    ? await prisma.noteCommentThread.findUnique({
+    ? await prisma.taskHighlightThread.findUnique({
         where: { id: data.threadId },
         include: { subscribers: { select: { userId: true } } },
       })
@@ -94,39 +101,38 @@ export async function createNoteComment(data: {
   if (data.threadId && !thread) throw new Error("Thread not found");
 
   const isNew = !thread;
+  let annotatedContent: string | null = null;
   if (!thread) {
     const quote = data.quoteText.trim();
     if (!quote) throw new Error("Select text to comment on");
-    thread = await prisma.noteCommentThread.create({
+    thread = await prisma.taskHighlightThread.create({
       data: {
-        noteId: note.id,
+        taskId: task.id,
         quoteText: quote,
         createdById: user.id,
         subscribers: {
-          create: [...new Set([note.authorId, user.id])].map((userId) => ({
-            userId,
-          })),
+          create: [...new Set([task.createdById, task.assigneeId, user.id].filter(Boolean) as string[])].map(
+            (userId) => ({ userId }),
+          ),
         },
       },
       include: { subscribers: { select: { userId: true } } },
     });
 
-    const nextContent =
-      data.annotatedContent ??
-      (() => {
-        const mark = commentMarkTag(thread!.id);
-        return wrapFirstPlainText(note.content, quote, mark.open, mark.close);
-      })();
-    if (nextContent !== note.content) {
-      await prisma.meetingNote.update({
-        where: { id: note.id },
-        data: { content: nextContent },
+    const html = asAnnotatableHtml(task.description);
+    const mark = commentMarkTag(thread.id);
+    const next = wrapFirstPlainText(html, quote, mark.open, mark.close);
+    if (next !== (task.description ?? "")) {
+      await prisma.task.update({
+        where: { id: task.id },
+        data: { description: next },
       });
+      annotatedContent = next;
     }
   }
 
   if (mentionedIds.length > 0) {
-    await prisma.noteCommentSubscriber.createMany({
+    await prisma.taskHighlightSubscriber.createMany({
       data: mentionedIds.map((userId) => ({
         threadId: thread!.id,
         userId,
@@ -138,15 +144,16 @@ export async function createNoteComment(data: {
   const subscriberIds = [
     ...new Set([
       ...thread.subscribers.map((s) => s.userId),
-      note.authorId,
+      task.createdById,
+      task.assigneeId,
       user.id,
       ...mentionedIds,
-    ]),
+    ].filter(Boolean) as string[]),
   ];
 
   const conversationId = await ensureThreadConversation({
     threadId: thread.id,
-    noteTitle: note.title,
+    taskTitle: task.title,
     participantIds: subscriberIds,
   });
 
@@ -155,12 +162,12 @@ export async function createNoteComment(data: {
     .map((m) => `@[${m.name}](${m.id})`);
 
   const messageBody = isNew
-    ? encodeNoteCommentBody(
+    ? encodeTaskCommentBody(
         {
-          noteId: note.id,
-          projectId: note.projectId,
+          taskId: task.id,
+          projectId: task.projectId,
           threadId: thread.id,
-          noteTitle: note.title,
+          taskTitle: task.title,
           quoteText: thread.quoteText,
           comment: trimmed,
         },
@@ -171,62 +178,32 @@ export async function createNoteComment(data: {
   const sent = await sendMessage({
     conversationId,
     body: messageBody,
-    kind: isNew ? "note_comment" : "message",
+    kind: isNew ? "task_comment" : "message",
   });
   if (!sent.ok) throw new Error(sent.error);
 
-  revalidatePath(`/dashboard/projects/${note.projectId}`);
+  revalidatePath(`/dashboard/projects/${task.projectId}`);
+  revalidatePath(`/dashboard/projects/${task.projectId}/tasks/${task.id}`);
   revalidatePath(`/dashboard/messages/conv-${conversationId}`);
 
   return {
     threadId: thread.id,
     conversationId,
-    noteUrl: noteCommentUrl(note.projectId, note.id, thread.id),
+    taskUrl: taskCommentUrl(task.projectId, task.id, thread.id),
+    description: annotatedContent,
   };
 }
 
-export async function getNoteCommentThread(threadId: string) {
-  const thread = await prisma.noteCommentThread.findUnique({
-    where: { id: threadId },
-    include: {
-      note: { select: { id: true, projectId: true, title: true } },
-      subscribers: { select: { userId: true, understoodAt: true } },
-      comments: {
-        include: commentInclude,
-        orderBy: { createdAt: "asc" },
-      },
-    },
-  });
-  if (!thread) throw new Error("Thread not found");
-
-  const { user } = await requireProjectMember(thread.note.projectId);
-
-  return {
-    id: thread.id,
-    noteId: thread.note.id,
-    noteTitle: thread.note.title,
-    quoteText: thread.quoteText,
-    conversationId: thread.conversationId,
-    comments: thread.comments.map((c) => ({
-      id: c.id,
-      content: c.content,
-      createdAt: c.createdAt,
-      user: c.user,
-    })),
-    understood: thread.subscribers.some((s) => s.userId === user.id && s.understoodAt),
-  };
-}
-
-export async function getNoteCommentThreads(noteId: string) {
-  const note = await prisma.meetingNote.findUnique({
-    where: { id: noteId },
+export async function getTaskHighlightThreads(taskId: string) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
     select: { projectId: true },
   });
-  if (!note) throw new Error("Note not found");
-  await requireProjectMember(note.projectId);
+  if (!task) throw new Error("Task not found");
+  const { user } = await requireProjectMember(task.projectId);
 
-  return prisma.noteCommentThread.findMany({
-    where: { noteId },
+  const threads = await prisma.taskHighlightThread.findMany({
+    where: { taskId },
     include: {
       createdBy: { select: { id: true, name: true, imageUrl: true } },
       subscribers: { select: { userId: true, understoodAt: true } },
@@ -237,32 +214,39 @@ export async function getNoteCommentThreads(noteId: string) {
     },
     orderBy: { createdAt: "asc" },
   });
+
+  return threads.map((t) => ({
+    ...t,
+    understood: t.subscribers.some(
+      (s) => s.userId === user.id && s.understoodAt,
+    ),
+  }));
 }
 
-export async function toggleNoteCommentUnderstood(threadId: string) {
-  const thread = await prisma.noteCommentThread.findUnique({
+export async function toggleTaskHighlightUnderstood(threadId: string) {
+  const thread = await prisma.taskHighlightThread.findUnique({
     where: { id: threadId },
-    include: { note: { select: { projectId: true, authorId: true } } },
+    include: { task: { select: { projectId: true } } },
   });
   if (!thread) throw new Error("Thread not found");
 
-  const { user, member } = await requireProjectMember(thread.note.projectId);
+  const { user, member } = await requireProjectMember(thread.task.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot update comments");
 
-  const existing = await prisma.noteCommentSubscriber.findUnique({
+  const existing = await prisma.taskHighlightSubscriber.findUnique({
     where: { threadId_userId: { threadId, userId: user.id } },
   });
 
   if (existing?.understoodAt) {
-    await prisma.noteCommentSubscriber.update({
+    await prisma.taskHighlightSubscriber.update({
       where: { id: existing.id },
       data: { understoodAt: null },
     });
-    revalidatePath(`/dashboard/projects/${thread.note.projectId}`);
+    revalidatePath(`/dashboard/projects/${thread.task.projectId}`);
     return { understood: false };
   }
 
-  await prisma.noteCommentSubscriber.upsert({
+  await prisma.taskHighlightSubscriber.upsert({
     where: { threadId_userId: { threadId, userId: user.id } },
     create: {
       threadId,
@@ -272,6 +256,6 @@ export async function toggleNoteCommentUnderstood(threadId: string) {
     update: { understoodAt: new Date() },
   });
 
-  revalidatePath(`/dashboard/projects/${thread.note.projectId}`);
+  revalidatePath(`/dashboard/projects/${thread.task.projectId}`);
   return { understood: true };
 }

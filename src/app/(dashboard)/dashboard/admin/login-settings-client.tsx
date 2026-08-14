@@ -152,7 +152,7 @@ function PhotoTile({ photo }: { photo: LoginPhotoDTO }) {
   };
 
   return (
-    <div className="group relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-border/60 bg-surface">
+    <div className="group relative aspect-[3/4] w-full overflow-hidden rounded-2xl border border-border/60 bg-surface">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={photo.url} alt="" className="h-full w-full object-cover" />
       <div className="absolute inset-x-0 bottom-0 flex justify-end gap-1 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">

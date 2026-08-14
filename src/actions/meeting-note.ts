@@ -5,14 +5,16 @@ import { requireProjectMember, requireProjectRole } from "@/lib/auth";
 import { logTaskActivity } from "@/lib/activity";
 import { revalidatePath } from "next/cache";
 import { createTask } from "@/actions/task";
+import { sendMessage } from "@/actions/messages";
 import { taskMarkTag, wrapFirstPlainText } from "@/lib/html-annotate";
+import { encodeNoteActivityBody } from "@/lib/note-activity-payload";
 
 export async function createMeetingNote(data: {
   projectId: string;
   title: string;
   content: string;
   date: string;
-  noteType?: "MEETING_NOTE" | "DECISION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+  noteType?: "MEETING_NOTE" | "DECISION" | "DEADLINE" | "PRODUCT" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
   dueDate?: string;
   taskId?: string;
 }) {
@@ -54,6 +56,13 @@ export async function createMeetingNote(data: {
   }
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
+  await postNoteActivityToChat({
+    projectId: data.projectId,
+    noteId: note.id,
+    noteTitle: note.title,
+    noteType: note.noteType,
+    action: "created",
+  });
   return note;
 }
 
@@ -141,6 +150,16 @@ export async function updateMeetingNote(data: {
   ]);
 
   revalidatePath(`/dashboard/projects/${note.projectId}`);
+  if (historyEntries.length > 0) {
+    await postNoteActivityToChat({
+      projectId: note.projectId,
+      noteId: note.id,
+      noteTitle: data.title ?? note.title,
+      noteType: note.noteType,
+      action: "updated",
+      fields: historyEntries.map((e) => e.field),
+    });
+  }
   return updated;
 }
 
@@ -173,6 +192,7 @@ const linkedTaskSelect = {
   taskNumber: true,
   taskType: true,
   projectId: true,
+  stage: true,
 } as const;
 
 const noteActivityInclude = {
@@ -188,6 +208,7 @@ const noteActivityInclude = {
       quoteText: true,
       conversationId: true,
       _count: { select: { comments: true } },
+      subscribers: { select: { userId: true, understoodAt: true } },
     },
     orderBy: { createdAt: "asc" as const },
   },
@@ -444,4 +465,22 @@ export async function createTaskFromNoteHighlight(data: {
 
   revalidatePath(`/dashboard/projects/${note.projectId}`);
   return task;
+}
+
+async function postNoteActivityToChat(payload: {
+  projectId: string;
+  noteId: string;
+  noteTitle: string;
+  noteType: string;
+  action: "created" | "updated";
+  fields?: string[];
+}) {
+  const sent = await sendMessage({
+    projectId: payload.projectId,
+    body: encodeNoteActivityBody(payload),
+    kind: "note_activity",
+  });
+  if (!sent.ok) {
+    console.error("[note activity chat]", sent.error);
+  }
 }

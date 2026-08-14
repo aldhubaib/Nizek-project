@@ -1,13 +1,18 @@
-import Link from "next/link";
-import { ArrowUpRight, MessageSquareText } from "lucide-react";
-import { noteCommentUrl, type NoteCommentPayload } from "@/lib/note-comment-payload";
+"use client";
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
+import { useState } from "react";
+import { MessageSquareText } from "lucide-react";
+import { type NoteCommentPayload } from "@/lib/note-comment-payload";
+import { ActivityCard } from "@/components/messages/activity-card";
+import { NoteCommentReplyDialog } from "@/components/messages/note-comment-reply-dialog";
+
+const COMMENT_THEME = {
+  accent: "text-amber-400",
+  border: "border-amber-500/35",
+  ring: "ring-amber-500/20",
+  iconWrap: "bg-amber-500/10 text-amber-400",
+  button: "border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-amber-400",
+};
 
 export function NoteCommentCard({
   payload,
@@ -16,50 +21,35 @@ export function NoteCommentCard({
   payload: NoteCommentPayload;
   createdAt: string;
 }) {
-  const noteUrl = noteCommentUrl(payload.projectId, payload.noteId, payload.threadId);
+  const [open, setOpen] = useState(false);
 
   return (
-    <div className="min-w-[min(100%,320px)] max-w-md overflow-hidden rounded-xl border border-amber-500/35 bg-card/95 shadow-sm ring-1 ring-inset ring-amber-500/20">
-      <div className="h-0.5 w-full bg-amber-400/70" />
-      <div className="space-y-3 p-3.5">
-        <div className="flex items-start gap-2.5">
-          <div className="grid size-9 shrink-0 place-items-center rounded-full bg-amber-500/10 text-amber-400">
-            <MessageSquareText className="size-4" strokeWidth={2} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Note comment
-            </p>
-            <h3 className="mt-0.5 text-[15px] font-semibold leading-snug text-foreground">
-              {payload.noteTitle}
-            </h3>
-          </div>
-        </div>
-
-        {payload.quoteText && (
+    <>
+      <ActivityCard
+        theme={COMMENT_THEME}
+        icon={MessageSquareText}
+        category="Note comment"
+        title={payload.noteTitle}
+        onAction={() => setOpen(true)}
+        actionLabel="Reply on the highlight"
+        createdAt={createdAt}
+      >
+        {payload.quoteText ? (
           <blockquote className="border-l-2 border-amber-400/60 pl-3 text-[12px] italic text-muted-foreground">
             {payload.quoteText}
           </blockquote>
-        )}
-
+        ) : null}
         <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">
           {payload.comment}
         </p>
-
-        <Link
-          href={noteUrl}
-          className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-[12px] font-medium text-amber-400 transition-colors hover:bg-amber-500/10"
-        >
-          <span className="min-w-0 flex-1 truncate text-foreground">
-            Open note · reply on the highlight
-          </span>
-          <ArrowUpRight className="size-3.5 shrink-0" />
-        </Link>
-
-        <div className="flex justify-end">
-          <span className="text-[10px] text-muted-foreground">{formatTime(createdAt)}</span>
-        </div>
-      </div>
-    </div>
+      </ActivityCard>
+      <NoteCommentReplyDialog
+        open={open}
+        onOpenChange={setOpen}
+        noteId={payload.noteId}
+        threadId={payload.threadId}
+        noteTitle={payload.noteTitle}
+      />
+    </>
   );
 }

@@ -7,39 +7,23 @@ import { Check, Loader2, MessageSquare, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  createNoteComment,
-  toggleNoteCommentUnderstood,
-} from "@/actions/note-comment";
+  createTaskHighlightComment,
+  toggleTaskHighlightUnderstood,
+} from "@/actions/task-highlight-comment";
+import type { NoteCommentThreadView } from "@/components/project/note-comment-panel";
 
-export type NoteCommentItem = {
-  id: string;
-  content: string;
-  createdAt: Date | string;
-  user: { id: string; name: string | null; imageUrl: string | null };
-};
+export type TaskHighlightThreadView = NoteCommentThreadView;
 
-export type NoteCommentThreadView = {
-  id: string;
-  quoteText: string;
-  conversationId: string | null;
-  comments: NoteCommentItem[];
-  understood: boolean;
-};
-
-export function NoteCommentPopover({
+export function TaskHighlightPopover({
   thread,
-  noteId,
+  taskId,
   onClose,
   onChanged,
-  hideChatLink = false,
-  className,
 }: {
-  thread: NoteCommentThreadView;
-  noteId: string;
+  thread: TaskHighlightThreadView;
+  taskId: string;
   onClose: () => void;
   onChanged: () => void;
-  hideChatLink?: boolean;
-  className?: string;
 }) {
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -52,8 +36,8 @@ export function NoteCommentPopover({
     setSubmitting(true);
     setError(null);
     try {
-      await createNoteComment({
-        noteId,
+      await createTaskHighlightComment({
+        taskId,
         quoteText: thread.quoteText,
         threadId: thread.id,
         content: text,
@@ -70,7 +54,7 @@ export function NoteCommentPopover({
   async function toggleUnderstood() {
     setToggling(true);
     try {
-      await toggleNoteCommentUnderstood(thread.id);
+      await toggleTaskHighlightUnderstood(thread.id);
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update");
@@ -80,12 +64,7 @@ export function NoteCommentPopover({
   }
 
   return (
-    <div
-      className={cn(
-        "flex w-[min(calc(100vw-2rem),320px)] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl",
-        className,
-      )}
-    >
+    <div className="flex w-[min(calc(100vw-2rem),320px)] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl">
       <div className="flex items-start gap-2 border-b border-border px-3 py-2.5">
         <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
         <p className="min-w-0 flex-1 line-clamp-3 border-l-2 border-amber-400/70 pl-2 text-[11px] italic leading-snug text-muted-foreground">
@@ -120,7 +99,7 @@ export function NoteCommentPopover({
         </div>
       </div>
 
-      {!hideChatLink && thread.conversationId && (
+      {thread.conversationId && (
         <div className="border-b border-border px-3 py-1.5">
           <Link
             href={`/dashboard/messages/conv-${thread.conversationId}`}
@@ -131,12 +110,7 @@ export function NoteCommentPopover({
         </div>
       )}
 
-      <div
-        className={cn(
-          "space-y-3 overflow-y-auto px-3 py-3",
-          hideChatLink ? "max-h-[min(50dvh,24rem)]" : "max-h-56",
-        )}
-      >
+      <div className="max-h-56 space-y-3 overflow-y-auto px-3 py-3">
         {thread.comments.length === 0 ? (
           <p className="text-[12px] text-muted-foreground">No comments yet.</p>
         ) : (

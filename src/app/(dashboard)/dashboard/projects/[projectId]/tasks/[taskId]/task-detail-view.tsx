@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Loader2, MessageCircleQuestion, History, MessageSquare,
   ChevronRight, ChevronDown, Pencil, Check, Clock, Undo2, Gauge, Timer,
-  FileText, Plus, Paperclip, X, MoreVertical, Trash2,
+  FileText, Plus, Paperclip, X, MoreVertical, Trash2, ExternalLink,
 } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, moveTask as moveTaskAction, declineTask, deleteTask } from "@/actions/task";
@@ -16,6 +16,9 @@ import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { formatDistanceToNow } from "date-fns";
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
 import { CommentSection } from "@/components/kanban/comment-section";
+import { TaskDescriptionComments } from "@/components/project/task-description-comments";
+import { LinkedCountPopover } from "@/components/project/linked-count-popover";
+import type { TaskHighlightThreadView } from "@/components/project/task-highlight-popover";
 import { StageConfirmDialog, getCheckpoint } from "@/components/kanban/stage-confirm-dialog";
 import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
 import { cn } from "@/lib/utils";
@@ -119,6 +122,8 @@ interface Props {
   isAdmin: boolean;
   canSkipClientReview?: boolean;
   canDelete?: boolean;
+  initialThreadId?: string | null;
+  backToNoteId?: string | null;
 }
 
 export function TaskDetailPage({
@@ -132,6 +137,8 @@ export function TaskDetailPage({
   isAdmin,
   canSkipClientReview,
   canDelete,
+  initialThreadId = null,
+  backToNoteId = null,
 }: Props) {
   const router = useRouter();
   const questions = allQuestions.filter((q) => q.taskType === initialTask.taskType);
@@ -199,6 +206,10 @@ export function TaskDetailPage({
   const [notes, setNotes] = useState<NoteData[]>(initialNotes);
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [attachNoteOpen, setAttachNoteOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [highlightThreads, setHighlightThreads] = useState<TaskHighlightThreadView[]>([]);
+  const [headerThreadId, setHeaderThreadId] = useState<string | null>(initialThreadId);
 
   // Time tracking
   const startedAt = stageLogData.startedAt ? new Date(stageLogData.startedAt).toISOString() : null;
@@ -442,8 +453,16 @@ export function TaskDetailPage({
       {/* Header */}
       <div className="h-12 flex items-center gap-3 px-6 pr-14 border-b border-border shrink-0 sticky top-0 bg-background z-10">
         <button
-          onClick={() => router.push(`/dashboard/projects/${projectId}`)}
+          onClick={() =>
+            router.push(
+              backToNoteId
+                ? `/dashboard/projects/${projectId}?tab=notes&noteId=${backToNoteId}`
+                : `/dashboard/projects/${projectId}`,
+            )
+          }
           className="text-muted-foreground hover:text-foreground transition-colors"
+          title={backToNoteId ? "Back to note" : "Back to project"}
+          aria-label={backToNoteId ? "Back to note" : "Back to project"}
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
@@ -511,10 +530,93 @@ export function TaskDetailPage({
               {titleValue}
             </h1>
           )}
+          {(notes.length > 0 || highlightThreads.length > 0) && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground/70">
+              {notes.length > 0 && (
+                <LinkedCountPopover
+                  count={notes.length}
+                  singular="Note"
+                  plural="Notes"
+                  icon={FileText}
+                  open={notesOpen}
+                  onOpenChange={setNotesOpen}
+                >
+                  {notes.map((note) => (
+                    <button
+                      key={note.id}
+                      type="button"
+                      onClick={() => {
+                        setNotesOpen(false);
+                        router.push(`/dashboard/projects/${projectId}?tab=notes&noteId=${note.id}`);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-left text-sm hover:border-border"
+                    >
+                      <span className="min-w-0 flex-1 truncate">{note.title}</span>
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    </button>
+                  ))}
+                </LinkedCountPopover>
+              )}
+              {notes.length > 0 && highlightThreads.length > 0 && <span>·</span>}
+              {highlightThreads.length > 0 && (
+                <LinkedCountPopover
+                  count={highlightThreads.length}
+                  singular="Comment"
+                  plural="Comments"
+                  icon={MessageSquare}
+                  open={commentsOpen}
+                  onOpenChange={setCommentsOpen}
+                >
+                  {highlightThreads.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      data-note-comment-ui
+                      onClick={() => {
+                        setCommentsOpen(false);
+                        setHeaderThreadId(t.id);
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                        t.understood
+                          ? "border-border/40 text-muted-foreground"
+                          : "border-border/50 hover:border-border",
+                      )}
+                    >
+                      <MessageSquare
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0",
+                          t.understood ? "text-muted-foreground/50" : "text-amber-400",
+                        )}
+                      />
+                      <span className={cn("min-w-0 flex-1 truncate italic", t.understood && "opacity-60")}>
+                        {t.quoteText}
+                      </span>
+                      {t.understood ? (
+                        <span className="grid size-5 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
+                          <Check className="h-3 w-3" strokeWidth={3} />
+                        </span>
+                      ) : (
+                        <span className="grid min-w-5 shrink-0 place-items-center rounded-full bg-amber-400 px-1 text-[10px] font-bold leading-5 text-background">
+                          {t.comments.length}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </LinkedCountPopover>
+              )}
+            </div>
+          )}
           {initialTask.description && (
-            <p className="text-[13px] text-muted-foreground leading-relaxed mt-2">
-              {initialTask.description}
-            </p>
+            <div className="mt-3">
+              <TaskDescriptionComments
+                description={initialTask.description}
+                taskId={initialTask.id}
+                projectId={projectId}
+                initialThreadId={headerThreadId}
+                onThreadsChange={setHighlightThreads}
+              />
+            </div>
           )}
         </div>
 
@@ -1050,7 +1152,7 @@ function TaskNoteEditor({
             className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-8"
             autoFocus
           />
-          <RichTextEditor content={content} onChange={setContent} placeholder="Write your note... (type / for commands)" borderless />
+          <RichTextEditor content={content} onChange={setContent} placeholder="Write your note... (type / for commands)" borderless projectId={projectId} />
         </div>
       </div>
     </div>

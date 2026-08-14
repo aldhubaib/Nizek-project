@@ -98,13 +98,18 @@ import {
   type OutboxEntry,
 } from "@/lib/message-outbox";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/upload-limits";
+import { DeadlineReminderCard } from "@/components/messages/deadline-reminder-card";
 import {
-  DeadlineReminderCard,
-  NizekBotAvatar,
-} from "@/components/messages/deadline-reminder-card";
+  ChatPostAvatar,
+  chatPostAuthorLabel,
+} from "@/components/messages/activity-card";
 import { NoteCommentCard } from "@/components/messages/note-comment-card";
+import { TaskCommentCard } from "@/components/messages/task-comment-card";
+import { NoteActivityCard } from "@/components/messages/note-activity-card";
 import type { DeadlineReminderPayload } from "@/lib/deadline-reminder-payload";
 import type { NoteCommentPayload } from "@/lib/note-comment-payload";
+import type { TaskCommentPayload } from "@/lib/task-comment-payload";
+import type { NoteActivityPayload } from "@/lib/note-activity-payload";
 import { closePushBannersByTags } from "@/lib/close-push-banners";
 import { threadPushTag } from "@/lib/notification-read";
 import { updateAppBadge } from "@/lib/app-badge";
@@ -206,8 +211,14 @@ export type ChatMessage = {
   mentions?: string[];
   deadlineReminder?: DeadlineReminderPayload | null;
   noteComment?: NoteCommentPayload | null;
+  taskComment?: TaskCommentPayload | null;
+  noteActivity?: NoteActivityPayload | null;
   important?: boolean;
 };
+
+function isFeedCardKind(kind?: string) {
+  return kind === "deadline_reminder" || kind === "note_activity" || kind === "note_comment";
+}
 
 const fmtTaskNumber = (n: number) => `T-${String(n).padStart(3, "0")}`;
 
@@ -670,7 +681,47 @@ const MessageRow = memo(function MessageRow({
     swiped.current = false;
   };
 
-  if (m.noteComment) {
+  if (m.noteActivity || m.noteComment || m.deadlineReminder) {
+    const authorLabel = chatPostAuthorLabel(m.authorId, m.authorName);
+    return (
+      <div id={`msg-${m.id}`} className={cn("contents", dimmed && "opacity-30")}>
+        {showDay && (
+          <div className="my-2 flex items-center justify-center">
+            <span className="rounded-full bg-surface px-3 py-1 text-tiny font-medium text-muted-foreground">
+              {formatDay(m.createdAt)}
+            </span>
+          </div>
+        )}
+        <div
+          className={cn(
+            "flex gap-2 justify-start",
+            newGroup && !showDay && notFirst && "mt-3",
+          )}
+        >
+          <ChatPostAvatar
+            show={showAuthor}
+            authorId={m.authorId}
+            authorName={m.authorName}
+            authorImageUrl={m.authorImageUrl}
+          />
+          <div className="flex min-w-0 max-w-[min(100%,420px)] flex-col gap-1">
+            {showAuthor && (
+              <div className="px-1 text-tiny text-muted-foreground">{authorLabel}</div>
+            )}
+            {m.deadlineReminder ? (
+              <DeadlineReminderCard payload={m.deadlineReminder} createdAt={m.createdAt} />
+            ) : m.noteActivity ? (
+              <NoteActivityCard payload={m.noteActivity} createdAt={m.createdAt} />
+            ) : (
+              <NoteCommentCard payload={m.noteComment!} createdAt={m.createdAt} />
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (m.taskComment) {
     return (
       <div id={`msg-${m.id}`} className={cn("contents", dimmed && "opacity-30")}>
         {showDay && (
@@ -692,38 +743,7 @@ const MessageRow = memo(function MessageRow({
             {showAuthor && (
               <div className="px-1 text-tiny text-muted-foreground">{m.authorName}</div>
             )}
-            <NoteCommentCard payload={m.noteComment} createdAt={m.createdAt} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (m.deadlineReminder) {
-    return (
-      <div id={`msg-${m.id}`} className={cn("contents", dimmed && "opacity-30")}>
-        {showDay && (
-          <div className="my-2 flex items-center justify-center">
-            <span className="rounded-full bg-surface px-3 py-1 text-tiny font-medium text-muted-foreground">
-              {formatDay(m.createdAt)}
-            </span>
-          </div>
-        )}
-        <div
-          className={cn(
-            "flex gap-2 justify-start",
-            newGroup && !showDay && notFirst && "mt-3",
-          )}
-        >
-          <NizekBotAvatar show={showAuthor} />
-          <div className="flex min-w-0 max-w-[min(100%,420px)] flex-col gap-1">
-            {showAuthor && (
-              <div className="px-1 text-tiny text-muted-foreground">{m.authorName}</div>
-            )}
-            <DeadlineReminderCard
-              payload={m.deadlineReminder}
-              createdAt={m.createdAt}
-            />
+            <TaskCommentCard payload={m.taskComment} createdAt={m.createdAt} />
           </div>
         </div>
       </div>
@@ -1292,6 +1312,9 @@ export function ThreadChat({
                 task: m.task ?? null,
                 mentions: m.mentions ?? [],
                 important: false,
+                noteComment: m.noteComment ?? null,
+                taskComment: m.taskComment ?? null,
+                noteActivity: m.noteActivity ?? null,
               },
             ],
       );
@@ -1427,6 +1450,8 @@ export function ThreadChat({
             mentions: m.mentions ?? [],
             deadlineReminder: m.deadlineReminder ?? null,
             noteComment: m.noteComment ?? null,
+            taskComment: m.taskComment ?? null,
+            noteActivity: m.noteActivity ?? null,
             important: false,
           },
         ];
@@ -2469,11 +2494,15 @@ export function ThreadChat({
             {messages.map((m, i) => {
               const prev = messages[i - 1];
               const showDay = !prev || !sameDay(prev.createdAt, m.createdAt);
-              const newGroup = !prev || prev.authorId !== m.authorId || showDay;
-              const mine =
-                m.kind === "deadline_reminder"
-                  ? false
-                  : m.authorId === currentMemberId;
+              const isFeed = isFeedCardKind(m.kind);
+              const prevFeed = isFeedCardKind(prev?.kind);
+              const newGroup =
+                !prev ||
+                prev.authorId !== m.authorId ||
+                showDay ||
+                isFeed ||
+                prevFeed;
+              const mine = isFeed ? false : m.authorId === currentMemberId;
               return (
                 <MessageRow
                   key={m.id}

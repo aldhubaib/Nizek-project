@@ -4,21 +4,18 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
-import { Check, CheckSquare, Loader2, MessageSquare, Send } from "lucide-react";
+import { Check, Loader2, MessageSquare, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NoteAnnotation } from "@/components/tiptap/note-annotation-mark";
 import { AttendanceBlock } from "@/components/tiptap/attendance-block";
-import { createNoteComment } from "@/actions/note-comment";
+import { createTaskHighlightComment } from "@/actions/task-highlight-comment";
 import { getProjectMembersForMention } from "@/actions/comment";
+import { asAnnotatableHtml } from "@/lib/html-annotate";
 import {
-  NoteCommentPopover,
-  type NoteCommentThreadView,
-} from "@/components/project/note-comment-panel";
-import {
-  TaskPreviewPopover,
-  type TaskPreviewSeed,
-} from "@/components/project/task-preview-popover";
+  TaskHighlightPopover,
+  type TaskHighlightThreadView,
+} from "@/components/project/task-highlight-popover";
 
 type SelectionState = {
   text: string;
@@ -26,47 +23,31 @@ type SelectionState = {
   left: number;
 };
 
-type GutterIcon =
-  | {
-      kind: "comment";
-      threadId: string;
-      top: number;
-      understood: boolean;
-      count: number;
-    }
-  | {
-      kind: "task";
-      taskId: string;
-      top: number;
-      done: boolean;
-    };
+type GutterIcon = {
+  threadId: string;
+  top: number;
+  understood: boolean;
+  count: number;
+};
 
-export function NoteAnnotatedContent({
+export function TaskAnnotatedContent({
   content,
-  noteId,
+  taskId,
   projectId,
-  canCreateTask,
   threads,
   openThreadId,
   onOpenThread,
-  taskUrl,
-  linkedTasks = [],
-  onCreateTask,
   onChanged,
 }: {
   content: string;
-  noteId: string;
+  taskId: string;
   projectId: string;
-  canCreateTask: boolean;
-  threads: NoteCommentThreadView[];
+  threads: TaskHighlightThreadView[];
   openThreadId: string | null;
   onOpenThread: (threadId: string | null) => void;
-  taskUrl: (taskId: string) => string;
-  linkedTasks?: TaskPreviewSeed[];
-  onCreateTask: (quote: string) => void;
-  onChanged: () => void;
+  onChanged: (nextDescription?: string | null) => void;
 }) {
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const html = asAnnotatableHtml(content);
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [commenting, setCommenting] = useState(false);
   const [draft, setDraft] = useState("");
@@ -80,53 +61,26 @@ export function NoteAnnotatedContent({
   const quoteRef = useRef("");
   const threadsRef = useRef(threads);
   threadsRef.current = threads;
-  const linkedTasksRef = useRef(linkedTasks);
-  linkedTasksRef.current = linkedTasks;
 
   const layoutIcons = useCallback(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
     const wrapRect = wrap.getBoundingClientRect();
+    const marks = wrap.querySelectorAll<HTMLElement>("mark.note-annotation-comment[data-thread-id]");
+    const seen = new Set<string>();
     const next: GutterIcon[] = [];
-    const seenThread = new Set<string>();
-    const seenTask = new Set<string>();
-
-    for (const el of wrap.querySelectorAll<HTMLElement>(
-      "mark.note-annotation-comment[data-thread-id], mark[data-kind='comment'][data-thread-id]",
-    )) {
+    for (const el of marks) {
       const threadId = el.getAttribute("data-thread-id");
-      if (!threadId || seenThread.has(threadId)) continue;
-      seenThread.add(threadId);
+      if (!threadId || seen.has(threadId)) continue;
+      seen.add(threadId);
       const r = el.getBoundingClientRect();
       const thread = threadsRef.current.find((t) => t.id === threadId);
       next.push({
-        kind: "comment",
         threadId,
         top: r.top - wrapRect.top + wrap.scrollTop,
         understood: thread?.understood ?? false,
         count: thread?.comments.length ?? 1,
       });
-    }
-
-    for (const el of wrap.querySelectorAll<HTMLElement>(
-      "mark.note-annotation-task[data-task-id], mark[data-kind='task'][data-task-id]",
-    )) {
-      const taskId = el.getAttribute("data-task-id");
-      if (!taskId || seenTask.has(taskId)) continue;
-      seenTask.add(taskId);
-      const r = el.getBoundingClientRect();
-      next.push({
-        kind: "task",
-        taskId,
-        top: r.top - wrapRect.top + wrap.scrollTop,
-        done: linkedTasksRef.current.find((t) => t.id === taskId)?.stage === "DONE",
-      });
-    }
-
-    next.sort((a, b) => a.top - b.top);
-    for (let i = 1; i < next.length; i++) {
-      const prev = next[i - 1];
-      if (next[i].top - prev.top < 32) next[i].top = prev.top + 36;
     }
     setIcons(next);
   }, []);
@@ -140,26 +94,17 @@ export function NoteAnnotatedContent({
       NoteAnnotation,
       AttendanceBlock,
     ],
-    content,
+    content: html,
     editorProps: {
       attributes: {
         class:
-          "focus:outline-none prose prose-invert max-w-none text-base leading-relaxed prose-headings:font-bold prose-h1:text-4xl prose-h2:text-2xl prose-h3:text-xl prose-img:rounded-lg prose-img:max-w-full",
+          "focus:outline-none prose prose-invert max-w-none text-[13px] leading-relaxed text-muted-foreground prose-p:my-0",
       },
       handleClick: (view, pos) => {
         const marks = view.state.doc.resolve(pos).marks();
         const ann = marks.find((m) => m.type.name === "noteAnnotation");
         if (!ann) return false;
-        if (ann.attrs.threadId) {
-          setOpenTaskId(null);
-          onOpenThread(ann.attrs.threadId);
-        }
-        if (ann.attrs.taskId) {
-          onOpenThread(null);
-          setOpenTaskId((current) =>
-            current === ann.attrs.taskId ? null : ann.attrs.taskId,
-          );
-        }
+        if (ann.attrs.threadId) onOpenThread(ann.attrs.threadId);
         return true;
       },
     },
@@ -194,13 +139,13 @@ export function NoteAnnotatedContent({
 
   useEffect(() => {
     if (!editor) return;
-    if (content !== editor.getHTML()) editor.commands.setContent(content);
+    if (html !== editor.getHTML()) editor.commands.setContent(html);
     requestAnimationFrame(layoutIcons);
-  }, [content, editor, layoutIcons]);
+  }, [html, editor, layoutIcons]);
 
   useLayoutEffect(() => {
     layoutIcons();
-  }, [layoutIcons, threads, linkedTasks, content]);
+  }, [layoutIcons, threads, html]);
 
   useEffect(() => {
     const onResize = () => layoutIcons();
@@ -215,16 +160,15 @@ export function NoteAnnotatedContent({
   }, [projectId]);
 
   useEffect(() => {
-    if (!openThreadId && !openTaskId) return;
+    if (!openThreadId) return;
     function onPointerDown(e: PointerEvent) {
       const target = e.target as HTMLElement | null;
       if (target?.closest("[data-note-comment-ui]")) return;
       onOpenThread(null);
-      setOpenTaskId(null);
     }
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [openThreadId, openTaskId, onOpenThread]);
+  }, [openThreadId, onOpenThread]);
 
   useEffect(() => {
     if (!openThreadId || !wrapRef.current) return;
@@ -247,13 +191,13 @@ export function NoteAnnotatedContent({
     setSubmitting(true);
     setError(null);
     try {
-      const result = await createNoteComment({
-        noteId,
+      const result = await createTaskHighlightComment({
+        taskId,
         quoteText: quote,
         content: text,
       });
       closeComposer();
-      onChanged();
+      onChanged(result.description);
       onOpenThread(result.threadId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to post comment");
@@ -268,82 +212,44 @@ export function NoteAnnotatedContent({
       )
     : members;
 
-  function previewTask(taskId: string) {
-    onOpenThread(null);
-    setOpenTaskId((current) => (current === taskId ? null : taskId));
-  }
-
   const openThread = threads.find((t) => t.id === openThreadId) ?? null;
-  const openIcon = icons.find(
-    (i) => i.kind === "comment" && i.threadId === openThreadId,
-  );
-  const openTaskIcon = icons.find(
-    (i) => i.kind === "task" && i.taskId === openTaskId,
-  );
-  const openTaskSeed = linkedTasks.find((t) => t.id === openTaskId) ?? null;
+  const openIcon = icons.find((i) => i.threadId === openThreadId);
 
   return (
     <div ref={wrapRef} className="relative pr-12">
       <EditorContent editor={editor} />
 
-      {icons.map((icon) =>
-        icon.kind === "task" ? (
-          <button
-            key={`task-${icon.taskId}`}
-            type="button"
-            data-note-comment-ui
-            title={icon.done ? "Task done" : "Preview task"}
-            onClick={() => previewTask(icon.taskId)}
-            className={cn(
-              "absolute right-0 z-10 grid size-8 -translate-y-1 place-items-center rounded-full border shadow-sm transition-colors",
-              icon.done
-                ? "border-border bg-popover text-muted-foreground/50 hover:text-muted-foreground"
-                : openTaskId === icon.taskId
-                  ? "border-emerald-400/60 bg-emerald-500/20 text-emerald-300"
-                  : "border-border bg-popover text-emerald-400 hover:border-emerald-400/50 hover:bg-emerald-500/10",
-            )}
-            style={{ top: icon.top }}
-          >
-            <CheckSquare className="h-3.5 w-3.5" />
-            {icon.done ? (
-              <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-muted text-muted-foreground">
-                <Check className="h-2.5 w-2.5" strokeWidth={3} />
-              </span>
-            ) : null}
-          </button>
-        ) : (
-          <button
-            key={`comment-${icon.threadId}`}
-            type="button"
-            data-note-comment-ui
-            title={icon.understood ? "Understood" : "Open comment"}
-            onClick={() => {
-              setOpenTaskId(null);
-              onOpenThread(openThreadId === icon.threadId ? null : icon.threadId);
-            }}
-            className={cn(
-              "absolute right-0 z-10 grid size-8 -translate-y-1 place-items-center rounded-full border shadow-sm transition-colors",
-              icon.understood
-                ? "border-border bg-popover text-muted-foreground/50 hover:text-muted-foreground"
-                : openThreadId === icon.threadId
-                  ? "border-amber-400/60 bg-amber-500/20 text-amber-300"
-                  : "border-border bg-popover text-amber-400 hover:border-amber-400/50 hover:bg-amber-500/10",
-            )}
-            style={{ top: icon.top }}
-          >
-            <MessageSquare className="h-3.5 w-3.5" />
-            {icon.understood ? (
-              <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-muted text-muted-foreground">
-                <Check className="h-2.5 w-2.5" strokeWidth={3} />
-              </span>
-            ) : icon.count > 0 ? (
-              <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-amber-400 px-1 text-[9px] font-bold leading-4 text-background">
-                {icon.count}
-              </span>
-            ) : null}
-          </button>
-        ),
-      )}
+      {icons.map((icon) => (
+        <button
+          key={icon.threadId}
+          type="button"
+          data-note-comment-ui
+          title={icon.understood ? "Understood" : "Open comment"}
+          onClick={() =>
+            onOpenThread(openThreadId === icon.threadId ? null : icon.threadId)
+          }
+          className={cn(
+            "absolute right-0 z-10 grid size-8 -translate-y-1 place-items-center rounded-full border shadow-sm transition-colors",
+            icon.understood
+              ? "border-border bg-popover text-muted-foreground/50 hover:text-muted-foreground"
+              : openThreadId === icon.threadId
+                ? "border-amber-400/60 bg-amber-500/20 text-amber-300"
+                : "border-border bg-popover text-amber-400 hover:border-amber-400/50 hover:bg-amber-500/10",
+          )}
+          style={{ top: icon.top }}
+        >
+          <MessageSquare className="h-3.5 w-3.5" />
+          {icon.understood ? (
+            <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-muted text-muted-foreground">
+              <Check className="h-2.5 w-2.5" strokeWidth={3} />
+            </span>
+          ) : icon.count > 0 ? (
+            <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-amber-400 px-1 text-[9px] font-bold leading-4 text-background">
+              {icon.count}
+            </span>
+          ) : null}
+        </button>
+      ))}
 
       {openThread && (
         <div
@@ -351,27 +257,11 @@ export function NoteAnnotatedContent({
           className="absolute right-11 z-30"
           style={{ top: Math.max(0, (openIcon?.top ?? 0) - 8) }}
         >
-          <NoteCommentPopover
+          <TaskHighlightPopover
             thread={openThread}
-            noteId={noteId}
+            taskId={taskId}
             onClose={() => onOpenThread(null)}
-            onChanged={onChanged}
-          />
-        </div>
-      )}
-
-      {openTaskId && (
-        <div
-          data-note-comment-ui
-          className="absolute right-11 z-30"
-          style={{ top: Math.max(0, (openTaskIcon?.top ?? 0) - 8) }}
-        >
-          <TaskPreviewPopover
-            key={openTaskId}
-            taskId={openTaskId}
-            href={taskUrl(openTaskId)}
-            seed={openTaskSeed}
-            onClose={() => setOpenTaskId(null)}
+            onChanged={() => onChanged()}
           />
         </div>
       )}
@@ -393,21 +283,6 @@ export function NoteAnnotatedContent({
             <MessageSquare className="h-3.5 w-3.5 text-amber-400" />
             Comment
           </button>
-          {canCreateTask && (
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                const quote = quoteRef.current;
-                setSelection(null);
-                onCreateTask(quote);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-foreground hover:bg-accent"
-            >
-              <CheckSquare className="h-3.5 w-3.5 text-primary" />
-              Create task
-            </button>
-          )}
         </div>
       )}
 

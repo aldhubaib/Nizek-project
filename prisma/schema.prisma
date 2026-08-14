@@ -124,6 +124,10 @@ model User {
   noteCommentMentions NoteCommentMention[]    @relation("NoteCommentMentionedUser")
   noteCommentSubs    NoteCommentSubscriber[]  @relation("NoteCommentSubscriber")
   noteTaskLinks      NoteTaskLink[]           @relation("NoteTaskLinkCreator")
+  taskHighlightThreads TaskHighlightThread[]  @relation("TaskHighlightThreadAuthor")
+  taskHighlightComments TaskHighlightComment[] @relation("TaskHighlightCommentAuthor")
+  taskHighlightMentions TaskHighlightMention[] @relation("TaskHighlightMentionedUser")
+  taskHighlightSubs    TaskHighlightSubscriber[] @relation("TaskHighlightSubscriber")
 
   @@index([systemRole])
   @@index([blocked])
@@ -297,6 +301,7 @@ model Task {
   answers    TaskAnswer[]
   activities TaskActivity[]
   comments   TaskComment[]
+  highlightThreads TaskHighlightThread[]
   stageLogs  StageLog[]
   notes      MeetingNote[]
   noteLinks  NoteTaskLink[]
@@ -392,6 +397,7 @@ enum NoteType {
   MEETING_NOTE
   DECISION
   DEADLINE
+  PRODUCT
   FEATURE
   ENHANCEMENT
   BUG
@@ -533,6 +539,67 @@ model NoteCommentSubscriber {
   thread   NoteCommentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   userId   String
   user     User   @relation("NoteCommentSubscriber", fields: [userId], references: [id], onDelete: Cascade)
+
+  understoodAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@unique([threadId, userId])
+  @@index([userId])
+}
+
+// Highlighted excerpt on a task description. Same inbox pattern as note comments.
+model TaskHighlightThread {
+  id             String   @id @default(cuid())
+  taskId         String
+  task           Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  quoteText      String
+  conversationId String?  @unique
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  createdById    String
+  createdBy      User     @relation("TaskHighlightThreadAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  comments    TaskHighlightComment[]
+  subscribers TaskHighlightSubscriber[]
+
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model TaskHighlightComment {
+  id        String @id @default(cuid())
+  threadId  String
+  thread    TaskHighlightThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User   @relation("TaskHighlightCommentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  /// Matching inbox Message.id when this reply was mirrored into chat.
+  messageId String? @unique
+
+  mentions TaskHighlightMention[]
+
+  createdAt DateTime @default(now())
+
+  @@index([threadId])
+}
+
+model TaskHighlightMention {
+  id        String @id @default(cuid())
+  commentId String
+  comment   TaskHighlightComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User   @relation("TaskHighlightMentionedUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([userId])
+}
+
+model TaskHighlightSubscriber {
+  id       String @id @default(cuid())
+  threadId String
+  thread   TaskHighlightThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation("TaskHighlightSubscriber", fields: [userId], references: [id], onDelete: Cascade)
 
   understoodAt DateTime?
   createdAt DateTime @default(now())
@@ -1454,6 +1521,7 @@ model Conversation {
   participants ConversationParticipant[]
   messages     Message[]
   noteCommentThread NoteCommentThread?
+  taskHighlightThread TaskHighlightThread?
 
   @@unique([projectId, kind])
   @@index([projectId])

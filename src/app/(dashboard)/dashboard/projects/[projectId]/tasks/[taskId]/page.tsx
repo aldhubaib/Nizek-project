@@ -10,10 +10,12 @@ import { TaskDetailPage as TaskDetailClient } from "./task-detail-view";
 
 interface Props {
   params: Promise<{ projectId: string; taskId: string }>;
+  searchParams: Promise<{ threadId?: string; from?: string; noteId?: string }>;
 }
 
-export default async function TaskDetailPage({ params }: Props) {
+export default async function TaskDetailPage({ params, searchParams }: Props) {
   const { projectId, taskId } = await params;
+  const { threadId, from, noteId } = await searchParams;
 
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -91,6 +93,8 @@ export default async function TaskDetailPage({ params }: Props) {
         (userPermissions.canMoveTask &&
           (userPermissions.allowedTransitions?.["INTERNAL_REVIEW"] ?? []).includes("READY_FOR_RELEASE"))
       }
+      initialThreadId={threadId ?? null}
+      backToNoteId={from === "note" ? (noteId ?? null) : null}
     />
   );
 }

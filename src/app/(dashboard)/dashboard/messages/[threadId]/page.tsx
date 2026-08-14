@@ -182,6 +182,13 @@ export default async function ThreadPage({
               },
             },
           },
+          taskHighlightThread: {
+            select: {
+              task: {
+                select: { projectId: true, title: true, project: { select: { name: true } } },
+              },
+            },
+          },
         },
       });
       if (!convo) notFound();
@@ -211,11 +218,26 @@ export default async function ThreadPage({
           .sort((a, b) => a.name.localeCompare(b.name));
         subtitle = `${convo.noteCommentThread.note.project.name} · Note comment`;
         title = convo.noteCommentThread.note.title;
+      } else if (convo.taskHighlightThread) {
+        const projectId = convo.taskHighlightThread.task.projectId;
+        const members = await prisma.projectMember.findMany({
+          where: { projectId },
+          include: { user: { select: { id: true, name: true, email: true } } },
+        });
+        mentionables = members
+          .map((m) => ({
+            id: m.user.id,
+            name: m.user.name ?? m.user.email,
+          }))
+          .filter((m) => m.id !== user.id)
+          .sort((a, b) => a.name.localeCompare(b.name));
+        subtitle = `${convo.taskHighlightThread.task.project.name} · Task comment`;
+        title = convo.taskHighlightThread.task.title;
       }
       target = { conversationId: convo.id };
       channel = conversationChannel(convo.id);
       presenceChannel = globalPresenceChannel();
-      if (!convo.noteCommentThread) {
+      if (!convo.noteCommentThread && !convo.taskHighlightThread) {
         title =
           convo.title ??
           (others.map((m) => m.name ?? m.email).join(", ") || "Direct message");

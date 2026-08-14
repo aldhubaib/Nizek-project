@@ -105,7 +105,7 @@ function ScrollingGallery({ photos }: { photos: GalleryPhoto[] }) {
 
 function PhotoCard({ src }: { src: string }) {
   return (
-    <div className="aspect-[4/3] w-full overflow-hidden rounded-xl shadow-lg ring-1 ring-white/5">
+    <div className="aspect-[3/4] w-full overflow-hidden rounded-2xl shadow-lg ring-1 ring-white/5">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt="" className="h-full w-full object-cover" />
     </div>
@@ -125,7 +125,7 @@ function GalleryCard({
 }) {
   return (
     <div
-      className="flex aspect-[4/3] w-full flex-col justify-end rounded-xl p-5 shadow-lg ring-1 ring-white/5"
+      className="flex aspect-[3/4] w-full flex-col justify-end rounded-2xl p-5 shadow-lg ring-1 ring-white/5"
       style={{
         backgroundImage: `linear-gradient(135deg, ${from}, ${to})`,
         color: text,

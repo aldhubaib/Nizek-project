@@ -23,16 +23,27 @@ import {
   Code,
   ImageIcon,
   Type,
+  Users,
+  Check,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
 import { NoteAnnotation } from "@/components/tiptap/note-annotation-mark";
+import {
+  AttendanceBlock,
+  type AttendancePerson,
+} from "@/components/tiptap/attendance-block";
+import { getProjectMembersForMention } from "@/actions/comment";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 
 export interface RichTextEditorProps {
   content: string;
   onChange: (html: string) => void;
   placeholder?: string;
   borderless?: boolean;
+  projectId?: string;
 }
 
 export function RichTextEditor({
@@ -40,9 +51,15 @@ export function RichTextEditor({
   onChange,
   placeholder = "Type '/' for commands...",
   borderless = false,
+  projectId,
 }: RichTextEditorProps) {
   const [slashMenu, setSlashMenu] = useState<{ x: number; y: number; query: string } | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
+  const [attendancePicker, setAttendancePicker] = useState<{ x: number; y: number } | null>(null);
+  const [members, setMembers] = useState<AttendancePerson[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [memberQuery, setMemberQuery] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -54,6 +71,7 @@ export function RichTextEditor({
       Placeholder.configure({ placeholder }),
       Image.configure({ inline: false }),
       NoteAnnotation,
+      AttendanceBlock,
     ],
     content,
     onUpdate: ({ editor }) => {
@@ -160,23 +178,35 @@ export function RichTextEditor({
   }
 
   const COMMANDS = [
-    { id: "h1", label: "Heading 1", description: "Large heading", icon: Heading1 },
-    { id: "h2", label: "Heading 2", description: "Medium heading", icon: Heading2 },
-    { id: "h3", label: "Heading 3", description: "Small heading", icon: Heading3 },
-    { id: "text", label: "Text", description: "Plain text", icon: Type },
-    { id: "bullet", label: "Bullet List", description: "Unordered list", icon: List },
-    { id: "numbered", label: "Numbered List", description: "Ordered list", icon: ListOrdered },
-    { id: "quote", label: "Quote", description: "Block quote", icon: Quote },
-    { id: "divider", label: "Divider", description: "Horizontal rule", icon: Minus },
-    { id: "code", label: "Code Block", description: "Code snippet", icon: Code },
-    { id: "image", label: "Image", description: "Upload from device", icon: ImageIcon },
+    { id: "h1", label: "Heading 1", description: "Large heading", icon: Heading1, aliases: [] as string[] },
+    { id: "h2", label: "Heading 2", description: "Medium heading", icon: Heading2, aliases: [] },
+    { id: "h3", label: "Heading 3", description: "Small heading", icon: Heading3, aliases: [] },
+    { id: "text", label: "Text", description: "Plain text", icon: Type, aliases: [] },
+    { id: "bullet", label: "Bullet List", description: "Unordered list", icon: List, aliases: [] },
+    { id: "numbered", label: "Numbered List", description: "Ordered list", icon: ListOrdered, aliases: [] },
+    { id: "quote", label: "Quote", description: "Block quote", icon: Quote, aliases: [] },
+    { id: "divider", label: "Divider", description: "Horizontal rule", icon: Minus, aliases: [] },
+    { id: "code", label: "Code Block", description: "Code snippet", icon: Code, aliases: [] },
+    { id: "image", label: "Image", description: "Upload from device", icon: ImageIcon, aliases: [] },
+    ...(projectId
+      ? [{
+          id: "people",
+          label: "People",
+          description: "Pick people on this project",
+          icon: Users,
+          aliases: ["user", "member", "attendance", "attendee", "present"],
+        }]
+      : []),
   ];
 
   function getFilteredCommands(query: string) {
     if (!query) return COMMANDS;
     const q = query.toLowerCase();
     return COMMANDS.filter(
-      (c) => c.label.toLowerCase().includes(q) || c.id.includes(q)
+      (c) =>
+        c.label.toLowerCase().includes(q) ||
+        c.id.includes(q) ||
+        c.aliases.some((a) => a.includes(q)),
     );
   }
 
@@ -200,6 +230,18 @@ export function RichTextEditor({
       if (range) editor.chain().focus().deleteRange(range).run();
       fileInputRef.current?.click();
       setSlashMenu(null);
+      return;
+    }
+
+    if (id === "people") {
+      const pos = slashMenu;
+      if (range) editor.chain().focus().deleteRange(range).run();
+      setSlashMenu(null);
+      if (pos) {
+        setAttendancePicker({ x: pos.x, y: pos.y });
+        setMemberQuery("");
+        void openAttendancePicker();
+      }
       return;
     }
 
@@ -239,7 +281,40 @@ export function RichTextEditor({
     }
     setSlashMenu(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor]);
+  }, [editor, slashMenu, projectId]);
+
+  async function openAttendancePicker() {
+    if (!projectId) return;
+    setMembersLoading(true);
+    try {
+      const res = await getProjectMembersForMention(projectId);
+      setMembers(res.members);
+      setSelectedIds(new Set(res.currentUserId ? [res.currentUserId] : []));
+    } catch (err) {
+      console.error(err);
+      setMembers([]);
+    } finally {
+      setMembersLoading(false);
+    }
+  }
+
+  function toggleMember(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function insertAttendance() {
+    if (!editor) return;
+    const people = members.filter((m) => selectedIds.has(m.id));
+    if (people.length === 0) return;
+    editor.chain().focus().insertContent({ type: "attendance", attrs: { people } }).run();
+    setAttendancePicker(null);
+    setSelectedIds(new Set());
+  }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -253,6 +328,7 @@ export function RichTextEditor({
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setSlashMenu(null);
+        setAttendancePicker(null);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -273,6 +349,28 @@ export function RichTextEditor({
     />
   );
 
+  const filteredMembers = memberQuery
+    ? members.filter((m) =>
+        (m.name ?? "").toLowerCase().includes(memberQuery.toLowerCase()),
+      )
+    : members;
+
+  const picker = attendancePicker ? (
+    <AttendancePicker
+      ref={menuRef}
+      x={attendancePicker.x}
+      y={attendancePicker.y}
+      loading={membersLoading}
+      members={filteredMembers}
+      selectedIds={selectedIds}
+      query={memberQuery}
+      onQueryChange={setMemberQuery}
+      onToggle={toggleMember}
+      onInsert={insertAttendance}
+      onClose={() => setAttendancePicker(null)}
+    />
+  ) : null;
+
   if (borderless) {
     return (
       <div className="relative">
@@ -288,6 +386,7 @@ export function RichTextEditor({
             onSelect={executeCommand}
           />
         )}
+        {picker}
       </div>
     );
   }
@@ -339,6 +438,7 @@ export function RichTextEditor({
             onSelect={executeCommand}
           />
         )}
+        {picker}
       </div>
     </div>
   );
@@ -395,6 +495,103 @@ const SlashCommandMenu = forwardRef<HTMLDivElement, SlashMenuProps>(
   }
 );
 SlashCommandMenu.displayName = "SlashCommandMenu";
+
+interface AttendancePickerProps {
+  x: number;
+  y: number;
+  loading: boolean;
+  members: AttendancePerson[];
+  selectedIds: Set<string>;
+  query: string;
+  onQueryChange: (value: string) => void;
+  onToggle: (id: string) => void;
+  onInsert: () => void;
+  onClose: () => void;
+}
+
+const AttendancePicker = forwardRef<HTMLDivElement, AttendancePickerProps>(
+  (
+    { x, y, loading, members, selectedIds, query, onQueryChange, onToggle, onInsert, onClose },
+    ref,
+  ) => {
+    return (
+      <div
+        ref={ref}
+        className="absolute z-50 w-72 overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
+        style={{ left: x, top: y }}
+      >
+        <div className="flex items-center justify-between px-2.5 py-1.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            People
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            Cancel
+          </button>
+        </div>
+        <div className="px-2 pb-2">
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            placeholder="Search people on this project…"
+            className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-[12px] outline-none focus:border-primary/40"
+          />
+        </div>
+        <div className="max-h-56 overflow-y-auto pb-1">
+          {loading ? (
+            <div className="flex items-center gap-2 px-3 py-4 text-[12px] text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Loading people…
+            </div>
+          ) : members.length === 0 ? (
+            <p className="px-3 py-4 text-[12px] text-muted-foreground">
+              No matching project members.
+            </p>
+          ) : (
+            members.map((m) => {
+              const selected = selectedIds.has(m.id);
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => onToggle(m.id)}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 px-2.5 py-2 text-left transition-colors",
+                    selected ? "bg-accent" : "hover:bg-accent/50",
+                  )}
+                >
+                  <Avatar size="sm">
+                    <AvatarImage src={m.imageUrl ?? undefined} alt="" />
+                    <AvatarFallback>
+                      {(m.name ?? "?").charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+                    {m.name ?? "Someone"}
+                  </span>
+                  {selected && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                </button>
+              );
+            })
+          )}
+        </div>
+        <div className="flex items-center justify-between border-t border-border px-2.5 py-2">
+          <span className="text-[11px] text-muted-foreground">
+            {selectedIds.size} selected
+          </span>
+          <Button size="sm" onClick={onInsert} disabled={selectedIds.size === 0}>
+            Insert
+          </Button>
+        </div>
+      </div>
+    );
+  },
+);
+AttendancePicker.displayName = "AttendancePicker";
 
 /* ─── Toolbar Button ─── */
 

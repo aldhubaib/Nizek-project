@@ -28,6 +28,14 @@ describe("wrapFirstPlainText", () => {
       'data-task-id="task1"',
     );
   });
+
+  it("matches across tags and collapsed whitespace", () => {
+    const html = "<p>It is a long<br> established fact</p>";
+    const { open, close } = taskMarkTag("t1");
+    const next = wrapFirstPlainText(html, "It is a long established fact", open, close);
+    expect(next).toContain('data-task-id="t1"');
+    expect(next).toContain("<br>");
+  });
 });
 
 describe("toMentionTokens", () => {
