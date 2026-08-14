@@ -5,16 +5,16 @@ import { useSearchParams } from "next/navigation";
 import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, FileText, Trash2, Gavel, ArrowLeft, Clock, History, User, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, MoreVertical, Link2 } from "lucide-react";
+import { Plus, FileText, Trash2, Gavel, Clock, History, User, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, MoreVertical, Link2 } from "lucide-react";
 import { createMeetingNote, updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete, getMeetingNote } from "@/actions/meeting-note";
 import { getNoteCommentThreads } from "@/actions/note-comment";
 import { testDeadlineReminder } from "@/actions/deadline-reminder";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { NoteAnnotatedContent } from "@/components/project/note-annotated-content-lazy";
-import { NoteCommentPanel } from "@/components/project/note-comment-panel";
+import { type NoteCommentThreadView } from "@/components/project/note-comment-panel";
 import { AttachToTaskDialog } from "@/components/project/attach-to-task-dialog";
 import { CreateTaskFromNoteDialog } from "@/components/project/create-task-from-note";
-import { NotificationBell } from "@/components/notification-bell";
+import { PageHeaderActions } from "@/components/page-header-actions";
 import { taskCode } from "@/lib/task-label";
 import {
   DropdownMenu,
@@ -123,6 +123,7 @@ interface Props {
   allowedTaskTypes?: string[];
   activeContractType?: string | null;
   isActive?: boolean;
+  onFullscreenChange?: (open: boolean, goBack?: () => void) => void;
 }
 
 const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "DEADLINE", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
@@ -138,12 +139,27 @@ export function MeetingNotesTab({
   allowedTaskTypes = [],
   activeContractType = null,
   isActive = true,
+  onFullscreenChange,
 }: Props) {
   const [notes, setNotes] = useState(initialNotes);
   const [filter, setFilter] = useState<NoteType | "ALL">("ALL");
   const [view, setView] = useState<"list" | "create" | "detail">("list");
   const [selectedNote, setSelectedNote] = useState<MeetingNote | null>(null);
   const searchParams = useSearchParams();
+
+  const goBack = useCallback(() => {
+    setView("list");
+    setSelectedNote(null);
+  }, []);
+
+  useEffect(() => {
+    if (view !== "list") {
+      onFullscreenChange?.(true, goBack);
+    } else {
+      onFullscreenChange?.(false);
+    }
+    return () => onFullscreenChange?.(false);
+  }, [view, goBack, onFullscreenChange]);
 
   useEffect(() => {
     setNotes(initialNotes);
@@ -198,13 +214,8 @@ export function MeetingNotesTab({
     setView("create");
   }
 
-  function goBack() {
-    setView("list");
-    setSelectedNote(null);
-  }
-
   if (view === "create") {
-    return <NoteFullScreenCreate projectId={projectId} currentUserId={currentUserId} onBack={goBack} />;
+    return <NoteFullScreenCreate projectId={projectId} onBack={goBack} />;
   }
 
   if (view === "detail" && selectedNote) {
@@ -219,7 +230,7 @@ export function MeetingNotesTab({
         activeContractType={activeContractType}
         isActive={isActive}
         initialThreadId={searchParams.get("threadId")}
-        onBack={goBack}
+        currentUserId={currentUserId}
         onToggleComplete={() => toggleComplete(selectedNote.id)}
         onRefresh={() => refreshNote(selectedNote.id)}
         onDelete={async () => {
@@ -359,11 +370,9 @@ export function MeetingNotesTab({
 
 function NoteFullScreenCreate({
   projectId,
-  currentUserId,
   onBack,
 }: {
   projectId: string;
-  currentUserId?: string;
   onBack: () => void;
 }) {
   const [title, setTitle] = useState("");
@@ -414,22 +423,14 @@ function NoteFullScreenCreate({
   };
 
   return (
-    <div className="fixed inset-0 z-[110] bg-background flex flex-col">
-      <div className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </button>
-        <div className="flex items-center gap-2">
-          <NotificationBell currentUserId={currentUserId} />
-          <Button size="sm" onClick={handleSave} disabled={saving || !title.trim()}>
-            {saving ? "Saving..." : "Save"}
-          </Button>
-        </div>
-      </div>
+    <div className="flex flex-col bg-background">
+      <PageHeaderActions>
+        <Button size="sm" onClick={handleSave} disabled={saving || !title.trim()}>
+          {saving ? "Saving..." : "Save"}
+        </Button>
+      </PageHeaderActions>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
+      <div className="max-w-4xl mx-auto w-full px-8 sm:px-16 py-10">
           {/* Type picker */}
           <div className="mb-6">
             <div className="flex gap-2 flex-wrap">
@@ -494,7 +495,6 @@ function NoteFullScreenCreate({
             placeholder={editorPlaceholders[noteType ?? "MEETING_NOTE"] ?? "Write here... (type / for commands)"}
             borderless
           />
-        </div>
       </div>
     </div>
   );
@@ -512,7 +512,7 @@ function NoteFullScreenDetail({
   activeContractType,
   isActive,
   initialThreadId,
-  onBack,
+  currentUserId,
   onToggleComplete,
   onRefresh,
   onDelete,
@@ -526,7 +526,7 @@ function NoteFullScreenDetail({
   activeContractType: string | null;
   isActive: boolean;
   initialThreadId: string | null;
-  onBack: () => void;
+  currentUserId?: string;
   onToggleComplete: () => Promise<void>;
   onRefresh: () => Promise<void>;
   onDelete: () => Promise<void>;
@@ -546,17 +546,24 @@ function NoteFullScreenDetail({
   const [attachOpen, setAttachOpen] = useState(false);
   const [createQuote, setCreateQuote] = useState<string | null>(null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(initialThreadId);
-  const [threads, setThreads] = useState<
-    { id: string; quoteText: string; conversationId: string | null; comments: { id: string; content: string; createdAt: Date; user: { id: string; name: string | null; imageUrl: string | null } }[] }[]
-  >([]);
+  const [threads, setThreads] = useState<NoteCommentThreadView[]>([]);
 
   const linked = allLinkedTasks(note);
-  const activeThread = threads.find((t) => t.id === activeThreadId) ?? null;
 
   const loadThreads = useCallback(async () => {
     const data = await getNoteCommentThreads(note.id);
-    setThreads(data as typeof threads);
-  }, [note.id]);
+    setThreads(
+      data.map((t) => ({
+        id: t.id,
+        quoteText: t.quoteText,
+        conversationId: t.conversationId,
+        comments: t.comments,
+        understood: currentUserId
+          ? t.subscribers.some((s) => s.userId === currentUserId && s.understoodAt)
+          : false,
+      })),
+    );
+  }, [note.id, currentUserId]);
 
   useEffect(() => {
     void loadThreads();
@@ -646,108 +653,100 @@ function NoteFullScreenDetail({
   }
 
   return (
-    <div className="relative fixed inset-0 z-[110] flex flex-col bg-background">
-      {/* Top bar */}
-      <div className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </button>
-        <div className="flex items-center gap-2">
-          {!isEditing && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                aria-label="Note options"
-                className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <MoreVertical className="h-4 w-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => setShowHistory(true)}>
-                  <History className="h-4 w-4" />
-                  <span className="flex-1">History</span>
-                </DropdownMenuItem>
-                {canEdit && (
-                  <>
-                    {isDeadline && (
-                      <DropdownMenuItem
-                        onClick={handleToggleComplete}
-                        disabled={togglingComplete}
-                        className={cn(completedAt && "text-emerald-400 focus:text-emerald-400")}
-                      >
-                        {completedAt ? (
-                          <CheckCircle2 className="h-4 w-4" />
-                        ) : (
-                          <Circle className="h-4 w-4" />
-                        )}
-                        <span className="flex-1">{completedAt ? "Mark incomplete" : "Mark complete"}</span>
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem onClick={() => setIsEditing(true)}>
-                      <Pencil className="h-4 w-4" />
-                      <span className="flex-1">Edit</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setAttachOpen(true)}>
-                      <Link2 className="h-4 w-4" />
-                      <span className="flex-1">Attach to task</span>
-                    </DropdownMenuItem>
-                    {showReminderTests && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuSub>
-                          <DropdownMenuSubTrigger>
-                            <CalendarClock className="h-4 w-4" />
-                            <span className="flex-1">Test reminders</span>
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuSubContent className="w-52">
-                            <DropdownMenuGroup>
-                              <DropdownMenuLabel className="text-[10px] text-muted-foreground">
-                                Post to project chat @ all
-                              </DropdownMenuLabel>
-                              {DEADLINE_REMINDER_TEST_SCENARIOS.map((offsetDays) => (
-                                <DropdownMenuItem
-                                  key={offsetDays}
-                                  disabled={testingMilestone !== null}
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    void handleTestReminder(offsetDays);
-                                  }}
-                                >
-                                  <span className="flex-1">{milestoneLabel(offsetDays)}</span>
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuGroup>
-                          </DropdownMenuSubContent>
-                        </DropdownMenuSub>
-                      </>
-                    )}
-                    <DropdownMenuSeparator />
+    <div className="flex flex-col bg-background">
+      <PageHeaderActions>
+        {!isEditing && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="Note options"
+              className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={() => setShowHistory(true)}>
+                <History className="h-4 w-4" />
+                <span className="flex-1">History</span>
+              </DropdownMenuItem>
+              {canEdit && (
+                <>
+                  {isDeadline && (
                     <DropdownMenuItem
-                      variant="destructive"
-                      onClick={handleDelete}
-                      disabled={deleting}
+                      onClick={handleToggleComplete}
+                      disabled={togglingComplete}
+                      className={cn(completedAt && "text-emerald-400 focus:text-emerald-400")}
                     >
-                      <Trash2 className="h-4 w-4" />
-                      <span className="flex-1">Delete</span>
+                      {completedAt ? (
+                        <CheckCircle2 className="h-4 w-4" />
+                      ) : (
+                        <Circle className="h-4 w-4" />
+                      )}
+                      <span className="flex-1">{completedAt ? "Mark incomplete" : "Mark complete"}</span>
                     </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-          {isEditing && (
-            <>
-              <Button variant="ghost" size="sm" onClick={() => { setIsEditing(false); setTitle(note.title); setContent(note.content); }}>Cancel</Button>
-              <Button size="sm" onClick={handleSave} disabled={saving || !title.trim()}>
-                {saving ? "Saving..." : "Save"}
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+                  )}
+                  <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                    <Pencil className="h-4 w-4" />
+                    <span className="flex-1">Edit</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setAttachOpen(true)}>
+                    <Link2 className="h-4 w-4" />
+                    <span className="flex-1">Attach to task</span>
+                  </DropdownMenuItem>
+                  {showReminderTests && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <CalendarClock className="h-4 w-4" />
+                          <span className="flex-1">Test reminders</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="w-52">
+                          <DropdownMenuGroup>
+                            <DropdownMenuLabel className="text-[10px] text-muted-foreground">
+                              Post to project chat @ all
+                            </DropdownMenuLabel>
+                            {DEADLINE_REMINDER_TEST_SCENARIOS.map((offsetDays) => (
+                              <DropdownMenuItem
+                                key={offsetDays}
+                                disabled={testingMilestone !== null}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  void handleTestReminder(offsetDays);
+                                }}
+                              >
+                                <span className="flex-1">{milestoneLabel(offsetDays)}</span>
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuGroup>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    </>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span className="flex-1">Delete</span>
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        {isEditing && (
+          <>
+            <Button variant="ghost" size="sm" onClick={() => { setIsEditing(false); setTitle(note.title); setContent(note.content); }}>Cancel</Button>
+            <Button size="sm" onClick={handleSave} disabled={saving || !title.trim()}>
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </>
+        )}
+      </PageHeaderActions>
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
+      <div className="max-w-4xl mx-auto w-full px-8 sm:px-16 py-10">
             {/* Type badge + meta */}
             <div className="flex flex-wrap items-center gap-3 mb-2">
               {config && (
@@ -854,7 +853,9 @@ function NoteFullScreenDetail({
                 noteId={note.id}
                 projectId={projectId}
                 canCreateTask={isActive && allowedTaskTypes.length > 0}
-                onOpenThread={(id) => setActiveThreadId(id)}
+                threads={threads}
+                openThreadId={activeThreadId}
+                onOpenThread={setActiveThreadId}
                 onOpenTask={(taskId) => {
                   window.location.href = `/dashboard/projects/${projectId}/tasks/${taskId}`;
                 }}
@@ -886,22 +887,7 @@ function NoteFullScreenDetail({
                 </div>
               </div>
             )}
-        </div>
       </div>
-
-      {activeThread && (
-        <div className="absolute inset-y-12 right-0 z-[111] w-full max-w-sm shadow-2xl">
-          <NoteCommentPanel
-            thread={activeThread}
-            noteId={note.id}
-            onClose={() => setActiveThreadId(null)}
-            onChanged={async () => {
-              await onRefresh();
-              await loadThreads();
-            }}
-          />
-        </div>
-      )}
 
       {showHistory && (
         <NoteHistoryDialog events={timeline} onClose={() => setShowHistory(false)} />

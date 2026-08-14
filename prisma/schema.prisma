@@ -534,6 +534,7 @@ model NoteCommentSubscriber {
   userId   String
   user     User   @relation("NoteCommentSubscriber", fields: [userId], references: [id], onDelete: Cascade)
 
+  understoodAt DateTime?
   createdAt DateTime @default(now())
 
   @@unique([threadId, userId])

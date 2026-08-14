@@ -197,6 +197,7 @@ export async function getNoteCommentThreads(noteId: string) {
     where: { noteId },
     include: {
       createdBy: { select: { id: true, name: true, imageUrl: true } },
+      subscribers: { select: { userId: true, understoodAt: true } },
       comments: {
         include: commentInclude,
         orderBy: { createdAt: "asc" },
@@ -204,4 +205,41 @@ export async function getNoteCommentThreads(noteId: string) {
     },
     orderBy: { createdAt: "asc" },
   });
+}
+
+export async function toggleNoteCommentUnderstood(threadId: string) {
+  const thread = await prisma.noteCommentThread.findUnique({
+    where: { id: threadId },
+    include: { note: { select: { projectId: true, authorId: true } } },
+  });
+  if (!thread) throw new Error("Thread not found");
+
+  const { user, member } = await requireProjectMember(thread.note.projectId);
+  if (member.role === "CLIENT") throw new Error("Clients cannot update comments");
+
+  const existing = await prisma.noteCommentSubscriber.findUnique({
+    where: { threadId_userId: { threadId, userId: user.id } },
+  });
+
+  if (existing?.understoodAt) {
+    await prisma.noteCommentSubscriber.update({
+      where: { id: existing.id },
+      data: { understoodAt: null },
+    });
+    revalidatePath(`/dashboard/projects/${thread.note.projectId}`);
+    return { understood: false };
+  }
+
+  await prisma.noteCommentSubscriber.upsert({
+    where: { threadId_userId: { threadId, userId: user.id } },
+    create: {
+      threadId,
+      userId: user.id,
+      understoodAt: new Date(),
+    },
+    update: { understoodAt: new Date() },
+  });
+
+  revalidatePath(`/dashboard/projects/${thread.note.projectId}`);
+  return { understood: true };
 }

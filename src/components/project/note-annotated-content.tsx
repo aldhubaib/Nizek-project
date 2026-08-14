@@ -1,14 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
-import { CheckSquare, Loader2, MessageSquareText, Send } from "lucide-react";
+import { Check, CheckSquare, Loader2, MessageSquare, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { NoteAnnotation } from "@/components/tiptap/note-annotation-mark";
 import { createNoteComment } from "@/actions/note-comment";
 import { getProjectMembersForMention } from "@/actions/comment";
+import {
+  NoteCommentPopover,
+  type NoteCommentThreadView,
+} from "@/components/project/note-comment-panel";
 
 type SelectionState = {
   text: string;
@@ -16,11 +21,20 @@ type SelectionState = {
   left: number;
 };
 
+type GutterIcon = {
+  threadId: string;
+  top: number;
+  understood: boolean;
+  count: number;
+};
+
 export function NoteAnnotatedContent({
   content,
   noteId,
   projectId,
   canCreateTask,
+  threads,
+  openThreadId,
   onOpenThread,
   onOpenTask,
   onCreateTask,
@@ -30,7 +44,9 @@ export function NoteAnnotatedContent({
   noteId: string;
   projectId: string;
   canCreateTask: boolean;
-  onOpenThread: (threadId: string) => void;
+  threads: NoteCommentThreadView[];
+  openThreadId: string | null;
+  onOpenThread: (threadId: string | null) => void;
   onOpenTask: (taskId: string) => void;
   onCreateTask: (quote: string) => void;
   onChanged: () => void;
@@ -43,8 +59,34 @@ export function NoteAnnotatedContent({
   const [members, setMembers] = useState<{ id: string; name: string | null }[]>([]);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
+  const [icons, setIcons] = useState<GutterIcon[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
   const quoteRef = useRef("");
+  const threadsRef = useRef(threads);
+  threadsRef.current = threads;
+
+  const layoutIcons = useCallback(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const wrapRect = wrap.getBoundingClientRect();
+    const marks = wrap.querySelectorAll<HTMLElement>("mark.note-annotation-comment[data-thread-id]");
+    const seen = new Set<string>();
+    const next: GutterIcon[] = [];
+    for (const el of marks) {
+      const threadId = el.getAttribute("data-thread-id");
+      if (!threadId || seen.has(threadId)) continue;
+      seen.add(threadId);
+      const r = el.getBoundingClientRect();
+      const thread = threadsRef.current.find((t) => t.id === threadId);
+      next.push({
+        threadId,
+        top: r.top - wrapRect.top + wrap.scrollTop,
+        understood: thread?.understood ?? false,
+        count: thread?.comments.length ?? 1,
+      });
+    }
+    setIcons(next);
+  }, []);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -90,18 +132,51 @@ export function NoteAnnotatedContent({
       });
       quoteRef.current = text;
     },
+    onCreate: () => {
+      requestAnimationFrame(layoutIcons);
+    },
+    onUpdate: () => {
+      requestAnimationFrame(layoutIcons);
+    },
   });
 
   useEffect(() => {
     if (!editor) return;
     if (content !== editor.getHTML()) editor.commands.setContent(content);
-  }, [content, editor]);
+    requestAnimationFrame(layoutIcons);
+  }, [content, editor, layoutIcons]);
+
+  useLayoutEffect(() => {
+    layoutIcons();
+  }, [layoutIcons, threads, content]);
+
+  useEffect(() => {
+    const onResize = () => layoutIcons();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [layoutIcons]);
 
   useEffect(() => {
     getProjectMembersForMention(projectId)
       .then((res) => setMembers(res.members))
       .catch(() => setMembers([]));
   }, [projectId]);
+
+  useEffect(() => {
+    if (!openThreadId) return;
+    function onPointerDown(e: PointerEvent) {
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      const target = e.target as Node | null;
+      if (target && wrap.contains(target)) {
+        const el = target as HTMLElement;
+        if (el.closest("[data-note-comment-ui]")) return;
+      }
+      onOpenThread(null);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [openThreadId, onOpenThread]);
 
   const closeComposer = useCallback(() => {
     setCommenting(false);
@@ -139,9 +214,59 @@ export function NoteAnnotatedContent({
       )
     : members;
 
+  const openThread = threads.find((t) => t.id === openThreadId) ?? null;
+  const openIcon = icons.find((i) => i.threadId === openThreadId);
+
   return (
-    <div ref={wrapRef} className="relative">
+    <div ref={wrapRef} className="relative pr-12">
       <EditorContent editor={editor} />
+
+      {icons.map((icon) => (
+        <button
+          key={icon.threadId}
+          type="button"
+          data-note-comment-ui
+          title={icon.understood ? "Understood" : "Open comment"}
+          onClick={() =>
+            onOpenThread(openThreadId === icon.threadId ? null : icon.threadId)
+          }
+          className={cn(
+            "absolute right-0 z-10 grid size-8 -translate-y-1 place-items-center rounded-full border shadow-sm transition-colors",
+            openThreadId === icon.threadId
+              ? "border-amber-400/60 bg-amber-500/20 text-amber-300"
+              : icon.understood
+                ? "border-sky-500/40 bg-sky-500/15 text-sky-400"
+                : "border-border bg-popover text-amber-400 hover:border-amber-400/50 hover:bg-amber-500/10",
+          )}
+          style={{ top: icon.top }}
+        >
+          {icon.understood ? (
+            <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+          ) : (
+            <MessageSquare className="h-3.5 w-3.5" />
+          )}
+          {!icon.understood && icon.count > 0 && (
+            <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-amber-400 px-1 text-[9px] font-bold leading-4 text-background">
+              {icon.count}
+            </span>
+          )}
+        </button>
+      ))}
+
+      {openThread && (
+        <div
+          data-note-comment-ui
+          className="absolute right-11 z-30"
+          style={{ top: Math.max(0, (openIcon?.top ?? 0) - 8) }}
+        >
+          <NoteCommentPopover
+            thread={openThread}
+            noteId={noteId}
+            onClose={() => onOpenThread(null)}
+            onChanged={onChanged}
+          />
+        </div>
+      )}
 
       {selection && !commenting && (
         <div
@@ -157,7 +282,7 @@ export function NoteAnnotatedContent({
             }}
             className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-foreground hover:bg-accent"
           >
-            <MessageSquareText className="h-3.5 w-3.5 text-amber-400" />
+            <MessageSquare className="h-3.5 w-3.5 text-amber-400" />
             Comment
           </button>
           {canCreateTask && (

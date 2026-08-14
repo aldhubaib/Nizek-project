@@ -3,37 +3,43 @@
 import { useState } from "react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
-import { Loader2, MessageSquare, Send, X } from "lucide-react";
+import { Check, Loader2, MessageSquare, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createNoteComment } from "@/actions/note-comment";
+import { cn } from "@/lib/utils";
+import {
+  createNoteComment,
+  toggleNoteCommentUnderstood,
+} from "@/actions/note-comment";
 
-type Comment = {
+export type NoteCommentItem = {
   id: string;
   content: string;
   createdAt: Date | string;
   user: { id: string; name: string | null; imageUrl: string | null };
 };
 
-type Thread = {
+export type NoteCommentThreadView = {
   id: string;
   quoteText: string;
   conversationId: string | null;
-  comments: Comment[];
+  comments: NoteCommentItem[];
+  understood: boolean;
 };
 
-export function NoteCommentPanel({
+export function NoteCommentPopover({
   thread,
   noteId,
   onClose,
   onChanged,
 }: {
-  thread: Thread;
+  thread: NoteCommentThreadView;
   noteId: string;
   onClose: () => void;
   onChanged: () => void;
 }) {
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [toggling, setToggling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function reply() {
@@ -57,45 +63,82 @@ export function NoteCommentPanel({
     }
   }
 
-  return (
-    <div className="flex h-full flex-col border-l border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <MessageSquare className="h-4 w-4 shrink-0 text-amber-400" />
-          <h3 className="truncate text-sm font-semibold">Comments</h3>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+  async function toggleUnderstood() {
+    setToggling(true);
+    try {
+      await toggleNoteCommentUnderstood(thread.id);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update");
+    } finally {
+      setToggling(false);
+    }
+  }
 
-      <div className="border-b border-border px-4 py-3">
-        <p className="line-clamp-4 border-l-2 border-amber-400/70 pl-2 text-[12px] italic text-muted-foreground">
+  return (
+    <div className="flex w-[min(calc(100vw-2rem),320px)] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl">
+      <div className="flex items-start gap-2 border-b border-border px-3 py-2.5">
+        <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+        <p className="min-w-0 flex-1 line-clamp-3 border-l-2 border-amber-400/70 pl-2 text-[11px] italic leading-snug text-muted-foreground">
           {thread.quoteText}
         </p>
-        {thread.conversationId && (
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            title={thread.understood ? "Mark as not understood" : "Mark as understood"}
+            onClick={() => void toggleUnderstood()}
+            disabled={toggling}
+            className={cn(
+              "grid size-7 place-items-center rounded-full transition-colors",
+              thread.understood
+                ? "bg-sky-500/20 text-sky-400"
+                : "text-muted-foreground hover:bg-accent hover:text-sky-400",
+            )}
+          >
+            {toggling ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {thread.conversationId && (
+        <div className="border-b border-border px-3 py-1.5">
           <Link
             href={`/dashboard/messages/conv-${thread.conversationId}`}
-            className="mt-2 inline-block text-[11px] font-medium text-primary hover:underline"
+            className="text-[11px] font-medium text-primary hover:underline"
           >
             Open in chat →
           </Link>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
+      <div className="max-h-56 space-y-3 overflow-y-auto px-3 py-3">
         {thread.comments.length === 0 ? (
-          <p className="text-[12px] text-muted-foreground">No replies yet.</p>
+          <p className="text-[12px] text-muted-foreground">No comments yet.</p>
         ) : (
           thread.comments.map((c) => (
             <div key={c.id} className="flex gap-2">
-              <div className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-[10px] font-semibold">
-                {(c.user.name ?? "?").charAt(0).toUpperCase()}
-              </div>
+              {c.user.imageUrl ? (
+                <img
+                  src={c.user.imageUrl}
+                  alt=""
+                  className="size-7 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <div className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-[10px] font-semibold">
+                  {(c.user.name ?? "?").charAt(0).toUpperCase()}
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
                   <span className="truncate text-[12px] font-medium">
@@ -116,6 +159,7 @@ export function NoteCommentPanel({
 
       <div className="border-t border-border p-3">
         <textarea
+          autoFocus
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -124,8 +168,8 @@ export function NoteCommentPanel({
               void reply();
             }
           }}
-          placeholder="Reply… @ to mention. Recipients stay on this thread."
-          rows={3}
+          placeholder="Reply…"
+          rows={2}
           className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-2 text-[13px] outline-none focus:border-primary/40"
         />
         {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useRef, useCallback, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KanbanBoard } from "@/components/kanban/board-lazy";
@@ -22,7 +22,7 @@ import { listProjectVaultCredentials, type VaultCredentialDTO } from "@/actions/
 import type { TaskQuestion } from "@/components/kanban/question-field";
 import Link from "next/link";
 import { LayoutGrid, FileText, Paperclip, Users, KeyRound, Settings, Loader2, ArrowLeft } from "lucide-react";
-import type { KanbanTask } from "@/store/kanban";
+import { cn } from "@/lib/utils";
 export interface UserPermissions {
   canCreateTask: boolean;
   canModifyTask: boolean;
@@ -214,6 +214,13 @@ export function ProjectDetailClient({
   const [loadingTeam, startTeamTransition] = useTransition();
   const [loadingVault, startVaultTransition] = useTransition();
   const [loadingSettings, startSettingsTransition] = useTransition();
+  const [noteFullscreen, setNoteFullscreen] = useState(false);
+  const noteBackRef = useRef<(() => void) | null>(null);
+
+  const handleNoteFullscreen = useCallback((open: boolean, goBack?: () => void) => {
+    setNoteFullscreen(open);
+    noteBackRef.current = open && goBack ? goBack : null;
+  }, []);
 
   useEffect(() => {
     if (activeTab === "notes" && notes === null) {
@@ -279,16 +286,33 @@ export function ProjectDetailClient({
 
   return (
     <div>
-      <div className="h-12 flex items-center justify-between px-6 pr-14 border-b border-border shrink-0">
+      <div
+        className={cn(
+          "h-12 flex items-center justify-between px-6 border-b border-border shrink-0",
+          noteFullscreen ? "pr-24" : "pr-14",
+        )}
+      >
         <div className="flex items-center gap-2.5 min-w-0">
-          <Link
-            href="/dashboard/projects"
-            className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
-            title="Back to all projects"
-            aria-label="Back to all projects"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
+          {noteFullscreen ? (
+            <button
+              type="button"
+              onClick={() => noteBackRef.current?.()}
+              className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
+              title="Back to notes"
+              aria-label="Back to notes"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          ) : (
+            <Link
+              href="/dashboard/projects"
+              className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
+              title="Back to all projects"
+              aria-label="Back to all projects"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+          )}
           {project.logoUrl ? (
             <img
               src={project.logoUrl}
@@ -310,6 +334,7 @@ export function ProjectDetailClient({
           )}
         </div>
         <button
+          type="button"
           onClick={handleOpenSettings}
           className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           title="Project Settings"
@@ -318,9 +343,9 @@ export function ProjectDetailClient({
         </button>
       </div>
 
-      <div className="px-6 py-4">
-        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as string)} className="space-y-4">
-          <TabsList className="bg-muted/50">
+      <div className={cn(noteFullscreen ? "px-0 py-0" : "px-6 py-4")}>
+        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as string)} className={cn("space-y-4", noteFullscreen && "gap-0 space-y-0")}>
+          <TabsList className={cn("bg-muted/50", noteFullscreen && "hidden")}>
             <TabsTrigger value="board" className="gap-1.5">
               <LayoutGrid className="h-3.5 w-3.5" />
               Board
@@ -390,6 +415,7 @@ export function ProjectDetailClient({
                 allowedTaskTypes={allowedTaskTypes ?? []}
                 activeContractType={activeContractType ?? null}
                 isActive={isActive}
+                onFullscreenChange={handleNoteFullscreen}
               />
             )}
           </TabsContent>
