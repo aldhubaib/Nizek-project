@@ -348,16 +348,15 @@ export function MeetingNotesTab({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold">Notes</h2>
-          <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5 flex-wrap">
+      <div className="mb-4 flex items-center gap-2">
+        <h2 className="shrink-0 text-lg font-semibold">Notes</h2>
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg bg-muted/50 p-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {(["ALL" as const, ...usedTypes]).map((t) => (
               <button
                 key={t}
                 onClick={() => setFilter(t)}
                 className={cn(
-                  "px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors",
+                  "shrink-0 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors",
                   filter === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -367,13 +366,17 @@ export function MeetingNotesTab({
                 </span>
               </button>
             ))}
-          </div>
         </div>
         {canEdit && (
-          <Button size="sm" onClick={openCreate}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            New Note
-          </Button>
+          <>
+            <Button size="icon" className="shrink-0 sm:hidden" onClick={openCreate} aria-label="New note">
+              <Plus className="h-4 w-4" />
+            </Button>
+            <Button size="sm" className="hidden shrink-0 sm:inline-flex" onClick={openCreate}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              New Note
+            </Button>
+          </>
         )}
       </div>
 
@@ -581,7 +584,7 @@ function NoteFullScreenCreate({
         </Button>
       </PageHeaderActions>
 
-      <div className="max-w-4xl mx-auto w-full px-8 sm:px-16 py-10">
+      <div className="max-w-4xl mx-auto w-full px-4 py-6 sm:px-8 sm:py-10 lg:px-16">
           {/* Type picker */}
           <div className="mb-6">
             <div className="flex gap-2 flex-wrap">
@@ -612,7 +615,7 @@ function NoteFullScreenCreate({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={placeholders[noteType ?? "MEETING_NOTE"] ?? "Title..."}
-            className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-4"
+            className="w-full text-2xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-4 sm:text-4xl"
             autoFocus
           />
 
@@ -901,7 +904,7 @@ function NoteFullScreenDetail({
         )}
       </PageHeaderActions>
 
-      <div className="max-w-4xl mx-auto w-full px-8 sm:px-16 py-10">
+      <div className="max-w-4xl mx-auto w-full px-4 py-6 sm:px-8 sm:py-10 lg:px-16">
             {/* Type badge + meta */}
             <div className="flex flex-wrap items-center gap-3 mb-2">
               {config && (
@@ -1092,11 +1095,11 @@ function NoteFullScreenDetail({
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-8"
+                className="w-full text-2xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-6 sm:mb-8 sm:text-4xl"
                 autoFocus
               />
             ) : (
-              <h1 className={cn("text-4xl font-bold mb-8", completedAt && "line-through opacity-60")}>
+              <h1 className={cn("text-2xl font-bold mb-6 sm:mb-8 sm:text-4xl", completedAt && "line-through opacity-60")}>
                 {note.title}
               </h1>
             )}

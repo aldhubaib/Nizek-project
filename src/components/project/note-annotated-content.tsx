@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
-import { Check, CheckSquare, Loader2, MessageSquare, Send } from "lucide-react";
+import { ArrowLeft, Check, CheckSquare, Copy, Loader2, MessageSquare, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NoteAnnotation } from "@/components/tiptap/note-annotation-mark";
@@ -78,6 +79,11 @@ export function NoteAnnotatedContent({
   const [icons, setIcons] = useState<GutterIcon[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
   const quoteRef = useRef("");
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches,
+  );
+  const [sheetOffset, setSheetOffset] = useState(0);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const threadsRef = useRef(threads);
   threadsRef.current = threads;
   const linkedTasksRef = useRef(linkedTasks);
@@ -209,10 +215,38 @@ export function NoteAnnotatedContent({
   }, [layoutIcons]);
 
   useEffect(() => {
+    setPortalTarget(document.body);
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setIsDesktop(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
     getProjectMembersForMention(projectId)
       .then((res) => setMembers(res.members))
       .catch(() => setMembers([]));
   }, [projectId]);
+
+  useEffect(() => {
+    if (!commenting || isDesktop) {
+      setSheetOffset(0);
+      return;
+    }
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const sync = () => {
+      setSheetOffset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    };
+    sync();
+    vv.addEventListener("resize", sync);
+    vv.addEventListener("scroll", sync);
+    return () => {
+      vv.removeEventListener("resize", sync);
+      vv.removeEventListener("scroll", sync);
+    };
+  }, [commenting, isDesktop]);
 
   useEffect(() => {
     if (!openThreadId && !openTaskId) return;
@@ -239,6 +273,20 @@ export function NoteAnnotatedContent({
     setSelection(null);
     editor?.commands.setTextSelection(editor.state.selection.to);
   }, [editor]);
+
+  function keepHighlight(e: { preventDefault: () => void }) {
+    e.preventDefault();
+  }
+
+  async function copyHighlight() {
+    const text = quoteRef.current.trim();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function submitComment() {
     const quote = quoteRef.current.trim();
@@ -283,7 +331,7 @@ export function NoteAnnotatedContent({
   const openTaskSeed = linkedTasks.find((t) => t.id === openTaskId) ?? null;
 
   return (
-    <div ref={wrapRef} className="relative pr-12">
+    <div ref={wrapRef} className="relative pr-10 sm:pr-12">
       <EditorContent editor={editor} />
 
       {icons.map((icon) =>
@@ -295,7 +343,7 @@ export function NoteAnnotatedContent({
             title={icon.done ? "Task done" : "Preview task"}
             onClick={() => previewTask(icon.taskId)}
             className={cn(
-              "absolute right-0 z-10 grid size-8 -translate-y-1 place-items-center rounded-full border shadow-sm transition-colors",
+              "absolute right-0 z-10 grid size-7 -translate-y-1 place-items-center rounded-full border shadow-sm transition-colors sm:size-8",
               icon.done
                 ? "border-border bg-popover text-muted-foreground/50 hover:text-muted-foreground"
                 : openTaskId === icon.taskId
@@ -322,7 +370,7 @@ export function NoteAnnotatedContent({
               onOpenThread(openThreadId === icon.threadId ? null : icon.threadId);
             }}
             className={cn(
-              "absolute right-0 z-10 grid size-8 -translate-y-1 place-items-center rounded-full border shadow-sm transition-colors",
+              "absolute right-0 z-10 grid size-7 -translate-y-1 place-items-center rounded-full border shadow-sm transition-colors sm:size-8",
               icon.understood
                 ? "border-border bg-popover text-muted-foreground/50 hover:text-muted-foreground"
                 : openThreadId === icon.threadId
@@ -348,12 +396,13 @@ export function NoteAnnotatedContent({
       {openThread && (
         <div
           data-note-comment-ui
-          className="absolute right-11 z-30"
-          style={{ top: Math.max(0, (openIcon?.top ?? 0) - 8) }}
+          className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[110] lg:absolute lg:inset-x-auto lg:bottom-auto lg:right-11 lg:z-30 lg:top-[var(--gutter-top)]"
+          style={{ ["--gutter-top" as string]: `${Math.max(0, (openIcon?.top ?? 0) - 8)}px` }}
         >
           <NoteCommentPopover
             thread={openThread}
             noteId={noteId}
+            className="w-full max-w-none lg:w-[min(calc(100vw-2rem),320px)]"
             onClose={() => onOpenThread(null)}
             onChanged={onChanged}
           />
@@ -363,8 +412,8 @@ export function NoteAnnotatedContent({
       {openTaskId && (
         <div
           data-note-comment-ui
-          className="absolute right-11 z-30"
-          style={{ top: Math.max(0, (openTaskIcon?.top ?? 0) - 8) }}
+          className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[110] lg:absolute lg:inset-x-auto lg:bottom-auto lg:right-11 lg:z-30 lg:top-[var(--gutter-top)]"
+          style={{ ["--gutter-top" as string]: `${Math.max(0, (openTaskIcon?.top ?? 0) - 8)}px` }}
         >
           <TaskPreviewPopover
             key={openTaskId}
@@ -376,14 +425,14 @@ export function NoteAnnotatedContent({
         </div>
       )}
 
-      {selection && !commenting && (
+      {selection && !commenting && isDesktop && (
         <div
           className="absolute z-20 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-border bg-popover p-0.5 shadow-lg"
           style={{ top: Math.max(0, selection.top), left: selection.left }}
         >
           <button
             type="button"
-            onMouseDown={(e) => e.preventDefault()}
+            onMouseDown={keepHighlight}
             onClick={() => {
               setCommenting(true);
               setDraft("");
@@ -396,7 +445,7 @@ export function NoteAnnotatedContent({
           {canCreateTask && (
             <button
               type="button"
-              onMouseDown={(e) => e.preventDefault()}
+              onMouseDown={keepHighlight}
               onClick={() => {
                 const quote = quoteRef.current;
                 setSelection(null);
@@ -411,84 +460,235 @@ export function NoteAnnotatedContent({
         </div>
       )}
 
-      {commenting && selection && (
+      {selection && portalTarget && !isDesktop
+        ? createPortal(
+            <div
+              data-note-comment-ui
+              className="fixed inset-x-0 top-0 z-[110] flex h-12 items-center gap-0.5 border-b border-border bg-background px-1"
+            >
+              <button
+                type="button"
+                aria-label="Cancel"
+                onMouseDown={keepHighlight}
+                onPointerDown={keepHighlight}
+                onClick={closeComposer}
+                className="grid size-11 shrink-0 place-items-center rounded-full text-foreground hover:bg-muted"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <span className="min-w-0 flex-1 truncate px-1 text-sm font-semibold">
+                {commenting ? "Comment" : selection.text}
+              </span>
+              {!commenting && (
+                <div className="ml-auto flex items-center">
+                  <button
+                    type="button"
+                    aria-label="Comment"
+                    onMouseDown={keepHighlight}
+                    onPointerDown={keepHighlight}
+                    onClick={() => {
+                      setCommenting(true);
+                      setDraft("");
+                    }}
+                    className="grid size-11 place-items-center rounded-full text-foreground hover:bg-muted"
+                  >
+                    <MessageSquare className="h-5 w-5 text-amber-400" />
+                  </button>
+                  {canCreateTask && (
+                    <button
+                      type="button"
+                      aria-label="Create task"
+                      onMouseDown={keepHighlight}
+                      onPointerDown={keepHighlight}
+                      onClick={() => {
+                        const quote = quoteRef.current;
+                        setSelection(null);
+                        onCreateTask(quote);
+                      }}
+                      className="grid size-11 place-items-center rounded-full text-foreground hover:bg-muted"
+                    >
+                      <CheckSquare className="h-5 w-5" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    aria-label="Copy"
+                    onMouseDown={keepHighlight}
+                    onPointerDown={keepHighlight}
+                    onClick={() => void copyHighlight()}
+                    className="grid size-11 place-items-center rounded-full text-foreground hover:bg-muted"
+                  >
+                    <Copy className="h-5 w-5" />
+                  </button>
+                </div>
+              )}
+            </div>,
+            portalTarget,
+          )
+        : null}
+
+      {commenting && selection && isDesktop && (
         <div
+          data-note-comment-ui
           className="absolute z-30 w-[min(100%,340px)] -translate-x-1/2 rounded-xl border border-border bg-popover p-3 shadow-xl"
           style={{ top: Math.max(0, selection.top), left: selection.left }}
         >
-          <p className="mb-2 line-clamp-2 border-l-2 border-amber-400/70 pl-2 text-[11px] italic text-muted-foreground">
-            {selection.text}
-          </p>
-          <div className="relative">
-            <textarea
-              autoFocus
-              value={draft}
-              onChange={(e) => {
-                const v = e.target.value;
-                setDraft(v);
-                const at = v.slice(0, e.target.selectionStart).match(/@([^\s@]*)$/);
-                if (at) {
-                  setMentionOpen(true);
-                  setMentionQuery(at[1]);
-                } else {
-                  setMentionOpen(false);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault();
-                  void submitComment();
-                }
-                if (e.key === "Escape") closeComposer();
-              }}
-              placeholder="Comment… use @ to mention"
-              rows={3}
-              className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-2 text-[13px] outline-none focus:border-primary/40"
-            />
-            {mentionOpen && mentionResults.length > 0 && (
-              <div className="absolute left-0 right-0 top-full z-40 mt-1 max-h-40 overflow-y-auto rounded-md border border-border bg-popover shadow-lg">
-                {mentionResults.slice(0, 8).map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    className="block w-full px-2.5 py-1.5 text-left text-[12px] hover:bg-accent"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      const replaced = draft.replace(
-                        /@([^\s@]*)$/,
-                        `@${m.name ?? ""} `,
-                      );
-                      setDraft(replaced);
-                      setMentionOpen(false);
-                    }}
-                  >
-                    {m.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          {error && <p className="mt-1.5 text-[11px] text-destructive">{error}</p>}
-          <div className="mt-2 flex justify-end gap-2">
-            <Button type="button" size="sm" variant="ghost" onClick={closeComposer}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => void submitComment()}
-              disabled={submitting || !draft.trim()}
-            >
-              {submitting ? (
-                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Send className="mr-1 h-3.5 w-3.5" />
-              )}
-              Comment
-            </Button>
-          </div>
+          <CommentComposer
+            quote={selection.text}
+            draft={draft}
+            setDraft={setDraft}
+            mentionOpen={mentionOpen}
+            setMentionOpen={setMentionOpen}
+            setMentionQuery={setMentionQuery}
+            mentionResults={mentionResults}
+            error={error}
+            submitting={submitting}
+            showCancel
+            compact
+            onCancel={closeComposer}
+            onSubmit={() => void submitComment()}
+          />
         </div>
       )}
+
+      {commenting && selection && !isDesktop && portalTarget
+        ? createPortal(
+            <div
+              data-note-comment-ui
+              className="fixed inset-x-0 z-[110] rounded-t-xl border-t border-border bg-popover p-3 shadow-2xl"
+              style={{ bottom: sheetOffset }}
+            >
+              <CommentComposer
+                quote={selection.text}
+                draft={draft}
+                setDraft={setDraft}
+                mentionOpen={mentionOpen}
+                setMentionOpen={setMentionOpen}
+                setMentionQuery={setMentionQuery}
+                mentionResults={mentionResults}
+                error={error}
+                submitting={submitting}
+                showCancel={false}
+                compact={false}
+                onCancel={closeComposer}
+                onSubmit={() => void submitComment()}
+              />
+            </div>,
+            portalTarget,
+          )
+        : null}
     </div>
   );
 }
+
+function CommentComposer({
+  quote,
+  draft,
+  setDraft,
+  mentionOpen,
+  setMentionOpen,
+  setMentionQuery,
+  mentionResults,
+  error,
+  submitting,
+  showCancel,
+  compact,
+  onCancel,
+  onSubmit,
+}: {
+  quote: string;
+  draft: string;
+  setDraft: (v: string) => void;
+  mentionOpen: boolean;
+  setMentionOpen: (v: boolean) => void;
+  setMentionQuery: (v: string) => void;
+  mentionResults: { id: string; name: string | null }[];
+  error: string | null;
+  submitting: boolean;
+  showCancel: boolean;
+  compact: boolean;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <>
+      <p className="mb-2 line-clamp-2 border-l-2 border-amber-400/70 pl-2 text-[11px] italic text-muted-foreground">
+        {quote}
+      </p>
+      <div className="relative">
+        <textarea
+          autoFocus
+          value={draft}
+          onChange={(e) => {
+            const v = e.target.value;
+            setDraft(v);
+            const at = v.slice(0, e.target.selectionStart).match(/@([^\s@]*)$/);
+            if (at) {
+              setMentionOpen(true);
+              setMentionQuery(at[1]);
+            } else {
+              setMentionOpen(false);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              onSubmit();
+            }
+            if (e.key === "Escape") onCancel();
+          }}
+          placeholder="Comment… use @ to mention"
+          rows={compact ? 3 : 4}
+          className={cn(
+            "w-full resize-none rounded-md border border-border bg-background px-2.5 py-2 outline-none focus:border-primary/40",
+            compact ? "text-[13px]" : "text-[16px]",
+          )}
+        />
+        {mentionOpen && mentionResults.length > 0 && (
+          <div
+            className={cn(
+              "absolute left-0 right-0 z-40 max-h-40 overflow-y-auto rounded-md border border-border bg-popover shadow-lg",
+              compact ? "top-full mt-1" : "bottom-full mb-1",
+            )}
+          >
+            {mentionResults.slice(0, 8).map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                className={cn(
+                  "block w-full px-2.5 text-left hover:bg-accent",
+                  compact ? "py-1.5 text-[12px]" : "py-2.5 text-[13px]",
+                )}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const replaced = draft.replace(/@([^\s@]*)$/, `@${m.name ?? ""} `);
+                  setDraft(replaced);
+                  setMentionOpen(false);
+                }}
+              >
+                {m.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {error && <p className="mt-1.5 text-[11px] text-destructive">{error}</p>}
+      <div className="mt-2 flex justify-end gap-2">
+        {showCancel && (
+          <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
+        <Button type="button" size="sm" onClick={onSubmit} disabled={submitting || !draft.trim()}>
+          {submitting ? (
+            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Send className="mr-1 h-3.5 w-3.5" />
+          )}
+          Comment
+        </Button>
+      </div>
+    </>
+  );
+}
+
