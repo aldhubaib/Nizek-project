@@ -18,11 +18,10 @@ const nextConfig: NextConfig = {
     root: path.resolve(import.meta.dirname),
   },
   experimental: {
-    // Turbopack compiles in Rust, so its allocations are invisible to
-    // NODE_OPTIONS heap caps. Left unbounded on this 48GB machine it grew past
-    // 37GB across workers and hard-panicked the kernel (watchdog timeout after
-    // the VM compressor filled). This is a byte value.
-    turbopackMemoryLimit: 8 * 1024 * 1024 * 1024,
+    // turbopackMemoryLimit (a hard byte cap) was removed in Next 16.3. Its
+    // replacement is turbopackMemoryEviction, which defaults to 'auto' and
+    // persists cache to disk then evicts it from memory -- the fix for the
+    // unbounded dev-server growth that panicked this machine on 2026-08-01.
     // Defaults to os.cpus().length (16 here), which is what spawned 12
     // simultaneous workers.
     cpus: 6,
