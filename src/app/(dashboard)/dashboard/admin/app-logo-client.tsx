@@ -34,10 +34,10 @@ export function AppLogoClient({ assets }: { assets: Assets }) {
       </p>
       <p className="text-[13px] text-muted-foreground rounded-lg border border-border bg-card/60 px-3 py-2.5 leading-relaxed">
         Sidebar, login, the browser tab, and the logo inside the installed app
-        update within about a minute (or the next time someone focuses the app).
-        iOS and Android home-screen icons are cached by the OS when the app is
-        installed — users have to remove and re-add the app to get a new glyph.
-        That cannot be forced from the website.
+        update within about a minute. The Android/iOS home-screen glyph is
+        copied by the OS at install time — Chrome can refresh it after you
+        open the app on Wi‑Fi and fully close it, but Samsung&apos;s app search
+        often keeps the old icon until the app is removed and added again.
       </p>
       <div className="space-y-3">
         {BRANDING_SLOTS.map((slot) => (

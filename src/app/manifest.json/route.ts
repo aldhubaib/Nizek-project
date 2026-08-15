@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { brandingUrlWithBust, getBrandingMapUncached } from "@/lib/branding";
+import { getBrandingMapUncached } from "@/lib/branding";
 import type { BrandingStorageSlot } from "@/lib/branding-slots";
+import { pwaIconHref } from "@/lib/pwa-icon-href";
 
 export const dynamic = "force-dynamic";
 
@@ -12,17 +13,17 @@ export async function GET() {
   const add = (
     slot: BrandingStorageSlot,
     sizes: string,
-    fallback: string,
+    path: string,
     purpose?: string,
   ): Icon => ({
-    src: brandingUrlWithBust(map, slot) ?? fallback,
+    src: pwaIconHref(path, map[slot]?.updatedAt),
     sizes,
     type: "image/png",
     purpose,
   });
 
-  // Always ship a complete icon set — custom branding overrides the static
-  // fallbacks in /public, so the app stays installable before anything is set.
+  // Same-origin, versioned paths. Chrome treats icon URLs as immutable, so a
+  // new `?v=` after a logo upload is what actually refreshes the WebAPK glyph.
   const icons: Icon[] = [
     add("androidAny192", "192x192", "/icon-192.png", "any"),
     add("androidAny512", "512x512", "/icon-512.png", "any"),
@@ -31,7 +32,7 @@ export async function GET() {
   ];
   if (map.androidMonochrome) {
     icons.push({
-      src: brandingUrlWithBust(map, "androidMonochrome")!,
+      src: pwaIconHref("/icon-monochrome.png", map.androidMonochrome.updatedAt),
       sizes: "512x512",
       type: "image/png",
       purpose: "monochrome",
