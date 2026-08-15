@@ -8,6 +8,7 @@ import {
 } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { BrandingStorageSlot } from "@/lib/branding-slots";
+import { pwaIconHref, pwaIconToken } from "@/lib/pwa-icon-href";
 
 export type BrandingEntry = { url: string; updatedAt: number };
 export type BrandingMap = Partial<Record<BrandingStorageSlot, BrandingEntry>>;
@@ -83,33 +84,32 @@ export async function getBrandingMapUncached(): Promise<BrandingMap> {
 }
 
 /**
- * Cache-busted URLs for the surfaces we live-apply in open clients.
- * Missing slots stay null so the UI can keep its letter-N fallback.
+ * URLs for the surfaces we live-apply in open clients.
+ * Favicon / apple-touch / manifest use same-origin versioned paths.
+ * webLogo / splash stay on R2 and are null when unset (letter-N fallback).
  */
 export async function getLiveLogos(): Promise<
   import("@/lib/live-branding").LiveLogos
 > {
   const map = await getBrandingMapUncached();
-  const pick = (
-    slot:
-      | "favicon"
-      | "faviconDark"
-      | "appleTouchIcon"
-      | "webLogo"
-      | "iosSplash",
-  ) => {
+  const token = pwaIconToken(map);
+  const pickR2 = (slot: "webLogo" | "iosSplash") => {
     const entry = map[slot];
     return entry ? withBrandingBust(entry.url, entry.updatedAt) : null;
   };
   return {
-    favicon: pick("favicon"),
-    faviconDark: pick("faviconDark"),
-    appleTouchIcon: pick("appleTouchIcon"),
-    webLogo: pick("webLogo"),
-    iosSplash: pick("iosSplash"),
-    manifest: `/manifest.json?v=${
-      Math.max(0, ...Object.values(map).map((e) => e.updatedAt))
-    }`,
+    favicon: pwaIconHref("favicon.ico", map.favicon?.updatedAt),
+    faviconDark: map.faviconDark
+      ? pwaIconHref("favicon-dark.ico", map.faviconDark.updatedAt)
+      : null,
+    appleTouchIcon: pwaIconHref(
+      "apple-touch-icon.png",
+      map.appleTouchIcon?.updatedAt,
+    ),
+    webLogo: pickR2("webLogo"),
+    iosSplash: pickR2("iosSplash"),
+    manifest: `/manifest.json?v=${token}`,
+    iconToken: String(token),
   };
 }
 

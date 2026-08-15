@@ -12,6 +12,7 @@ import {
   MAX_BRANDING_FILE_BYTES,
   type BrandingSlotId,
 } from "@/lib/branding-slots";
+import { generatePwaSetFromSource } from "@/lib/pwa-icon-generate";
 
 export type BrandingAssetDTO = {
   slot: BrandingSlotId;
@@ -41,6 +42,7 @@ export async function getBrandingAssets(): Promise<
 
   const result: Partial<Record<BrandingSlotId, BrandingAssetDTO>> = {};
   for (const slot of [
+    "homeScreenSource",
     "favicon",
     "faviconDark",
     "appleTouchIcon",
@@ -211,6 +213,61 @@ export async function setBrandingAsset(formData: FormData): Promise<void> {
       .flatten({ background: "#0e0e10" })
       .png()
       .toBuffer();
+  }
+
+  if (slot.id === "homeScreenSource") {
+    const set = await generatePwaSetFromSource(bytes);
+    await upsertAsset("homeScreenSource", {
+      bytes,
+      mime: "image/png",
+      fileName: file.name,
+      width: dims.width,
+      height: dims.height,
+    });
+    await upsertAsset("androidAny192", {
+      bytes: set.any192,
+      mime: "image/png",
+      fileName: "icon-192.png",
+      width: 192,
+      height: 192,
+    });
+    await upsertAsset("androidAny512", {
+      bytes: set.any512,
+      mime: "image/png",
+      fileName: "icon-512.png",
+      width: 512,
+      height: 512,
+    });
+    await upsertAsset("androidMaskable192", {
+      bytes: set.maskable192,
+      mime: "image/png",
+      fileName: "icon-maskable-192.png",
+      width: 192,
+      height: 192,
+    });
+    await upsertAsset("androidMaskable512", {
+      bytes: set.maskable512,
+      mime: "image/png",
+      fileName: "icon-maskable-512.png",
+      width: 512,
+      height: 512,
+    });
+    await upsertAsset("appleTouchIcon", {
+      bytes: set.appleTouch,
+      mime: "image/png",
+      fileName: "apple-touch-icon.png",
+      width: 180,
+      height: 180,
+    });
+    await upsertAsset("favicon", {
+      bytes: set.faviconIco,
+      mime: "image/x-icon",
+      fileName: "favicon.ico",
+      width: 32,
+      height: 32,
+    });
+    invalidateBrandingCache();
+    return;
   }
 
   if (slot.id === "androidAny" || slot.id === "androidMaskable") {

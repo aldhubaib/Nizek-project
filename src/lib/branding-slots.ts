@@ -2,6 +2,7 @@
 // Each slot enforces its format and dimensions before the file is accepted.
 
 export type BrandingSlotId =
+  | "homeScreenSource"
   | "favicon"
   | "faviconDark"
   | "appleTouchIcon"
@@ -16,6 +17,7 @@ export type BrandingSlotId =
 // out into a 192 and a 512 row (the missing size is generated with sharp) so
 // the PWA manifest always has both sizes of the same artwork.
 export type BrandingStorageSlot =
+  | "homeScreenSource"
   | "favicon"
   | "faviconDark"
   | "appleTouchIcon"
@@ -47,6 +49,23 @@ export type BrandingSlotConfig = {
   previewClass: string; // tailwind styling for preview surface
   previewShape?: "square" | "rounded" | "circle" | "wide";
   note?: string;
+};
+
+/** One square PNG that fans out into Android, iOS, and favicon assets. */
+export const HOME_SCREEN_SOURCE_SLOT: BrandingSlotConfig = {
+  id: "homeScreenSource",
+  title: "Home screen icon (source)",
+  formats: ["image/png"],
+  formatsLabel: "PNG",
+  accept: ".png,image/png",
+  sizes: [
+    { w: 512, h: 512 },
+    { w: 1024, h: 1024 },
+  ],
+  sizesLabel: "512×512 or 1024×1024 square",
+  previewClass: "h-20 w-20",
+  previewShape: "rounded",
+  note: "Generates Android (any + maskable), iOS apple-touch, and the favicon. Does not change the sidebar wordmark, OG image, splash, or monochrome icon.",
 };
 
 export const BRANDING_SLOTS: BrandingSlotConfig[] = [
@@ -179,6 +198,7 @@ export const BRANDING_SLOTS: BrandingSlotConfig[] = [
 ];
 
 export function getBrandingSlot(id: string): BrandingSlotConfig | undefined {
+  if (id === HOME_SCREEN_SOURCE_SLOT.id) return HOME_SCREEN_SOURCE_SLOT;
   return BRANDING_SLOTS.find((s) => s.id === id);
 }
 

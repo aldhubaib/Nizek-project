@@ -13,26 +13,26 @@ export async function GET() {
   const add = (
     slot: BrandingStorageSlot,
     sizes: string,
-    path: string,
+    file: string,
     purpose?: string,
   ): Icon => ({
-    src: pwaIconHref(path, map[slot]?.updatedAt),
+    src: pwaIconHref(file, map[slot]?.updatedAt),
     sizes,
     type: "image/png",
     purpose,
   });
 
-  // Same-origin, versioned paths. Chrome treats icon URLs as immutable, so a
-  // new `?v=` after a logo upload is what actually refreshes the WebAPK glyph.
+  // Same-origin, versioned *paths*. Chrome treats icon URLs as immutable, so a
+  // new `/pwa-icons/<stamp>/…` after a logo upload is what refreshes the glyph.
   const icons: Icon[] = [
-    add("androidAny192", "192x192", "/icon-192.png", "any"),
-    add("androidAny512", "512x512", "/icon-512.png", "any"),
-    add("androidMaskable192", "192x192", "/icon-maskable-192.png", "maskable"),
-    add("androidMaskable512", "512x512", "/icon-maskable-512.png", "maskable"),
+    add("androidAny192", "192x192", "icon-192.png", "any"),
+    add("androidAny512", "512x512", "icon-512.png", "any"),
+    add("androidMaskable192", "192x192", "icon-maskable-192.png", "maskable"),
+    add("androidMaskable512", "512x512", "icon-maskable-512.png", "maskable"),
   ];
   if (map.androidMonochrome) {
     icons.push({
-      src: pwaIconHref("/icon-monochrome.png", map.androidMonochrome.updatedAt),
+      src: pwaIconHref("icon-monochrome.png", map.androidMonochrome.updatedAt),
       sizes: "512x512",
       type: "image/png",
       purpose: "monochrome",

@@ -4,6 +4,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdateNotifier } from "@/components/update-notifier";
+import { HomeScreenIconBanner } from "@/components/home-screen-icon-banner";
 import { DisablePinchZoom } from "@/components/disable-pinch-zoom";
 import { BrandingProvider } from "@/components/branding-provider";
 import { getClientRelease } from "@/lib/version";
@@ -93,6 +94,7 @@ export default async function RootLayout({
               currentVersion={release.version}
               releasedAt={release.releasedAt}
             />
+            <HomeScreenIconBanner />
           </BrandingProvider>
         </ClerkProvider>
       </body>

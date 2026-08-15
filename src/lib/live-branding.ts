@@ -11,6 +11,8 @@ export type LiveLogos = {
   iosSplash: string | null;
   /** Cache-busted manifest href so installed PWAs re-read icons. */
   manifest: string | null;
+  /** Max PWA-icon updatedAt; used to prompt installed apps to review the glyph. */
+  iconToken: string | null;
 };
 
 export const EMPTY_LIVE_LOGOS: LiveLogos = {
@@ -20,10 +22,17 @@ export const EMPTY_LIVE_LOGOS: LiveLogos = {
   webLogo: null,
   iosSplash: null,
   manifest: null,
+  iconToken: null,
 };
 
 function str(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+function tokenFromManifest(manifest: string | null): string | null {
+  if (!manifest) return null;
+  const match = manifest.match(/[?&]v=(\d+)/);
+  return match?.[1] ?? null;
 }
 
 export function parseLiveLogos(data: unknown): LiveLogos | null {
@@ -31,13 +40,15 @@ export function parseLiveLogos(data: unknown): LiveLogos | null {
   const d = data as { logos?: unknown; logo?: unknown };
   if (d.logos && typeof d.logos === "object") {
     const l = d.logos as Record<string, unknown>;
+    const manifest = str(l.manifest);
     return {
       favicon: str(l.favicon),
       faviconDark: str(l.faviconDark),
       appleTouchIcon: str(l.appleTouchIcon),
       webLogo: str(l.webLogo),
       iosSplash: str(l.iosSplash),
-      manifest: str(l.manifest),
+      manifest,
+      iconToken: str(l.iconToken) ?? tokenFromManifest(manifest),
     };
   }
   // Rolling-deploy compat: older /api/version only returned `logo`.
@@ -57,7 +68,8 @@ export function logosEqual(a: LiveLogos, b: LiveLogos): boolean {
     a.appleTouchIcon === b.appleTouchIcon &&
     a.webLogo === b.webLogo &&
     a.iosSplash === b.iosSplash &&
-    a.manifest === b.manifest
+    a.manifest === b.manifest &&
+    a.iconToken === b.iconToken
   );
 }
 

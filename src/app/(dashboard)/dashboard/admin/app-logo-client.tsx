@@ -16,6 +16,7 @@ import {
 } from "@/actions/branding";
 import {
   BRANDING_SLOTS,
+  HOME_SCREEN_SOURCE_SLOT,
   validateBrandingFile,
   MAX_BRANDING_FILE_BYTES,
   type BrandingSlotConfig,
@@ -28,18 +29,24 @@ export function AppLogoClient({ assets }: { assets: Assets }) {
   return (
     <div className="max-w-3xl space-y-6">
       <p className="text-sm text-muted-foreground">
-        Upload branded assets for the browser tab, installed app icons, and
-        social sharing. Each slot enforces the required format and dimensions
-        before it&apos;s accepted.
+        Upload a square source to generate every home-screen size, or replace
+        individual assets below. Each slot enforces the required format and
+        dimensions before it&apos;s accepted.
       </p>
       <p className="text-[13px] text-muted-foreground rounded-lg border border-border bg-card/60 px-3 py-2.5 leading-relaxed">
-        Sidebar, login, the browser tab, and the logo inside the installed app
-        update within about a minute. The Android/iOS home-screen glyph is
-        copied by the OS at install time — Chrome can refresh it after you
-        open the app on Wi‑Fi and fully close it, but Samsung&apos;s app search
-        often keeps the old icon until the app is removed and added again.
+        Sidebar, login, and the browser tab update within about a minute. On
+        Android Chrome, open the installed app, tap ⋮ → Review app update,
+        then fully close it on Wi‑Fi. iOS updates the logo inside the app;
+        if the home-screen glyph stays old after reopen, remove the app and
+        add it again from Safari. Samsung and some launchers still freeze the
+        icon until it is removed and added again.
       </p>
+      <SlotRow
+        slot={HOME_SCREEN_SOURCE_SLOT}
+        asset={assets.homeScreenSource}
+      />
       <div className="space-y-3">
+        <h3 className="text-sm font-medium">Individual assets</h3>
         {BRANDING_SLOTS.map((slot) => (
           <SlotRow key={slot.id} slot={slot} asset={assets[slot.id]} />
         ))}

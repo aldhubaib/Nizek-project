@@ -13,21 +13,23 @@ describe("parseLiveLogos", () => {
       parseLiveLogos({
         version: "abc.s0",
         logos: {
-          favicon: "https://cdn/f.png?v=1",
-          faviconDark: "https://cdn/fd.png?v=1",
-          appleTouchIcon: "https://cdn/a.png?v=1",
+          favicon: "/pwa-icons/1/favicon.ico",
+          faviconDark: "/pwa-icons/1/favicon-dark.ico",
+          appleTouchIcon: "/pwa-icons/1/apple-touch-icon.png",
           webLogo: "https://cdn/w.svg?v=1",
           iosSplash: null,
           manifest: "/manifest.json?v=9",
+          iconToken: "9",
         },
       }),
     ).toEqual({
-      favicon: "https://cdn/f.png?v=1",
-      faviconDark: "https://cdn/fd.png?v=1",
-      appleTouchIcon: "https://cdn/a.png?v=1",
+      favicon: "/pwa-icons/1/favicon.ico",
+      faviconDark: "/pwa-icons/1/favicon-dark.ico",
+      appleTouchIcon: "/pwa-icons/1/apple-touch-icon.png",
       webLogo: "https://cdn/w.svg?v=1",
       iosSplash: null,
       manifest: "/manifest.json?v=9",
+      iconToken: "9",
     });
   });
 
@@ -39,7 +41,16 @@ describe("parseLiveLogos", () => {
       webLogo: null,
       iosSplash: null,
       manifest: null,
+      iconToken: null,
     });
+  });
+
+  it("derives iconToken from the manifest query when omitted", () => {
+    expect(
+      parseLiveLogos({
+        logos: { manifest: "/manifest.json?v=42" },
+      })?.iconToken,
+    ).toBe("42");
   });
 
   it("rejects junk", () => {
@@ -68,12 +79,13 @@ describe("applyDocumentLogos", () => {
   it("upserts favicon, apple-touch-icon, and splash links", () => {
     document.head.innerHTML = "";
     applyDocumentLogos({
-      favicon: "https://cdn/f.png?v=2",
+      favicon: "/pwa-icons/2/favicon.ico",
       faviconDark: null,
-      appleTouchIcon: "https://cdn/a.png?v=2",
+      appleTouchIcon: "/pwa-icons/2/apple-touch-icon.png",
       webLogo: "https://cdn/w.svg?v=2",
       iosSplash: "https://cdn/s.png?v=2",
       manifest: "/manifest.json?v=2",
+      iconToken: "2",
     });
     const icon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
     const apple = document.querySelector<HTMLLinkElement>(
@@ -85,8 +97,10 @@ describe("applyDocumentLogos", () => {
     const manifest = document.querySelector<HTMLLinkElement>(
       "link[rel='manifest']",
     );
-    expect(icon?.getAttribute("href")).toBe("https://cdn/f.png?v=2");
-    expect(apple?.getAttribute("href")).toBe("https://cdn/a.png?v=2");
+    expect(icon?.getAttribute("href")).toBe("/pwa-icons/2/favicon.ico");
+    expect(apple?.getAttribute("href")).toBe(
+      "/pwa-icons/2/apple-touch-icon.png",
+    );
     expect(splash?.getAttribute("href")).toBe("https://cdn/s.png?v=2");
     expect(manifest?.getAttribute("href")).toBe("/manifest.json?v=2");
   });
