@@ -1517,7 +1517,11 @@ export function ThreadChat({
     }
     if (!nearBottomRef.current) return;
     const el = scrollerRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
   }, [messages.length, typing.length, outbox.length]);
 
   // Infinite load older via top sentinel.
@@ -1538,7 +1542,15 @@ export function ThreadChat({
   const scrollToBottom = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    const pin = () => {
+      el.scrollTop = el.scrollHeight;
+    };
+    pin();
+    // Outbox bubble / composer collapse land on the next frame.
+    requestAnimationFrame(() => {
+      pin();
+      requestAnimationFrame(pin);
+    });
     setNewBelow(0);
     nearBottomRef.current = true;
     setNearBottom(true);
@@ -1755,6 +1767,7 @@ export function ThreadChat({
         previewUrl: f.previewUrl,
       })),
     });
+    scrollToBottom();
   };
 
   // --- Voice messages ---
@@ -1785,9 +1798,10 @@ export function ThreadChat({
         replyToId: replyId,
         files: [{ key: `voice-${Date.now()}`, file, previewUrl: null }],
       });
+      scrollToBottom();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [replyTo, threadKey, target.taskId, target.projectId, target.conversationId],
+    [replyTo, threadKey, target.taskId, target.projectId, target.conversationId, scrollToBottom],
   );
 
   const cleanupRecordingResources = () => {
