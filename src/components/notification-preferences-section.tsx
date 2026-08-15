@@ -35,8 +35,8 @@ const ROWS: {
   },
   {
     key: "notifyDeadlines",
-    label: "Deadline reminders",
-    detail: "Reminders before note deadlines are due.",
+    label: "Roadmap reminders",
+    detail: "Reminders before roadmap items are due.",
     icon: CalendarClock,
   },
 ];

@@ -8,6 +8,8 @@ import {
   type NoteTimelineEvent,
   type NoteTimelineUser,
 } from "@/lib/note-timeline";
+import type { ParagraphChange } from "@/lib/note-content-diff";
+import { cn } from "@/lib/utils";
 
 function timeAgo(date: Date): string {
   const diffMs = Date.now() - date.getTime();
@@ -21,19 +23,79 @@ function timeAgo(date: Date): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function person(user: NoteTimelineUser) {
+  return user.name ?? "Someone";
+}
+
 function describeEvent(entry: NoteTimelineEvent): string {
   if (entry.kind === "created") {
-    return `${entry.user.name ?? "Someone"} created this note`;
+    return `${person(entry.user)} created this note`;
+  }
+  if (entry.kind === "comment") {
+    return entry.isReply
+      ? `${person(entry.user)} replied`
+      : `${person(entry.user)} commented`;
+  }
+  if (entry.kind === "task") {
+    const label = entry.taskCode ? `${entry.taskCode} ${entry.taskTitle}` : entry.taskTitle;
+    return `${person(entry.user)} linked a task · ${label}`;
   }
   if (entry.kind === "edited") {
-    const name = entry.user.name ?? "Someone";
+    const name = person(entry.user);
     if (entry.field === "title" && entry.oldValue && entry.newValue) {
-      return `${name} changed title from "${entry.oldValue}" to "${entry.newValue}"`;
+      return `${name} changed the title from “${entry.oldValue}” to “${entry.newValue}”`;
     }
     const action = editTimelineDescription(entry.field, entry.oldValue, entry.newValue);
     return `${name} ${action.charAt(0).toLowerCase()}${action.slice(1)}`;
   }
   return `Nizek Bot sent reminder · ${entry.label}`;
+}
+
+function Quote({ children, className }: { children: string; className?: string }) {
+  return (
+    <blockquote
+      className={cn(
+        "mt-1.5 border-l-2 pl-2.5 text-[11px] italic leading-relaxed text-muted-foreground",
+        className ?? "border-border",
+      )}
+    >
+      {children}
+    </blockquote>
+  );
+}
+
+function ParagraphChanges({ changes }: { changes: ParagraphChange[] }) {
+  return (
+    <div className="mt-1.5 space-y-2">
+      {changes.map((change, i) => (
+        <div key={i} className="rounded-md bg-muted/40 px-2.5 py-2">
+          {change.type === "removed" ? (
+            <>
+              <Quote className="border-destructive/50">{change.before ?? ""}</Quote>
+              <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                was deleted
+              </p>
+            </>
+          ) : null}
+          {change.type === "added" ? (
+            <>
+              <Quote className="border-emerald-400/50">{change.after ?? ""}</Quote>
+              <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                was added
+              </p>
+            </>
+          ) : null}
+          {change.type === "changed" ? (
+            <>
+              <Quote className="border-destructive/50">{change.before ?? ""}</Quote>
+              <p className="mt-1 text-[10px] text-muted-foreground/70">was changed to</p>
+              <Quote className="border-emerald-400/50">{change.after ?? ""}</Quote>
+            </>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function Avatar({ user }: { user: NoteTimelineUser }) {
@@ -56,21 +118,44 @@ function Avatar({ user }: { user: NoteTimelineUser }) {
 }
 
 function TimelineRow({ entry }: { entry: NoteTimelineEvent }) {
-  const isReminder = entry.kind === "reminder";
+  const icon =
+    entry.kind === "reminder" ? (
+      <div className="w-[18px] h-[18px] rounded-full bg-rose-500/15 ring-2 ring-card flex items-center justify-center">
+        <CalendarClock className="w-2.5 h-2.5 text-rose-400" />
+      </div>
+    ) : (
+      <Avatar user={entry.user} />
+    );
 
   return (
     <div className="relative flex gap-3 py-2">
-      <div className="relative z-10 mt-1 shrink-0">
-        {isReminder ? (
-          <div className="w-[18px] h-[18px] rounded-full bg-rose-500/15 ring-2 ring-card flex items-center justify-center">
-            <CalendarClock className="w-2.5 h-2.5 text-rose-400" />
-          </div>
-        ) : (
-          <Avatar user={entry.user} />
-        )}
-      </div>
+      <div className="relative z-10 mt-1 shrink-0">{icon}</div>
       <div className="flex-1 min-w-0">
         <p className="text-[12px] text-foreground/80 leading-snug">{describeEvent(entry)}</p>
+        {entry.kind === "edited" && entry.paragraphChanges && entry.paragraphChanges.length > 0 ? (
+          <ParagraphChanges changes={entry.paragraphChanges} />
+        ) : null}
+        {entry.kind === "comment" ? (
+          <>
+            {entry.quoteText ? (
+              <>
+                <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  On this paragraph
+                </p>
+                <Quote className="border-amber-400/60">{entry.quoteText}</Quote>
+              </>
+            ) : null}
+            <p className="mt-1.5 text-[12px] leading-relaxed text-foreground">{entry.comment}</p>
+          </>
+        ) : null}
+        {entry.kind === "task" && entry.quoteText ? (
+          <>
+            <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              From this paragraph
+            </p>
+            <Quote className="border-emerald-400/60">{entry.quoteText}</Quote>
+          </>
+        ) : null}
         <span className="text-[10px] text-muted-foreground/50 mt-1 block">
           {timeAgo(entry.at)}
         </span>
@@ -96,7 +181,7 @@ export function NoteHistoryDialog({ events, onClose }: Props) {
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-xl shadow-2xl max-w-lg w-full mx-4 flex flex-col max-h-[85vh]">
+      <div className="relative bg-card border border-border rounded-xl shadow-2xl max-w-xl w-full mx-4 flex flex-col max-h-[85vh]">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border shrink-0">
           <History className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
           <h3 className="text-[13px] font-semibold">Note History</h3>

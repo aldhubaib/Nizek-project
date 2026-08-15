@@ -181,7 +181,7 @@ export async function createNoteComment(data: {
   return {
     threadId: thread.id,
     conversationId,
-    noteUrl: noteCommentUrl(note.projectId, note.id, thread.id),
+    noteUrl: noteCommentUrl(note.projectId, note.id, thread.id, note.noteType),
   };
 }
 

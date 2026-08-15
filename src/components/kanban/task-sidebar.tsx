@@ -7,6 +7,8 @@ import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, getTaskStageLogs, deleteTask } from "@/actions/task";
 import { createMeetingNote, updateMeetingNote, getTaskNotes, getMeetingNote } from "@/actions/meeting-note";
+import { getNoteCommentThreads } from "@/actions/note-comment";
+import { taskCode } from "@/lib/task-label";
 import { AttachExistingNoteDialog } from "@/components/project/attach-existing-note-dialog";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { useRouter } from "next/navigation";
@@ -231,6 +233,13 @@ function NoteFullScreenViewer({
       user: { id: string; name: string | null; imageUrl: string | null };
     }[];
     reminderLogs?: { id: string; offsetDays: number; sentAt: Date }[];
+    taskLinks?: {
+      id?: string;
+      quoteText?: string | null;
+      createdAt?: Date | string;
+      createdBy?: { id: string; name: string | null; imageUrl: string | null };
+      task: { id: string; title: string; taskNumber: number; taskType: string };
+    }[];
   };
   task: KanbanTask;
   taskTypeMeta: { prefix: string; label: string; color: string };
@@ -242,6 +251,42 @@ function NoteFullScreenViewer({
   const [editContent, setEditContent] = useState(note.content);
   const [saving, setSaving] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [commentEvents, setCommentEvents] = useState<
+    {
+      id: string;
+      content: string;
+      quoteText: string;
+      createdAt: Date | string;
+      user: { id: string; name: string | null; imageUrl: string | null };
+      isReply: boolean;
+    }[]
+  >([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getNoteCommentThreads(note.id)
+      .then((threads) => {
+        if (cancelled) return;
+        setCommentEvents(
+          threads.flatMap((thread) =>
+            thread.comments.map((comment, i) => ({
+              id: comment.id,
+              content: comment.content,
+              quoteText: thread.quoteText,
+              createdAt: comment.createdAt,
+              user: comment.user,
+              isReply: i > 0,
+            })),
+          ),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setCommentEvents([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [note.id]);
 
   const timeline = useMemo(
     () =>
@@ -256,8 +301,21 @@ function NoteFullScreenViewer({
         },
         history: note.history,
         reminderLogs: note.reminderLogs,
+        comments: commentEvents,
+        tasks: (note.taskLinks ?? []).map((link, i) => ({
+          id: link.id ?? `${link.task.id}-${i}`,
+          quoteText: link.quoteText ?? null,
+          createdAt: link.createdAt ?? note.createdAt,
+          user: link.createdBy ?? {
+            id: note.author.id,
+            name: note.author.name,
+            imageUrl: note.author.imageUrl ?? null,
+          },
+          taskTitle: link.task.title,
+          taskCode: taskCode(link.task.taskType, link.task.taskNumber),
+        })),
       }),
-    [note],
+    [note, commentEvents],
   );
 
   async function handleSave() {

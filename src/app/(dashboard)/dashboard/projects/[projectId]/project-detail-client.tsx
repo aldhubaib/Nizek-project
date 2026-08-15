@@ -23,9 +23,13 @@ import { listProjectVaultCredentials, type VaultCredentialDTO } from "@/actions/
 import type { TaskQuestion } from "@/components/kanban/question-field";
 import type { KanbanTask } from "@/store/kanban";
 import Link from "next/link";
-import { LayoutGrid, FileText, Paperclip, Users, KeyRound, Settings, Loader2, ArrowLeft } from "lucide-react";
+import { LayoutGrid, FileText, Paperclip, Users, KeyRound, Settings, Loader2, ArrowLeft, Map } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+
+const PROJECT_TAB_CLASS =
+  "flex-none gap-1 px-2 group-data-horizontal/tabs:after:bottom-0";
+
 export interface UserPermissions {
   canCreateTask: boolean;
   canModifyTask: boolean;
@@ -119,6 +123,7 @@ interface MeetingNote {
   noteType: string;
   dueDate?: Date | string | null;
   completedAt?: Date | string | null;
+  roadmapStatus?: string | null;
   createdAt: Date;
   updatedAt: Date;
   author: { id: string; name: string | null; imageUrl: string | null };
@@ -200,6 +205,7 @@ export function ProjectDetailClient({
 }: Props) {
   const canEdit = userPermissions.canModifyTask || userPermissions.isAdmin;
   const isAdmin = userPermissions.isAdmin;
+  const canManageTeam = userPermissions.canInviteMembers || userPermissions.canInviteClients;
   const router = useRouter();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTabState] = useState(searchParams.get("tab") ?? "board");
@@ -230,13 +236,27 @@ export function ProjectDetailClient({
   }, []);
 
   useEffect(() => {
-    if (activeTab === "notes" && notes === null) {
+    const wantsNotes =
+      activeTab === "notes" ||
+      activeTab === "roadmap" ||
+      Boolean(searchParams.get("noteId"));
+    if (wantsNotes && notes === null) {
       startNotesTransition(async () => {
         const data = await getMeetingNotes(project.id);
         setNotes(data as unknown as MeetingNote[]);
       });
     }
-  }, [activeTab, notes, project.id]);
+  }, [activeTab, notes, project.id, searchParams]);
+
+  useEffect(() => {
+    if (!notes) return;
+    const noteId = searchParams.get("noteId");
+    if (!noteId) return;
+    const note = notes.find((n) => n.id === noteId);
+    if (!note) return;
+    const tab = note.noteType === "DEADLINE" ? "roadmap" : "notes";
+    if (activeTab !== tab) setActiveTab(tab);
+  }, [notes, searchParams, activeTab]);
 
   useEffect(() => {
     if (activeTab === "assets" && assets === null) {
@@ -293,13 +313,42 @@ export function ProjectDetailClient({
 
   return (
     <div>
+      {!noteFullscreen && (canManageTeam || canAccessVault) && (
+        <PageOverflowItems id="project-team-vault" order={50}>
+          {canManageTeam && (
+            <DropdownMenuItem onClick={() => setActiveTab("team")}>
+              <Users className="h-4 w-4" />
+              <span className="flex-1">Team</span>
+              <span className="text-[10px] text-muted-foreground">
+                {members.length + (teamData?.invitations.length ?? 0)}
+              </span>
+            </DropdownMenuItem>
+          )}
+          {canAccessVault && (
+            <DropdownMenuItem onClick={() => setActiveTab("vault")}>
+              <KeyRound className="h-4 w-4" />
+              <span className="flex-1">Vault</span>
+              {vaultCredentials && (
+                <span className="text-[10px] text-muted-foreground">
+                  {vaultCredentials.length}
+                </span>
+              )}
+            </DropdownMenuItem>
+          )}
+        </PageOverflowItems>
+      )}
       <PageOverflowItems id="project-settings" order={100}>
         <DropdownMenuItem onClick={handleOpenSettings}>
           <Settings className="h-4 w-4" />
           <span className="flex-1">Settings</span>
         </DropdownMenuItem>
       </PageOverflowItems>
-      <div className="h-12 sticky top-0 z-10 flex items-center justify-between px-6 pr-24 border-b border-border bg-background shrink-0">
+      <Tabs
+        value={activeTab}
+        onValueChange={(val) => setActiveTab(val as string)}
+        className={cn("gap-0")}
+      >
+      <div className="h-12 sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-6 pr-24 border-b border-border bg-background shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
           {noteFullscreen ? (
             <button
@@ -334,58 +383,59 @@ export function ProjectDetailClient({
               </span>
             </div>
           )}
-          <h1 className="text-sm font-semibold truncate">{project.name}</h1>
+          <h1 className="text-sm font-semibold truncate max-w-[9rem] sm:max-w-[14rem]">{project.name}</h1>
           {!isActive && (
             <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold bg-destructive/15 text-destructive border-destructive/20">
               Expired
             </span>
           )}
         </div>
-      </div>
-
-      <div className={cn(noteFullscreen ? "px-0 py-0" : "px-6 py-4")}>
-        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as string)} className={cn("space-y-4", noteFullscreen && "gap-0 space-y-0")}>
-          <TabsList className={cn("bg-muted/50", noteFullscreen && "hidden")}>
-            <TabsTrigger value="board" className="gap-1.5">
+        <TabsList
+          variant="line"
+          className={cn(
+            "h-12 w-max max-w-full justify-center gap-0 overflow-x-auto rounded-none bg-transparent p-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+            noteFullscreen && "hidden",
+          )}
+        >
+            <TabsTrigger value="board" className={PROJECT_TAB_CLASS}>
               <LayoutGrid className="h-3.5 w-3.5" />
               Board
             </TabsTrigger>
-            <TabsTrigger value="notes" className="gap-1.5">
+            <TabsTrigger value="notes" className={PROJECT_TAB_CLASS}>
               <FileText className="h-3.5 w-3.5" />
               Notes
-              <span className="ml-1 text-[10px] text-muted-foreground">
-                {notes ? notes.length : project._count.meetingNotes}
+              <span className="text-[10px] text-muted-foreground">
+                {notes
+                  ? notes.filter((n) => n.noteType !== "DEADLINE").length
+                  : project._count.meetingNotes}
               </span>
             </TabsTrigger>
-            <TabsTrigger value="assets" className="gap-1.5">
+            <TabsTrigger value="roadmap" className={PROJECT_TAB_CLASS}>
+              <Map className="h-3.5 w-3.5" />
+              Roadmap
+              {notes && (
+                <span className="text-[10px] text-muted-foreground">
+                  {notes.filter((n) => n.noteType === "DEADLINE").length}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="assets" className={PROJECT_TAB_CLASS}>
               <Paperclip className="h-3.5 w-3.5" />
               Assets
-              <span className="ml-1 text-[10px] text-muted-foreground">
+              <span className="text-[10px] text-muted-foreground">
                 {assets ? assets.length : project._count.assets}
               </span>
             </TabsTrigger>
-            {(userPermissions.canInviteMembers || userPermissions.canInviteClients) && (
-              <TabsTrigger value="team" className="gap-1.5">
-                <Users className="h-3.5 w-3.5" />
-                Team
-                <span className="ml-1 text-[10px] text-muted-foreground">
-                  {members.length + (teamData?.invitations.length ?? 0)}
-                </span>
-              </TabsTrigger>
+            {canManageTeam && (
+              <TabsTrigger value="team" className="hidden" />
             )}
             {canAccessVault && (
-              <TabsTrigger value="vault" className="gap-1.5">
-                <KeyRound className="h-3.5 w-3.5" />
-                Vault
-                {vaultCredentials && (
-                  <span className="ml-1 text-[10px] text-muted-foreground">
-                    {vaultCredentials.length}
-                  </span>
-                )}
-              </TabsTrigger>
+              <TabsTrigger value="vault" className="hidden" />
             )}
-          </TabsList>
+        </TabsList>
+      </div>
 
+      <div className={cn(noteFullscreen ? "px-0 py-0" : "px-6 py-4")}>
           <TabsContent value="board">
             <KanbanBoard
               initialTasks={tasks as unknown as KanbanTask[]}
@@ -402,7 +452,7 @@ export function ProjectDetailClient({
           </TabsContent>
 
           <TabsContent value="notes">
-            {loadingNotes || !notes ? (
+            {activeTab === "notes" && (loadingNotes || !notes ? (
               <TabSpinner />
             ) : (
               <MeetingNotesTab
@@ -415,10 +465,32 @@ export function ProjectDetailClient({
                 allowedTaskTypes={allowedTaskTypes ?? []}
                 activeContractType={activeContractType ?? null}
                 isActive={isActive}
+                section="notes"
                 onFullscreenChange={handleNoteFullscreen}
                 onNotesChange={handleNotesChange}
               />
-            )}
+            ))}
+          </TabsContent>
+
+          <TabsContent value="roadmap">
+            {activeTab === "roadmap" && (loadingNotes || !notes ? (
+              <TabSpinner />
+            ) : (
+              <MeetingNotesTab
+                notes={notes as unknown as MeetingNote[]}
+                projectId={project.id}
+                canEdit={canEdit}
+                currentUserId={currentUserId}
+                isSystemAdmin={isSystemAdmin}
+                isDeadlineTestProject={isDeadlineTestProject}
+                allowedTaskTypes={allowedTaskTypes ?? []}
+                activeContractType={activeContractType ?? null}
+                isActive={isActive}
+                section="roadmap"
+                onFullscreenChange={handleNoteFullscreen}
+                onNotesChange={handleNotesChange}
+              />
+            ))}
           </TabsContent>
 
           <TabsContent value="assets">
@@ -440,7 +512,7 @@ export function ProjectDetailClient({
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-[13px] font-semibold">Team Members</h2>
-                  {(userPermissions.canInviteMembers || userPermissions.canInviteClients) && (
+                  {canManageTeam && (
                     <InviteMemberDialog
                       projectId={project.id}
                       roles={teamData.roles}
@@ -472,8 +544,8 @@ export function ProjectDetailClient({
             </TabsContent>
           )}
 
-        </Tabs>
       </div>
+      </Tabs>
 
       {settingsOpen && createPortal(
         <ProjectSettingsOverlay

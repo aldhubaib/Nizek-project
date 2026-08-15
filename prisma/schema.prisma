@@ -397,12 +397,18 @@ enum NoteType {
   MEETING_NOTE
   DECISION
   DEADLINE
-  PRODUCT
   FEATURE
   ENHANCEMENT
   BUG
   REPORTED_BUG
   DESIGN
+}
+
+enum RoadmapStatus {
+  PLANNED
+  NEXT
+  PROGRESS
+  SHIPPED
 }
 
 model MeetingNote {
@@ -412,8 +418,9 @@ model MeetingNote {
   date     DateTime
   noteType NoteType @default(MEETING_NOTE)
 
-  dueDate     DateTime?
-  completedAt DateTime?
+  dueDate        DateTime?
+  completedAt    DateTime?
+  roadmapStatus  RoadmapStatus @default(PLANNED)
 
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -434,6 +441,7 @@ model MeetingNote {
   @@index([taskId])
   @@index([projectId, date])
   @@index([noteType, completedAt, dueDate])
+  @@index([noteType, roadmapStatus])
 }
 
 // Tracks which deadline milestone reminders were already sent so we don't spam

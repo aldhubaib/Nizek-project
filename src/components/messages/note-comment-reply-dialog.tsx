@@ -37,20 +37,22 @@ export function NoteCommentReplyDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   noteId: string;
-  threadId: string;
+  threadId?: string;
   noteTitle: string;
   projectId: string;
 }) {
+  const noteOnly = !threadId;
   const [thread, setThread] = useState<NoteCommentThreadView | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"thread" | "note">("thread");
+  const [view, setView] = useState<"thread" | "note">(noteOnly ? "note" : "thread");
   const [note, setNote] = useState<NotePreview | null>(null);
   const [noteLoading, setNoteLoading] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(threadId);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(threadId ?? null);
 
   const load = useCallback(async () => {
+    if (!threadId) return;
     setLoading(true);
     setError(null);
     try {
@@ -93,7 +95,7 @@ export function NoteCommentReplyDialog({
           understood: t.id === threadId ? (thread?.understood ?? false) : false,
         })),
       });
-      setActiveThreadId(threadId);
+      setActiveThreadId(threadId ?? null);
     } catch (err) {
       setNoteError(err instanceof Error ? err.message : "Failed to load note");
     } finally {
@@ -103,12 +105,16 @@ export function NoteCommentReplyDialog({
 
   useEffect(() => {
     if (!open) {
-      setView("thread");
+      setView(noteOnly ? "note" : "thread");
       setNote(null);
+      setThread(null);
       return;
     }
-    void load();
-  }, [open, load]);
+    if (noteOnly) void loadNote();
+    else void load();
+    // Load once when the dialog opens for this note/thread.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, noteOnly, noteId, threadId]);
 
   async function openFullNote() {
     setView("note");
@@ -138,16 +144,18 @@ export function NoteCommentReplyDialog({
         {view === "note" ? (
           <>
             <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
-              <button
-                type="button"
-                onClick={() => setView("thread")}
-                className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                aria-label="Back to reply"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
+              {noteOnly ? null : (
+                <button
+                  type="button"
+                  onClick={() => setView("thread")}
+                  className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                  aria-label="Back to reply"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+              )}
               <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <p className="min-w-0 flex-1 truncate text-sm font-semibold">{noteTitle}</p>
+              <p className="min-w-0 flex-1 truncate text-sm font-semibold">{note?.title || noteTitle}</p>
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
@@ -180,7 +188,7 @@ export function NoteCommentReplyDialog({
                   linkedTasks={note.linked}
                   onCreateTask={() => undefined}
                   onChanged={() => {
-                    void load();
+                    if (threadId) void load();
                     void loadNote();
                   }}
                 />

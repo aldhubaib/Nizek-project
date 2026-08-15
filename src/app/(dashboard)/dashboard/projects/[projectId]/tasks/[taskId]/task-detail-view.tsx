@@ -21,7 +21,7 @@ import { LinkedCountPopover } from "@/components/project/linked-count-popover";
 import type { TaskHighlightThreadView } from "@/components/project/task-highlight-popover";
 import { StageConfirmDialog, getCheckpoint } from "@/components/kanban/stage-confirm-dialog";
 import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
-import { cn } from "@/lib/utils";
+import { projectNoteUrl } from "@/lib/project-note-url";
 import { uploadFileToR2 } from "@/lib/upload";
 import { markThreadRead } from "@/actions/messages";
 import { closePushBannersByTags } from "@/lib/close-push-banners";
@@ -108,6 +108,7 @@ interface NoteData {
   title: string;
   content: string;
   createdAt: Date;
+  noteType?: string;
   author: { name: string | null };
 }
 
@@ -456,7 +457,7 @@ export function TaskDetailPage({
           onClick={() =>
             router.push(
               backToNoteId
-                ? `/dashboard/projects/${projectId}?tab=notes&noteId=${backToNoteId}`
+                ? projectNoteUrl(projectId, backToNoteId)
                 : `/dashboard/projects/${projectId}`,
             )
           }
@@ -547,7 +548,7 @@ export function TaskDetailPage({
                       type="button"
                       onClick={() => {
                         setNotesOpen(false);
-                        router.push(`/dashboard/projects/${projectId}?tab=notes&noteId=${note.id}`);
+                        router.push(projectNoteUrl(projectId, note.id, { noteType: note.noteType }));
                       }}
                       className="flex w-full items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-left text-sm hover:border-border"
                     >
@@ -1000,7 +1001,7 @@ export function TaskDetailPage({
               {notes.map((note) => (
                 <button
                   key={note.id}
-                  onClick={() => router.push(`/dashboard/projects/${projectId}?tab=notes&noteId=${note.id}`)}
+                  onClick={() => router.push(projectNoteUrl(projectId, note.id, { noteType: note.noteType }))}
                   className="w-full text-left rounded-lg border border-border/60 bg-background p-3 hover:border-border transition-colors"
                 >
                   <div className="flex items-center justify-between">

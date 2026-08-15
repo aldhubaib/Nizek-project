@@ -1,3 +1,5 @@
+import { projectNoteUrl } from "@/lib/project-note-url";
+
 const PAYLOAD_PREFIX = "<!--note-comment:";
 
 export type NoteCommentPayload = {
@@ -39,8 +41,9 @@ export function noteCommentUrl(
   projectId: string,
   noteId: string,
   threadId: string,
+  noteType?: string | null,
 ): string {
-  return `/dashboard/projects/${projectId}?tab=notes&noteId=${noteId}&threadId=${threadId}`;
+  return projectNoteUrl(projectId, noteId, { noteType, threadId });
 }
 
 export function noteCommentPreview(payload: NoteCommentPayload): string {

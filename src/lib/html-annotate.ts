@@ -20,6 +20,11 @@ export function wrapFirstPlainText(
     "&apos;": "'",
   };
   const entities = Object.keys(ENTITY_MAP);
+  const BLOCK = new Set([
+    "p", "div", "h1", "h2", "h3", "h4", "h5", "h6",
+    "li", "ul", "ol", "blockquote", "br", "tr", "pre", "hr",
+    "table", "thead", "tbody", "td", "th", "section", "article",
+  ]);
 
   const pushChar = (start: number, end: number, ch: string) => {
     if (/\s/.test(ch)) {
@@ -34,15 +39,18 @@ export function wrapFirstPlainText(
     pieces.push({ start, end, ch });
   };
 
-  let inTag = false;
   for (let i = 0; i < html.length; i++) {
     const ch = html[i];
     if (ch === "<") {
-      inTag = true;
-      continue;
-    }
-    if (inTag) {
-      if (ch === ">") inTag = false;
+      const gt = html.indexOf(">", i);
+      if (gt === -1) break;
+      const inner = html.slice(i + 1, gt).trim();
+      const isClose = inner.startsWith("/");
+      const name = inner.replace(/^\//, "").split(/[\s/]/)[0]?.toLowerCase() ?? "";
+      if (BLOCK.has(name) && (isClose || name === "br")) {
+        pushChar(i, gt, " ");
+      }
+      i = gt;
       continue;
     }
     if (ch === "&") {
@@ -64,7 +72,33 @@ export function wrapFirstPlainText(
   const last = pieces[idx + needle.length - 1];
   if (!last) return html;
   const to = last.end + 1;
-  return html.slice(0, from) + openTag + html.slice(from, to) + closeTag + html.slice(to);
+
+  // TipTap selections often span headings/lists. A single <mark> wrapping
+  // those tags is invalid HTML and gets stripped — wrap each text run instead.
+  let out = html.slice(0, from);
+  let wrapping = false;
+  let i = from;
+  while (i < to) {
+    if (html[i] === "<") {
+      if (wrapping) {
+        out += closeTag;
+        wrapping = false;
+      }
+      const gt = html.indexOf(">", i);
+      const end = gt === -1 ? html.length : gt + 1;
+      out += html.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (!wrapping) {
+      out += openTag;
+      wrapping = true;
+    }
+    out += html[i];
+    i++;
+  }
+  if (wrapping) out += closeTag;
+  return out + html.slice(to);
 }
 
 export function commentMarkTag(threadId: string): { open: string; close: string } {
@@ -79,6 +113,27 @@ export function taskMarkTag(taskId: string): { open: string; close: string } {
     open: `<mark data-kind="task" data-task-id="${escapeAttr(taskId)}" class="note-annotation note-annotation-task">`,
     close: "</mark>",
   };
+}
+
+export function applyStoredAnnotationMarks(
+  content: string,
+  taskLinks: { taskId: string; quoteText?: string | null }[],
+  commentThreads: { id: string; quoteText?: string | null }[],
+): string {
+  let html = content;
+  for (const link of taskLinks) {
+    const quote = link.quoteText?.trim();
+    if (!quote || html.includes(`data-task-id="${link.taskId}"`)) continue;
+    const mark = taskMarkTag(link.taskId);
+    html = wrapFirstPlainText(html, quote, mark.open, mark.close);
+  }
+  for (const thread of commentThreads) {
+    const quote = thread.quoteText?.trim();
+    if (!quote || html.includes(`data-thread-id="${thread.id}"`)) continue;
+    const mark = commentMarkTag(thread.id);
+    html = wrapFirstPlainText(html, quote, mark.open, mark.close);
+  }
+  return html;
 }
 
 function escapeAttr(value: string): string {
@@ -98,4 +153,21 @@ export function asAnnotatableHtml(value: string | null | undefined): string {
   if (!text.trim()) return "";
   if (/<[a-z][\s\S]*>/i.test(text)) return text;
   return `<p>${escapeHtml(text).replace(/\n/g, "<br>")}</p>`;
+}
+
+export function plainTextExcerpt(html: string, max = 220): string {
+  const text = html
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/(p|div|h[1-6]|li)>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length <= max) return text;
+  return `${text.slice(0, max).replace(/\s+\S*$/, "")}…`;
 }

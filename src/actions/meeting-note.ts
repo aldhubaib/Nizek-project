@@ -6,24 +6,35 @@ import { logTaskActivity } from "@/lib/activity";
 import { revalidatePath } from "next/cache";
 import { createTask } from "@/actions/task";
 import { sendMessage } from "@/actions/messages";
-import { taskMarkTag, wrapFirstPlainText } from "@/lib/html-annotate";
+import { applyStoredAnnotationMarks, plainTextExcerpt, taskMarkTag, wrapFirstPlainText } from "@/lib/html-annotate";
+import { diffNoteParagraphs, encodeContentDiff } from "@/lib/note-content-diff";
 import { encodeNoteActivityBody } from "@/lib/note-activity-payload";
+import {
+  isRoadmapStatus,
+  type RoadmapStatus,
+} from "@/lib/roadmap-status";
 
 export async function createMeetingNote(data: {
   projectId: string;
   title: string;
   content: string;
   date: string;
-  noteType?: "MEETING_NOTE" | "DECISION" | "DEADLINE" | "PRODUCT" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+  noteType?: "MEETING_NOTE" | "DECISION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
   dueDate?: string;
   taskId?: string;
+  roadmapStatus?: RoadmapStatus;
 }) {
   const { user, member } = await requireProjectMember(data.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot create notes");
 
   if (data.noteType === "DEADLINE" && !data.dueDate) {
-    throw new Error("Due date is required for deadlines");
+    throw new Error("Due date is required");
   }
+
+  const roadmapStatus =
+    data.noteType === "DEADLINE" && data.roadmapStatus && isRoadmapStatus(data.roadmapStatus)
+      ? data.roadmapStatus
+      : "PLANNED";
 
   const note = await prisma.meetingNote.create({
     data: {
@@ -33,8 +44,10 @@ export async function createMeetingNote(data: {
       noteType: data.noteType ?? "MEETING_NOTE",
       projectId: data.projectId,
       authorId: user.id,
+      roadmapStatus,
       ...(data.dueDate && { dueDate: new Date(data.dueDate) }),
       ...(data.taskId && { taskId: data.taskId }),
+      ...(roadmapStatus === "SHIPPED" ? { completedAt: new Date() } : {}),
     },
   });
 
@@ -62,25 +75,69 @@ export async function createMeetingNote(data: {
     noteTitle: note.title,
     noteType: note.noteType,
     action: "created",
+    excerpt: plainTextExcerpt(note.content),
   });
   return note;
 }
 
-export async function toggleDeadlineComplete(noteId: string): Promise<Date | null> {
+export async function toggleDeadlineComplete(
+  noteId: string,
+): Promise<{ completedAt: Date | null; roadmapStatus: RoadmapStatus }> {
   const note = await prisma.meetingNote.findUnique({ where: { id: noteId } });
   if (!note) throw new Error("Note not found");
-  if (note.noteType !== "DEADLINE") throw new Error("Not a deadline");
+  if (note.noteType !== "DEADLINE") throw new Error("Not a roadmap item");
 
   await requireProjectMember(note.projectId);
 
   const completedAt = note.completedAt ? null : new Date();
+  const roadmapStatus: RoadmapStatus = completedAt ? "SHIPPED" : "PLANNED";
   await prisma.meetingNote.update({
     where: { id: noteId },
-    data: { completedAt },
+    data: { completedAt, roadmapStatus },
   });
 
   revalidatePath(`/dashboard/projects/${note.projectId}`);
-  return completedAt;
+  return { completedAt, roadmapStatus };
+}
+
+export async function updateRoadmapStatus(
+  noteId: string,
+  status: RoadmapStatus,
+): Promise<{ roadmapStatus: RoadmapStatus; completedAt: Date | null }> {
+  if (!isRoadmapStatus(status)) throw new Error("Invalid roadmap status");
+
+  const note = await prisma.meetingNote.findUnique({ where: { id: noteId } });
+  if (!note) throw new Error("Note not found");
+  if (note.noteType !== "DEADLINE") throw new Error("Not a roadmap item");
+
+  const { user, member } = await requireProjectMember(note.projectId);
+  if (member.role === "CLIENT") throw new Error("Clients cannot edit notes");
+
+  const completedAt =
+    status === "SHIPPED" ? note.completedAt ?? new Date() : null;
+
+  await prisma.$transaction([
+    prisma.meetingNote.update({
+      where: { id: noteId },
+      data: { roadmapStatus: status, completedAt },
+    }),
+    ...(note.roadmapStatus !== status
+      ? [
+          prisma.noteHistory.create({
+            data: {
+              noteId: note.id,
+              userId: user.id,
+              field: "roadmapStatus",
+              oldValue: note.roadmapStatus,
+              newValue: status,
+            },
+          }),
+        ]
+      : []),
+  ]);
+
+  revalidatePath(`/dashboard/projects/${note.projectId}`);
+  return { roadmapStatus: status, completedAt };
 }
 
 export async function updateMeetingNote(data: {
@@ -126,13 +183,16 @@ export async function updateMeetingNote(data: {
   }
 
   if (data.content !== undefined && data.content !== note.content) {
-    historyEntries.push({
-      field: "content",
-      oldValue: null,
-      newValue: null,
-      noteId: note.id,
-      userId: user.id,
-    });
+    const changes = diffNoteParagraphs(note.content, data.content);
+    if (changes.length > 0) {
+      historyEntries.push({
+        field: "content",
+        oldValue: changes.length === 1 ? (changes[0].before ?? null) : `${changes.length} paragraph${changes.length === 1 ? "" : "s"}`,
+        newValue: encodeContentDiff(changes),
+        noteId: note.id,
+        userId: user.id,
+      });
+    }
   }
 
   const [updated] = await prisma.$transaction([
@@ -158,6 +218,7 @@ export async function updateMeetingNote(data: {
       noteType: note.noteType,
       action: "updated",
       fields: historyEntries.map((e) => e.field),
+      excerpt: plainTextExcerpt(data.content ?? note.content),
     });
   }
   return updated;
@@ -199,7 +260,10 @@ const noteActivityInclude = {
   author: true,
   task: { select: linkedTaskSelect },
   taskLinks: {
-    include: { task: { select: linkedTaskSelect } },
+    include: {
+      task: { select: linkedTaskSelect },
+      createdBy: { select: { id: true, name: true, imageUrl: true } },
+    },
     orderBy: { createdAt: "desc" as const },
   },
   commentThreads: {
@@ -221,14 +285,42 @@ const noteActivityInclude = {
   },
 } as const;
 
+function withAnnotationMarks<
+  T extends {
+    content: string;
+    taskLinks: { taskId: string; quoteText?: string | null }[];
+    commentThreads: { id: string; quoteText?: string | null }[];
+  },
+>(note: T): T {
+  const content = applyStoredAnnotationMarks(
+    note.content,
+    note.taskLinks,
+    note.commentThreads,
+  );
+  return content === note.content ? note : { ...note, content };
+}
+
 export async function getMeetingNotes(projectId: string) {
   await requireProjectMember(projectId);
 
-  return prisma.meetingNote.findMany({
+  const notes = await prisma.meetingNote.findMany({
     where: { projectId },
     include: noteActivityInclude,
     orderBy: { date: "desc" },
   });
+  const mapped = notes.map((note) => withAnnotationMarks(note));
+  const dirty = mapped.filter((note, i) => note.content !== notes[i].content);
+  if (dirty.length > 0) {
+    await Promise.all(
+      dirty.map((note) =>
+        prisma.meetingNote.update({
+          where: { id: note.id },
+          data: { content: note.content },
+        }),
+      ),
+    );
+  }
+  return mapped;
 }
 
 export async function getMeetingNote(noteId: string) {
@@ -239,7 +331,14 @@ export async function getMeetingNote(noteId: string) {
   if (!note) throw new Error("Note not found");
 
   await requireProjectMember(note.projectId);
-  return note;
+  const next = withAnnotationMarks(note);
+  if (next.content !== note.content) {
+    await prisma.meetingNote.update({
+      where: { id: note.id },
+      data: { content: next.content },
+    });
+  }
+  return next;
 }
 
 export async function getTaskNotes(taskId: string) {
@@ -263,6 +362,13 @@ export async function getTaskNotes(taskId: string) {
       },
       reminderLogs: {
         orderBy: { sentAt: "desc" },
+      },
+      taskLinks: {
+        include: {
+          task: { select: linkedTaskSelect },
+          createdBy: { select: { id: true, name: true, imageUrl: true } },
+        },
+        orderBy: { createdAt: "desc" },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -474,6 +580,7 @@ async function postNoteActivityToChat(payload: {
   noteType: string;
   action: "created" | "updated";
   fields?: string[];
+  excerpt?: string;
 }) {
   const sent = await sendMessage({
     projectId: payload.projectId,

@@ -694,7 +694,7 @@ const MessageRow = memo(function MessageRow({
         )}
         <div
           className={cn(
-            "flex gap-2 justify-start",
+            "flex w-full gap-2 justify-start",
             newGroup && !showDay && notFirst && "mt-3",
           )}
         >
@@ -704,7 +704,7 @@ const MessageRow = memo(function MessageRow({
             authorName={m.authorName}
             authorImageUrl={m.authorImageUrl}
           />
-          <div className="flex min-w-0 max-w-[min(100%,420px)] flex-col gap-1">
+          <div className="flex min-w-0 w-full max-w-[420px] flex-col gap-1">
             {showAuthor && (
               <div className="px-1 text-tiny text-muted-foreground">{authorLabel}</div>
             )}
@@ -739,7 +739,7 @@ const MessageRow = memo(function MessageRow({
           )}
         >
           {!mine && <div className="w-8 shrink-0" aria-hidden />}
-          <div className="flex min-w-0 max-w-[min(100%,420px)] flex-col gap-1">
+          <div className="flex min-w-0 w-full max-w-[420px] flex-col gap-1">
             {showAuthor && (
               <div className="px-1 text-tiny text-muted-foreground">{m.authorName}</div>
             )}

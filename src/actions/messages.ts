@@ -35,6 +35,7 @@ import {
   noteActivityPreview,
   type NoteActivityPayload,
 } from "@/lib/note-activity-payload";
+import { plainTextExcerpt } from "@/lib/html-annotate";
 import { ALL_MENTION_ID, ALL_MENTION_NAME } from "@/lib/mentions";
 import {
   broadcast,
@@ -379,6 +380,28 @@ export async function getThreadMessages(input: {
       important: importantIds.has(c.id),
     };
   });
+
+  const missingExcerptIds = [
+    ...new Set(
+      messages
+        .map((m) => m.noteActivity)
+        .filter((a): a is NoteActivityPayload => Boolean(a && !a.excerpt))
+        .map((a) => a.noteId),
+    ),
+  ];
+  if (missingExcerptIds.length > 0) {
+    const notes = await prisma.meetingNote.findMany({
+      where: { id: { in: missingExcerptIds } },
+      select: { id: true, content: true },
+    });
+    const byId = new Map(notes.map((n) => [n.id, plainTextExcerpt(n.content)]));
+    for (const m of messages) {
+      if (m.noteActivity && !m.noteActivity.excerpt) {
+        const excerpt = byId.get(m.noteActivity.noteId);
+        if (excerpt) m.noteActivity = { ...m.noteActivity, excerpt };
+      }
+    }
+  }
 
   return { messages, hasMore };
 }

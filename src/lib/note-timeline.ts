@@ -1,4 +1,6 @@
 import { milestoneLabel } from "@/lib/deadline-milestones";
+import { roadmapStatusLabel } from "@/lib/roadmap-status";
+import { decodeContentDiff, summarizeContentDiff, type ParagraphChange } from "@/lib/note-content-diff";
 
 export interface NoteTimelineUser {
   id: string;
@@ -21,6 +23,24 @@ export interface NoteTimelineReminder {
   sentAt: Date | string;
 }
 
+export interface NoteTimelineComment {
+  id: string;
+  content: string;
+  quoteText: string;
+  createdAt: Date | string;
+  user: NoteTimelineUser;
+  isReply: boolean;
+}
+
+export interface NoteTimelineTask {
+  id: string;
+  quoteText: string | null;
+  createdAt: Date | string;
+  user: NoteTimelineUser;
+  taskTitle: string;
+  taskCode?: string;
+}
+
 export type NoteTimelineEvent =
   | {
       kind: "created";
@@ -36,6 +56,25 @@ export type NoteTimelineEvent =
       field: string;
       oldValue: string | null;
       newValue: string | null;
+      paragraphChanges?: ParagraphChange[];
+    }
+  | {
+      kind: "comment";
+      id: string;
+      at: Date;
+      user: NoteTimelineUser;
+      quoteText: string;
+      comment: string;
+      isReply: boolean;
+    }
+  | {
+      kind: "task";
+      id: string;
+      at: Date;
+      user: NoteTimelineUser;
+      quoteText: string | null;
+      taskTitle: string;
+      taskCode?: string;
     }
   | {
       kind: "reminder";
@@ -52,6 +91,8 @@ export function buildNoteTimeline(input: {
   author: NoteTimelineUser;
   history?: NoteTimelineEdit[];
   reminderLogs?: NoteTimelineReminder[];
+  comments?: NoteTimelineComment[];
+  tasks?: NoteTimelineTask[];
 }): NoteTimelineEvent[] {
   const events: NoteTimelineEvent[] = [
     {
@@ -71,6 +112,32 @@ export function buildNoteTimeline(input: {
       field: entry.field,
       oldValue: entry.oldValue,
       newValue: entry.newValue,
+      paragraphChanges:
+        entry.field === "content" ? decodeContentDiff(entry.newValue) ?? undefined : undefined,
+    });
+  }
+
+  for (const comment of input.comments ?? []) {
+    events.push({
+      kind: "comment",
+      id: `comment-${comment.id}`,
+      at: new Date(comment.createdAt),
+      user: comment.user,
+      quoteText: comment.quoteText,
+      comment: comment.content,
+      isReply: comment.isReply,
+    });
+  }
+
+  for (const task of input.tasks ?? []) {
+    events.push({
+      kind: "task",
+      id: `task-${task.id}`,
+      at: new Date(task.createdAt),
+      user: task.user,
+      quoteText: task.quoteText,
+      taskTitle: task.taskTitle,
+      taskCode: task.taskCode,
     });
   }
 
@@ -100,6 +167,18 @@ export function editTimelineDescription(
     }
     return "Changed title";
   }
-  if (field === "content") return "Updated content";
+  if (field === "content") {
+    const changes = decodeContentDiff(newValue);
+    if (changes && changes.length > 0) {
+      return summarizeContentDiff(changes);
+    }
+    return "Updated content";
+  }
+  if (field === "roadmapStatus") {
+    const from = oldValue ? roadmapStatusLabel(oldValue) : null;
+    const to = newValue ? roadmapStatusLabel(newValue) : null;
+    if (from && to) return `Moved from ${from} to ${to}`;
+    return "Changed roadmap status";
+  }
   return `Changed ${field}`;
 }

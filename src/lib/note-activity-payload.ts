@@ -1,3 +1,5 @@
+import { projectNoteUrl } from "@/lib/project-note-url";
+
 const PAYLOAD_PREFIX = "<!--note-activity:";
 
 export type NoteActivityPayload = {
@@ -7,7 +9,26 @@ export type NoteActivityPayload = {
   noteType: string;
   action: "created" | "updated";
   fields?: string[];
+  excerpt?: string;
 };
+
+const TYPE_LABEL: Record<string, string> = {
+  MEETING_NOTE: "Meeting Note",
+  DECISION: "Decision",
+  DEADLINE: "RoadMap",
+  FEATURE: "Business Case",
+  ENHANCEMENT: "Enhancement",
+  BUG: "Bug",
+  REPORTED_BUG: "Reported Bug",
+  DESIGN: "Design",
+};
+
+export function noteActivityCategory(payload: NoteActivityPayload): string {
+  const typeLabel = TYPE_LABEL[payload.noteType] ?? "Note";
+  return payload.action === "created"
+    ? `${typeLabel} Created`
+    : `${typeLabel} Created edited`;
+}
 
 export function encodeNoteActivityBody(payload: NoteActivityPayload): string {
   return `${PAYLOAD_PREFIX}${JSON.stringify(payload)}`;
@@ -31,13 +52,11 @@ export function isNoteActivityMessage(kind: string): boolean {
   return kind === "note_activity";
 }
 
-export function noteActivityUrl(projectId: string, noteId: string): string {
-  return `/dashboard/projects/${projectId}?tab=notes&noteId=${noteId}`;
+export function noteActivityUrl(projectId: string, noteId: string, noteType?: string): string {
+  return projectNoteUrl(projectId, noteId, { noteType });
 }
 
 export function noteActivityPreview(payload: NoteActivityPayload): string {
   const title = payload.noteTitle.trim() || "Untitled";
-  return payload.action === "created"
-    ? `created the note “${title}”`
-    : `updated the note “${title}”`;
+  return `${noteActivityCategory(payload)} · ${title}`;
 }

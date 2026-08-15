@@ -36,6 +36,18 @@ describe("wrapFirstPlainText", () => {
     expect(next).toContain('data-task-id="t1"');
     expect(next).toContain("<br>");
   });
+
+  it("matches a TipTap selection that spans a heading and list items", () => {
+    const html =
+      "<h3>5.2 Self-serve event (no venue)</h3><ol><li><p>Organizer creates event in mobile app.</p></li><li><p>Organizer purchases credits in-app via MyFatoorah.</p></li></ol>";
+    const quote =
+      "5.2 Self-serve event (no venue) Organizer creates event in mobile app. Organizer purchases credits in-app via MyFatoorah.";
+    const { open, close } = taskMarkTag("t1");
+    const next = wrapFirstPlainText(html, quote, open, close);
+    expect(next).toContain('data-task-id="t1"');
+    expect(next).toContain("</h3>");
+    expect(next.match(/<mark /g)?.length).toBeGreaterThan(1);
+  });
 });
 
 describe("toMentionTokens", () => {

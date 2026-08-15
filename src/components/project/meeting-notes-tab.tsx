@@ -6,8 +6,8 @@ import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, FileText, Trash2, Gavel, Clock, History, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, Link2, MessageSquare, Check, CheckSquare, Package } from "lucide-react";
-import { createMeetingNote, updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete, getMeetingNote } from "@/actions/meeting-note";
+import { Plus, FileText, Trash2, Gavel, Clock, History, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, Link2, MessageSquare, Check, CheckSquare } from "lucide-react";
+import { createMeetingNote, updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete, updateRoadmapStatus, getMeetingNote } from "@/actions/meeting-note";
 import { getNoteCommentThreads } from "@/actions/note-comment";
 import { testDeadlineReminder } from "@/actions/deadline-reminder";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
@@ -37,15 +37,16 @@ import {
 } from "@/lib/note-timeline";
 import { NoteHistoryDialog } from "@/components/project/note-history-dialog";
 import { LinkedCountPopover } from "@/components/project/linked-count-popover";
+import { RoadmapBoard } from "@/components/project/roadmap-board";
+import { ROADMAP_COLUMNS, normalizeRoadmapStatus, type RoadmapStatus } from "@/lib/roadmap-status";
 import { cn } from "@/lib/utils";
 
-type NoteType = "MEETING_NOTE" | "DECISION" | "DEADLINE" | "PRODUCT" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+type NoteType = "MEETING_NOTE" | "DECISION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
 
 const NOTE_TYPE_CONFIG: Record<NoteType, { label: string; color: string; bgColor: string; icon: typeof FileText }> = {
   MEETING_NOTE: { label: "Meeting Note", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: FileText },
   DECISION: { label: "Decision", color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/20", icon: Gavel },
-  DEADLINE: { label: "Deadline", color: "text-rose-400", bgColor: "bg-rose-500/10 border-rose-500/20", icon: CalendarClock },
-  PRODUCT: { label: "Product", color: "text-emerald-400", bgColor: "bg-emerald-500/10 border-emerald-500/20", icon: Package },
+  DEADLINE: { label: "Roadmap", color: "text-rose-400", bgColor: "bg-rose-500/10 border-rose-500/20", icon: CalendarClock },
   FEATURE: { label: "Business Case", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: Sparkles },
   ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bgColor: "bg-violet-500/10 border-violet-500/20", icon: Wrench },
   BUG: { label: "Bug", color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/20", icon: Bug },
@@ -98,11 +99,18 @@ interface MeetingNote {
   noteType: string;
   dueDate?: Date | string | null;
   completedAt?: Date | string | null;
+  roadmapStatus?: string | null;
   createdAt: Date;
   updatedAt: Date;
   author: { id: string; name: string | null; imageUrl: string | null };
   task: LinkedTask | null;
-  taskLinks?: { task: LinkedTask }[];
+  taskLinks?: {
+    id?: string;
+    quoteText?: string | null;
+    createdAt?: Date | string;
+    createdBy?: { id: string; name: string | null; imageUrl: string | null };
+    task: LinkedTask;
+  }[];
   commentThreads?: {
     id: string;
     quoteText: string;
@@ -200,15 +208,17 @@ interface Props {
   allowedTaskTypes?: string[];
   activeContractType?: string | null;
   isActive?: boolean;
+  section?: "notes" | "roadmap";
   onFullscreenChange?: (open: boolean, goBack?: () => void) => void;
   onNotesChange?: (updater: (prev: MeetingNote[]) => MeetingNote[]) => void;
 }
 
-const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "DEADLINE", "PRODUCT", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
-const STANDALONE_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "DEADLINE", "PRODUCT"];
+const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "DEADLINE", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
+const NOTES_CREATE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION"];
+const ROADMAP_CREATE_TYPES: NoteType[] = ["DEADLINE"];
 
 export function MeetingNotesTab({
-  notes,
+  notes: allNotes,
   projectId,
   canEdit,
   currentUserId,
@@ -217,12 +227,24 @@ export function MeetingNotesTab({
   allowedTaskTypes = [],
   activeContractType = null,
   isActive = true,
+  section = "notes",
   onFullscreenChange,
   onNotesChange,
 }: Props) {
+  const isRoadmap = section === "roadmap";
+  const tabKey = isRoadmap ? "roadmap" : "notes";
+  const createTypes = isRoadmap ? ROADMAP_CREATE_TYPES : NOTES_CREATE_TYPES;
+  const notes = useMemo(
+    () =>
+      allNotes.filter((n) =>
+        isRoadmap ? n.noteType === "DEADLINE" : n.noteType !== "DEADLINE",
+      ),
+    [allNotes, isRoadmap],
+  );
   const [filter, setFilter] = useState<NoteType | "ALL">("ALL");
   const [view, setView] = useState<"list" | "create" | "detail">("list");
   const [selectedNote, setSelectedNote] = useState<MeetingNote | null>(null);
+  const [createStatus, setCreateStatus] = useState<RoadmapStatus>("PLANNED");
   const searchParams = useSearchParams();
   const dismissedNoteIdRef = useRef<string | null>(null);
 
@@ -240,10 +262,10 @@ export function MeetingNotesTab({
     setSelectedNote(null);
     params.delete("noteId");
     params.delete("threadId");
-    params.set("tab", "notes");
+    params.set("tab", tabKey);
     const qs = params.toString();
     window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
-  }, []);
+  }, [tabKey]);
 
   useEffect(() => {
     onFullscreenChange?.(view !== "list", view !== "list" ? goBack : undefined);
@@ -274,13 +296,40 @@ export function MeetingNotesTab({
   }, [setNotes]);
 
   const toggleComplete = useCallback(async (noteId: string) => {
-    const completedAt = await toggleDeadlineComplete(noteId);
+    const { completedAt, roadmapStatus } = await toggleDeadlineComplete(noteId);
     setNotes((prev) =>
-      prev.map((n) => (n.id === noteId ? { ...n, completedAt } : n)),
+      prev.map((n) => (n.id === noteId ? { ...n, completedAt, roadmapStatus } : n)),
     );
     setSelectedNote((prev) =>
-      prev?.id === noteId ? { ...prev, completedAt } : prev,
+      prev?.id === noteId ? { ...prev, completedAt, roadmapStatus } : prev,
     );
+  }, [setNotes]);
+
+  const moveStatus = useCallback(async (noteId: string, status: RoadmapStatus) => {
+    const completedAt = status === "SHIPPED" ? new Date() : null;
+    setNotes((prev) =>
+      prev.map((n) =>
+        n.id === noteId
+          ? { ...n, roadmapStatus: status, completedAt: status === "SHIPPED" ? n.completedAt ?? completedAt : null }
+          : n,
+      ),
+    );
+    setSelectedNote((prev) =>
+      prev?.id === noteId
+        ? { ...prev, roadmapStatus: status, completedAt: status === "SHIPPED" ? prev.completedAt ?? completedAt : null }
+        : prev,
+    );
+    try {
+      const result = await updateRoadmapStatus(noteId, status);
+      setNotes((prev) =>
+        prev.map((n) => (n.id === noteId ? { ...n, ...result } : n)),
+      );
+      setSelectedNote((prev) =>
+        prev?.id === noteId ? { ...prev, ...result } : prev,
+      );
+    } catch (err) {
+      console.error(err);
+    }
   }, [setNotes]);
 
   const filtered = useMemo(() => {
@@ -298,13 +347,14 @@ export function MeetingNotesTab({
     setSelectedNote(note);
     setView("detail");
     const params = new URLSearchParams(window.location.search);
-    params.set("tab", "notes");
+    params.set("tab", tabKey);
     params.set("noteId", note.id);
     params.delete("threadId");
     window.history.replaceState(null, "", `?${params.toString()}`);
   }
 
-  function openCreate() {
+  function openCreate(status: RoadmapStatus = "PLANNED") {
+    setCreateStatus(status);
     setView("create");
   }
 
@@ -312,6 +362,8 @@ export function MeetingNotesTab({
     return (
       <NoteFullScreenCreate
         projectId={projectId}
+        createTypes={createTypes}
+        defaultRoadmapStatus={createStatus}
         onCreated={(note) => {
           setNotes((prev) => [note, ...prev]);
           goBack();
@@ -334,6 +386,7 @@ export function MeetingNotesTab({
         initialThreadId={searchParams.get("threadId")}
         currentUserId={currentUserId}
         onToggleComplete={() => toggleComplete(selectedNote.id)}
+        onMoveStatus={(status) => moveStatus(selectedNote.id, status)}
         onRefresh={() => refreshNote(selectedNote.id)}
         onDelete={async () => {
           await deleteMeetingNote(selectedNote.id);
@@ -346,8 +399,24 @@ export function MeetingNotesTab({
 
   return (
     <div>
+      {isRoadmap ? (
+        <RoadmapBoard
+          notes={notes}
+          canEdit={canEdit}
+          currentUserId={currentUserId}
+          onOpen={(id) => {
+            const note = notes.find((n) => n.id === id);
+            if (note) openNote(note);
+          }}
+          onCreate={openCreate}
+          onMove={moveStatus}
+          onToggleComplete={(id) => void toggleComplete(id)}
+        />
+      ) : (
+      <>
+      {(usedTypes.length > 1 || canEdit) && (
       <div className="mb-4 flex items-center gap-2">
-        <h2 className="shrink-0 text-lg font-semibold">Notes</h2>
+        {usedTypes.length > 1 && (
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg bg-muted/50 p-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {(["ALL" as const, ...usedTypes]).map((t) => (
               <button
@@ -365,30 +434,36 @@ export function MeetingNotesTab({
               </button>
             ))}
         </div>
+        )}
         {canEdit && (
-          <>
-            <Button size="icon" className="shrink-0 sm:hidden" onClick={openCreate} aria-label="New note">
+          <div className="ml-auto flex items-center gap-2">
+            <Button size="icon" className="shrink-0 sm:hidden" onClick={openCreate} aria-label={isRoadmap ? "New roadmap item" : "New note"}>
               <Plus className="h-4 w-4" />
             </Button>
             <Button size="sm" className="hidden shrink-0 sm:inline-flex" onClick={openCreate}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
-              New Note
+              {isRoadmap ? "New Roadmap" : "New Note"}
             </Button>
-          </>
+          </div>
         )}
       </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-          <FileText className="h-10 w-10 mb-2 opacity-40" />
+          {isRoadmap ? (
+            <CalendarClock className="h-10 w-10 mb-2 opacity-40" />
+          ) : (
+            <FileText className="h-10 w-10 mb-2 opacity-40" />
+          )}
           <p className="text-sm">
-            {filter === "ALL" ? "No notes yet" : `No ${NOTE_TYPE_CONFIG[filter].label.toLowerCase()}s yet`}
+            {filter === "ALL" ? (isRoadmap ? "Nothing on the roadmap yet" : "No notes yet") : `No ${NOTE_TYPE_CONFIG[filter].label.toLowerCase()}s yet`}
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2.5 sm:[grid-template-columns:repeat(auto-fill,minmax(15.75rem,1fr))]">
           {filtered.map((note) => {
-            const cfg = NOTE_TYPE_CONFIG[(note.noteType as NoteType) ?? "MEETING_NOTE"];
+            const cfg = NOTE_TYPE_CONFIG[(note.noteType as NoteType)] ?? NOTE_TYPE_CONFIG.MEETING_NOTE;
             const Icon = cfg?.icon ?? FileText;
             const isDeadline = note.noteType === "DEADLINE";
             const deadlineStatus =
@@ -511,6 +586,8 @@ export function MeetingNotesTab({
           })}
         </div>
       )}
+      </>
+      )}
     </div>
   );
 }
@@ -520,18 +597,23 @@ export function MeetingNotesTab({
 function NoteFullScreenCreate({
   projectId,
   onCreated,
+  createTypes,
+  defaultRoadmapStatus = "PLANNED",
 }: {
   projectId: string;
   onCreated: (note: MeetingNote) => void;
+  createTypes: NoteType[];
+  defaultRoadmapStatus?: RoadmapStatus;
 }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [dueDate, setDueDate] = useState(new Date().toISOString().split("T")[0]);
-  const [noteType, setNoteType] = useState<NoteType | null>(null);
+  const [noteType, setNoteType] = useState<NoteType | null>(createTypes.length === 1 ? createTypes[0] : null);
   const [saving, setSaving] = useState(false);
   const [typeError, setTypeError] = useState(false);
   const [dueDateError, setDueDateError] = useState(false);
+  const [roadmapStatus, setRoadmapStatus] = useState<RoadmapStatus>(defaultRoadmapStatus);
 
   const isDeadline = noteType === "DEADLINE";
 
@@ -550,6 +632,7 @@ function NoteFullScreenCreate({
         date,
         noteType,
         ...(isDeadline && dueDate ? { dueDate } : {}),
+        ...(isDeadline ? { roadmapStatus } : {}),
       });
       const full = await getMeetingNote(created.id);
       onCreated(full as unknown as MeetingNote);
@@ -562,16 +645,14 @@ function NoteFullScreenCreate({
 
   const placeholders: Record<string, string> = {
     DECISION: "What was decided?",
-    DEADLINE: "Deadline title...",
+    DEADLINE: "Title...",
     MEETING_NOTE: "Meeting title...",
-    PRODUCT: "Product title...",
   };
 
   const editorPlaceholders: Record<string, string> = {
     DECISION: "Describe the context, options considered, and rationale... (type / for commands)",
-    DEADLINE: "Notes about this deadline... (type / for commands)",
+    DEADLINE: "Notes about this item... (type / for commands)",
     MEETING_NOTE: "Write your meeting notes here... (type / for commands)",
-    PRODUCT: "Describe the product... (type / for commands)",
   };
 
   return (
@@ -584,9 +665,10 @@ function NoteFullScreenCreate({
 
       <div className="max-w-4xl mx-auto w-full px-4 py-6 sm:px-8 sm:py-10 lg:px-16">
           {/* Type picker */}
+          {createTypes.length > 1 && (
           <div className="mb-6">
             <div className="flex gap-2 flex-wrap">
-              {STANDALONE_NOTE_TYPES.map((id) => {
+              {createTypes.map((id) => {
                 const cfg = NOTE_TYPE_CONFIG[id];
                 const Icon = cfg.icon;
                 const isActive = noteType === id;
@@ -608,6 +690,7 @@ function NoteFullScreenCreate({
             </div>
             {typeError && <p className="text-[11px] text-destructive mt-1.5">Please select a type</p>}
           </div>
+          )}
 
           <input
             value={title}
@@ -619,7 +702,7 @@ function NoteFullScreenCreate({
 
           <div className="flex items-center gap-3 mb-8 pb-6 border-b border-border/50">
             {isDeadline ? (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-end gap-4">
                 <div>
                   <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Due Date *</label>
                   <Input
@@ -629,6 +712,26 @@ function NoteFullScreenCreate({
                     className={cn("w-auto text-[13px] h-8", dueDateError && "border-destructive")}
                   />
                   {dueDateError && <p className="text-[10px] text-destructive mt-0.5">Required</p>}
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Status</label>
+                  <div className="flex flex-wrap gap-1">
+                    {ROADMAP_COLUMNS.map((col) => (
+                      <button
+                        key={col.id}
+                        type="button"
+                        onClick={() => setRoadmapStatus(col.id)}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                          roadmapStatus === col.id
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-border text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {col.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -667,6 +770,7 @@ function NoteFullScreenDetail({
   initialThreadId,
   currentUserId,
   onToggleComplete,
+  onMoveStatus,
   onRefresh,
   onDelete,
 }: {
@@ -681,6 +785,7 @@ function NoteFullScreenDetail({
   initialThreadId: string | null;
   currentUserId?: string;
   onToggleComplete: () => Promise<void>;
+  onMoveStatus?: (status: RoadmapStatus) => Promise<void>;
   onRefresh: () => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
@@ -734,8 +839,26 @@ function NoteFullScreenDetail({
         author: note.author,
         history: note.history,
         reminderLogs: note.reminderLogs,
+        comments: threads.flatMap((thread) =>
+          thread.comments.map((comment, i) => ({
+            id: comment.id,
+            content: comment.content,
+            quoteText: thread.quoteText,
+            createdAt: comment.createdAt,
+            user: comment.user,
+            isReply: i > 0,
+          })),
+        ),
+        tasks: (note.taskLinks ?? []).map((link, i) => ({
+          id: link.id ?? `${link.task.id}-${i}`,
+          quoteText: link.quoteText ?? null,
+          createdAt: link.createdAt ?? note.createdAt,
+          user: link.createdBy ?? note.author,
+          taskTitle: link.task.title,
+          taskCode: taskCode(link.task.taskType, link.task.taskNumber),
+        })),
       }),
-    [note],
+    [note, threads],
   );
 
   useEffect(() => {
@@ -744,7 +867,7 @@ function NoteFullScreenDetail({
     setCompletedAt(note.completedAt ?? null);
   }, [note]);
 
-  const config = NOTE_TYPE_CONFIG[(note.noteType as NoteType) ?? "MEETING_NOTE"];
+  const config = NOTE_TYPE_CONFIG[(note.noteType as NoteType)] ?? NOTE_TYPE_CONFIG.MEETING_NOTE;
   const Icon = config?.icon ?? FileText;
   const isDeadline = note.noteType === "DEADLINE";
   const deadlineStatus =
@@ -913,28 +1036,34 @@ function NoteFullScreenDetail({
               </span>
             </div>
 
-            {isDeadline && canEdit && (
-              <>
-                <button
-                  onClick={handleToggleComplete}
-                  disabled={togglingComplete}
-                  className={cn(
-                    "mb-4 inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors disabled:opacity-50",
-                    completedAt
-                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-primary"
-                  )}
-                >
-                  {completedAt ? (
-                    <><CheckCircle2 className="w-4 h-4" /> Completed</>
-                  ) : (
-                    <><Circle className="w-4 h-4" /> Mark as complete</>
-                  )}
-                </button>
-                {testMessage && (
-                  <p className="mb-4 text-[11px] text-muted-foreground">{testMessage}</p>
-                )}
-              </>
+            {isDeadline && (
+              <div className="mb-4 flex flex-wrap items-center gap-1.5">
+                {ROADMAP_COLUMNS.map((col) => {
+                  const active = normalizeRoadmapStatus(note.roadmapStatus, completedAt) === col.id;
+                  return (
+                    <button
+                      key={col.id}
+                      type="button"
+                      disabled={!canEdit || togglingComplete}
+                      onClick={() => {
+                        if (!canEdit || active) return;
+                        void onMoveStatus?.(col.id);
+                      }}
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50",
+                        active
+                          ? "border-foreground bg-foreground text-background"
+                          : "border-border text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {col.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {isDeadline && canEdit && testMessage && (
+              <p className="mb-4 text-[11px] text-muted-foreground">{testMessage}</p>
             )}
 
             {/* Created by + timestamps + linked task */}

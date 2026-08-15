@@ -12,6 +12,7 @@ const globalForPrisma = globalThis as unknown as {
   pool: Pool | undefined;
   /** The generated PrismaClient class this singleton was built from. */
   prismaClientClass: typeof PrismaClient | undefined;
+  prismaShutdownBound?: boolean;
 };
 
 // Pool size is env-tunable so we can raise it per-replica when a Postgres
@@ -19,7 +20,7 @@ const globalForPrisma = globalThis as unknown as {
 // scale-out without exhausting DB connections. Defaults to 10.
 const POOL_MAX = Number(process.env.PG_POOL_MAX ?? 10) || 10;
 
-function createClient() {
+function createPool() {
   const pool = new Pool({
     connectionString,
     max: POOL_MAX,
@@ -37,9 +38,7 @@ function createClient() {
     console.error("Unexpected pg pool error:", err.message);
   });
 
-  globalForPrisma.pool = pool;
-  const adapter = new PrismaPg(pool);
-  return new PrismaClient({ adapter });
+  return pool;
 }
 
 function getClient() {
@@ -52,12 +51,17 @@ function getClient() {
   ) {
     return globalForPrisma.prisma;
   }
-  if (globalForPrisma.pool) {
-    globalForPrisma.pool.end().catch(() => {});
-    globalForPrisma.pool = undefined;
+
+  // Keep the live pg pool. Ending it here races in-flight queries and throws
+  // "Cannot use a pool after calling end on the pool".
+  const existing = globalForPrisma.pool;
+  if (!existing || existing.ended) {
+    globalForPrisma.pool = createPool();
   }
+
   globalForPrisma.prismaClientClass = PrismaClient;
-  const client = createClient();
+  const adapter = new PrismaPg(globalForPrisma.pool);
+  const client = new PrismaClient({ adapter });
   globalForPrisma.prisma = client;
   return client;
 }
@@ -67,5 +71,9 @@ export const prisma = getClient();
 function gracefulShutdown() {
   globalForPrisma.pool?.end().catch(() => {});
 }
-process.on("SIGTERM", gracefulShutdown);
-process.on("SIGINT", gracefulShutdown);
+
+if (!globalForPrisma.prismaShutdownBound) {
+  globalForPrisma.prismaShutdownBound = true;
+  process.on("SIGTERM", gracefulShutdown);
+  process.on("SIGINT", gracefulShutdown);
+}

@@ -38,7 +38,7 @@ function statusFor(daysUntil: number) {
 
 function DeadlineRow({ item }: { item: IncompleteDeadlineRow }) {
   const status = statusFor(item.daysUntil);
-  const href = `/dashboard/projects/${item.project.id}?tab=notes`;
+  const href = `/dashboard/projects/${item.project.id}?tab=roadmap`;
 
   return (
     <Link
@@ -75,7 +75,7 @@ export function IncompleteDeadlines({ data }: { data: IncompleteDeadlineRow[] })
         <div className="mb-2.5 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-[14px] font-semibold">
             <CalendarClock className="h-4 w-4 text-muted-foreground" />
-            Incomplete Deadlines
+            Incomplete Roadmap
           </h2>
           {overdueCount > 0 && (
             <span className="flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-400">
@@ -87,7 +87,7 @@ export function IncompleteDeadlines({ data }: { data: IncompleteDeadlineRow[] })
         <div className="flex items-center gap-3 text-[11px]">
           {data.length > 0 ? (
             <span className="text-muted-foreground">
-              {data.length} open deadline{data.length === 1 ? "" : "s"}
+              {data.length} open item{data.length === 1 ? "" : "s"}
             </span>
           ) : (
             <span className="text-muted-foreground">All clear</span>
@@ -102,7 +102,7 @@ export function IncompleteDeadlines({ data }: { data: IncompleteDeadlineRow[] })
               className="mb-2 h-7 w-7 text-muted-foreground/20"
               strokeWidth={1.5}
             />
-            <p className="text-[12px] text-muted-foreground">No open deadlines</p>
+            <p className="text-[12px] text-muted-foreground">Nothing on the roadmap</p>
           </div>
         ) : (
           <div className="divide-y divide-border/50">

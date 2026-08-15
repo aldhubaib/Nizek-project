@@ -19,7 +19,7 @@ export function TaskCommentCard({
   const taskUrl = taskCommentUrl(payload.projectId, payload.taskId, payload.threadId);
 
   return (
-    <div className="min-w-[min(100%,320px)] max-w-md overflow-hidden rounded-xl border border-amber-500/35 bg-card/95 shadow-sm ring-1 ring-inset ring-amber-500/20">
+    <div className="w-full overflow-hidden rounded-xl border border-amber-500/35 bg-card/95 shadow-sm ring-1 ring-inset ring-amber-500/20">
       <div className="h-0.5 w-full bg-amber-400/70" />
       <div className="space-y-3 p-3.5">
         <div className="flex items-start gap-2.5">

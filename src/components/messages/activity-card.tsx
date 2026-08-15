@@ -61,7 +61,7 @@ export function ActivityCard({
   return (
     <div
       className={cn(
-        "min-w-[min(100%,320px)] max-w-md overflow-hidden rounded-xl border bg-card/95 shadow-sm ring-1 ring-inset",
+        "w-full overflow-hidden rounded-xl border bg-card/95 shadow-sm ring-1 ring-inset",
         theme.border,
         theme.ring,
       )}

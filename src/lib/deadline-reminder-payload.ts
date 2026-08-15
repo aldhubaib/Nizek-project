@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 import { ALL_MENTION_TOKEN } from "@/lib/mentions";
+import { projectNoteUrl } from "@/lib/project-note-url";
 
 export const NIZEK_BOT_NAME = "Nizek Bot";
 export const NIZEK_BOT_AUTHOR_ID = "nizek-bot";
@@ -65,7 +66,7 @@ export function deadlineReminderTheme(offsetDays: number): DeadlineReminderTheme
       pill: "border-yellow-500/30 bg-yellow-500/10 text-yellow-400",
       icon: "text-yellow-400",
       button: "border-yellow-500/30 bg-yellow-500/5 hover:bg-yellow-500/10 text-yellow-400",
-      category: "DEADLINE REMINDER",
+      category: "ROADMAP REMINDER",
       statusLabel: `Due in ${offsetDays} days`,
     };
   }
@@ -77,7 +78,7 @@ export function deadlineReminderTheme(offsetDays: number): DeadlineReminderTheme
     pill: "border-sky-500/30 bg-sky-500/10 text-sky-400",
     icon: "text-sky-400",
     button: "border-sky-500/30 bg-sky-500/5 hover:bg-sky-500/10 text-sky-400",
-    category: "DEADLINE REMINDER",
+    category: "ROADMAP REMINDER",
     statusLabel: `Due in ${offsetDays} days`,
   };
 }
@@ -108,7 +109,7 @@ export function decodeDeadlineReminderPayload(
 }
 
 export function deadlineReminderNoteUrl(projectId: string, noteId: string): string {
-  return `/dashboard/projects/${projectId}?tab=notes&noteId=${noteId}`;
+  return projectNoteUrl(projectId, noteId, { noteType: "DEADLINE" });
 }
 
 export function deadlineReminderPreview(payload: DeadlineReminderPayload): string {
