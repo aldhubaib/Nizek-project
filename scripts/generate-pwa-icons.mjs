@@ -2,11 +2,16 @@
 // installable out of the box (before any custom branding is uploaded).
 // Run: node scripts/generate-pwa-icons.mjs
 import sharp from "sharp";
-import { writeFile } from "node:fs/promises";
+import { writeFile, mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-const publicDir = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
+const publicDir = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "public",
+  "branding-defaults",
+);
 
 const BG = "#0a0a0a";
 const FG = "#4ade80";
@@ -54,6 +59,7 @@ function pngToIco(pngBuf, dim) {
 }
 
 async function main() {
+  await mkdir(publicDir, { recursive: true });
   await png(svg({ size: 192, rounded: true }), 192, "icon-192.png");
   await png(svg({ size: 512, rounded: true }), 512, "icon-512.png");
   await png(svg({ size: 192, scale: 0.7 }), 192, "icon-maskable-192.png");
@@ -63,7 +69,7 @@ async function main() {
   const fav = await png(svg({ size: 32, rounded: true }), 32, "favicon.png");
   await writeFile(join(publicDir, "favicon.ico"), pngToIco(fav, 32));
 
-  console.log("PWA icons written to /public");
+  console.log("PWA fallback icons written to /public/branding-defaults");
 }
 
 main().catch((err) => {

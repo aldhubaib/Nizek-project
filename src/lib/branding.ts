@@ -107,6 +107,9 @@ export async function getLiveLogos(): Promise<
     appleTouchIcon: pick("appleTouchIcon"),
     webLogo: pick("webLogo"),
     iosSplash: pick("iosSplash"),
+    manifest: `/manifest.json?v=${
+      Math.max(0, ...Object.values(map).map((e) => e.updatedAt))
+    }`,
   };
 }
 

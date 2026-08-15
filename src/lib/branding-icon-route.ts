@@ -30,7 +30,9 @@ export async function brandingIconResponse(
   }
 
   try {
-    const buf = await readFile(join(process.cwd(), "public", fallbackFile));
+    const buf = await readFile(
+      join(process.cwd(), "public", "branding-defaults", fallbackFile),
+    );
     return new NextResponse(buf, {
       headers: { "Content-Type": contentType, ...NO_STORE },
     });

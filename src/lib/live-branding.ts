@@ -9,6 +9,8 @@ export type LiveLogos = {
   appleTouchIcon: string | null;
   webLogo: string | null;
   iosSplash: string | null;
+  /** Cache-busted manifest href so installed PWAs re-read icons. */
+  manifest: string | null;
 };
 
 export const EMPTY_LIVE_LOGOS: LiveLogos = {
@@ -17,6 +19,7 @@ export const EMPTY_LIVE_LOGOS: LiveLogos = {
   appleTouchIcon: null,
   webLogo: null,
   iosSplash: null,
+  manifest: null,
 };
 
 function str(v: unknown): string | null {
@@ -34,6 +37,7 @@ export function parseLiveLogos(data: unknown): LiveLogos | null {
       appleTouchIcon: str(l.appleTouchIcon),
       webLogo: str(l.webLogo),
       iosSplash: str(l.iosSplash),
+      manifest: str(l.manifest),
     };
   }
   // Rolling-deploy compat: older /api/version only returned `logo`.
@@ -52,7 +56,8 @@ export function logosEqual(a: LiveLogos, b: LiveLogos): boolean {
     a.faviconDark === b.faviconDark &&
     a.appleTouchIcon === b.appleTouchIcon &&
     a.webLogo === b.webLogo &&
-    a.iosSplash === b.iosSplash
+    a.iosSplash === b.iosSplash &&
+    a.manifest === b.manifest
   );
 }
 
@@ -106,5 +111,9 @@ export function applyDocumentLogos(logos: LiveLogos) {
 
   if (logos.iosSplash) {
     upsertLink("apple-touch-startup-image", logos.iosSplash);
+  }
+
+  if (logos.manifest) {
+    upsertLink("manifest", logos.manifest);
   }
 }

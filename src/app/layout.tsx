@@ -4,9 +4,10 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdateNotifier } from "@/components/update-notifier";
+import { DisablePinchZoom } from "@/components/disable-pinch-zoom";
 import { BrandingProvider } from "@/components/branding-provider";
 import { getClientRelease } from "@/lib/version";
-import { getLiveLogos, getBrandingMap, brandingUrlWithBust } from "@/lib/branding";
+import { getLiveLogos, getBrandingMapUncached, brandingUrlWithBust } from "@/lib/branding";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,6 +21,12 @@ const geistMono = Geist_Mono({
 });
 
 export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  minimumScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
   themeColor: "#000000",
   // Shrink the layout viewport when the soft keyboard opens (Android Chrome).
   // iOS still needs the visualViewport frame hook in ThreadChat.
@@ -27,15 +34,14 @@ export const viewport: Viewport = {
 };
 
 export async function generateMetadata(): Promise<Metadata> {
-  const map = await getBrandingMap();
-  const favicon = brandingUrlWithBust(map, "favicon") ?? "/favicon.ico";
-  const faviconDark = map.faviconDark
-    ? brandingUrlWithBust(map, "faviconDark")
-    : null;
-  const apple = brandingUrlWithBust(map, "appleTouchIcon") ?? "/apple-touch-icon.png";
-  const splash = map.iosSplash
-    ? brandingUrlWithBust(map, "iosSplash")
-    : undefined;
+  const [map, logos] = await Promise.all([
+    getBrandingMapUncached(),
+    getLiveLogos(),
+  ]);
+  const favicon = logos.favicon ?? "/favicon.ico";
+  const faviconDark = logos.faviconDark;
+  const apple = logos.appleTouchIcon ?? "/apple-touch-icon.png";
+  const splash = logos.iosSplash ?? undefined;
   const og = map.ogImage
     ? brandingUrlWithBust(map, "ogImage")
     : undefined;
@@ -44,7 +50,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "Nizek Project",
     description: "Project management for teams",
     applicationName: "Nizek",
-    manifest: "/manifest.json",
+    manifest: logos.manifest ?? "/manifest.json",
     icons: {
       icon: faviconDark
         ? [
@@ -81,6 +87,7 @@ export default async function RootLayout({
       <body className="min-h-full bg-background text-foreground">
         <ClerkProvider appearance={{ baseTheme: dark }}>
           <BrandingProvider initialLogos={logos}>
+            <DisablePinchZoom />
             <TooltipProvider>{children}</TooltipProvider>
             <UpdateNotifier
               currentVersion={release.version}

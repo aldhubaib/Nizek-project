@@ -18,6 +18,7 @@ describe("parseLiveLogos", () => {
           appleTouchIcon: "https://cdn/a.png?v=1",
           webLogo: "https://cdn/w.svg?v=1",
           iosSplash: null,
+          manifest: "/manifest.json?v=9",
         },
       }),
     ).toEqual({
@@ -26,6 +27,7 @@ describe("parseLiveLogos", () => {
       appleTouchIcon: "https://cdn/a.png?v=1",
       webLogo: "https://cdn/w.svg?v=1",
       iosSplash: null,
+      manifest: "/manifest.json?v=9",
     });
   });
 
@@ -36,6 +38,7 @@ describe("parseLiveLogos", () => {
       appleTouchIcon: null,
       webLogo: null,
       iosSplash: null,
+      manifest: null,
     });
   });
 
@@ -70,6 +73,7 @@ describe("applyDocumentLogos", () => {
       appleTouchIcon: "https://cdn/a.png?v=2",
       webLogo: "https://cdn/w.svg?v=2",
       iosSplash: "https://cdn/s.png?v=2",
+      manifest: "/manifest.json?v=2",
     });
     const icon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
     const apple = document.querySelector<HTMLLinkElement>(
@@ -78,8 +82,12 @@ describe("applyDocumentLogos", () => {
     const splash = document.querySelector<HTMLLinkElement>(
       "link[rel='apple-touch-startup-image']",
     );
+    const manifest = document.querySelector<HTMLLinkElement>(
+      "link[rel='manifest']",
+    );
     expect(icon?.getAttribute("href")).toBe("https://cdn/f.png?v=2");
     expect(apple?.getAttribute("href")).toBe("https://cdn/a.png?v=2");
     expect(splash?.getAttribute("href")).toBe("https://cdn/s.png?v=2");
+    expect(manifest?.getAttribute("href")).toBe("/manifest.json?v=2");
   });
 });
