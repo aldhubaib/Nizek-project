@@ -7,6 +7,7 @@ import {
   CalendarClock,
   FileText,
   Gavel,
+  MessageCircleQuestion,
   Palette,
   Sparkles,
   Wrench,
@@ -50,6 +51,17 @@ const NOTE_THEME: Record<string, { icon: LucideIcon; theme: ActivityCardTheme }>
       iconWrap: "bg-amber-500/10 text-amber-400",
       button: "border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-amber-400",
       quote: "border-amber-400/60",
+    },
+  },
+  CLARIFICATION: {
+    icon: MessageCircleQuestion,
+    theme: {
+      accent: "text-sky-400",
+      border: "border-sky-500/35",
+      ring: "ring-sky-500/20",
+      iconWrap: "bg-sky-500/10 text-sky-400",
+      button: "border-sky-500/30 bg-sky-500/5 hover:bg-sky-500/10 text-sky-400",
+      quote: "border-sky-400/60",
     },
   },
   DEADLINE: {

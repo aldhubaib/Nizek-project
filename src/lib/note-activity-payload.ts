@@ -15,6 +15,7 @@ export type NoteActivityPayload = {
 const TYPE_LABEL: Record<string, string> = {
   MEETING_NOTE: "Meeting Note",
   DECISION: "Decision",
+  CLARIFICATION: "Clarification",
   DEADLINE: "RoadMap",
   FEATURE: "Business Case",
   ENHANCEMENT: "Enhancement",

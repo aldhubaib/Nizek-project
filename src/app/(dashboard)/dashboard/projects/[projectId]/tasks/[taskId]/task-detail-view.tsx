@@ -7,11 +7,13 @@ import {
   ArrowLeft, Loader2, MessageCircleQuestion, History, MessageSquare,
   ChevronRight, ChevronDown, Pencil, Check, Clock, Undo2, Gauge, Timer,
   FileText, Plus, Paperclip, X, MoreVertical, Trash2, ExternalLink,
+  CalendarClock,
 } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, moveTask as moveTaskAction, declineTask, deleteTask } from "@/actions/task";
 import { createMeetingNote, getTaskNotes } from "@/actions/meeting-note";
 import { AttachExistingNoteDialog } from "@/components/project/attach-existing-note-dialog";
+import { TaskRoadmapEditor } from "@/components/project/task-roadmap-editor";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { formatDistanceToNow } from "date-fns";
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
@@ -21,7 +23,7 @@ import { LinkedCountPopover } from "@/components/project/linked-count-popover";
 import type { TaskHighlightThreadView } from "@/components/project/task-highlight-popover";
 import { StageConfirmDialog, getCheckpoint } from "@/components/kanban/stage-confirm-dialog";
 import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
-import { projectNoteUrl } from "@/lib/project-note-url";
+import { projectNoteUrl, isRoadmapNote } from "@/lib/project-note-url";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
 import { markThreadRead } from "@/actions/messages";
@@ -204,11 +206,14 @@ export function TaskDetailPage({
   const menuRef = useRef<HTMLDivElement>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Notes
+  // Notes + roadmap (same NoteTaskLink; split by noteType)
   const [notes, setNotes] = useState<NoteData[]>(initialNotes);
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [attachNoteOpen, setAttachNoteOpen] = useState(false);
+  const [roadmapEditorOpen, setRoadmapEditorOpen] = useState(false);
+  const [attachRoadmapOpen, setAttachRoadmapOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [roadmapOpen, setRoadmapOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [highlightThreads, setHighlightThreads] = useState<TaskHighlightThreadView[]>([]);
   const [headerThreadId, setHeaderThreadId] = useState<string | null>(initialThreadId);
@@ -450,6 +455,9 @@ export function TaskDetailPage({
     setNotes(data);
   }
 
+  const attachedNotes = notes.filter((n) => !isRoadmapNote(n.noteType));
+  const attachedRoadmaps = notes.filter((n) => isRoadmapNote(n.noteType));
+
   return (
     <div className="min-h-screen">
       {/* Header */}
@@ -532,18 +540,18 @@ export function TaskDetailPage({
               {titleValue}
             </h1>
           )}
-          {(notes.length > 0 || highlightThreads.length > 0) && (
+          {(attachedNotes.length > 0 || attachedRoadmaps.length > 0 || highlightThreads.length > 0) && (
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground/70">
-              {notes.length > 0 && (
+              {attachedNotes.length > 0 && (
                 <LinkedCountPopover
-                  count={notes.length}
+                  count={attachedNotes.length}
                   singular="Note"
                   plural="Notes"
                   icon={FileText}
                   open={notesOpen}
                   onOpenChange={setNotesOpen}
                 >
-                  {notes.map((note) => (
+                  {attachedNotes.map((note) => (
                     <button
                       key={note.id}
                       type="button"
@@ -559,7 +567,32 @@ export function TaskDetailPage({
                   ))}
                 </LinkedCountPopover>
               )}
-              {notes.length > 0 && highlightThreads.length > 0 && <span>·</span>}
+              {attachedRoadmaps.length > 0 && (
+                <LinkedCountPopover
+                  count={attachedRoadmaps.length}
+                  singular="Roadmap item"
+                  plural="Roadmap items"
+                  icon={CalendarClock}
+                  open={roadmapOpen}
+                  onOpenChange={setRoadmapOpen}
+                >
+                  {attachedRoadmaps.map((note) => (
+                    <button
+                      key={note.id}
+                      type="button"
+                      onClick={() => {
+                        setRoadmapOpen(false);
+                        router.push(projectNoteUrl(projectId, note.id, { noteType: note.noteType }));
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-left text-sm hover:border-border"
+                    >
+                      <span className="min-w-0 flex-1 truncate">{note.title}</span>
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    </button>
+                  ))}
+                </LinkedCountPopover>
+              )}
+              {(attachedNotes.length > 0 || attachedRoadmaps.length > 0) && highlightThreads.length > 0 && <span>·</span>}
               {highlightThreads.length > 0 && (
                 <LinkedCountPopover
                   count={highlightThreads.length}
@@ -979,9 +1012,9 @@ export function TaskDetailPage({
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
               <h3 className="text-[13px] font-semibold">Notes</h3>
-              {notes.length > 0 && (
+              {attachedNotes.length > 0 && (
                 <span className="text-[10px] font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
-                  {notes.length}
+                  {attachedNotes.length}
                 </span>
               )}
             </div>
@@ -995,11 +1028,56 @@ export function TaskDetailPage({
               </Button>
             </div>
           </div>
-          {notes.length === 0 ? (
+          {attachedNotes.length === 0 ? (
             <p className="text-[12px] text-muted-foreground/60 py-2">No notes attached</p>
           ) : (
             <div className="space-y-2">
-              {notes.map((note) => (
+              {attachedNotes.map((note) => (
+                <button
+                  key={note.id}
+                  onClick={() => router.push(projectNoteUrl(projectId, note.id, { noteType: note.noteType }))}
+                  className="w-full text-left rounded-lg border border-border/60 bg-background p-3 hover:border-border transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-[12px] font-medium text-primary truncate">{note.title}</p>
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">
+                      {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">by {note.author.name ?? "Unknown"}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Roadmap */}
+        <div className="rounded-xl bg-card border border-border p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <CalendarClock className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+              <h3 className="text-[13px] font-semibold">Roadmap</h3>
+              {attachedRoadmaps.length > 0 && (
+                <span className="text-[10px] font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
+                  {attachedRoadmaps.length}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="ghost" onClick={() => setAttachRoadmapOpen(true)} className="h-7 text-xs">
+                Attach
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setRoadmapEditorOpen(true)} className="h-7 text-xs">
+                <Plus className="w-3 h-3 mr-1" />
+                New
+              </Button>
+            </div>
+          </div>
+          {attachedRoadmaps.length === 0 ? (
+            <p className="text-[12px] text-muted-foreground/60 py-2">No roadmap items attached</p>
+          ) : (
+            <div className="space-y-2">
+              {attachedRoadmaps.map((note) => (
                 <button
                   key={note.id}
                   onClick={() => router.push(projectNoteUrl(projectId, note.id, { noteType: note.noteType }))}
@@ -1071,11 +1149,31 @@ export function TaskDetailPage({
         />
       )}
 
+      {roadmapEditorOpen && (
+        <TaskRoadmapEditor
+          task={initialTask}
+          projectId={projectId}
+          taskTypeMeta={taskTypeMeta}
+          onClose={() => setRoadmapEditorOpen(false)}
+          onSaved={() => { setRoadmapEditorOpen(false); refreshNotes(); setActivityKey((k) => k + 1); }}
+        />
+      )}
+
       <AttachExistingNoteDialog
         open={attachNoteOpen}
         onClose={() => setAttachNoteOpen(false)}
         projectId={projectId}
         taskId={initialTask.id}
+        kind="notes"
+        onAttached={() => { refreshNotes(); setActivityKey((k) => k + 1); }}
+      />
+
+      <AttachExistingNoteDialog
+        open={attachRoadmapOpen}
+        onClose={() => setAttachRoadmapOpen(false)}
+        projectId={projectId}
+        taskId={initialTask.id}
+        kind="roadmap"
         onAttached={() => { refreshNotes(); setActivityKey((k) => k + 1); }}
       />
     </div>

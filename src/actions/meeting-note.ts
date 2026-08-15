@@ -19,7 +19,7 @@ export async function createMeetingNote(data: {
   title: string;
   content: string;
   date: string;
-  noteType?: "MEETING_NOTE" | "DECISION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+  noteType?: "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
   dueDate?: string;
   taskId?: string;
   roadmapStatus?: RoadmapStatus;
@@ -493,15 +493,26 @@ export async function searchProjectTasksForLink(projectId: string, query = "") {
   });
 }
 
-export async function searchProjectNotesForLink(projectId: string, taskId: string, query = "") {
+export async function searchProjectNotesForLink(
+  projectId: string,
+  taskId: string,
+  query = "",
+  opts?: { kind?: "notes" | "roadmap" },
+) {
   await requireProjectMember(projectId);
   const q = query.trim();
+  const kind = opts?.kind;
   return prisma.meetingNote.findMany({
     where: {
       projectId,
       NOT: {
         OR: [{ taskId }, { taskLinks: { some: { taskId } } }],
       },
+      ...(kind === "roadmap"
+        ? { noteType: "DEADLINE" }
+        : kind === "notes"
+          ? { noteType: { not: "DEADLINE" } }
+          : {}),
       ...(q ? { title: { contains: q, mode: "insensitive" } } : {}),
     },
     select: {

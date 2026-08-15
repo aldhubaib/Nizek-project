@@ -396,6 +396,7 @@ model TaskActivity {
 enum NoteType {
   MEETING_NOTE
   DECISION
+  CLARIFICATION
   DEADLINE
   FEATURE
   ENHANCEMENT

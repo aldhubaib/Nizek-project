@@ -2,6 +2,10 @@ export function projectNoteTab(noteType?: string | null): "notes" | "roadmap" {
   return noteType === "DEADLINE" ? "roadmap" : "notes";
 }
 
+export function isRoadmapNote(noteType?: string | null): boolean {
+  return noteType === "DEADLINE";
+}
+
 export function projectNoteUrl(
   projectId: string,
   noteId: string,

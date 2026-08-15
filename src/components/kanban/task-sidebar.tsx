@@ -3,13 +3,15 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Gauge, Timer, FileText, Plus, Maximize2, Trash2, MoreVertical } from "lucide-react";
+import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Gauge, Timer, FileText, Plus, Maximize2, Trash2, MoreVertical, CalendarClock } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, getTaskStageLogs, deleteTask } from "@/actions/task";
 import { createMeetingNote, updateMeetingNote, getTaskNotes, getMeetingNote } from "@/actions/meeting-note";
 import { getNoteCommentThreads } from "@/actions/note-comment";
 import { taskCode } from "@/lib/task-label";
 import { AttachExistingNoteDialog } from "@/components/project/attach-existing-note-dialog";
+import { TaskRoadmapEditor } from "@/components/project/task-roadmap-editor";
+import { isRoadmapNote } from "@/lib/project-note-url";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
@@ -97,98 +99,172 @@ interface Props {
   canSkipClientReview?: boolean;
 }
 
-function AttachedNotesSection({
-  task,
-  projectId,
-  onCreateNote,
-}: {
-  task: KanbanTask;
-  projectId: string;
-  onCreateNote: () => void;
-}) {
-  const [notes, setNotes] = useState<{
+type AttachedNoteRow = {
+  id: string;
+  title: string;
+  content: string;
+  noteType: string;
+  createdAt: Date;
+  author: { id: string; name: string | null; imageUrl?: string | null };
+  history?: {
     id: string;
-    title: string;
-    content: string;
-    noteType: string;
+    field: string;
+    oldValue: string | null;
+    newValue: string | null;
     createdAt: Date;
-    author: { id: string; name: string | null; imageUrl?: string | null };
-    history?: {
-      id: string;
-      field: string;
-      oldValue: string | null;
-      newValue: string | null;
-      createdAt: Date;
-      user: { id: string; name: string | null; imageUrl: string | null };
-    }[];
-    reminderLogs?: { id: string; offsetDays: number; sentAt: Date }[];
-  }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [viewingNote, setViewingNote] = useState<typeof notes[number] | null>(null);
+    user: { id: string; name: string | null; imageUrl: string | null };
+  }[];
+  reminderLogs?: { id: string; offsetDays: number; sentAt: Date }[];
+};
 
-  useEffect(() => {
-    getTaskNotes(task.id)
-      .then((data) => { setNotes(data); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [task.id]);
-
+function AttachedLinkBlock({
+  title,
+  icon: Icon,
+  items,
+  loading,
+  emptyText,
+  onAttach,
+  onCreate,
+  onSelect,
+}: {
+  title: string;
+  icon: typeof FileText;
+  items: AttachedNoteRow[];
+  loading: boolean;
+  emptyText: string;
+  onAttach: () => void;
+  onCreate: () => void;
+  onSelect: (note: AttachedNoteRow) => void;
+}) {
   return (
-    <>
-      <div className="mt-6 pt-6 border-t border-border">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-            <h3 className="text-[13px] font-semibold">Notes</h3>
-            {notes.length > 0 && (
-              <span className="text-[10px] font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
-                {notes.length}
-              </span>
-            )}
-          </div>
-          <Button size="sm" variant="ghost" onClick={onCreateNote} className="h-7 text-xs">
+    <div className="mt-6 pt-6 border-t border-border">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Icon className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+          <h3 className="text-[13px] font-semibold">{title}</h3>
+          {items.length > 0 && (
+            <span className="text-[10px] font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
+              {items.length}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <Button size="sm" variant="ghost" onClick={onAttach} className="h-7 text-xs">
+            Attach
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onCreate} className="h-7 text-xs">
             <Plus className="w-3 h-3 mr-1" />
             New
           </Button>
         </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-4">
-            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-          </div>
-        ) : notes.length === 0 ? (
-          <p className="text-[12px] text-muted-foreground/60 py-2">No notes attached</p>
-        ) : (
-          <div className="rounded-lg border border-border overflow-hidden">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="text-[11px] font-medium text-muted-foreground px-3 py-1.5">Title</th>
-                  <th className="text-[11px] font-medium text-muted-foreground px-3 py-1.5 w-24 text-right">Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {notes.map((note) => (
-                  <tr
-                    key={note.id}
-                    onClick={() => setViewingNote(note)}
-                    className="border-b border-border/30 last:border-0 hover:bg-accent/50 cursor-pointer transition-colors"
-                  >
-                    <td className="px-3 py-2">
-                      <p className="text-[12px] font-medium text-primary truncate max-w-[220px]">{note.title}</p>
-                      <p className="text-[10px] text-muted-foreground">by {note.author.name ?? "Unknown"}</p>
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                        {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-4">
+          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+        </div>
+      ) : items.length === 0 ? (
+        <p className="text-[12px] text-muted-foreground/60 py-2">{emptyText}</p>
+      ) : (
+        <div className="rounded-lg border border-border overflow-hidden">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="text-[11px] font-medium text-muted-foreground px-3 py-1.5">Title</th>
+                <th className="text-[11px] font-medium text-muted-foreground px-3 py-1.5 w-24 text-right">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((note) => (
+                <tr
+                  key={note.id}
+                  onClick={() => onSelect(note)}
+                  className="border-b border-border/30 last:border-0 hover:bg-accent/50 cursor-pointer transition-colors"
+                >
+                  <td className="px-3 py-2">
+                    <p className="text-[12px] font-medium text-primary truncate max-w-[220px]">{note.title}</p>
+                    <p className="text-[10px] text-muted-foreground">by {note.author.name ?? "Unknown"}</p>
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                      {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AttachedNotesSection({
+  task,
+  projectId,
+  refreshKey,
+  onCreateNote,
+  onCreateRoadmap,
+}: {
+  task: KanbanTask;
+  projectId: string;
+  refreshKey: number;
+  onCreateNote: () => void;
+  onCreateRoadmap: () => void;
+}) {
+  const [notes, setNotes] = useState<AttachedNoteRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [viewingNote, setViewingNote] = useState<AttachedNoteRow | null>(null);
+  const [attachNoteOpen, setAttachNoteOpen] = useState(false);
+  const [attachRoadmapOpen, setAttachRoadmapOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getTaskNotes(task.id)
+      .then((data) => {
+        if (cancelled) return;
+        setNotes(data as AttachedNoteRow[]);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [task.id, refreshKey]);
+
+  function reload() {
+    getTaskNotes(task.id)
+      .then((data) => { setNotes(data as AttachedNoteRow[]); setLoading(false); })
+      .catch(() => setLoading(false));
+  }
+
+  const attachedNotes = notes.filter((n) => !isRoadmapNote(n.noteType));
+  const attachedRoadmaps = notes.filter((n) => isRoadmapNote(n.noteType));
+
+  return (
+    <>
+      <AttachedLinkBlock
+        title="Notes"
+        icon={FileText}
+        items={attachedNotes}
+        loading={loading}
+        emptyText="No notes attached"
+        onAttach={() => setAttachNoteOpen(true)}
+        onCreate={onCreateNote}
+        onSelect={setViewingNote}
+      />
+      <AttachedLinkBlock
+        title="Roadmap"
+        icon={CalendarClock}
+        items={attachedRoadmaps}
+        loading={loading}
+        emptyText="No roadmap items attached"
+        onAttach={() => setAttachRoadmapOpen(true)}
+        onCreate={onCreateRoadmap}
+        onSelect={setViewingNote}
+      />
 
       {viewingNote && createPortal(
         <NoteFullScreenViewer
@@ -199,13 +275,30 @@ function AttachedNotesSection({
           onUpdated={async (updated) => {
             const fresh = await getMeetingNote(updated.id);
             setNotes((prev) =>
-              prev.map((n) => (n.id === updated.id ? (fresh as typeof notes[number]) : n)),
+              prev.map((n) => (n.id === updated.id ? (fresh as AttachedNoteRow) : n)),
             );
-            setViewingNote(fresh as typeof notes[number]);
+            setViewingNote(fresh as AttachedNoteRow);
           }}
         />,
         document.body
       )}
+
+      <AttachExistingNoteDialog
+        open={attachNoteOpen}
+        onClose={() => setAttachNoteOpen(false)}
+        projectId={projectId}
+        taskId={task.id}
+        kind="notes"
+        onAttached={reload}
+      />
+      <AttachExistingNoteDialog
+        open={attachRoadmapOpen}
+        onClose={() => setAttachRoadmapOpen(false)}
+        projectId={projectId}
+        taskId={task.id}
+        kind="roadmap"
+        onAttached={reload}
+      />
     </>
   );
 }
@@ -444,6 +537,8 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
   const [notePanelOpen, setNotePanelOpen] = useState(false);
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
+  const [roadmapEditorOpen, setRoadmapEditorOpen] = useState(false);
+  const [linksRefreshKey, setLinksRefreshKey] = useState(0);
   const [questionsOpen, setQuestionsOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -895,7 +990,9 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
           <AttachedNotesSection
             task={task}
             projectId={projectId}
+            refreshKey={linksRefreshKey}
             onCreateNote={() => { setNotePanelOpen(false); setNoteEditorOpen(true); }}
+            onCreateRoadmap={() => { setNotePanelOpen(false); setRoadmapEditorOpen(true); }}
           />
 
           {/* Comments */}
@@ -1040,7 +1137,17 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
           projectId={projectId}
           taskTypeMeta={taskTypeMeta}
           onClose={() => setNoteEditorOpen(false)}
-          onSaved={() => { setNoteEditorOpen(false); setNotePanelOpen(true); }}
+          onSaved={() => { setNoteEditorOpen(false); setNotePanelOpen(true); setLinksRefreshKey((k) => k + 1); }}
+        />
+      )}
+
+      {roadmapEditorOpen && (
+        <TaskRoadmapEditor
+          task={task}
+          projectId={projectId}
+          taskTypeMeta={taskTypeMeta}
+          onClose={() => setRoadmapEditorOpen(false)}
+          onSaved={() => { setRoadmapEditorOpen(false); setLinksRefreshKey((k) => k + 1); }}
         />
       )}
     </>
@@ -1064,7 +1171,7 @@ function TaskNotesPanel({
   onClose: () => void;
   onCreateNote: () => void;
 }) {
-  const [notes, setNotes] = useState<{ id: string; title: string; content: string; createdAt: Date; author: { name: string | null } }[]>([]);
+  const [notes, setNotes] = useState<{ id: string; title: string; content: string; noteType?: string; createdAt: Date; author: { name: string | null } }[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(true);
   const [viewingNote, setViewingNote] = useState<typeof notes[number] | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -1075,6 +1182,8 @@ function TaskNotesPanel({
       setLoadingNotes(false);
     }).catch(() => setLoadingNotes(false));
   }, [task.id]);
+
+  const displayNotes = notes.filter((n) => !isRoadmapNote(n.noteType));
 
   if (viewingNote) {
     return (
@@ -1141,7 +1250,7 @@ function TaskNotesPanel({
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
             </div>
-          ) : notes.length === 0 ? (
+          ) : displayNotes.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <FileText className="w-8 h-8 mb-2 opacity-30" />
               <p className="text-sm">No notes for this task</p>
@@ -1152,7 +1261,7 @@ function TaskNotesPanel({
             </div>
           ) : (
             <div className="py-1">
-              {notes.map((note) => (
+              {displayNotes.map((note) => (
                 <button
                   key={note.id}
                   onClick={() => setViewingNote(note)}
@@ -1174,6 +1283,7 @@ function TaskNotesPanel({
       onClose={() => setAttachOpen(false)}
       projectId={projectId}
       taskId={task.id}
+      kind="notes"
       onAttached={() => {
         setLoadingNotes(true);
         getTaskNotes(task.id)

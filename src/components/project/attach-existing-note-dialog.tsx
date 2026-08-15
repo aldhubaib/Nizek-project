@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, FileText } from "lucide-react";
+import { Loader2, CalendarClock, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,41 +29,45 @@ export function AttachExistingNoteDialog({
   projectId,
   taskId,
   onAttached,
+  kind = "notes",
 }: {
   open: boolean;
   onClose: () => void;
   projectId: string;
   taskId: string;
   onAttached: () => void;
+  kind?: "notes" | "roadmap";
 }) {
   const [query, setQuery] = useState("");
   const [notes, setNotes] = useState<NoteRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [attaching, setAttaching] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const isRoadmap = kind === "roadmap";
+  const Icon = isRoadmap ? CalendarClock : FileText;
 
   useEffect(() => {
     if (!open) return;
     setQuery("");
     setError(null);
     setLoading(true);
-    searchProjectNotesForLink(projectId, taskId, "")
+    searchProjectNotesForLink(projectId, taskId, "", { kind })
       .then((rows) => setNotes(rows as NoteRow[]))
       .catch(() => setNotes([]))
       .finally(() => setLoading(false));
-  }, [open, projectId, taskId]);
+  }, [open, projectId, taskId, kind]);
 
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(() => {
       setLoading(true);
-      searchProjectNotesForLink(projectId, taskId, query)
+      searchProjectNotesForLink(projectId, taskId, query, { kind })
         .then((rows) => setNotes(rows as NoteRow[]))
         .catch(() => setNotes([]))
         .finally(() => setLoading(false));
     }, 200);
     return () => clearTimeout(t);
-  }, [query, open, projectId, taskId]);
+  }, [query, open, projectId, taskId, kind]);
 
   async function attach(noteId: string) {
     setAttaching(noteId);
@@ -84,15 +88,15 @@ export function AttachExistingNoteDialog({
       <DialogContent className="flex max-h-[80dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
         <DialogHeader className="shrink-0 border-b border-border px-4 py-3">
           <DialogTitle className="flex items-center gap-2 text-sm">
-            <FileText className="h-4 w-4 text-primary" />
-            Attach existing note
+            <Icon className="h-4 w-4 text-primary" />
+            {isRoadmap ? "Attach existing roadmap item" : "Attach existing note"}
           </DialogTitle>
         </DialogHeader>
         <div className="p-3">
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search notes…"
+            placeholder={isRoadmap ? "Search roadmap…" : "Search notes…"}
             className="h-9"
             autoFocus
           />
@@ -104,7 +108,7 @@ export function AttachExistingNoteDialog({
             </div>
           ) : notes.length === 0 ? (
             <p className="px-2 py-8 text-center text-sm text-muted-foreground">
-              No matching notes
+              {isRoadmap ? "No matching roadmap items" : "No matching notes"}
             </p>
           ) : (
             notes.map((n) => (

@@ -6,7 +6,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, FileText, Trash2, Gavel, Clock, History, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, Link2, MessageSquare, Check, CheckSquare } from "lucide-react";
+import { Plus, FileText, Trash2, Gavel, Clock, History, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, Link2, MessageSquare, Check, CheckSquare, MessageCircleQuestion } from "lucide-react";
 import { createMeetingNote, updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete, updateRoadmapStatus, getMeetingNote } from "@/actions/meeting-note";
 import { getNoteCommentThreads } from "@/actions/note-comment";
 import { testDeadlineReminder } from "@/actions/deadline-reminder";
@@ -41,11 +41,12 @@ import { RoadmapBoard } from "@/components/project/roadmap-board";
 import { ROADMAP_COLUMNS, normalizeRoadmapStatus, type RoadmapStatus } from "@/lib/roadmap-status";
 import { cn } from "@/lib/utils";
 
-type NoteType = "MEETING_NOTE" | "DECISION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+type NoteType = "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
 
 const NOTE_TYPE_CONFIG: Record<NoteType, { label: string; color: string; bgColor: string; icon: typeof FileText }> = {
   MEETING_NOTE: { label: "Meeting Note", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: FileText },
   DECISION: { label: "Decision", color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/20", icon: Gavel },
+  CLARIFICATION: { label: "Clarification", color: "text-sky-400", bgColor: "bg-sky-500/10 border-sky-500/20", icon: MessageCircleQuestion },
   DEADLINE: { label: "Roadmap", color: "text-rose-400", bgColor: "bg-rose-500/10 border-rose-500/20", icon: CalendarClock },
   FEATURE: { label: "Business Case", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: Sparkles },
   ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bgColor: "bg-violet-500/10 border-violet-500/20", icon: Wrench },
@@ -213,8 +214,8 @@ interface Props {
   onNotesChange?: (updater: (prev: MeetingNote[]) => MeetingNote[]) => void;
 }
 
-const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "DEADLINE", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
-const NOTES_CREATE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION"];
+const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "CLARIFICATION", "DEADLINE", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
+const NOTES_CREATE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "CLARIFICATION"];
 const ROADMAP_CREATE_TYPES: NoteType[] = ["DEADLINE"];
 
 export function MeetingNotesTab({
@@ -645,12 +646,14 @@ function NoteFullScreenCreate({
 
   const placeholders: Record<string, string> = {
     DECISION: "What was decided?",
+    CLARIFICATION: "What needs clarifying?",
     DEADLINE: "Title...",
     MEETING_NOTE: "Meeting title...",
   };
 
   const editorPlaceholders: Record<string, string> = {
     DECISION: "Describe the context, options considered, and rationale... (type / for commands)",
+    CLARIFICATION: "Capture the questions, missing details, and what was clarified... (type / for commands)",
     DEADLINE: "Notes about this item... (type / for commands)",
     MEETING_NOTE: "Write your meeting notes here... (type / for commands)",
   };
