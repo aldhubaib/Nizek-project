@@ -17,8 +17,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await processDeadlineReminders();
-  return NextResponse.json({ ok: true, ...result });
+  try {
+    const result = await processDeadlineReminders();
+    return NextResponse.json({ ok: true, ...result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Deadline reminders failed";
+    console.error("deadline-reminders cron failed:", err);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {

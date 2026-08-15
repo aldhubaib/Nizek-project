@@ -277,14 +277,19 @@ export async function processDeadlineReminders(): Promise<{
       continue;
     }
 
-    const result = await sendDeadlineReminderForNote({
-      noteId: note.id,
-      offsetDays: days,
-      authorId: note.authorId,
-    });
+    try {
+      const result = await sendDeadlineReminderForNote({
+        noteId: note.id,
+        offsetDays: days,
+        authorId: note.authorId,
+      });
 
-    if (result.ok) sent++;
-    else skipped++;
+      if (result.ok) sent++;
+      else skipped++;
+    } catch (err) {
+      console.error("deadline reminder failed for note", note.id, err);
+      skipped++;
+    }
   }
 
   return { processed: notes.length, sent, skipped };

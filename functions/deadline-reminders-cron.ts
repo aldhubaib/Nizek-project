@@ -19,6 +19,9 @@ const res = await fetch(url, {
 
 const body = await res.text();
 console.log(`POST ${url} → ${res.status}`);
-console.log(body);
+console.log(body || "(empty body)");
 
-if (!res.ok) process.exit(1);
+if (!res.ok) {
+  console.error("deadline-reminders cron request failed");
+  process.exit(1);
+}
