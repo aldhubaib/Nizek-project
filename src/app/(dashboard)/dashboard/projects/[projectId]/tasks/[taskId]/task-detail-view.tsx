@@ -22,6 +22,7 @@ import type { TaskHighlightThreadView } from "@/components/project/task-highligh
 import { StageConfirmDialog, getCheckpoint } from "@/components/kanban/stage-confirm-dialog";
 import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
 import { projectNoteUrl } from "@/lib/project-note-url";
+import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
 import { markThreadRead } from "@/actions/messages";
 import { closePushBannersByTags } from "@/lib/close-push-banners";

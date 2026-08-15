@@ -55,12 +55,11 @@ function getClient() {
   // Keep the live pg pool. Ending it here races in-flight queries and throws
   // "Cannot use a pool after calling end on the pool".
   const existing = globalForPrisma.pool;
-  if (!existing || existing.ended) {
-    globalForPrisma.pool = createPool();
-  }
+  const pool = !existing || existing.ended ? createPool() : existing;
+  globalForPrisma.pool = pool;
 
   globalForPrisma.prismaClientClass = PrismaClient;
-  const adapter = new PrismaPg(globalForPrisma.pool);
+  const adapter = new PrismaPg(pool);
   const client = new PrismaClient({ adapter });
   globalForPrisma.prisma = client;
   return client;

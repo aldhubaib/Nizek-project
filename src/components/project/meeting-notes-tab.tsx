@@ -437,10 +437,10 @@ export function MeetingNotesTab({
         )}
         {canEdit && (
           <div className="ml-auto flex items-center gap-2">
-            <Button size="icon" className="shrink-0 sm:hidden" onClick={openCreate} aria-label={isRoadmap ? "New roadmap item" : "New note"}>
+            <Button size="icon" className="shrink-0 sm:hidden" onClick={() => openCreate()} aria-label={isRoadmap ? "New roadmap item" : "New note"}>
               <Plus className="h-4 w-4" />
             </Button>
-            <Button size="sm" className="hidden shrink-0 sm:inline-flex" onClick={openCreate}>
+            <Button size="sm" className="hidden shrink-0 sm:inline-flex" onClick={() => openCreate()}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               {isRoadmap ? "New Roadmap" : "New Note"}
             </Button>
