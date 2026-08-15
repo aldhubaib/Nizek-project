@@ -8,14 +8,14 @@ export const ROADMAP_COLUMNS: {
 }[] = [
   { id: "PLANNED", label: "Planned" },
   { id: "NEXT", label: "Next" },
-  { id: "PROGRESS", label: "Progress" },
+  { id: "PROGRESS", label: "In Progress" },
   { id: "SHIPPED", label: "Shipped" },
 ];
 
 const LABELS: Record<RoadmapStatus, string> = {
   PLANNED: "Planned",
   NEXT: "Next",
-  PROGRESS: "Progress",
+  PROGRESS: "In Progress",
   SHIPPED: "Shipped",
 };
 
