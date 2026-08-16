@@ -6,7 +6,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, FileText, Trash2, Gavel, Clock, History, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, Link2, MessageSquare, Check, CheckSquare, MessageCircleQuestion } from "lucide-react";
+import { Plus, FileText, Trash2, Gavel, Clock, History, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, Link2, MessageSquare, Check, CheckSquare, MessageCircleQuestion, MoreVertical } from "lucide-react";
 import { createMeetingNote, updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete, updateRoadmapStatus, getMeetingNote } from "@/actions/meeting-note";
 import { getNoteCommentThreads } from "@/actions/note-comment";
 import { testDeadlineReminder } from "@/actions/deadline-reminder";
@@ -19,6 +19,8 @@ import { PageHeaderActions } from "@/components/page-header-actions";
 import { PageOverflowItems } from "@/components/page-overflow-menu";
 import { taskCode } from "@/lib/task-label";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -26,6 +28,7 @@ import {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   DEADLINE_REMINDER_TEST_SCENARIOS,
@@ -36,9 +39,11 @@ import {
   buildNoteTimeline,
 } from "@/lib/note-timeline";
 import { NoteHistoryDialog } from "@/components/project/note-history-dialog";
+import { NoteSlideOver } from "@/components/project/note-slide-over";
 import { LinkedCountPopover } from "@/components/project/linked-count-popover";
 import { RoadmapBoard } from "@/components/project/roadmap-board";
-import { ROADMAP_COLUMNS, normalizeRoadmapStatus, type RoadmapStatus } from "@/lib/roadmap-status";
+import { ROADMAP_COLUMNS, normalizeRoadmapStatus, roadmapAllowsCreateTask, roadmapScheduleError, type RoadmapStatus } from "@/lib/roadmap-status";
+import { formatWorkingDays, parseWorkingDays } from "@/lib/working-days";
 import { cn } from "@/lib/utils";
 
 type NoteType = "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
@@ -92,13 +97,14 @@ interface LinkedTask {
   stage?: string;
 }
 
-interface MeetingNote {
+export interface MeetingNote {
   id: string;
   title: string;
   content: string;
   date: Date;
   noteType: string;
   dueDate?: Date | string | null;
+  workingDays?: number | null;
   completedAt?: Date | string | null;
   roadmapStatus?: string | null;
   createdAt: Date;
@@ -246,6 +252,7 @@ export function MeetingNotesTab({
   const [view, setView] = useState<"list" | "create" | "detail">("list");
   const [selectedNote, setSelectedNote] = useState<MeetingNote | null>(null);
   const [createStatus, setCreateStatus] = useState<RoadmapStatus>("PLANNED");
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const dismissedNoteIdRef = useRef<string | null>(null);
 
@@ -297,6 +304,15 @@ export function MeetingNotesTab({
   }, [setNotes]);
 
   const toggleComplete = useCallback(async (noteId: string) => {
+    const note = notes.find((n) => n.id === noteId);
+    if (note && !note.completedAt) {
+      const blocked = roadmapScheduleError("SHIPPED", note.dueDate, note.workingDays);
+      if (blocked) {
+        setScheduleError(blocked);
+        return;
+      }
+    }
+    setScheduleError(null);
     const { completedAt, roadmapStatus } = await toggleDeadlineComplete(noteId);
     setNotes((prev) =>
       prev.map((n) => (n.id === noteId ? { ...n, completedAt, roadmapStatus } : n)),
@@ -304,9 +320,20 @@ export function MeetingNotesTab({
     setSelectedNote((prev) =>
       prev?.id === noteId ? { ...prev, completedAt, roadmapStatus } : prev,
     );
-  }, [setNotes]);
+  }, [setNotes, notes]);
 
   const moveStatus = useCallback(async (noteId: string, status: RoadmapStatus) => {
+    const note =
+      notes.find((n) => n.id === noteId) ??
+      (selectedNote?.id === noteId ? selectedNote : null);
+    const blocked = roadmapScheduleError(status, note?.dueDate, note?.workingDays);
+    if (blocked) {
+      setScheduleError(blocked);
+      return;
+    }
+    setScheduleError(null);
+    const prevStatus = note?.roadmapStatus;
+    const prevCompleted = note?.completedAt ?? null;
     const completedAt = status === "SHIPPED" ? new Date() : null;
     setNotes((prev) =>
       prev.map((n) =>
@@ -329,9 +356,21 @@ export function MeetingNotesTab({
         prev?.id === noteId ? { ...prev, ...result } : prev,
       );
     } catch (err) {
-      console.error(err);
+      setNotes((prev) =>
+        prev.map((n) =>
+          n.id === noteId
+            ? { ...n, roadmapStatus: prevStatus, completedAt: prevCompleted }
+            : n,
+        ),
+      );
+      setSelectedNote((prev) =>
+        prev?.id === noteId
+          ? { ...prev, roadmapStatus: prevStatus, completedAt: prevCompleted }
+          : prev,
+      );
+      setScheduleError(err instanceof Error ? err.message : "Could not update status");
     }
-  }, [setNotes]);
+  }, [setNotes, notes, selectedNote]);
 
   const filtered = useMemo(() => {
     if (filter === "ALL") return notes;
@@ -388,6 +427,7 @@ export function MeetingNotesTab({
         currentUserId={currentUserId}
         onToggleComplete={() => toggleComplete(selectedNote.id)}
         onMoveStatus={(status) => moveStatus(selectedNote.id, status)}
+        scheduleError={scheduleError}
         onRefresh={() => refreshNote(selectedNote.id)}
         onDelete={async () => {
           await deleteMeetingNote(selectedNote.id);
@@ -401,6 +441,12 @@ export function MeetingNotesTab({
   return (
     <div>
       {isRoadmap ? (
+        <>
+        {scheduleError && (
+          <p className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
+            {scheduleError}
+          </p>
+        )}
         <RoadmapBoard
           notes={notes}
           canEdit={canEdit}
@@ -411,8 +457,10 @@ export function MeetingNotesTab({
           }}
           onCreate={openCreate}
           onMove={moveStatus}
+          onBlocked={setScheduleError}
           onToggleComplete={(id) => void toggleComplete(id)}
         />
+        </>
       ) : (
       <>
       {(usedTypes.length > 1 || canEdit) && (
@@ -531,10 +579,15 @@ export function MeetingNotesTab({
                   {note.title}
                 </h3>
 
-                {deadlineStatus && (
-                  <span className={`mt-2 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${deadlineStatus.bg} ${deadlineStatus.color}`}>
-                    {deadlineStatus.label}
-                    {note.dueDate ? ` · ${format(new Date(note.dueDate), "MMM d, yyyy")}` : ""}
+                {(deadlineStatus || note.workingDays != null) && (
+                  <span className={`mt-2 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${deadlineStatus?.bg ?? "bg-muted border-border"} ${deadlineStatus?.color ?? "text-muted-foreground"}`}>
+                    {[
+                      deadlineStatus?.label,
+                      note.dueDate ? format(new Date(note.dueDate), "MMM d, yyyy") : null,
+                      note.workingDays != null ? formatWorkingDays(note.workingDays) : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                 )}
 
@@ -609,11 +662,12 @@ function NoteFullScreenCreate({
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [dueDate, setDueDate] = useState(new Date().toISOString().split("T")[0]);
+  const [dueDate, setDueDate] = useState("");
+  const [workingDays, setWorkingDays] = useState("");
+  const [workingDaysError, setWorkingDaysError] = useState<string | null>(null);
   const [noteType, setNoteType] = useState<NoteType | null>(createTypes.length === 1 ? createTypes[0] : null);
   const [saving, setSaving] = useState(false);
   const [typeError, setTypeError] = useState(false);
-  const [dueDateError, setDueDateError] = useState(false);
   const [roadmapStatus, setRoadmapStatus] = useState<RoadmapStatus>(defaultRoadmapStatus);
 
   const isDeadline = noteType === "DEADLINE";
@@ -621,9 +675,22 @@ function NoteFullScreenCreate({
   async function handleSave() {
     if (!noteType) { setTypeError(true); return; }
     if (!title.trim()) return;
-    if (isDeadline && !dueDate) { setDueDateError(true); return; }
+    let days: number | null = null;
+    if (isDeadline) {
+      try {
+        days = parseWorkingDays(workingDays);
+        setWorkingDaysError(null);
+      } catch (e) {
+        setWorkingDaysError(e instanceof Error ? e.message : "Invalid working days");
+        return;
+      }
+      const blocked = roadmapScheduleError(roadmapStatus, dueDate || null, days);
+      if (blocked) {
+        setWorkingDaysError(blocked);
+        return;
+      }
+    }
     setTypeError(false);
-    setDueDateError(false);
     setSaving(true);
     try {
       const created = await createMeetingNote({
@@ -633,12 +700,12 @@ function NoteFullScreenCreate({
         date,
         noteType,
         ...(isDeadline && dueDate ? { dueDate } : {}),
-        ...(isDeadline ? { roadmapStatus } : {}),
+        ...(isDeadline ? { roadmapStatus, workingDays: days } : {}),
       });
       const full = await getMeetingNote(created.id);
       onCreated(full as unknown as MeetingNote);
     } catch (err) {
-      console.error(err);
+      setWorkingDaysError(err instanceof Error ? err.message : "Could not save");
     } finally {
       setSaving(false);
     }
@@ -678,7 +745,7 @@ function NoteFullScreenCreate({
                 return (
                   <button
                     key={id}
-                    onClick={() => { setNoteType(id); setTypeError(false); setDueDateError(false); }}
+                    onClick={() => { setNoteType(id); setTypeError(false); }}
                     className={cn(
                       "flex items-center gap-2 rounded-lg border px-4 py-2 text-[13px] font-medium transition-colors",
                       isActive ? `${cfg.bgColor} ${cfg.color}` : "border-border text-muted-foreground hover:border-muted-foreground/40",
@@ -707,14 +774,35 @@ function NoteFullScreenCreate({
             {isDeadline ? (
               <div className="flex flex-wrap items-end gap-4">
                 <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Due Date *</label>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Due Date</label>
                   <Input
                     type="date"
                     value={dueDate}
-                    onChange={(e) => { setDueDate(e.target.value); setDueDateError(false); }}
-                    className={cn("w-auto text-[13px] h-8", dueDateError && "border-destructive")}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-auto text-[13px] h-8"
                   />
-                  {dueDateError && <p className="text-[10px] text-destructive mt-0.5">Required</p>}
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Required before Next</p>
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Working Days</label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                    placeholder="e.g. 5"
+                    value={workingDays}
+                    onChange={(e) => {
+                      setWorkingDays(e.target.value);
+                      setWorkingDaysError(null);
+                    }}
+                    className="w-28 text-[13px] h-8"
+                  />
+                  {workingDaysError ? (
+                    <p className="text-[10px] text-destructive mt-0.5">{workingDaysError}</p>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Required before Next</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Status</label>
@@ -761,7 +849,7 @@ function NoteFullScreenCreate({
 
 /* ─── Full-screen detail ─── */
 
-function NoteFullScreenDetail({
+export function NoteFullScreenDetail({
   note,
   projectId,
   canEdit,
@@ -776,6 +864,8 @@ function NoteFullScreenDetail({
   onMoveStatus,
   onRefresh,
   onDelete,
+  scheduleError,
+  onClose,
 }: {
   note: MeetingNote;
   projectId: string;
@@ -791,10 +881,20 @@ function NoteFullScreenDetail({
   onMoveStatus?: (status: RoadmapStatus) => Promise<void>;
   onRefresh: () => Promise<void>;
   onDelete: () => Promise<void>;
+  scheduleError?: string | null;
+  /** When set, this is a slide-over covering the current page (chat). */
+  onClose?: () => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(note.title);
   const [content, setContent] = useState(note.content);
+  const [dueDate, setDueDate] = useState(
+    note.dueDate ? new Date(note.dueDate).toISOString().split("T")[0] : "",
+  );
+  const [workingDays, setWorkingDays] = useState(
+    note.workingDays != null ? String(note.workingDays) : "",
+  );
+  const [workingDaysError, setWorkingDaysError] = useState<string | null>(null);
   const [completedAt, setCompletedAt] = useState<Date | string | null>(
     note.completedAt ?? null,
   );
@@ -868,11 +968,18 @@ function NoteFullScreenDetail({
     setTitle(note.title);
     setContent(note.content);
     setCompletedAt(note.completedAt ?? null);
+    setDueDate(note.dueDate ? new Date(note.dueDate).toISOString().split("T")[0] : "");
+    setWorkingDays(note.workingDays != null ? String(note.workingDays) : "");
   }, [note]);
 
   const config = NOTE_TYPE_CONFIG[(note.noteType as NoteType)] ?? NOTE_TYPE_CONFIG.MEETING_NOTE;
   const Icon = config?.icon ?? FileText;
   const isDeadline = note.noteType === "DEADLINE";
+  const currentRoadmapStatus = normalizeRoadmapStatus(note.roadmapStatus, completedAt);
+  const canCreateTaskFromNote =
+    isActive &&
+    allowedTaskTypes.length > 0 &&
+    (!isDeadline || roadmapAllowsCreateTask(currentRoadmapStatus));
   const deadlineStatus =
     isDeadline && note.dueDate
       ? getDeadlineStatus(note.dueDate, completedAt)
@@ -912,8 +1019,24 @@ function NoteFullScreenDetail({
 
   async function handleSave() {
     setSaving(true);
+    setWorkingDaysError(null);
     try {
-      await updateMeetingNote({ noteId: note.id, title: title.trim(), content });
+      let days: number | null | undefined;
+      if (isDeadline) {
+        try {
+          days = parseWorkingDays(workingDays);
+        } catch (e) {
+          setWorkingDaysError(e instanceof Error ? e.message : "Invalid working days");
+          setSaving(false);
+          return;
+        }
+      }
+      await updateMeetingNote({
+        noteId: note.id,
+        title: title.trim(),
+        content,
+        ...(isDeadline ? { dueDate: dueDate || null, workingDays: days ?? null } : {}),
+      });
       await onRefresh();
       setIsEditing(false);
     } catch (err) {
@@ -934,10 +1057,35 @@ function NoteFullScreenDetail({
     }
   }
 
-  return (
-    <div className="flex flex-col bg-background">
-      {!isEditing && (
-        <PageOverflowItems id="note-detail" order={0}>
+  const overlay = Boolean(onClose);
+
+  useEffect(() => {
+    if (!overlay) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (showHistory || attachOpen || createQuote !== null) return;
+      onClose?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [overlay, onClose, showHistory, attachOpen, createQuote]);
+
+  function cancelEditing() {
+    setIsEditing(false);
+    setTitle(note.title);
+    setContent(note.content);
+    setDueDate(note.dueDate ? new Date(note.dueDate).toISOString().split("T")[0] : "");
+    setWorkingDays(note.workingDays != null ? String(note.workingDays) : "");
+    setWorkingDaysError(null);
+  }
+
+  const overflowItems = (
+    <>
               <DropdownMenuItem onClick={() => setShowHistory(true)}>
                 <History className="h-4 w-4" />
                 <span className="flex-1">History</span>
@@ -1007,17 +1155,19 @@ function NoteFullScreenDetail({
                   </DropdownMenuItem>
                 </>
               )}
-        </PageOverflowItems>
-      )}
-      {isEditing && (
-        <PageHeaderActions>
-            <Button variant="ghost" size="sm" onClick={() => { setIsEditing(false); setTitle(note.title); setContent(note.content); }}>Cancel</Button>
-            <Button size="sm" onClick={handleSave} disabled={saving || !title.trim()}>
-              {saving ? "Saving..." : "Save"}
-            </Button>
-        </PageHeaderActions>
-      )}
+    </>
+  );
 
+  const editActions = (
+    <>
+      <Button variant="ghost" size="sm" onClick={cancelEditing}>Cancel</Button>
+      <Button size="sm" onClick={handleSave} disabled={saving || !title.trim()}>
+        {saving ? "Saving..." : "Save"}
+      </Button>
+    </>
+  );
+
+  const body = (
       <div className="max-w-4xl mx-auto w-full px-4 py-6 sm:px-8 sm:py-10 lg:px-16">
             {/* Type badge + meta */}
             <div className="flex flex-wrap items-center gap-3 mb-2">
@@ -1032,11 +1182,18 @@ function NoteFullScreenDetail({
                   {deadlineStatus.label}
                 </span>
               )}
+              {!(isDeadline && isEditing) && (
               <span className="text-[13px] text-muted-foreground">
                 {isDeadline
-                  ? `Due ${format(new Date(note.dueDate!), "MMMM d, yyyy")}`
+                  ? [
+                      note.dueDate ? `Due ${format(new Date(note.dueDate), "MMMM d, yyyy")}` : null,
+                      note.workingDays != null ? formatWorkingDays(note.workingDays) : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "No due date"
                   : format(new Date(note.date), "MMMM d, yyyy")}
               </span>
+              )}
             </div>
 
             {isDeadline && (
@@ -1063,6 +1220,46 @@ function NoteFullScreenDetail({
                     </button>
                   );
                 })}
+              </div>
+            )}
+            {isDeadline && scheduleError && (
+              <p className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
+                {scheduleError}
+              </p>
+            )}
+            {isDeadline && isEditing && (
+              <div className="mb-6 flex flex-wrap items-end gap-4">
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Due Date</label>
+                  <Input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="w-auto text-[13px] h-8"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Required before Next</p>
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Working Days</label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                    placeholder="e.g. 5"
+                    value={workingDays}
+                    onChange={(e) => {
+                      setWorkingDays(e.target.value);
+                      setWorkingDaysError(null);
+                    }}
+                    className="w-28 text-[13px] h-8"
+                  />
+                  {workingDaysError ? (
+                    <p className="text-[10px] text-destructive mt-0.5">{workingDaysError}</p>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">Required before Next</p>
+                  )}
+                </div>
               </div>
             )}
             {isDeadline && canEdit && testMessage && (
@@ -1232,7 +1429,7 @@ function NoteFullScreenDetail({
                 content={note.content}
                 noteId={note.id}
                 projectId={projectId}
-                canCreateTask={isActive && allowedTaskTypes.length > 0}
+                canCreateTask={canCreateTaskFromNote}
                 threads={threads}
                 openThreadId={activeThreadId}
                 onOpenThread={setActiveThreadId}
@@ -1248,7 +1445,10 @@ function NoteFullScreenDetail({
               />
             )}
       </div>
+  );
 
+  const dialogs = (
+    <>
       {showHistory && (
         <NoteHistoryDialog events={timeline} onClose={() => setShowHistory(false)} />
       )}
@@ -1272,6 +1472,48 @@ function NoteFullScreenDetail({
         activeContractType={activeContractType}
         onCreated={() => void onRefresh()}
       />
+    </>
+  );
+
+  if (onClose) {
+    return (
+      <NoteSlideOver
+        title={note.title}
+        onClose={onClose}
+        headerRight={
+          isEditing ? (
+            <div className="flex shrink-0 items-center gap-1">{editActions}</div>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Note actions"
+                className="grid size-9 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {overflowItems}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )
+        }
+      >
+        <div className="min-h-0 flex-1 overflow-y-auto">{body}</div>
+        {dialogs}
+      </NoteSlideOver>
+    );
+  }
+
+  return (
+    <div className="flex flex-col bg-background">
+      {!isEditing && (
+        <PageOverflowItems id="note-detail" order={0}>
+          {overflowItems}
+        </PageOverflowItems>
+      )}
+      {isEditing && <PageHeaderActions>{editActions}</PageHeaderActions>}
+      {body}
+      {dialogs}
     </div>
   );
 }

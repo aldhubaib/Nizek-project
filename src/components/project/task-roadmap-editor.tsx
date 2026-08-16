@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { createMeetingNote } from "@/actions/meeting-note";
-import { ROADMAP_COLUMNS, type RoadmapStatus } from "@/lib/roadmap-status";
+import { ROADMAP_COLUMNS, roadmapScheduleError, type RoadmapStatus } from "@/lib/roadmap-status";
+import { parseWorkingDays } from "@/lib/working-days";
 import { cn } from "@/lib/utils";
 
 export function TaskRoadmapEditor({
@@ -24,18 +25,27 @@ export function TaskRoadmapEditor({
 }) {
   const [title, setTitle] = useState(task.title);
   const [content, setContent] = useState("");
-  const [dueDate, setDueDate] = useState(new Date().toISOString().split("T")[0]);
-  const [dueDateError, setDueDateError] = useState(false);
+  const [dueDate, setDueDate] = useState("");
+  const [workingDays, setWorkingDays] = useState("");
+  const [workingDaysError, setWorkingDaysError] = useState<string | null>(null);
   const [roadmapStatus, setRoadmapStatus] = useState<RoadmapStatus>("PLANNED");
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
     if (!title.trim() || saving) return;
-    if (!dueDate) {
-      setDueDateError(true);
+    let days: number | null = null;
+    try {
+      days = parseWorkingDays(workingDays);
+      setWorkingDaysError(null);
+    } catch (e) {
+      setWorkingDaysError(e instanceof Error ? e.message : "Invalid working days");
       return;
     }
-    setDueDateError(false);
+    const blocked = roadmapScheduleError(roadmapStatus, dueDate || null, days);
+    if (blocked) {
+      setWorkingDaysError(blocked);
+      return;
+    }
     setSaving(true);
     try {
       await createMeetingNote({
@@ -44,13 +54,14 @@ export function TaskRoadmapEditor({
         content,
         date: new Date().toISOString().split("T")[0],
         noteType: "DEADLINE",
-        dueDate,
+        ...(dueDate ? { dueDate } : {}),
+        workingDays: days,
         roadmapStatus,
         taskId: task.id,
       });
       onSaved();
     } catch (err) {
-      console.error(err);
+      setWorkingDaysError(err instanceof Error ? err.message : "Could not save");
     } finally {
       setSaving(false);
     }
@@ -93,14 +104,35 @@ export function TaskRoadmapEditor({
           <div className="flex items-center gap-3 mb-8 pb-6 border-b border-border/50">
             <div className="flex flex-wrap items-end gap-4">
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Due Date *</label>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Due Date</label>
                 <Input
                   type="date"
                   value={dueDate}
-                  onChange={(e) => { setDueDate(e.target.value); setDueDateError(false); }}
-                  className={cn("w-auto text-[13px] h-8", dueDateError && "border-destructive")}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-auto text-[13px] h-8"
                 />
-                {dueDateError && <p className="text-[10px] text-destructive mt-0.5">Required</p>}
+                <p className="text-[10px] text-muted-foreground mt-0.5">Required before Next</p>
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Working Days</label>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="e.g. 5"
+                  value={workingDays}
+                  onChange={(e) => {
+                    setWorkingDays(e.target.value);
+                    setWorkingDaysError(null);
+                  }}
+                  className="w-28 text-[13px] h-8"
+                />
+                {workingDaysError ? (
+                  <p className="text-[10px] text-destructive mt-0.5">{workingDaysError}</p>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Required before Next</p>
+                )}
               </div>
               <div>
                 <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Status</label>

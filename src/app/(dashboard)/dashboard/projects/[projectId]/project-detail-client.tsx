@@ -122,6 +122,7 @@ interface MeetingNote {
   date: Date;
   noteType: string;
   dueDate?: Date | string | null;
+  workingDays?: number | null;
   completedAt?: Date | string | null;
   roadmapStatus?: string | null;
   createdAt: Date;

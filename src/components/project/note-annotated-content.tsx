@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NoteAnnotation } from "@/components/tiptap/note-annotation-mark";
 import { AttendanceBlock } from "@/components/tiptap/attendance-block";
-import { createNoteComment } from "@/actions/note-comment";
+import { createNoteComment, getNoteCommentThread } from "@/actions/note-comment";
 import { getProjectMembersForMention } from "@/actions/comment";
 import {
   NoteCommentPopover,
@@ -68,6 +68,8 @@ export function NoteAnnotatedContent({
   onChanged: () => void;
 }) {
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [fetchedThread, setFetchedThread] = useState<NoteCommentThreadView | null>(null);
+  const [popoverTick, setPopoverTick] = useState(0);
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [commenting, setCommenting] = useState(false);
   const [draft, setDraft] = useState("");
@@ -249,6 +251,36 @@ export function NoteAnnotatedContent({
   }, [commenting, isDesktop]);
 
   useEffect(() => {
+    if (!openThreadId) {
+      setFetchedThread(null);
+      return;
+    }
+    const existing = threads.find((t) => t.id === openThreadId);
+    if (existing) {
+      setFetchedThread(existing);
+      return;
+    }
+    let cancelled = false;
+    void getNoteCommentThread(openThreadId)
+      .then((data) => {
+        if (cancelled) return;
+        setFetchedThread({
+          id: data.id,
+          quoteText: data.quoteText,
+          conversationId: data.conversationId,
+          comments: data.comments,
+          understood: data.understood,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setFetchedThread(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openThreadId, threads]);
+
+  useEffect(() => {
     if (!openThreadId && !openTaskId) return;
     function onPointerDown(e: PointerEvent) {
       const target = e.target as HTMLElement | null;
@@ -256,14 +288,31 @@ export function NoteAnnotatedContent({
       onOpenThread(null);
       setOpenTaskId(null);
     }
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
+    const timer = window.setTimeout(() => {
+      document.addEventListener("pointerdown", onPointerDown);
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
   }, [openThreadId, openTaskId, onOpenThread]);
 
   useEffect(() => {
     if (!openThreadId || !wrapRef.current) return;
     const el = wrapRef.current.querySelector(`[data-thread-id="${openThreadId}"]`);
-    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [openThreadId]);
+
+  useEffect(() => {
+    if (!openThreadId) return;
+    const scrollParent = wrapRef.current?.closest(".overflow-y-auto, .overflow-auto");
+    const sync = () => setPopoverTick((n) => n + 1);
+    scrollParent?.addEventListener("scroll", sync, { passive: true });
+    window.addEventListener("resize", sync);
+    return () => {
+      scrollParent?.removeEventListener("scroll", sync);
+      window.removeEventListener("resize", sync);
+    };
   }, [openThreadId]);
 
   const closeComposer = useCallback(() => {
@@ -321,14 +370,39 @@ export function NoteAnnotatedContent({
     setOpenTaskId((current) => (current === taskId ? null : taskId));
   }
 
-  const openThread = threads.find((t) => t.id === openThreadId) ?? null;
-  const openIcon = icons.find(
-    (i) => i.kind === "comment" && i.threadId === openThreadId,
-  );
+  const openThread =
+    threads.find((t) => t.id === openThreadId) ??
+    (fetchedThread?.id === openThreadId ? fetchedThread : null);
   const openTaskIcon = icons.find(
     (i) => i.kind === "task" && i.taskId === openTaskId,
   );
   const openTaskSeed = linkedTasks.find((t) => t.id === openTaskId) ?? null;
+
+  void popoverTick;
+  const commentIconRect =
+    openThreadId && typeof document !== "undefined"
+      ? wrapRef.current
+          ?.querySelector(`[data-comment-icon="${openThreadId}"]`)
+          ?.getBoundingClientRect()
+      : undefined;
+  const commentPopoverStyle: CSSProperties | undefined = !openThread
+    ? undefined
+    : !isDesktop
+      ? {
+          left: 12,
+          right: 12,
+          bottom: `max(0.75rem, env(safe-area-inset-bottom, 0px))`,
+        }
+      : commentIconRect
+        ? {
+            top: Math.max(
+              12,
+              Math.min(commentIconRect.top - 8, window.innerHeight - 24),
+            ),
+            left: Math.max(12, commentIconRect.left - 328),
+            width: 320,
+          }
+        : { top: 72, right: 24, width: 320 };
 
   return (
     <div ref={wrapRef} className="relative pr-10 sm:pr-12">
@@ -364,8 +438,11 @@ export function NoteAnnotatedContent({
             key={`comment-${icon.threadId}`}
             type="button"
             data-note-comment-ui
+            data-comment-icon={icon.threadId}
             title={icon.understood ? "Understood" : "Open comment"}
-            onClick={() => {
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
               setOpenTaskId(null);
               onOpenThread(openThreadId === icon.threadId ? null : icon.threadId);
             }}
@@ -393,26 +470,29 @@ export function NoteAnnotatedContent({
         ),
       )}
 
-      {openThread && (
-        <div
-          data-note-comment-ui
-          className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[110] lg:absolute lg:inset-x-auto lg:bottom-auto lg:right-11 lg:z-30 lg:top-[var(--gutter-top)]"
-          style={{ ["--gutter-top" as string]: `${Math.max(0, (openIcon?.top ?? 0) - 8)}px` }}
-        >
-          <NoteCommentPopover
-            thread={openThread}
-            noteId={noteId}
-            className="w-full max-w-none lg:w-[min(calc(100vw-2rem),320px)]"
-            onClose={() => onOpenThread(null)}
-            onChanged={onChanged}
-          />
-        </div>
-      )}
+      {openThread && portalTarget
+        ? createPortal(
+            <div
+              data-note-comment-ui
+              className="fixed z-[400]"
+              style={commentPopoverStyle}
+            >
+              <NoteCommentPopover
+                thread={openThread}
+                noteId={noteId}
+                className="w-full max-w-none"
+                onClose={() => onOpenThread(null)}
+                onChanged={onChanged}
+              />
+            </div>,
+            portalTarget,
+          )
+        : null}
 
       {openTaskId && (
         <div
           data-note-comment-ui
-          className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[110] lg:absolute lg:inset-x-auto lg:bottom-auto lg:right-11 lg:z-30 lg:top-[var(--gutter-top)]"
+          className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[300] lg:absolute lg:inset-x-auto lg:bottom-auto lg:right-11 lg:z-30 lg:top-[var(--gutter-top)]"
           style={{ ["--gutter-top" as string]: `${Math.max(0, (openTaskIcon?.top ?? 0) - 8)}px` }}
         >
           <TaskPreviewPopover
@@ -464,7 +544,7 @@ export function NoteAnnotatedContent({
         ? createPortal(
             <div
               data-note-comment-ui
-              className="fixed inset-x-0 top-0 z-[110] flex h-12 items-center gap-0.5 border-b border-border bg-background px-1"
+              className="fixed inset-x-0 top-0 z-[300] flex h-12 items-center gap-0.5 border-b border-border bg-background px-1"
             >
               <button
                 type="button"
@@ -555,7 +635,7 @@ export function NoteAnnotatedContent({
         ? createPortal(
             <div
               data-note-comment-ui
-              className="fixed inset-x-0 z-[110] rounded-t-xl border-t border-border bg-popover p-3 shadow-2xl"
+              className="fixed inset-x-0 z-[300] rounded-t-xl border-t border-border bg-popover p-3 shadow-2xl"
               style={{ bottom: sheetOffset }}
             >
               <CommentComposer

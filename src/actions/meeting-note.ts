@@ -2,6 +2,13 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember, requireProjectRole } from "@/lib/auth";
+import {
+  canCreateInStage,
+  getAdminPermissions,
+  getPermissionsFromRole,
+} from "@/lib/permissions";
+import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
+import { isDeadlineTestProjectByName } from "@/lib/deadline-reminders";
 import { logTaskActivity } from "@/lib/activity";
 import { revalidatePath } from "next/cache";
 import { createTask } from "@/actions/task";
@@ -11,8 +18,12 @@ import { diffNoteParagraphs, encodeContentDiff } from "@/lib/note-content-diff";
 import { encodeNoteActivityBody } from "@/lib/note-activity-payload";
 import {
   isRoadmapStatus,
+  normalizeRoadmapStatus,
+  roadmapCreateTaskError,
+  roadmapScheduleError,
   type RoadmapStatus,
 } from "@/lib/roadmap-status";
+import { parseWorkingDays } from "@/lib/working-days";
 
 export async function createMeetingNote(data: {
   projectId: string;
@@ -23,18 +34,27 @@ export async function createMeetingNote(data: {
   dueDate?: string;
   taskId?: string;
   roadmapStatus?: RoadmapStatus;
+  workingDays?: number | string | null;
 }) {
   const { user, member } = await requireProjectMember(data.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot create notes");
 
-  if (data.noteType === "DEADLINE" && !data.dueDate) {
-    throw new Error("Due date is required");
-  }
+  const workingDays =
+    data.noteType === "DEADLINE" ? parseWorkingDays(data.workingDays) : null;
 
   const roadmapStatus =
     data.noteType === "DEADLINE" && data.roadmapStatus && isRoadmapStatus(data.roadmapStatus)
       ? data.roadmapStatus
       : "PLANNED";
+
+  if (data.noteType === "DEADLINE") {
+    const scheduleError = roadmapScheduleError(
+      roadmapStatus,
+      data.dueDate || null,
+      workingDays,
+    );
+    if (scheduleError) throw new Error(scheduleError);
+  }
 
   const note = await prisma.meetingNote.create({
     data: {
@@ -46,6 +66,7 @@ export async function createMeetingNote(data: {
       authorId: user.id,
       roadmapStatus,
       ...(data.dueDate && { dueDate: new Date(data.dueDate) }),
+      ...(workingDays != null && { workingDays }),
       ...(data.taskId && { taskId: data.taskId }),
       ...(roadmapStatus === "SHIPPED" ? { completedAt: new Date() } : {}),
     },
@@ -91,6 +112,14 @@ export async function toggleDeadlineComplete(
 
   const completedAt = note.completedAt ? null : new Date();
   const roadmapStatus: RoadmapStatus = completedAt ? "SHIPPED" : "PLANNED";
+  if (completedAt) {
+    const scheduleError = roadmapScheduleError(
+      "SHIPPED",
+      note.dueDate,
+      note.workingDays,
+    );
+    if (scheduleError) throw new Error(scheduleError);
+  }
   await prisma.meetingNote.update({
     where: { id: noteId },
     data: { completedAt, roadmapStatus },
@@ -112,6 +141,13 @@ export async function updateRoadmapStatus(
 
   const { user, member } = await requireProjectMember(note.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot edit notes");
+
+  const scheduleError = roadmapScheduleError(
+    status,
+    note.dueDate,
+    note.workingDays,
+  );
+  if (scheduleError) throw new Error(scheduleError);
 
   const completedAt =
     status === "SHIPPED" ? note.completedAt ?? new Date() : null;
@@ -145,6 +181,8 @@ export async function updateMeetingNote(data: {
   title?: string;
   content?: string;
   date?: string;
+  dueDate?: string | null;
+  workingDays?: number | string | null;
   /** Highlight marks only — don't write a history row. */
   skipHistory?: boolean;
 }) {
@@ -160,12 +198,32 @@ export async function updateMeetingNote(data: {
   const historyEntries: { field: string; oldValue: string | null; newValue: string | null; noteId: string; userId: string }[] = [];
 
   if (data.skipHistory) {
+    if (note.noteType === "DEADLINE") {
+      const scheduleError = roadmapScheduleError(
+        note.roadmapStatus,
+        data.dueDate !== undefined
+          ? data.dueDate
+            ? new Date(data.dueDate)
+            : null
+          : note.dueDate,
+        data.workingDays !== undefined
+          ? parseWorkingDays(data.workingDays)
+          : note.workingDays,
+      );
+      if (scheduleError) throw new Error(scheduleError);
+    }
     const updated = await prisma.meetingNote.update({
       where: { id: data.noteId },
       data: {
         ...(data.title && { title: data.title }),
         ...(data.content !== undefined && { content: data.content }),
         ...(data.date && { date: new Date(data.date) }),
+        ...(data.dueDate !== undefined && {
+          dueDate: data.dueDate ? new Date(data.dueDate) : null,
+        }),
+        ...(data.workingDays !== undefined && {
+          workingDays: parseWorkingDays(data.workingDays),
+        }),
       },
     });
     revalidatePath(`/dashboard/projects/${note.projectId}`);
@@ -195,6 +253,47 @@ export async function updateMeetingNote(data: {
     }
   }
 
+  const nextDueDate =
+    data.dueDate !== undefined
+      ? data.dueDate
+        ? new Date(data.dueDate)
+        : null
+      : undefined;
+  if (nextDueDate !== undefined) {
+    const oldIso = note.dueDate ? note.dueDate.toISOString().slice(0, 10) : null;
+    const newIso = nextDueDate ? nextDueDate.toISOString().slice(0, 10) : null;
+    if (oldIso !== newIso) {
+      historyEntries.push({
+        field: "dueDate",
+        oldValue: oldIso,
+        newValue: newIso,
+        noteId: note.id,
+        userId: user.id,
+      });
+    }
+  }
+
+  const nextWorkingDays =
+    data.workingDays !== undefined ? parseWorkingDays(data.workingDays) : undefined;
+  if (nextWorkingDays !== undefined && nextWorkingDays !== note.workingDays) {
+    historyEntries.push({
+      field: "workingDays",
+      oldValue: note.workingDays != null ? String(note.workingDays) : null,
+      newValue: nextWorkingDays != null ? String(nextWorkingDays) : null,
+      noteId: note.id,
+      userId: user.id,
+    });
+  }
+
+  if (note.noteType === "DEADLINE") {
+    const scheduleError = roadmapScheduleError(
+      note.roadmapStatus,
+      nextDueDate !== undefined ? nextDueDate : note.dueDate,
+      nextWorkingDays !== undefined ? nextWorkingDays : note.workingDays,
+    );
+    if (scheduleError) throw new Error(scheduleError);
+  }
+
   const [updated] = await prisma.$transaction([
     prisma.meetingNote.update({
       where: { id: data.noteId },
@@ -202,6 +301,8 @@ export async function updateMeetingNote(data: {
         ...(data.title && { title: data.title }),
         ...(data.content !== undefined && { content: data.content }),
         ...(data.date && { date: new Date(data.date) }),
+        ...(nextDueDate !== undefined && { dueDate: nextDueDate }),
+        ...(nextWorkingDays !== undefined && { workingDays: nextWorkingDays }),
       },
     }),
     ...(historyEntries.length > 0
@@ -339,6 +440,56 @@ export async function getMeetingNote(noteId: string) {
     });
   }
   return next;
+}
+
+/** Note plus the permissions needed to open it as a full workspace from chat. */
+export async function getNoteWorkspace(noteId: string) {
+  const note = await getMeetingNote(noteId);
+  const { user, member } = await requireProjectMember(note.projectId);
+  const project = await prisma.project.findUnique({
+    where: { id: note.projectId },
+    select: {
+      name: true,
+      contracts: {
+        select: {
+          id: true,
+          contractType: true,
+          label: true,
+          startDate: true,
+          endDate: true,
+        },
+      },
+    },
+  });
+  if (!project) throw new Error("Project not found");
+
+  const isSystemAdmin = user.systemRole === "ADMIN";
+  const perms = isSystemAdmin
+    ? getAdminPermissions()
+    : getPermissionsFromRole(member.projectRole);
+  const canEdit =
+    member.role !== "CLIENT" && (perms.canModifyTask || perms.isAdmin);
+  const activeContract = getActiveContract(project.contracts);
+  const isActive = Boolean(activeContract);
+  const allowedTaskTypes = activeContract
+    ? getAllowedTaskTypes(activeContract.contractType, isSystemAdmin)
+    : [];
+
+  return {
+    note,
+    projectId: note.projectId,
+    currentUserId: user.id,
+    canEdit,
+    canCreateTask:
+      member.role !== "CLIENT" &&
+      isActive &&
+      (isSystemAdmin || canCreateInStage(perms, "NEW_REQUEST")),
+    allowedTaskTypes,
+    activeContractType: activeContract?.contractType ?? null,
+    isActive,
+    isSystemAdmin,
+    isDeadlineTestProject: isDeadlineTestProjectByName(project.name),
+  };
 }
 
 export async function getTaskNotes(taskId: string) {
@@ -538,12 +689,26 @@ export async function createTaskFromNoteHighlight(data: {
 }) {
   const note = await prisma.meetingNote.findUnique({
     where: { id: data.noteId },
-    select: { id: true, title: true, content: true, projectId: true },
+    select: {
+      id: true,
+      title: true,
+      content: true,
+      projectId: true,
+      noteType: true,
+      roadmapStatus: true,
+      completedAt: true,
+    },
   });
   if (!note) throw new Error("Note not found");
 
   const { member } = await requireProjectMember(note.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot create tasks");
+
+  if (note.noteType === "DEADLINE") {
+    const status = normalizeRoadmapStatus(note.roadmapStatus, note.completedAt);
+    const blocked = roadmapCreateTaskError(status);
+    if (blocked) throw new Error(blocked);
+  }
 
   const quote = data.quoteText.trim();
   const description = [

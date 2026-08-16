@@ -21,14 +21,17 @@ import { cn } from "@/lib/utils";
 import {
   ROADMAP_COLUMNS,
   normalizeRoadmapStatus,
+  roadmapScheduleError,
   type RoadmapStatus,
 } from "@/lib/roadmap-status";
+import { formatWorkingDays } from "@/lib/working-days";
 
 export interface RoadmapNote {
   id: string;
   title: string;
   content: string;
   dueDate?: Date | string | null;
+  workingDays?: number | null;
   completedAt?: Date | string | null;
   roadmapStatus?: string | null;
   createdAt: Date | string;
@@ -135,6 +138,7 @@ export function RoadmapBoard({
   onOpen,
   onCreate,
   onMove,
+  onBlocked,
   onToggleComplete,
 }: {
   notes: RoadmapNote[];
@@ -143,6 +147,7 @@ export function RoadmapBoard({
   onOpen: (noteId: string) => void;
   onCreate: (status: RoadmapStatus) => void;
   onMove: (noteId: string, status: RoadmapStatus) => void;
+  onBlocked?: (message: string) => void;
   onToggleComplete: (noteId: string) => void;
 }) {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -180,6 +185,11 @@ export function RoadmapBoard({
     if (!note) return;
     const current = normalizeRoadmapStatus(note.roadmapStatus, note.completedAt);
     if (current === status) return;
+    const blocked = roadmapScheduleError(status, note.dueDate, note.workingDays);
+    if (blocked) {
+      onBlocked?.(blocked);
+      return;
+    }
     onMove(noteId, status);
   }
 
@@ -253,7 +263,7 @@ function RoadmapColumn({
           <h3 className="text-[15px] font-semibold tracking-tight">{label}</h3>
           <span className="text-[12px] text-muted-foreground tabular-nums">{notes.length}</span>
         </div>
-        {canEdit && (
+        {canEdit && status === "PLANNED" && (
           <button
             type="button"
             onClick={() => onCreate(status)}
@@ -365,10 +375,15 @@ function RoadmapCard({
         )}
       </div>
 
-      {deadlineStatus && (
-        <span className={`mt-2 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${deadlineStatus.bg} ${deadlineStatus.color}`}>
-          {deadlineStatus.label}
-          {note.dueDate ? ` · ${format(new Date(note.dueDate), "MMM d, yyyy")}` : ""}
+      {(deadlineStatus || note.workingDays != null) && (
+        <span className={`mt-2 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${deadlineStatus?.bg ?? "bg-muted border-border"} ${deadlineStatus?.color ?? "text-muted-foreground"}`}>
+          {[
+            deadlineStatus?.label,
+            note.dueDate ? format(new Date(note.dueDate), "MMM d, yyyy") : null,
+            note.workingDays != null ? formatWorkingDays(note.workingDays) : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </span>
       )}
 

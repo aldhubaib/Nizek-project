@@ -420,6 +420,7 @@ model MeetingNote {
   noteType NoteType @default(MEETING_NOTE)
 
   dueDate        DateTime?
+  workingDays    Int?
   completedAt    DateTime?
   roadmapStatus  RoadmapStatus @default(PLANNED)
 

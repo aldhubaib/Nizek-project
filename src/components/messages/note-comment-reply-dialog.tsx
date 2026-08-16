@@ -1,30 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, FileText, Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { getNoteCommentThread, getNoteCommentThreads } from "@/actions/note-comment";
-import { getMeetingNote } from "@/actions/meeting-note";
+  deleteMeetingNote,
+  getMeetingNote,
+  getNoteWorkspace,
+  toggleDeadlineComplete,
+  updateRoadmapStatus,
+} from "@/actions/meeting-note";
 import {
-  NoteCommentPopover,
-  type NoteCommentThreadView,
-} from "@/components/project/note-comment-panel";
-import { NoteAnnotatedContent } from "@/components/project/note-annotated-content-lazy";
-import { cn } from "@/lib/utils";
-
-type NotePreview = {
-  title: string;
-  content: string;
-  projectId: string;
-  linked: { id: string; title: string; taskNumber: number; taskType: string }[];
-  threads: NoteCommentThreadView[];
-};
+  NoteFullScreenDetail,
+  type MeetingNote,
+} from "@/components/project/meeting-notes-tab";
+import { NoteSlideOver } from "@/components/project/note-slide-over";
+import { roadmapScheduleError, type RoadmapStatus } from "@/lib/roadmap-status";
 
 export function NoteCommentReplyDialog({
   open,
@@ -32,7 +22,6 @@ export function NoteCommentReplyDialog({
   noteId,
   threadId,
   noteTitle,
-  projectId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -41,179 +30,161 @@ export function NoteCommentReplyDialog({
   noteTitle: string;
   projectId: string;
 }) {
-  const noteOnly = !threadId;
-  const [thread, setThread] = useState<NoteCommentThreadView | null>(null);
+  const [note, setNote] = useState<MeetingNote | null>(null);
+  const [workspace, setWorkspace] = useState<Awaited<
+    ReturnType<typeof getNoteWorkspace>
+  > | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"thread" | "note">(noteOnly ? "note" : "thread");
-  const [note, setNote] = useState<NotePreview | null>(null);
-  const [noteLoading, setNoteLoading] = useState(false);
-  const [noteError, setNoteError] = useState<string | null>(null);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(threadId ?? null);
-
-  const load = useCallback(async () => {
-    if (!threadId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getNoteCommentThread(threadId);
-      setThread({
-        id: data.id,
-        quoteText: data.quoteText,
-        conversationId: data.conversationId,
-        comments: data.comments,
-        understood: data.understood,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load comments");
-    } finally {
-      setLoading(false);
-    }
-  }, [threadId]);
-
-  const loadNote = useCallback(async () => {
-    setNoteLoading(true);
-    setNoteError(null);
-    try {
-      const [full, threads] = await Promise.all([
-        getMeetingNote(noteId),
-        getNoteCommentThreads(noteId),
-      ]);
-      const linkedMap = new Map<string, NotePreview["linked"][number]>();
-      if (full.task) linkedMap.set(full.task.id, full.task);
-      for (const link of full.taskLinks ?? []) linkedMap.set(link.task.id, link.task);
-      setNote({
-        title: full.title,
-        content: full.content,
-        projectId: full.projectId,
-        linked: [...linkedMap.values()],
-        threads: threads.map((t) => ({
-          id: t.id,
-          quoteText: t.quoteText,
-          conversationId: t.conversationId,
-          comments: t.comments,
-          understood: t.id === threadId ? (thread?.understood ?? false) : false,
-        })),
-      });
-      setActiveThreadId(threadId ?? null);
-    } catch (err) {
-      setNoteError(err instanceof Error ? err.message : "Failed to load note");
-    } finally {
-      setNoteLoading(false);
-    }
-  }, [noteId, threadId, thread?.understood]);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
-      setView(noteOnly ? "note" : "thread");
       setNote(null);
-      setThread(null);
+      setWorkspace(null);
+      setError(null);
+      setScheduleError(null);
       return;
     }
-    if (noteOnly) void loadNote();
-    else void load();
-    // Load once when the dialog opens for this note/thread.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, noteOnly, noteId, threadId]);
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    void getNoteWorkspace(noteId)
+      .then((data) => {
+        if (cancelled) return;
+        setWorkspace(data);
+        setNote(data.note as unknown as MeetingNote);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load note");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, noteId]);
 
-  async function openFullNote() {
-    setView("note");
-    if (!note) await loadNote();
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || note) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onOpenChange(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, note, onOpenChange]);
+
+  const refreshNote = useCallback(async () => {
+    const fresh = await getMeetingNote(noteId);
+    setNote(fresh as unknown as MeetingNote);
+  }, [noteId]);
+
+  const toggleComplete = useCallback(async () => {
+    if (!note) return;
+    if (!note.completedAt) {
+      const blocked = roadmapScheduleError("SHIPPED", note.dueDate, note.workingDays);
+      if (blocked) {
+        setScheduleError(blocked);
+        return;
+      }
+    }
+    setScheduleError(null);
+    const { completedAt, roadmapStatus } = await toggleDeadlineComplete(note.id);
+    setNote((prev) => (prev ? { ...prev, completedAt, roadmapStatus } : prev));
+  }, [note]);
+
+  const moveStatus = useCallback(
+    async (status: RoadmapStatus) => {
+      if (!note) return;
+      const blocked = roadmapScheduleError(status, note.dueDate, note.workingDays);
+      if (blocked) {
+        setScheduleError(blocked);
+        return;
+      }
+      setScheduleError(null);
+      const prevStatus = note.roadmapStatus;
+      const prevCompleted = note.completedAt ?? null;
+      const completedAt = status === "SHIPPED" ? new Date() : null;
+      setNote((prev) =>
+        prev
+          ? {
+              ...prev,
+              roadmapStatus: status,
+              completedAt:
+                status === "SHIPPED" ? prev.completedAt ?? completedAt : null,
+            }
+          : prev,
+      );
+      try {
+        const result = await updateRoadmapStatus(note.id, status);
+        setNote((prev) => (prev ? { ...prev, ...result } : prev));
+      } catch (err) {
+        setNote((prev) =>
+          prev
+            ? { ...prev, roadmapStatus: prevStatus, completedAt: prevCompleted }
+            : prev,
+        );
+        setScheduleError(err instanceof Error ? err.message : "Could not update status");
+      }
+    },
+    [note],
+  );
+
+  if (!open) return null;
+
+  if (loading && !note) {
+    return (
+      <NoteSlideOver title={noteTitle} onClose={() => onOpenChange(false)}>
+        <div className="flex flex-1 items-center justify-center gap-2 text-[13px] text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading note…
+        </div>
+      </NoteSlideOver>
+    );
   }
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton={false}
-        className={cn(
-          "gap-0 overflow-hidden p-0",
-          view === "note" ? "flex max-h-[90dvh] flex-col sm:max-w-2xl" : "sm:max-w-md",
-        )}
-      >
-        <DialogHeader className="sr-only">
-          <DialogTitle>
-            {view === "note" ? noteTitle : `Reply on “${noteTitle}”`}
-          </DialogTitle>
-          <DialogDescription>
-            {view === "note"
-              ? "Full note, scrolled to this highlight."
-              : "Comment thread on this note highlight."}
-          </DialogDescription>
-        </DialogHeader>
+  if (error && !note) {
+    return (
+      <NoteSlideOver title={noteTitle} onClose={() => onOpenChange(false)}>
+        <p className="px-4 py-10 text-center text-[13px] text-destructive">{error}</p>
+      </NoteSlideOver>
+    );
+  }
 
-        {view === "note" ? (
-          <>
-            <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
-              {noteOnly ? null : (
-                <button
-                  type="button"
-                  onClick={() => setView("thread")}
-                  className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                  aria-label="Back to reply"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </button>
-              )}
-              <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <p className="min-w-0 flex-1 truncate text-sm font-semibold">{note?.title || noteTitle}</p>
-              <button
-                type="button"
-                onClick={() => onOpenChange(false)}
-                className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                aria-label="Close"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-              {noteLoading && !note ? (
-                <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading note…
-                </div>
-              ) : noteError && !note ? (
-                <p className="py-8 text-center text-[13px] text-destructive">{noteError}</p>
-              ) : note ? (
-                <NoteAnnotatedContent
-                  content={note.content}
-                  noteId={noteId}
-                  projectId={note.projectId || projectId}
-                  canCreateTask={false}
-                  threads={note.threads}
-                  openThreadId={activeThreadId}
-                  onOpenThread={setActiveThreadId}
-                  taskUrl={(taskId) =>
-                    `/dashboard/projects/${note.projectId || projectId}/tasks/${taskId}?from=note&noteId=${noteId}`
-                  }
-                  linkedTasks={note.linked}
-                  onCreateTask={() => undefined}
-                  onChanged={() => {
-                    if (threadId) void load();
-                    void loadNote();
-                  }}
-                />
-              ) : null}
-            </div>
-          </>
-        ) : loading && !thread ? (
-          <div className="flex items-center justify-center gap-2 px-4 py-10 text-[13px] text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading comments…
-          </div>
-        ) : error && !thread ? (
-          <p className="px-4 py-8 text-center text-[13px] text-destructive">{error}</p>
-        ) : thread ? (
-          <NoteCommentPopover
-            thread={thread}
-            noteId={noteId}
-            hideChatLink
-            onViewNote={() => void openFullNote()}
-            className="w-full max-w-none rounded-none border-0 shadow-none"
-            onClose={() => onOpenChange(false)}
-            onChanged={() => void load()}
-          />
-        ) : null}
-      </DialogContent>
-    </Dialog>
+  if (!note || !workspace) return null;
+
+  return (
+    <NoteFullScreenDetail
+      note={note}
+      projectId={workspace.projectId}
+      canEdit={workspace.canEdit}
+      isSystemAdmin={workspace.isSystemAdmin}
+      isDeadlineTestProject={workspace.isDeadlineTestProject}
+      allowedTaskTypes={workspace.allowedTaskTypes}
+      activeContractType={workspace.activeContractType}
+      isActive={workspace.isActive}
+      initialThreadId={threadId ?? null}
+      currentUserId={workspace.currentUserId}
+      onToggleComplete={toggleComplete}
+      onMoveStatus={moveStatus}
+      scheduleError={scheduleError}
+      onRefresh={refreshNote}
+      onClose={() => onOpenChange(false)}
+      onDelete={async () => {
+        await deleteMeetingNote(note.id);
+        onOpenChange(false);
+      }}
+    />
   );
 }

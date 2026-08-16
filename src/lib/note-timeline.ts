@@ -180,5 +180,16 @@ export function editTimelineDescription(
     if (from && to) return `Moved from ${from} to ${to}`;
     return "Changed roadmap status";
   }
+  if (field === "dueDate") {
+    if (oldValue && newValue) return `Changed due date from ${oldValue} to ${newValue}`;
+    if (newValue) return `Set due date to ${newValue}`;
+    if (oldValue) return `Cleared due date`;
+    return "Changed due date";
+  }
+  if (field === "workingDays") {
+    const from = oldValue ? `${oldValue} working day${oldValue === "1" ? "" : "s"}` : "none";
+    const to = newValue ? `${newValue} working day${newValue === "1" ? "" : "s"}` : "none";
+    return `Changed effort from ${from} to ${to}`;
+  }
   return `Changed ${field}`;
 }

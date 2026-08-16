@@ -29,6 +29,8 @@ const FIELD_LABEL: Record<string, string> = {
   content: "content",
   date: "date",
   roadmapStatus: "status",
+  dueDate: "due date",
+  workingDays: "working days",
 };
 
 const PRIMARY: ActivityCardTheme = {
