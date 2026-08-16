@@ -80,9 +80,9 @@ export function ThreadSidebar({
   const router = useRouter();
   const onThread = useOnThread();
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState<"all" | "project" | "client" | "important">(
-    "all",
-  );
+  const [tab, setTab] = useState<
+    "all" | "direct" | "project" | "client" | "important"
+  >("all");
   const [showInactive, setShowInactive] = useState(false);
   const [importantMessages, setImportantMessages] = useState<
     ImportantMessageDTO[]
@@ -352,6 +352,7 @@ export function ThreadSidebar({
               ] as const)
             : ([
                 { id: "all" as const, label: "All", icon: Users },
+                { id: "direct" as const, label: "Direct", icon: MessageSquare },
                 { id: "project" as const, label: "Projects", icon: Folder },
                 { id: "client" as const, label: "Client", icon: Handshake },
                 { id: "important" as const, label: "Important", icon: Star },
@@ -412,12 +413,22 @@ export function ThreadSidebar({
             <MessageSquare className="h-8 w-8 text-muted-foreground/50" />
             <div>
               <div className="text-sm font-medium text-foreground">
-                {isClient ? "No client chats yet" : "No conversations yet"}
+                {isClient
+                  ? "No client chats yet"
+                  : tab === "direct"
+                    ? "No direct messages yet"
+                    : tab === "client"
+                      ? "No client chats yet"
+                      : tab === "project"
+                        ? "No project chats yet"
+                        : "No conversations yet"}
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 {isClient
                   ? "Waiting for your project team to enable client chat."
-                  : "Project chats open from each project — one group chat per project."}
+                  : tab === "direct"
+                    ? "Direct messages appear here when someone messages you."
+                    : "Project chats open from each project — one group chat per project."}
               </p>
             </div>
           </li>

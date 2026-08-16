@@ -684,7 +684,7 @@ const MessageRow = memo(function MessageRow({
   if (m.noteActivity || m.noteComment || m.deadlineReminder) {
     const authorLabel = chatPostAuthorLabel(m.authorId, m.authorName);
     return (
-      <div id={`msg-${m.id}`} className={cn("contents", dimmed && "opacity-30")}>
+      <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
         {showDay && (
           <div className="my-2 flex items-center justify-center">
             <span className="rounded-full bg-surface px-3 py-1 text-tiny font-medium text-muted-foreground">
@@ -723,7 +723,7 @@ const MessageRow = memo(function MessageRow({
 
   if (m.taskComment) {
     return (
-      <div id={`msg-${m.id}`} className={cn("contents", dimmed && "opacity-30")}>
+      <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
         {showDay && (
           <div className="my-2 flex items-center justify-center">
             <span className="rounded-full bg-surface px-3 py-1 text-tiny font-medium text-muted-foreground">
@@ -751,7 +751,7 @@ const MessageRow = memo(function MessageRow({
   }
 
   return (
-    <div id={`msg-${m.id}`} className={cn("contents", dimmed && "opacity-30")}>
+    <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
       {showDay && (
         <div className="my-2 flex items-center justify-center">
           <span className="rounded-full bg-surface px-3 py-1 text-tiny font-medium text-muted-foreground">
@@ -1515,6 +1515,8 @@ export function ThreadChat({
       skipAutoScrollRef.current = false;
       return;
     }
+    // Stay put while we jump to an Important / ?msg= target.
+    if (pendingFocusRef.current) return;
     if (!nearBottomRef.current) return;
     const el = scrollerRef.current;
     if (!el) return;
@@ -2144,25 +2146,38 @@ export function ThreadChat({
   }, [searchMatches]);
 
   const scrollToMessage = useCallback((id: string) => {
+    const scroller = scrollerRef.current;
     const el = document.getElementById(`msg-${id}`);
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!scroller || !el) return false;
+    nearBottomRef.current = false;
+    setNearBottom(false);
+    skipAutoScrollRef.current = true;
+    const sRect = scroller.getBoundingClientRect();
+    const eRect = el.getBoundingClientRect();
+    const top =
+      eRect.top - sRect.top + scroller.scrollTop - (scroller.clientHeight - el.offsetHeight) / 2;
+    scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
     el.classList.add("ring-2", "ring-primary/60", "rounded-2xl");
-    setTimeout(() => el.classList.remove("ring-2", "ring-primary/60", "rounded-2xl"), 1500);
+    window.setTimeout(
+      () => el.classList.remove("ring-2", "ring-primary/60", "rounded-2xl"),
+      1500,
+    );
+    return true;
   }, []);
 
-  const jumpToMessage = useCallback(
-    (id: string) => {
-      setView("chat");
-      setSearchOpen(false);
-      pendingFocusRef.current = id;
-      if (document.getElementById(`msg-${id}`)) {
-        scrollToMessage(id);
-        pendingFocusRef.current = null;
-      }
-    },
-    [scrollToMessage],
-  );
+  const jumpToMessage = useCallback((id: string) => {
+    setView("chat");
+    setSearchOpen(false);
+    pendingFocusRef.current = id;
+    nearBottomRef.current = false;
+    skipAutoScrollRef.current = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (pendingFocusRef.current !== id) return;
+        if (scrollToMessage(id)) pendingFocusRef.current = null;
+      });
+    });
+  }, [scrollToMessage]);
 
   useEffect(() => {
     if (focusMessageId) pendingFocusRef.current = focusMessageId;
@@ -2172,8 +2187,12 @@ export function ThreadChat({
     const id = pendingFocusRef.current;
     if (!id) return;
     if (document.getElementById(`msg-${id}`)) {
-      scrollToMessage(id);
-      pendingFocusRef.current = null;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (pendingFocusRef.current !== id) return;
+          if (scrollToMessage(id)) pendingFocusRef.current = null;
+        });
+      });
       return;
     }
     if (hasMore && !loadingOlder) {
