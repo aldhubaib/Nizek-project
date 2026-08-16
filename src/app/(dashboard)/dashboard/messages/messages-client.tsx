@@ -6,16 +6,17 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Search,
-  Users,
-  Folder,
   MessageSquare,
   Archive,
   ChevronDown,
+  Folder,
   Handshake,
   Star,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { OverflowTabBar, type OverflowTabItem } from "@/components/overflow-tab-bar";
 import { cn } from "@/lib/utils";
 import {
   listImportantMessages,
@@ -44,7 +45,22 @@ function formatRelative(iso: string) {
   return `${days}d`;
 }
 
-// True when the user is viewing a specific thread (not the inbox index).
+type InboxTab = "all" | "direct" | "project" | "client" | "important";
+type InboxGroupId = "project" | "direct" | "client" | "inactive";
+
+const INBOX_TABS: OverflowTabItem<InboxTab>[] = [
+  { id: "all", label: "Chats" },
+  { id: "project", label: "Projects" },
+  { id: "direct", label: "Direct" },
+  { id: "client", label: "Clients" },
+  { id: "important", label: "Important" },
+];
+
+const CLIENT_INBOX_TABS: OverflowTabItem<InboxTab>[] = [
+  { id: "all", label: "Chats" },
+  { id: "important", label: "Important" },
+];
+
 function useOnThread() {
   const pathname = usePathname();
   return (
@@ -80,10 +96,13 @@ export function ThreadSidebar({
   const router = useRouter();
   const onThread = useOnThread();
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState<
-    "all" | "direct" | "project" | "client" | "important"
-  >("all");
-  const [showInactive, setShowInactive] = useState(false);
+  const [tab, setTab] = useState<InboxTab>("all");
+  const [openGroups, setOpenGroups] = useState<Record<InboxGroupId, boolean>>({
+    project: true,
+    direct: true,
+    client: true,
+    inactive: false,
+  });
   const [importantMessages, setImportantMessages] = useState<
     ImportantMessageDTO[]
   >([]);
@@ -291,6 +310,23 @@ export function ThreadSidebar({
     [allRows],
   );
   const showInactiveSection = tab !== "important" && inactiveRows.length > 0;
+  const groupChats = tab === "all" && !isClient;
+  const projectRows = useMemo(
+    () => rows.filter((t) => t.kind === "project"),
+    [rows],
+  );
+  const directRows = useMemo(
+    () => rows.filter((t) => t.kind === "direct"),
+    [rows],
+  );
+  const clientRows = useMemo(
+    () => rows.filter((t) => t.kind === "client"),
+    [rows],
+  );
+
+  function toggleGroup(id: InboxGroupId) {
+    setOpenGroups((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
 
   const importantRows = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -341,38 +377,15 @@ export function ThreadSidebar({
                 ? "Search important messages"
                 : "Search conversations"
             }
-            className="h-11 pl-10 text-sm lg:h-9 lg:pl-8"
+            className="h-10 rounded-full border-0 bg-muted pl-10 text-sm shadow-none lg:h-9"
           />
         </div>
-        <div className="mt-2.5 flex items-center gap-1.5 overflow-x-auto">
-          {(isClient
-            ? ([
-                { id: "all" as const, label: "All", icon: MessageSquare },
-                { id: "important" as const, label: "Important", icon: Star },
-              ] as const)
-            : ([
-                { id: "all" as const, label: "All", icon: Users },
-                { id: "direct" as const, label: "Direct", icon: MessageSquare },
-                { id: "project" as const, label: "Projects", icon: Folder },
-                { id: "client" as const, label: "Client", icon: Handshake },
-                { id: "important" as const, label: "Important", icon: Star },
-              ] as const)
-          ).map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={cn(
-                "flex shrink-0 items-center justify-center gap-1.5 rounded-full px-3.5 py-2.5 text-xs font-medium transition-colors lg:rounded-md lg:px-2.5 lg:py-1.5",
-                tab === t.id
-                  ? "bg-primary/15 text-primary lg:bg-background lg:text-foreground lg:shadow-sm"
-                  : "bg-surface/80 text-muted-foreground hover:text-foreground lg:bg-transparent",
-              )}
-            >
-              <t.icon className="h-3.5 w-3.5" />
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <OverflowTabBar
+          className="mt-2.5"
+          items={isClient ? CLIENT_INBOX_TABS : INBOX_TABS}
+          value={tab}
+          onChange={setTab}
+        />
       </div>
 
       {/* Bottom padding clears the mobile bottom navigation bar. */}
@@ -433,58 +446,132 @@ export function ThreadSidebar({
             </div>
           </li>
         )}
-        {rows.map((thread) => (
-          <li key={thread.id}>
-            <ThreadRow
-              thread={thread}
-              active={pathname === `/dashboard/messages/${thread.id}`}
-              isOnline={
-                thread.kind === "direct" &&
-                thread.peerMemberIds.some((id) => online.has(id))
-              }
+        {groupChats ? (
+          <>
+            <ThreadGroup
+              label="Projects"
+              icon={Folder}
+              threads={projectRows}
+              open={openGroups.project}
+              onToggle={() => toggleGroup("project")}
+              pathname={pathname}
+              online={online}
             />
-          </li>
-        ))}
+            <ThreadGroup
+              label="Direct"
+              icon={MessageSquare}
+              threads={directRows}
+              open={openGroups.direct}
+              onToggle={() => toggleGroup("direct")}
+              pathname={pathname}
+              online={online}
+            />
+            <ThreadGroup
+              label="Clients"
+              icon={Handshake}
+              threads={clientRows}
+              open={openGroups.client}
+              onToggle={() => toggleGroup("client")}
+              pathname={pathname}
+              online={online}
+            />
+          </>
+        ) : (
+          rows.map((thread) => (
+            <li key={thread.id}>
+              <ThreadRow
+                thread={thread}
+                active={pathname === `/dashboard/messages/${thread.id}`}
+                isOnline={
+                  thread.kind === "direct" &&
+                  thread.peerMemberIds.some((id) => online.has(id))
+                }
+              />
+            </li>
+          ))
+        )}
 
         {showInactiveSection && (
-          <li>
-            <button
-              type="button"
-              onClick={() => setShowInactive((v) => !v)}
-              aria-expanded={showInactive}
-              className="flex w-full items-center gap-2 border-y border-border/40 bg-surface/30 px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface/60"
-            >
-              <Archive className="h-3.5 w-3.5" />
-              <span>Inactive projects</span>
-              <span className="ml-1 rounded-full bg-surface px-1.5 text-tiny">
-                {inactiveRows.length}
-              </span>
-              <ChevronDown
-                className={cn(
-                  "ml-auto h-3.5 w-3.5 transition-transform",
-                  showInactive && "rotate-180",
-                )}
-              />
-            </button>
-            {showInactive && (
-              <ul>
-                {inactiveRows.map((thread) => (
-                  <li key={thread.id}>
-                    <ThreadRow
-                      thread={thread}
-                      active={pathname === `/dashboard/messages/${thread.id}`}
-                      isOnline={false}
-                    />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
+          <ThreadGroup
+            label="Inactive projects"
+            icon={Archive}
+            threads={inactiveRows}
+            open={openGroups.inactive}
+            onToggle={() => toggleGroup("inactive")}
+            pathname={pathname}
+            online={online}
+          />
         )}
           </>
         )}
       </ul>
     </aside>
+  );
+}
+
+function unreadTotal(threads: InboxThread[]) {
+  return threads.reduce((sum, thread) => sum + Math.max(0, thread.unread), 0);
+}
+
+function ThreadGroup({
+  label,
+  icon: Icon,
+  threads,
+  open,
+  onToggle,
+  pathname,
+  online,
+}: {
+  label: string;
+  icon: LucideIcon;
+  threads: InboxThread[];
+  open: boolean;
+  onToggle: () => void;
+  pathname: string;
+  online: Set<string>;
+}) {
+  if (threads.length === 0) return null;
+  const unread = unreadTotal(threads);
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 border-t border-border/40 bg-surface/30 px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface/60"
+      >
+        <Icon className="h-3.5 w-3.5" />
+        <span>{label}</span>
+        {!open && unread > 0 && (
+          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-none text-primary-foreground">
+            {unread > 9 ? "9+" : unread}
+          </span>
+        )}
+        <ChevronDown
+          className={cn(
+            "ml-auto h-3.5 w-3.5 transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      {open && (
+        <ul>
+          {threads.map((thread) => (
+            <li key={thread.id}>
+              <ThreadRow
+                thread={thread}
+                active={pathname === `/dashboard/messages/${thread.id}`}
+                isOnline={
+                  thread.kind === "direct" &&
+                  thread.peerMemberIds.some((id) => online.has(id))
+                }
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }
 

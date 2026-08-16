@@ -26,6 +26,7 @@ import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
 import { projectNoteUrl, isRoadmapNote } from "@/lib/project-note-url";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
+import { usePasteFiles } from "@/hooks/use-paste-files";
 import { markThreadRead } from "@/actions/messages";
 import { closePushBannersByTags } from "@/lib/close-push-banners";
 import { threadPushTag } from "@/lib/notification-read";
@@ -170,6 +171,10 @@ export function TaskDetailPage({
   const [declineComment, setDeclineComment] = useState("");
   const [declineFiles, setDeclineFiles] = useState<File[]>([]);
   const declineFileRef = useRef<HTMLInputElement>(null);
+  const declinePasteRef = usePasteFiles(
+    (files) => setDeclineFiles((prev) => [...prev, ...files]),
+    { enabled: showDecline, capture: true },
+  );
   const [declining, setDeclining] = useState(false);
   const [showAdminStages, setShowAdminStages] = useState(false);
   const adminStagesRef = useRef<HTMLDivElement>(null);
@@ -826,12 +831,15 @@ export function TaskDetailPage({
                   Decline &amp; return to {declineTargetLabel}
                 </button>
               ) : (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2.5 mt-2">
+                <div
+                  ref={declinePasteRef}
+                  className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2.5 mt-2"
+                >
                   <p className="text-[11px] font-medium text-destructive">Why is this being declined?</p>
                   <textarea
                     value={declineComment}
                     onChange={(e) => setDeclineComment(e.target.value)}
-                    placeholder="Explain what needs to be fixed..."
+                    placeholder="Explain what needs to be fixed... Paste screenshots to attach"
                     className="w-full rounded-md border border-border bg-background px-3 py-2 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-destructive/50 resize-none"
                     rows={3}
                     autoFocus
@@ -944,6 +952,12 @@ export function TaskDetailPage({
           <button onClick={() => setTimeTrackingOpen(!timeTrackingOpen)} className="flex items-center gap-2 w-full text-left">
             <Clock className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
             <h3 className="text-[13px] font-semibold flex-1">Time Tracking</h3>
+            {initialTask.estimatedMinutes ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold tabular-nums text-foreground">
+                <Timer className="w-3 h-3 text-muted-foreground" />
+                Est {formatEstimate(initialTask.estimatedMinutes)}
+              </span>
+            ) : null}
             <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", timeTrackingOpen && "rotate-180")} />
           </button>
           {timeTrackingOpen && (

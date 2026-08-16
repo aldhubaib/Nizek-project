@@ -14,6 +14,7 @@ import { AddContractDialog } from "@/components/project/add-contract-dialog";
 import { EditContractDialog } from "@/components/project/edit-contract-dialog";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
+import { usePasteFiles } from "@/hooks/use-paste-files";
 import { ClientChatPeopleManager } from "@/components/messages/client-chat-people";
 
 interface Team {
@@ -96,7 +97,12 @@ export function ProjectSettingsOverlay({
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (file) await uploadLogo(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function uploadLogo(file: File) {
+    if (!file.type.startsWith("image/")) return;
     if (file.size > 512 * 1024) {
       alert("Logo must be under 512KB");
       return;
@@ -112,6 +118,14 @@ export function ProjectSettingsOverlay({
       setUploading(false);
     }
   }
+
+  const logoPasteRef = usePasteFiles(
+    (files) => {
+      const image = files.find((f) => f.type.startsWith("image/"));
+      if (image) void uploadLogo(image);
+    },
+    { enabled: !uploading, capture: false },
+  );
 
   async function handleRemoveLogo() {
     setUploading(true);
@@ -224,7 +238,7 @@ export function ProjectSettingsOverlay({
           </div>
 
           {/* Logo */}
-          <div className="space-y-3">
+          <div ref={logoPasteRef} className="space-y-3">
             <Label className="text-[13px] font-semibold">Project Photo</Label>
             <div className="flex items-center gap-4">
               {logo ? (

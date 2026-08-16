@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
 import { useChannel } from "@/components/realtime/hooks";
 import { taskChannel } from "@/lib/channels";
+import { usePasteFiles } from "@/hooks/use-paste-files";
 
 interface MentionUser {
   id: string;
@@ -76,6 +77,10 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mentionListRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pasteRef = usePasteFiles(
+    (files) => handleFilesSelected(files),
+    { capture: true },
+  );
 
   useEffect(() => {
     setLoading(true);
@@ -188,8 +193,8 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
     }
   }
 
-  function handleFilesSelected(files: FileList | null) {
-    if (!files) return;
+  function handleFilesSelected(files: FileList | File[] | null) {
+    if (!files || files.length === 0) return;
     const newFiles: PendingFile[] = [];
     for (const file of Array.from(files)) {
       if (file.size > MAX_FILE_SIZE) {
@@ -482,7 +487,10 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
           </div>
         )}
 
-        <div className="flex items-end gap-2 border border-border rounded-lg p-2 focus-within:border-primary/50 transition-colors">
+        <div
+          ref={pasteRef}
+          className="flex items-end gap-2 border border-border rounded-lg p-2 focus-within:border-primary/50 transition-colors"
+        >
           <button
             onClick={() => fileInputRef.current?.click()}
             className="p-1.5 rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
@@ -528,7 +536,9 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
           </button>
         </div>
         <p className="text-[10px] text-muted-foreground/40 mt-1">
-          {uploading ? "Uploading files..." : "Press Enter to send, Shift+Enter for new line"}
+          {uploading
+            ? "Uploading files..."
+            : "Paste a screenshot to attach · Enter to send, Shift+Enter for a new line"}
         </p>
       </div>
 

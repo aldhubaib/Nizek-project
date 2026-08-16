@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2, Package, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
+import { usePasteFiles } from "@/hooks/use-paste-files";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
 import { GrowingTextarea } from "@/components/equity/growing-textarea";
 import { PhotoGallery } from "@/components/equity/photo-gallery";
@@ -142,14 +143,20 @@ function ProductForm({
     null,
   );
   const fileRef = useRef<HTMLInputElement>(null);
+  const pasteRef = usePasteFiles(
+    (files) => {
+      void addFiles(files);
+    },
+    { enabled: uploading == null, capture: true },
+  );
 
   /**
    * Uploads run together and each lands as it finishes, so one large shot
    * doesn't hold up the rest. A file that fails is reported and skipped rather
    * than taking the batch with it.
    */
-  async function addFiles(files: FileList | null) {
-    const picked = Array.from(files ?? []);
+  async function addFiles(files: FileList | File[] | null) {
+    const picked = Array.from(files ?? []).filter((f) => f.type.startsWith("image/"));
     if (picked.length === 0) return;
 
     let done = 0;
@@ -217,7 +224,7 @@ function ProductForm({
         className={textareaCls}
       />
 
-      <div className="space-y-2">
+      <div ref={pasteRef} className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
             Photos

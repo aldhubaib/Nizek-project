@@ -769,6 +769,12 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            {task.estimatedMinutes ? (
+              <span className="mr-1 inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold tabular-nums text-foreground">
+                <Timer className="w-3 h-3 text-muted-foreground" />
+                Est {formatEstimate(task.estimatedMinutes)}
+              </span>
+            ) : null}
             <button
               onClick={() => setTimeTrackingOpen(true)}
               className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"

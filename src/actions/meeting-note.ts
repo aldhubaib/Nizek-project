@@ -17,13 +17,15 @@ import { applyStoredAnnotationMarks, plainTextExcerpt, taskMarkTag, wrapFirstPla
 import { diffNoteParagraphs, encodeContentDiff } from "@/lib/note-content-diff";
 import { encodeNoteActivityBody } from "@/lib/note-activity-payload";
 import {
+  ROADMAP_NEXT_FULL_ERROR,
+  ROADMAP_NEXT_MAX,
   isRoadmapStatus,
   normalizeRoadmapStatus,
   roadmapCreateTaskError,
   roadmapScheduleError,
   type RoadmapStatus,
 } from "@/lib/roadmap-status";
-import { parseWorkingDays } from "@/lib/working-days";
+import { addWorkingDays, parseWorkingDays, startOfLocalDay, parseDateInputValue, toDateInputValue } from "@/lib/working-days";
 
 export async function createMeetingNote(data: {
   projectId: string;
@@ -48,6 +50,18 @@ export async function createMeetingNote(data: {
       : "PLANNED";
 
   if (data.noteType === "DEADLINE") {
+    if (roadmapStatus === "NEXT") {
+      const nextCount = await prisma.meetingNote.count({
+        where: {
+          projectId: data.projectId,
+          noteType: "DEADLINE",
+          roadmapStatus: "NEXT",
+        },
+      });
+      if (nextCount >= ROADMAP_NEXT_MAX) {
+        throw new Error(ROADMAP_NEXT_FULL_ERROR);
+      }
+    }
     const scheduleError = roadmapScheduleError(
       roadmapStatus,
       data.dueDate || null,
@@ -132,7 +146,12 @@ export async function toggleDeadlineComplete(
 export async function updateRoadmapStatus(
   noteId: string,
   status: RoadmapStatus,
-): Promise<{ roadmapStatus: RoadmapStatus; completedAt: Date | null }> {
+): Promise<{
+  roadmapStatus: RoadmapStatus;
+  completedAt: Date | null;
+  dueDate: Date | null;
+  startedAt: Date | null;
+}> {
   if (!isRoadmapStatus(status)) throw new Error("Invalid roadmap status");
 
   const note = await prisma.meetingNote.findUnique({ where: { id: noteId } });
@@ -142,9 +161,29 @@ export async function updateRoadmapStatus(
   const { user, member } = await requireProjectMember(note.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot edit notes");
 
+  if (status === "NEXT" && note.roadmapStatus !== "NEXT") {
+    const nextCount = await prisma.meetingNote.count({
+      where: {
+        projectId: note.projectId,
+        noteType: "DEADLINE",
+        roadmapStatus: "NEXT",
+      },
+    });
+    if (nextCount >= ROADMAP_NEXT_MAX) {
+      throw new Error(ROADMAP_NEXT_FULL_ERROR);
+    }
+  }
+
+  const enteringProgress = status === "PROGRESS" && note.roadmapStatus !== "PROGRESS";
+  const startedAt = enteringProgress ? startOfLocalDay() : note.startedAt;
+  const dueDate =
+    enteringProgress && note.workingDays != null
+      ? addWorkingDays(startedAt ?? startOfLocalDay(), note.workingDays)
+      : note.dueDate;
+
   const scheduleError = roadmapScheduleError(
     status,
-    note.dueDate,
+    dueDate,
     note.workingDays,
   );
   if (scheduleError) throw new Error(scheduleError);
@@ -152,28 +191,60 @@ export async function updateRoadmapStatus(
   const completedAt =
     status === "SHIPPED" ? note.completedAt ?? new Date() : null;
 
+  const historyEntries: {
+    noteId: string;
+    userId: string;
+    field: string;
+    oldValue: string | null;
+    newValue: string | null;
+  }[] = [];
+
+  if (note.roadmapStatus !== status) {
+    historyEntries.push({
+      noteId: note.id,
+      userId: user.id,
+      field: "roadmapStatus",
+      oldValue: note.roadmapStatus,
+      newValue: status,
+    });
+  }
+
+  const oldDue = note.dueDate ? note.dueDate.toISOString() : null;
+  const newDue = dueDate ? dueDate.toISOString() : null;
+  if (oldDue !== newDue) {
+    historyEntries.push({
+      noteId: note.id,
+      userId: user.id,
+      field: "dueDate",
+      oldValue: note.dueDate ? note.dueDate.toISOString().slice(0, 10) : null,
+      newValue: dueDate ? dueDate.toISOString().slice(0, 10) : null,
+    });
+  }
+
+  const oldStart = note.startedAt ? note.startedAt.toISOString() : null;
+  const newStart = startedAt ? startedAt.toISOString() : null;
+  if (oldStart !== newStart) {
+    historyEntries.push({
+      noteId: note.id,
+      userId: user.id,
+      field: "startedAt",
+      oldValue: note.startedAt ? toDateInputValue(note.startedAt) : null,
+      newValue: startedAt ? toDateInputValue(startedAt) : null,
+    });
+  }
+
   await prisma.$transaction([
     prisma.meetingNote.update({
       where: { id: noteId },
-      data: { roadmapStatus: status, completedAt },
+      data: { roadmapStatus: status, completedAt, dueDate, startedAt },
     }),
-    ...(note.roadmapStatus !== status
-      ? [
-          prisma.noteHistory.create({
-            data: {
-              noteId: note.id,
-              userId: user.id,
-              field: "roadmapStatus",
-              oldValue: note.roadmapStatus,
-              newValue: status,
-            },
-          }),
-        ]
+    ...(historyEntries.length > 0
+      ? [prisma.noteHistory.createMany({ data: historyEntries })]
       : []),
   ]);
 
   revalidatePath(`/dashboard/projects/${note.projectId}`);
-  return { roadmapStatus: status, completedAt };
+  return { roadmapStatus: status, completedAt, dueDate, startedAt };
 }
 
 export async function updateMeetingNote(data: {
@@ -182,6 +253,7 @@ export async function updateMeetingNote(data: {
   content?: string;
   date?: string;
   dueDate?: string | null;
+  startedAt?: string | null;
   workingDays?: number | string | null;
   /** Highlight marks only — don't write a history row. */
   skipHistory?: boolean;
@@ -220,6 +292,9 @@ export async function updateMeetingNote(data: {
         ...(data.date && { date: new Date(data.date) }),
         ...(data.dueDate !== undefined && {
           dueDate: data.dueDate ? new Date(data.dueDate) : null,
+        }),
+        ...(data.startedAt !== undefined && {
+          startedAt: data.startedAt ? parseDateInputValue(data.startedAt) : null,
         }),
         ...(data.workingDays !== undefined && {
           workingDays: parseWorkingDays(data.workingDays),
@@ -273,6 +348,26 @@ export async function updateMeetingNote(data: {
     }
   }
 
+  const nextStartedAt =
+    data.startedAt !== undefined
+      ? data.startedAt
+        ? parseDateInputValue(data.startedAt)
+        : null
+      : undefined;
+  if (nextStartedAt !== undefined) {
+    const oldIso = note.startedAt ? toDateInputValue(note.startedAt) : null;
+    const newIso = nextStartedAt ? toDateInputValue(nextStartedAt) : null;
+    if (oldIso !== newIso) {
+      historyEntries.push({
+        field: "startedAt",
+        oldValue: oldIso,
+        newValue: newIso,
+        noteId: note.id,
+        userId: user.id,
+      });
+    }
+  }
+
   const nextWorkingDays =
     data.workingDays !== undefined ? parseWorkingDays(data.workingDays) : undefined;
   if (nextWorkingDays !== undefined && nextWorkingDays !== note.workingDays) {
@@ -302,6 +397,7 @@ export async function updateMeetingNote(data: {
         ...(data.content !== undefined && { content: data.content }),
         ...(data.date && { date: new Date(data.date) }),
         ...(nextDueDate !== undefined && { dueDate: nextDueDate }),
+        ...(nextStartedAt !== undefined && { startedAt: nextStartedAt }),
         ...(nextWorkingDays !== undefined && { workingDays: nextWorkingDays }),
       },
     }),

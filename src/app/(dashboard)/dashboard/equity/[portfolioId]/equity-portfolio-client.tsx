@@ -54,6 +54,7 @@ import { PerformanceSection } from "@/components/equity/performance-section";
 import { TeamSection } from "@/components/equity/team-section";
 import { PageHeader } from "@/components/page-header";
 import { uploadFileToR2 } from "@/lib/upload";
+import { usePasteFiles } from "@/hooks/use-paste-files";
 import {
   addEquityTranche,
   deleteEquityTranche,
@@ -2674,17 +2675,7 @@ function FinancialReportForm({
   const documentInputRef = useRef<HTMLInputElement>(null);
   const uploading = uploadPct !== null;
 
-  function set<K extends keyof FinancialReportDraft>(
-    key: K,
-    value: FinancialReportDraft[K]
-  ) {
-    setDraft((d) => ({ ...d, [key]: value }));
-  }
-
-  // One at a time so the counter means something; a failure stops the batch
-  // where it happened rather than losing the files already through.
-  async function handleDocuments(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
+  async function uploadDocuments(files: File[]) {
     if (files.length === 0) return;
     setUploadPct(0);
     try {
@@ -2710,6 +2701,26 @@ function FinancialReportForm({
       setUploadPct(null);
       if (documentInputRef.current) documentInputRef.current.value = "";
     }
+  }
+
+  const documentsPasteRef = usePasteFiles(
+    (files) => {
+      void uploadDocuments(files);
+    },
+    { enabled: !busy && !uploading, capture: true },
+  );
+
+  function set<K extends keyof FinancialReportDraft>(
+    key: K,
+    value: FinancialReportDraft[K]
+  ) {
+    setDraft((d) => ({ ...d, [key]: value }));
+  }
+
+  // One at a time so the counter means something; a failure stops the batch
+  // where it happened rather than losing the files already through.
+  async function handleDocuments(e: React.ChangeEvent<HTMLInputElement>) {
+    await uploadDocuments(Array.from(e.target.files ?? []));
   }
 
   function patchRow(key: string, patch: Partial<FieldRow>) {
@@ -3089,7 +3100,7 @@ function FinancialReportForm({
           period so a figure can always be checked against its source. */}
       <div>
         <label className={labelCls}>Financial documents</label>
-        <div className="space-y-1.5">
+        <div ref={documentsPasteRef} className="space-y-1.5">
           {draft.documents.map((doc) => (
             <div
               key={doc.key}
@@ -3137,7 +3148,7 @@ function FinancialReportForm({
             <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
             {uploading
               ? `Uploading… ${uploadPct}%`
-              : "Upload the financials this period was reported from (PDF, spreadsheet, image)"}
+              : "Upload or paste the financials this period was reported from (PDF, spreadsheet, image)"}
           </button>
           <input
             ref={documentInputRef}

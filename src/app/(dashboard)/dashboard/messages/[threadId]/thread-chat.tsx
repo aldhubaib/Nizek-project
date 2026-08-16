@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, Fragment } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -75,6 +75,7 @@ import {
   type CreateTaskFromMessagePayload,
 } from "@/components/messages/create-task-from-message";
 import { useVisualViewportFrame } from "@/hooks/use-visual-viewport-frame";
+import { usePasteFiles } from "@/hooks/use-paste-files";
 import {
   isThreadMuted,
   setThreadMuted,
@@ -113,6 +114,7 @@ import type { NoteActivityPayload } from "@/lib/note-activity-payload";
 import { closePushBannersByTags } from "@/lib/close-push-banners";
 import { threadPushTag } from "@/lib/notification-read";
 import { updateAppBadge } from "@/lib/app-badge";
+import { firstUnreadMessageId, formatUnreadSeparator } from "@/lib/chat-unread";
 import {
   ALL_MENTION_ID,
   ALL_MENTION_NAME,
@@ -373,6 +375,25 @@ function sameDay(a: string, b: string) {
     da.getFullYear() === db.getFullYear() &&
     da.getMonth() === db.getMonth() &&
     da.getDate() === db.getDate()
+  );
+}
+
+function UnreadSeparator({ count }: { count: number }) {
+  const label = formatUnreadSeparator(count);
+  if (!label) return null;
+  return (
+    <div
+      id="unread-separator"
+      className="my-3 flex items-center gap-3"
+      role="separator"
+      aria-label={label}
+    >
+      <div className="h-px flex-1 bg-primary/40" />
+      <span className="shrink-0 rounded-full bg-primary/15 px-3 py-0.5 text-[11px] font-semibold text-primary">
+        {label}
+      </span>
+      <div className="h-px flex-1 bg-primary/40" />
+    </div>
   );
 }
 
@@ -1080,6 +1101,8 @@ export function ThreadChat({
   activeContractType = null,
   projectName,
   peerLastReadAt: initialPeerLastReadAt = null,
+  lastReadAt: initialLastReadAt = null,
+  unreadCount: initialUnreadCount = 0,
   isClientRoom = false,
   focusMessageId,
 }: {
@@ -1102,18 +1125,33 @@ export function ThreadChat({
   activeContractType?: string | null;
   projectName?: string;
   peerLastReadAt?: string | null;
+  /** Viewer's last-read cursor at open — frozen for the unread separator. */
+  lastReadAt?: string | null;
+  unreadCount?: number;
   /** Isolated client-facing room — shows curated people manager. */
   isClientRoom?: boolean;
   /** Scroll to this message after open (inbox Important tab). */
   focusMessageId?: string;
 }) {
   const frameRef = useVisualViewportFrame<HTMLDivElement>();
+  const pickFilesRef = useRef<(files: FileList | File[] | null) => void>(() => {});
+  usePasteFiles((files) => pickFilesRef.current(files), {
+    ref: frameRef,
+    capture: true,
+  });
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [hasMore, setHasMore] = useState(hasMoreOlder);
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const skipAutoScrollRef = useRef(false);
-  const nearBottomRef = useRef(true);
-  const [nearBottom, setNearBottom] = useState(true);
+  const openUnreadCount = initialUnreadCount;
+  const openLastReadAt = initialLastReadAt;
+  const seekingUnread = openUnreadCount > 0 && !focusMessageId;
+  const skipAutoScrollRef = useRef(seekingUnread);
+  const nearBottomRef = useRef(!seekingUnread);
+  const didInitialPinRef = useRef(false);
+  const unreadSeekLoadsRef = useRef(0);
+  const [threadOpened, setThreadOpened] = useState(!seekingUnread);
+  const [unreadSeekExhausted, setUnreadSeekExhausted] = useState(false);
+  const [nearBottom, setNearBottom] = useState(!seekingUnread);
   const [newBelow, setNewBelow] = useState(0);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingFile[]>([]);
@@ -1504,7 +1542,6 @@ export function ThreadChat({
       setNearBottom(near);
       if (near) setNewBelow(0);
     };
-    onScroll();
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
@@ -1515,8 +1552,9 @@ export function ThreadChat({
       skipAutoScrollRef.current = false;
       return;
     }
-    // Stay put while we jump to an Important / ?msg= target.
+    // Stay put while we jump to an Important / ?msg= target or unread line.
     if (pendingFocusRef.current) return;
+    if (!didInitialPinRef.current) return;
     if (!nearBottomRef.current) return;
     const el = scrollerRef.current;
     if (!el) return;
@@ -1526,11 +1564,103 @@ export function ThreadChat({
     });
   }, [messages.length, typing.length, outbox.length]);
 
+  const firstUnreadId = useMemo(
+    () =>
+      openUnreadCount > 0
+        ? firstUnreadMessageId(messages, currentMemberId, openLastReadAt)
+        : null,
+    [messages, currentMemberId, openLastReadAt, openUnreadCount],
+  );
+
+  const crossedReadBoundary = useMemo(() => {
+    if (openUnreadCount <= 0) return true;
+    if (messages.length === 0) return !hasMore;
+    if (!openLastReadAt) return !hasMore;
+    const t = new Date(openLastReadAt).getTime();
+    return messages.some((m) => new Date(m.createdAt).getTime() <= t) || !hasMore;
+  }, [messages, openLastReadAt, openUnreadCount, hasMore]);
+
+  const readyForUnreadLine =
+    !focusMessageId &&
+    openUnreadCount > 0 &&
+    Boolean(firstUnreadId) &&
+    (crossedReadBoundary || unreadSeekExhausted);
+
+  const pinScroller = useCallback((mode: "bottom" | "unread") => {
+    const el = scrollerRef.current;
+    if (!el) return false;
+    if (mode === "unread") {
+      const sep = document.getElementById("unread-separator");
+      if (!sep) return false;
+      const sRect = el.getBoundingClientRect();
+      const eRect = sep.getBoundingClientRect();
+      el.scrollTop = Math.max(0, eRect.top - sRect.top + el.scrollTop - 8);
+      nearBottomRef.current = false;
+      setNearBottom(false);
+      skipAutoScrollRef.current = true;
+      return true;
+    }
+    el.scrollTop = el.scrollHeight;
+    nearBottomRef.current = true;
+    setNearBottom(true);
+    return true;
+  }, []);
+
+  const finishOpen = useCallback(
+    (mode: "bottom" | "unread") => {
+      if (didInitialPinRef.current) return;
+      if (!pinScroller(mode)) return;
+      didInitialPinRef.current = true;
+      setThreadOpened(true);
+    },
+    [pinScroller],
+  );
+
+  useLayoutEffect(() => {
+    if (didInitialPinRef.current) return;
+    if (pendingFocusRef.current) return;
+    if (openUnreadCount > 0) {
+      if (readyForUnreadLine) {
+        finishOpen("unread");
+        return;
+      }
+      if (crossedReadBoundary && !firstUnreadId) {
+        finishOpen("bottom");
+      }
+      return;
+    }
+    finishOpen("bottom");
+  }, [messages.length, firstUnreadId, crossedReadBoundary, readyForUnreadLine, openUnreadCount, finishOpen]);
+
+  useEffect(() => {
+    if (didInitialPinRef.current) return;
+    if (pendingFocusRef.current) return;
+    if (openUnreadCount <= 0) return;
+    if (crossedReadBoundary) return;
+    if (hasMore && !loadingOlder && unreadSeekLoadsRef.current < 10) {
+      unreadSeekLoadsRef.current += 1;
+      skipAutoScrollRef.current = true;
+      void loadOlder();
+      return;
+    }
+    if (!loadingOlder) {
+      setUnreadSeekExhausted(true);
+    }
+  }, [
+    crossedReadBoundary,
+    firstUnreadId,
+    hasMore,
+    loadingOlder,
+    loadOlder,
+    openUnreadCount,
+    finishOpen,
+  ]);
+
   // Infinite load older via top sentinel.
   useEffect(() => {
     const root = scrollerRef.current;
     const sentinel = topSentinelRef.current;
-    if (!root || !sentinel || !hasMore) return;
+    if (!root || !sentinel || !hasMore || !threadOpened) return;
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) void loadOlder();
@@ -1539,7 +1669,7 @@ export function ThreadChat({
     );
     io.observe(sentinel);
     return () => io.disconnect();
-  }, [hasMore, loadOlder]);
+  }, [hasMore, loadOlder, threadOpened]);
 
   const scrollToBottom = useCallback(() => {
     const el = scrollerRef.current;
@@ -1690,6 +1820,7 @@ export function ThreadChat({
       }));
     setPending((prev) => [...prev, ...picked]);
   };
+  pickFilesRef.current = pickFiles;
 
   const removePending = (key: string) => {
     setPending((prev) => {
@@ -2537,8 +2668,11 @@ export function ThreadChat({
                 prevFeed;
               const mine = isFeed ? false : m.authorId === currentMemberId;
               return (
-                <MessageRow
-                  key={m.id}
+                <Fragment key={m.id}>
+                  {m.id === firstUnreadId && readyForUnreadLine ? (
+                    <UnreadSeparator count={openUnreadCount} />
+                  ) : null}
+                  <MessageRow
                   m={m}
                   mine={mine}
                   showDay={showDay}
@@ -2571,6 +2705,7 @@ export function ThreadChat({
                   openImage={openImage}
                   memberNames={peopleNames}
                 />
+                </Fragment>
               );
             })}
             {outbox.map((o) => (
@@ -3005,30 +3140,6 @@ export function ThreadChat({
               onChange={(e) => {
                 setDraft(e.target.value);
                 notifyTyping();
-              }}
-              onPaste={(e) => {
-                const items = e.clipboardData?.items;
-                if (!items) return;
-                const files: File[] = [];
-                for (const item of Array.from(items)) {
-                  if (item.kind !== "file") continue;
-                  const file = item.getAsFile();
-                  if (!file) continue;
-                  if (file.type.startsWith("image/") && (!file.name || file.name === "image.png")) {
-                    const ext = file.type.split("/")[1]?.split("+")[0] || "png";
-                    const stamp = new Date()
-                      .toISOString()
-                      .replace(/[:T]/g, "-")
-                      .slice(0, 19);
-                    files.push(new File([file], `Pasted image ${stamp}.${ext}`, { type: file.type }));
-                  } else {
-                    files.push(file);
-                  }
-                }
-                if (files.length > 0) {
-                  e.preventDefault();
-                  pickFiles(files);
-                }
               }}
               onKeyDown={(e) => {
                 if (mentionPickerOpen) {

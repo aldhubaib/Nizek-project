@@ -7,14 +7,13 @@ import {
   getMeetingNote,
   getNoteWorkspace,
   toggleDeadlineComplete,
-  updateRoadmapStatus,
 } from "@/actions/meeting-note";
 import {
   NoteFullScreenDetail,
   type MeetingNote,
 } from "@/components/project/meeting-notes-tab";
 import { NoteSlideOver } from "@/components/project/note-slide-over";
-import { roadmapScheduleError, type RoadmapStatus } from "@/lib/roadmap-status";
+import { roadmapScheduleError } from "@/lib/roadmap-status";
 
 export function NoteCommentReplyDialog({
   open,
@@ -104,43 +103,6 @@ export function NoteCommentReplyDialog({
     setNote((prev) => (prev ? { ...prev, completedAt, roadmapStatus } : prev));
   }, [note]);
 
-  const moveStatus = useCallback(
-    async (status: RoadmapStatus) => {
-      if (!note) return;
-      const blocked = roadmapScheduleError(status, note.dueDate, note.workingDays);
-      if (blocked) {
-        setScheduleError(blocked);
-        return;
-      }
-      setScheduleError(null);
-      const prevStatus = note.roadmapStatus;
-      const prevCompleted = note.completedAt ?? null;
-      const completedAt = status === "SHIPPED" ? new Date() : null;
-      setNote((prev) =>
-        prev
-          ? {
-              ...prev,
-              roadmapStatus: status,
-              completedAt:
-                status === "SHIPPED" ? prev.completedAt ?? completedAt : null,
-            }
-          : prev,
-      );
-      try {
-        const result = await updateRoadmapStatus(note.id, status);
-        setNote((prev) => (prev ? { ...prev, ...result } : prev));
-      } catch (err) {
-        setNote((prev) =>
-          prev
-            ? { ...prev, roadmapStatus: prevStatus, completedAt: prevCompleted }
-            : prev,
-        );
-        setScheduleError(err instanceof Error ? err.message : "Could not update status");
-      }
-    },
-    [note],
-  );
-
   if (!open) return null;
 
   if (loading && !note) {
@@ -177,7 +139,6 @@ export function NoteCommentReplyDialog({
       initialThreadId={threadId ?? null}
       currentUserId={workspace.currentUserId}
       onToggleComplete={toggleComplete}
-      onMoveStatus={moveStatus}
       scheduleError={scheduleError}
       onRefresh={refreshNote}
       onClose={() => onOpenChange(false)}

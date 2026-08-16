@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
+import { usePasteFiles } from "@/hooks/use-paste-files";
 
 function Lightbox({
   images,
@@ -241,16 +242,17 @@ export function QuestionField({ question, index, value, onChange, compact, reado
         return { name: entry, dataUrl: "" };
       })
     : [];
+  const fileEntriesRef = useRef(fileEntries);
+  fileEntriesRef.current = fileEntries;
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
-    if (!files?.length) return;
+  const addFiles = useCallback(async (files: File[]) => {
+    if (!files.length) return;
 
     setUploading(true);
     setUploadError(null);
 
     const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
-    const list = Array.from(files);
+    const list = files;
     const tooBig = list.filter((f) => f.size > MAX_FILE_SIZE);
     const toUpload = list.filter((f) => f.size <= MAX_FILE_SIZE);
 
@@ -259,8 +261,6 @@ export function QuestionField({ question, index, value, onChange, compact, reado
     const uploaded: { name: string; dataUrl: string }[] = [];
     const failed: string[] = tooBig.map((f) => `${f.name} (too large)`);
 
-    // Upload all files in parallel (presigned direct-to-R2), updating progress
-    // as each completes rather than one-at-a-time.
     let done = 0;
     const results = await Promise.allSettled(
       toUpload.map(async (file) => {
@@ -280,7 +280,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
     });
 
     if (uploaded.length > 0) {
-      const combined = [...fileEntries, ...uploaded];
+      const combined = [...fileEntriesRef.current, ...uploaded];
       onChange(combined.map((f) => `${f.name}::${f.dataUrl}`).join("|||"));
     }
 
@@ -295,6 +295,17 @@ export function QuestionField({ question, index, value, onChange, compact, reado
     setUploading(false);
     setUploadProgress(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [onChange]);
+
+  const pasteRef = usePasteFiles(addFiles, {
+    enabled: question.type === "file" && !isReadonly && !uploading,
+    capture: true,
+  });
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files?.length) return;
+    await addFiles(Array.from(files));
   }
 
   function removeFile(name: string) {
@@ -491,7 +502,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
           </div>
         );
       })(      ) : question.type === "file" ? (
-        <div>
+        <div ref={pasteRef}>
           <input
             ref={fileInputRef}
             type="file"
@@ -516,7 +527,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
             ) : (
               <>
                 <Paperclip className="w-4 h-4" strokeWidth={1.5} />
-                {fileEntries.length > 0 ? "Attach more files" : "Click to attach files"}
+                {fileEntries.length > 0 ? "Attach more files" : "Click or paste to attach files"}
               </>
             )}
           </button>

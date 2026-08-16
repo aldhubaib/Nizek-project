@@ -223,6 +223,79 @@ type SendMessageInput = {
 
 const THREAD_PAGE_SIZE = 50;
 
+async function resolveThreadUnreadCursor(
+  userId: string,
+  input: {
+    taskId?: string | null;
+    projectId?: string | null;
+    conversationId?: string | null;
+  },
+  messageWhere: {
+    taskId?: string;
+    projectId?: string;
+    conversationId?: string | null;
+  },
+): Promise<{ lastReadAt: string | null; unreadCount: number }> {
+  let lastReadAt: Date | null = null;
+
+  if (input.conversationId) {
+    const row = await prisma.conversationParticipant.findUnique({
+      where: {
+        conversationId_memberId: {
+          conversationId: input.conversationId,
+          memberId: userId,
+        },
+      },
+      select: { lastReadAt: true },
+    });
+    lastReadAt = row?.lastReadAt ?? null;
+  }
+
+  if (!lastReadAt) {
+    const linkUrl = input.conversationId
+      ? `/dashboard/messages/conv-${input.conversationId}`
+      : input.taskId
+        ? `/dashboard/projects/${input.projectId}/tasks/${input.taskId}`
+        : input.projectId
+          ? `/dashboard/messages/project-${input.projectId}`
+          : null;
+    if (linkUrl) {
+      const [lastReadNotif, oldestUnread] = await Promise.all([
+        prisma.notification.findFirst({
+          where: {
+            recipientId: userId,
+            linkUrl,
+            read: true,
+            readAt: { not: null },
+          },
+          orderBy: { readAt: "desc" },
+          select: { readAt: true },
+        }),
+        prisma.notification.findFirst({
+          where: { recipientId: userId, linkUrl, read: false },
+          orderBy: { createdAt: "asc" },
+          select: { createdAt: true },
+        }),
+      ]);
+      lastReadAt =
+        lastReadNotif?.readAt ??
+        (oldestUnread ? new Date(oldestUnread.createdAt.getTime() - 1) : null);
+    }
+  }
+
+  if (!lastReadAt) return { lastReadAt: null, unreadCount: 0 };
+
+  const unreadCount = await prisma.message.count({
+    where: {
+      ...messageWhere,
+      authorId: { not: userId },
+      createdAt: { gt: lastReadAt },
+    },
+  });
+
+  return { lastReadAt: lastReadAt.toISOString(), unreadCount };
+}
+
 export type ThreadMessage = {
   id: string;
   authorId: string;
@@ -248,6 +321,10 @@ export type ThreadMessage = {
 export type ThreadMessagesPage = {
   messages: ThreadMessage[]; // oldest → newest
   hasMore: boolean;
+  /** When this viewer last read the thread. Null = caught up / never read. */
+  lastReadAt: string | null;
+  /** Other people's messages after lastReadAt. */
+  unreadCount: number;
 };
 
 export async function getThreadMessages(input: {
@@ -403,7 +480,11 @@ export async function getThreadMessages(input: {
     }
   }
 
-  return { messages, hasMore };
+  const unread = input.cursorId
+    ? { lastReadAt: null, unreadCount: 0 }
+    : await resolveThreadUnreadCursor(user.id, input, where);
+
+  return { messages, hasMore, lastReadAt: unread.lastReadAt, unreadCount: unread.unreadCount };
 }
 
 export type ImportantMessageDTO = {

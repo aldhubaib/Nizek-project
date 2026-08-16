@@ -186,9 +186,15 @@ export function editTimelineDescription(
     if (oldValue) return `Cleared due date`;
     return "Changed due date";
   }
+  if (field === "startedAt") {
+    if (oldValue && newValue) return `Changed starting date from ${oldValue} to ${newValue}`;
+    if (newValue) return `Set starting date to ${newValue}`;
+    if (oldValue) return `Cleared starting date`;
+    return "Changed starting date";
+  }
   if (field === "workingDays") {
-    const from = oldValue ? `${oldValue} working day${oldValue === "1" ? "" : "s"}` : "none";
-    const to = newValue ? `${newValue} working day${newValue === "1" ? "" : "s"}` : "none";
+    const from = oldValue ? `${oldValue} effort${oldValue === "1" ? "" : "s"}` : "none";
+    const to = newValue ? `${newValue} effort${newValue === "1" ? "" : "s"}` : "none";
     return `Changed effort from ${from} to ${to}`;
   }
   return `Changed ${field}`;

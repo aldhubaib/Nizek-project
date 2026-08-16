@@ -18,19 +18,23 @@ import { format } from "date-fns";
 import { CheckCircle2, CheckSquare, Circle, MessageSquare, Plus } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { RoadmapCommitDialog, RoadmapWarningDialog } from "@/components/project/roadmap-commit-dialog";
 import {
   ROADMAP_COLUMNS,
+  ROADMAP_NEXT_MAX,
   normalizeRoadmapStatus,
+  roadmapNextColumnError,
   roadmapScheduleError,
   type RoadmapStatus,
 } from "@/lib/roadmap-status";
-import { formatWorkingDays } from "@/lib/working-days";
+import { addWorkingDays, formatWorkingDays, startOfLocalDay } from "@/lib/working-days";
 
 export interface RoadmapNote {
   id: string;
   title: string;
   content: string;
   dueDate?: Date | string | null;
+  startedAt?: Date | string | null;
   workingDays?: number | null;
   completedAt?: Date | string | null;
   roadmapStatus?: string | null;
@@ -147,10 +151,21 @@ export function RoadmapBoard({
   onOpen: (noteId: string) => void;
   onCreate: (status: RoadmapStatus) => void;
   onMove: (noteId: string, status: RoadmapStatus) => void;
-  onBlocked?: (message: string) => void;
+  onBlocked?: (message: string | null) => void;
   onToggleComplete: (noteId: string) => void;
 }) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [pendingProgress, setPendingProgress] = useState<{
+    noteId: string;
+    title: string;
+    startDate: Date;
+    dueDate: Date;
+  } | null>(null);
+  const [warning, setWarning] = useState<{
+    heading: string;
+    message: string;
+    notice?: string;
+  } | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
@@ -185,9 +200,44 @@ export function RoadmapBoard({
     if (!note) return;
     const current = normalizeRoadmapStatus(note.roadmapStatus, note.completedAt);
     if (current === status) return;
+    onBlocked?.(null);
+    setWarning(null);
+    if (status === "NEXT") {
+      const nextFull = roadmapNextColumnError(grouped.NEXT.length);
+      if (nextFull) {
+        setWarning({
+          heading: "Next is full",
+          message: nextFull,
+          notice: "Drag an item back to Planned to free a slot.",
+        });
+        return;
+      }
+    }
+    if (status === "PROGRESS" && current !== "PROGRESS") {
+      const efforts = note.workingDays;
+      if (efforts == null || !Number.isInteger(efforts) || efforts < 1) {
+        setWarning({
+          heading: "Efforts required",
+          message: "Please enter the Efforts before moving to In Progress.",
+          notice: "Open the item in Next and fill Efforts first.",
+        });
+        return;
+      }
+      const startDate = startOfLocalDay();
+      setPendingProgress({
+        noteId,
+        title: note.title,
+        startDate,
+        dueDate: addWorkingDays(startDate, efforts),
+      });
+      return;
+    }
     const blocked = roadmapScheduleError(status, note.dueDate, note.workingDays);
     if (blocked) {
-      onBlocked?.(blocked);
+      setWarning({
+        heading: "Cannot move item",
+        message: blocked,
+      });
       return;
     }
     onMove(noteId, status);
@@ -201,7 +251,7 @@ export function RoadmapBoard({
       onDragEnd={handleDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      <div className="flex w-full min-w-0 gap-3 overflow-x-auto pb-4 [scrollbar-width:thin]">
+      <div className="flex w-full min-w-0 flex-col gap-4 pb-4 lg:h-[calc(100dvh-8rem)] lg:flex-row lg:gap-3 lg:overflow-x-auto">
         {ROADMAP_COLUMNS.map((column) => (
           <RoadmapColumn
             key={column.id}
@@ -225,6 +275,27 @@ export function RoadmapBoard({
           />
         ) : null}
       </DragOverlay>
+      {pendingProgress ? (
+        <RoadmapCommitDialog
+          title={pendingProgress.title}
+          startDateLabel={format(pendingProgress.startDate, "MMMM d, yyyy")}
+          dueDateLabel={format(pendingProgress.dueDate, "MMMM d, yyyy")}
+          onCancel={() => setPendingProgress(null)}
+          onConfirm={() => {
+            const { noteId } = pendingProgress;
+            setPendingProgress(null);
+            onMove(noteId, "PROGRESS");
+          }}
+        />
+      ) : null}
+      {warning ? (
+        <RoadmapWarningDialog
+          heading={warning.heading}
+          message={warning.message}
+          notice={warning.notice}
+          onDismiss={() => setWarning(null)}
+        />
+      ) : null}
     </DndContext>
   );
 }
@@ -254,14 +325,16 @@ function RoadmapColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex min-h-[calc(100dvh-8rem)] min-w-[16rem] flex-1 flex-col rounded-xl bg-muted/25",
+        "flex w-full max-h-[70dvh] flex-col rounded-xl bg-muted/25 lg:h-full lg:max-h-none lg:min-w-[16rem] lg:flex-1",
         isOver && "bg-muted/50 ring-1 ring-border",
       )}
     >
       <div className="flex items-center justify-between gap-2 px-3 py-3">
         <div className="flex items-baseline gap-2 min-w-0">
           <h3 className="text-[15px] font-semibold tracking-tight">{label}</h3>
-          <span className="text-[12px] text-muted-foreground tabular-nums">{notes.length}</span>
+          <span className="text-[12px] text-muted-foreground tabular-nums">
+            {status === "NEXT" ? `${notes.length}/${ROADMAP_NEXT_MAX}` : notes.length}
+          </span>
         </div>
         {canEdit && status === "PLANNED" && (
           <button
@@ -274,7 +347,7 @@ function RoadmapColumn({
           </button>
         )}
       </div>
-      <div className="flex flex-col gap-2.5 px-2 pb-3 min-h-[8rem]">
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-2 pb-3">
         {notes.map((note) => (
           <RoadmapCard
             key={note.id}
@@ -380,6 +453,7 @@ function RoadmapCard({
           {[
             deadlineStatus?.label,
             note.dueDate ? format(new Date(note.dueDate), "MMM d, yyyy") : null,
+            note.startedAt ? `Started ${format(new Date(note.startedAt), "MMM d")}` : null,
             note.workingDays != null ? formatWorkingDays(note.workingDays) : null,
           ]
             .filter(Boolean)

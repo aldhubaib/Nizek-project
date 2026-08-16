@@ -6,6 +6,7 @@ import { Flag, ImagePlus, Loader2, Pencil, Plus, Trash2, X } from "lucide-react"
 import { cn } from "@/lib/utils";
 import { GrowingTextarea } from "@/components/equity/growing-textarea";
 import { uploadFileToR2 } from "@/lib/upload";
+import { usePasteFiles } from "@/hooks/use-paste-files";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
 import {
   saveEquityTraction,
@@ -218,8 +219,16 @@ function PhotoCell({
     }
   }
 
+  const pasteRef = usePasteFiles(
+    (files) => {
+      const image = files.find((f) => f.type.startsWith("image/"));
+      void upload(image);
+    },
+    { enabled: !busy, capture: true },
+  );
+
   return (
-    <div className="relative">
+    <div ref={pasteRef} className="relative">
       <input
         ref={fileRef}
         type="file"

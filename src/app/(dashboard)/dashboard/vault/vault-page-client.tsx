@@ -21,7 +21,8 @@ function credentialMatches(c: VaultCredentialDTO, q: string) {
     c.title.toLowerCase().includes(q) ||
     (c.username ?? "").toLowerCase().includes(q) ||
     (c.url ?? "").toLowerCase().includes(q) ||
-    (c.category ?? "").toLowerCase().includes(q)
+    (c.category ?? "").toLowerCase().includes(q) ||
+    (c.folderName ?? "").toLowerCase().includes(q)
   );
 }
 

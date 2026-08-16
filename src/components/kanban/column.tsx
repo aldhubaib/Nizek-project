@@ -66,10 +66,10 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
     <div
       ref={setNodeRef}
       className={cn(
-        // Stacked full-width on phones, capped so one crowded stage scrolls
+        // Stacked full-width below lg, capped so one crowded stage scrolls
         // within itself instead of burying the stages below it; a fixed-width
-        // full-height rail column from sm up.
-        "flex flex-col rounded-lg bg-muted/30 border border-border/50 w-full max-h-[70dvh] sm:min-w-[312px] sm:w-[312px] shrink-0 sm:max-h-none sm:h-full transition-colors",
+        // full-height rail column from the desktop breakpoint up.
+        "flex w-full max-h-[70dvh] shrink-0 flex-col rounded-lg border border-border/50 bg-muted/30 transition-colors lg:h-full lg:max-h-none lg:w-[312px] lg:min-w-[312px]",
         isOver && !disabled && isValidDropTarget && "border-emerald-500/60 bg-emerald-500/5",
         isOver && !disabled && isDragging && !isValidDropTarget && "border-destructive/50 bg-destructive/5"
       )}

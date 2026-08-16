@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Sparkles, Wrench, Bug, Clock, Timer, Undo2, AlertCircle, Palette, Gauge } from "lucide-react";
+import { Sparkles, Wrench, Bug, Clock, Timer, Undo2, AlertCircle, Palette, Gauge, Hourglass } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -43,6 +43,14 @@ function formatDuration(ms: number): string {
   if (hours > 0) return `${hours}h ${minutes % 60}m`;
   if (minutes > 0) return `${minutes}m`;
   return `${seconds}s`;
+}
+
+function formatEstimate(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
 }
 
 function liveDuration(isoDate: string | null | undefined): string | null {
@@ -190,6 +198,10 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
         : null
       : liveDuration(task.startedAt);
   const stageTime = liveDuration(task.stageEnteredAt);
+  const estimateTime =
+    task.estimatedMinutes != null && task.estimatedMinutes > 0
+      ? formatEstimate(task.estimatedMinutes)
+      : null;
 
   return (
     <div
@@ -297,8 +309,16 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
           </div>
         </div>
 
-        {(totalTime || stageTime) && (
+        {(estimateTime || totalTime || stageTime) && (
           <div className="mt-2 flex items-center gap-3 text-[10px] font-mono tabular-nums text-muted-foreground/60">
+            {estimateTime && (
+              <TimeBadge
+                icon={Hourglass}
+                value={estimateTime}
+                label="Estimated time"
+                explanation="How long this task was expected to take when it entered Ready for Dev."
+              />
+            )}
             {totalTime && (
               <TimeBadge
                 icon={Clock}

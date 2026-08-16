@@ -324,6 +324,8 @@ export default async function ThreadPage({
       activeContractType={activeContractType}
       projectName={projectName}
       peerLastReadAt={peerLastReadAt}
+      lastReadAt={page.lastReadAt}
+      unreadCount={page.unreadCount}
       isClientRoom={isClientRoom}
       focusMessageId={focusMessageId}
     />

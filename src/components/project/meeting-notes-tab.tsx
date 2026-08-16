@@ -42,8 +42,9 @@ import { NoteHistoryDialog } from "@/components/project/note-history-dialog";
 import { NoteSlideOver } from "@/components/project/note-slide-over";
 import { LinkedCountPopover } from "@/components/project/linked-count-popover";
 import { RoadmapBoard } from "@/components/project/roadmap-board";
-import { ROADMAP_COLUMNS, normalizeRoadmapStatus, roadmapAllowsCreateTask, roadmapScheduleError, type RoadmapStatus } from "@/lib/roadmap-status";
-import { formatWorkingDays, parseWorkingDays } from "@/lib/working-days";
+import { RoadmapWarningDialog } from "@/components/project/roadmap-commit-dialog";
+import { normalizeRoadmapStatus, roadmapAllowsCreateTask, roadmapScheduleError, type RoadmapStatus } from "@/lib/roadmap-status";
+import { addWorkingDays, formatWorkingDays, parseWorkingDays, startOfLocalDay, toDateInputValue } from "@/lib/working-days";
 import { cn } from "@/lib/utils";
 
 type NoteType = "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
@@ -104,6 +105,7 @@ export interface MeetingNote {
   date: Date;
   noteType: string;
   dueDate?: Date | string | null;
+  startedAt?: Date | string | null;
   workingDays?: number | null;
   completedAt?: Date | string | null;
   roadmapStatus?: string | null;
@@ -251,7 +253,6 @@ export function MeetingNotesTab({
   const [filter, setFilter] = useState<NoteType | "ALL">("ALL");
   const [view, setView] = useState<"list" | "create" | "detail">("list");
   const [selectedNote, setSelectedNote] = useState<MeetingNote | null>(null);
-  const [createStatus, setCreateStatus] = useState<RoadmapStatus>("PLANNED");
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const dismissedNoteIdRef = useRef<string | null>(null);
@@ -334,17 +335,37 @@ export function MeetingNotesTab({
     setScheduleError(null);
     const prevStatus = note?.roadmapStatus;
     const prevCompleted = note?.completedAt ?? null;
+    const prevDue = note?.dueDate ?? null;
+    const prevStarted = note?.startedAt ?? null;
     const completedAt = status === "SHIPPED" ? new Date() : null;
+    const optimisticStart =
+      status === "PROGRESS" ? startOfLocalDay() : undefined;
+    const optimisticDue =
+      status === "PROGRESS" && note?.workingDays != null
+        ? addWorkingDays(optimisticStart ?? startOfLocalDay(), note.workingDays)
+        : undefined;
     setNotes((prev) =>
       prev.map((n) =>
         n.id === noteId
-          ? { ...n, roadmapStatus: status, completedAt: status === "SHIPPED" ? n.completedAt ?? completedAt : null }
+          ? {
+              ...n,
+              roadmapStatus: status,
+              completedAt: status === "SHIPPED" ? n.completedAt ?? completedAt : null,
+              ...(optimisticDue ? { dueDate: optimisticDue } : {}),
+              ...(optimisticStart ? { startedAt: optimisticStart } : {}),
+            }
           : n,
       ),
     );
     setSelectedNote((prev) =>
       prev?.id === noteId
-        ? { ...prev, roadmapStatus: status, completedAt: status === "SHIPPED" ? prev.completedAt ?? completedAt : null }
+        ? {
+            ...prev,
+            roadmapStatus: status,
+            completedAt: status === "SHIPPED" ? prev.completedAt ?? completedAt : null,
+            ...(optimisticDue ? { dueDate: optimisticDue } : {}),
+            ...(optimisticStart ? { startedAt: optimisticStart } : {}),
+          }
         : prev,
     );
     try {
@@ -359,13 +380,13 @@ export function MeetingNotesTab({
       setNotes((prev) =>
         prev.map((n) =>
           n.id === noteId
-            ? { ...n, roadmapStatus: prevStatus, completedAt: prevCompleted }
+            ? { ...n, roadmapStatus: prevStatus, completedAt: prevCompleted, dueDate: prevDue, startedAt: prevStarted }
             : n,
         ),
       );
       setSelectedNote((prev) =>
         prev?.id === noteId
-          ? { ...prev, roadmapStatus: prevStatus, completedAt: prevCompleted }
+          ? { ...prev, roadmapStatus: prevStatus, completedAt: prevCompleted, dueDate: prevDue, startedAt: prevStarted }
           : prev,
       );
       setScheduleError(err instanceof Error ? err.message : "Could not update status");
@@ -393,8 +414,7 @@ export function MeetingNotesTab({
     window.history.replaceState(null, "", `?${params.toString()}`);
   }
 
-  function openCreate(status: RoadmapStatus = "PLANNED") {
-    setCreateStatus(status);
+  function openCreate(_status: RoadmapStatus = "PLANNED") {
     setView("create");
   }
 
@@ -403,7 +423,6 @@ export function MeetingNotesTab({
       <NoteFullScreenCreate
         projectId={projectId}
         createTypes={createTypes}
-        defaultRoadmapStatus={createStatus}
         onCreated={(note) => {
           setNotes((prev) => [note, ...prev]);
           goBack();
@@ -426,7 +445,6 @@ export function MeetingNotesTab({
         initialThreadId={searchParams.get("threadId")}
         currentUserId={currentUserId}
         onToggleComplete={() => toggleComplete(selectedNote.id)}
-        onMoveStatus={(status) => moveStatus(selectedNote.id, status)}
         scheduleError={scheduleError}
         onRefresh={() => refreshNote(selectedNote.id)}
         onDelete={async () => {
@@ -442,11 +460,6 @@ export function MeetingNotesTab({
     <div>
       {isRoadmap ? (
         <>
-        {scheduleError && (
-          <p className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
-            {scheduleError}
-          </p>
-        )}
         <RoadmapBoard
           notes={notes}
           canEdit={canEdit}
@@ -460,6 +473,13 @@ export function MeetingNotesTab({
           onBlocked={setScheduleError}
           onToggleComplete={(id) => void toggleComplete(id)}
         />
+        {scheduleError ? (
+          <RoadmapWarningDialog
+            heading="Cannot move item"
+            message={scheduleError}
+            onDismiss={() => setScheduleError(null)}
+          />
+        ) : null}
         </>
       ) : (
       <>
@@ -584,6 +604,7 @@ export function MeetingNotesTab({
                     {[
                       deadlineStatus?.label,
                       note.dueDate ? format(new Date(note.dueDate), "MMM d, yyyy") : null,
+                      note.startedAt ? `Started ${format(new Date(note.startedAt), "MMM d")}` : null,
                       note.workingDays != null ? formatWorkingDays(note.workingDays) : null,
                     ]
                       .filter(Boolean)
@@ -652,45 +673,26 @@ function NoteFullScreenCreate({
   projectId,
   onCreated,
   createTypes,
-  defaultRoadmapStatus = "PLANNED",
 }: {
   projectId: string;
   onCreated: (note: MeetingNote) => void;
   createTypes: NoteType[];
-  defaultRoadmapStatus?: RoadmapStatus;
 }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [dueDate, setDueDate] = useState("");
-  const [workingDays, setWorkingDays] = useState("");
-  const [workingDaysError, setWorkingDaysError] = useState<string | null>(null);
   const [noteType, setNoteType] = useState<NoteType | null>(createTypes.length === 1 ? createTypes[0] : null);
   const [saving, setSaving] = useState(false);
   const [typeError, setTypeError] = useState(false);
-  const [roadmapStatus, setRoadmapStatus] = useState<RoadmapStatus>(defaultRoadmapStatus);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const isDeadline = noteType === "DEADLINE";
 
   async function handleSave() {
     if (!noteType) { setTypeError(true); return; }
     if (!title.trim()) return;
-    let days: number | null = null;
-    if (isDeadline) {
-      try {
-        days = parseWorkingDays(workingDays);
-        setWorkingDaysError(null);
-      } catch (e) {
-        setWorkingDaysError(e instanceof Error ? e.message : "Invalid working days");
-        return;
-      }
-      const blocked = roadmapScheduleError(roadmapStatus, dueDate || null, days);
-      if (blocked) {
-        setWorkingDaysError(blocked);
-        return;
-      }
-    }
     setTypeError(false);
+    setSaveError(null);
     setSaving(true);
     try {
       const created = await createMeetingNote({
@@ -699,13 +701,12 @@ function NoteFullScreenCreate({
         content,
         date,
         noteType,
-        ...(isDeadline && dueDate ? { dueDate } : {}),
-        ...(isDeadline ? { roadmapStatus, workingDays: days } : {}),
+        ...(isDeadline ? { roadmapStatus: "PLANNED" } : {}),
       });
       const full = await getMeetingNote(created.id);
       onCreated(full as unknown as MeetingNote);
     } catch (err) {
-      setWorkingDaysError(err instanceof Error ? err.message : "Could not save");
+      setSaveError(err instanceof Error ? err.message : "Could not save");
     } finally {
       setSaving(false);
     }
@@ -772,59 +773,13 @@ function NoteFullScreenCreate({
 
           <div className="flex items-center gap-3 mb-8 pb-6 border-b border-border/50">
             {isDeadline ? (
-              <div className="flex flex-wrap items-end gap-4">
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Due Date</label>
-                  <Input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="w-auto text-[13px] h-8"
-                  />
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Required before Next</p>
-                </div>
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Working Days</label>
-                  <Input
-                    type="number"
-                    min={1}
-                    step={1}
-                    inputMode="numeric"
-                    placeholder="e.g. 5"
-                    value={workingDays}
-                    onChange={(e) => {
-                      setWorkingDays(e.target.value);
-                      setWorkingDaysError(null);
-                    }}
-                    className="w-28 text-[13px] h-8"
-                  />
-                  {workingDaysError ? (
-                    <p className="text-[10px] text-destructive mt-0.5">{workingDaysError}</p>
-                  ) : (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Required before Next</p>
-                  )}
-                </div>
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Status</label>
-                  <div className="flex flex-wrap gap-1">
-                    {ROADMAP_COLUMNS.map((col) => (
-                      <button
-                        key={col.id}
-                        type="button"
-                        onClick={() => setRoadmapStatus(col.id)}
-                        className={cn(
-                          "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
-                          roadmapStatus === col.id
-                            ? "border-foreground bg-foreground text-background"
-                            : "border-border text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        {col.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              saveError ? (
+                <p className="text-[10px] text-destructive">{saveError}</p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  New items start in Planned. Drag on the board to change status.
+                </p>
+              )
             ) : (
               <Input
                 type="date"
@@ -861,7 +816,6 @@ export function NoteFullScreenDetail({
   initialThreadId,
   currentUserId,
   onToggleComplete,
-  onMoveStatus,
   onRefresh,
   onDelete,
   scheduleError,
@@ -878,7 +832,6 @@ export function NoteFullScreenDetail({
   initialThreadId: string | null;
   currentUserId?: string;
   onToggleComplete: () => Promise<void>;
-  onMoveStatus?: (status: RoadmapStatus) => Promise<void>;
   onRefresh: () => Promise<void>;
   onDelete: () => Promise<void>;
   scheduleError?: string | null;
@@ -889,7 +842,10 @@ export function NoteFullScreenDetail({
   const [title, setTitle] = useState(note.title);
   const [content, setContent] = useState(note.content);
   const [dueDate, setDueDate] = useState(
-    note.dueDate ? new Date(note.dueDate).toISOString().split("T")[0] : "",
+    note.dueDate ? toDateInputValue(note.dueDate) : "",
+  );
+  const [startedAt, setStartedAt] = useState(
+    note.startedAt ? toDateInputValue(note.startedAt) : "",
   );
   const [workingDays, setWorkingDays] = useState(
     note.workingDays != null ? String(note.workingDays) : "",
@@ -968,7 +924,8 @@ export function NoteFullScreenDetail({
     setTitle(note.title);
     setContent(note.content);
     setCompletedAt(note.completedAt ?? null);
-    setDueDate(note.dueDate ? new Date(note.dueDate).toISOString().split("T")[0] : "");
+    setDueDate(note.dueDate ? toDateInputValue(note.dueDate) : "");
+    setStartedAt(note.startedAt ? toDateInputValue(note.startedAt) : "");
     setWorkingDays(note.workingDays != null ? String(note.workingDays) : "");
   }, [note]);
 
@@ -1022,11 +979,11 @@ export function NoteFullScreenDetail({
     setWorkingDaysError(null);
     try {
       let days: number | null | undefined;
-      if (isDeadline) {
+      if (isDeadline && currentRoadmapStatus === "NEXT") {
         try {
           days = parseWorkingDays(workingDays);
         } catch (e) {
-          setWorkingDaysError(e instanceof Error ? e.message : "Invalid working days");
+          setWorkingDaysError(e instanceof Error ? e.message : "Invalid efforts");
           setSaving(false);
           return;
         }
@@ -1035,14 +992,65 @@ export function NoteFullScreenDetail({
         noteId: note.id,
         title: title.trim(),
         content,
-        ...(isDeadline ? { dueDate: dueDate || null, workingDays: days ?? null } : {}),
+        ...(isDeadline && currentRoadmapStatus === "NEXT"
+          ? { workingDays: days ?? null }
+          : {}),
+        ...(isDeadline && (currentRoadmapStatus === "PROGRESS" || currentRoadmapStatus === "SHIPPED")
+          ? { dueDate: dueDate || null, startedAt: startedAt || null }
+          : {}),
       });
       await onRefresh();
       setIsEditing(false);
     } catch (err) {
       console.error(err);
+      setWorkingDaysError(err instanceof Error ? err.message : "Could not save");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveEfforts(raw = workingDays) {
+    if (!canEdit || currentRoadmapStatus !== "NEXT") return;
+    try {
+      const days = parseWorkingDays(raw);
+      if (days === (note.workingDays ?? null)) return;
+      setWorkingDaysError(null);
+      await updateMeetingNote({ noteId: note.id, workingDays: days });
+      await onRefresh();
+    } catch (e) {
+      setWorkingDaysError(e instanceof Error ? e.message : "Invalid efforts");
+    }
+  }
+
+  async function saveDueDate() {
+    if (!canEdit) return;
+    if (currentRoadmapStatus !== "PROGRESS" && currentRoadmapStatus !== "SHIPPED") return;
+    if (!dueDate) {
+      setWorkingDaysError("Due date is required");
+      return;
+    }
+    setWorkingDaysError(null);
+    try {
+      await updateMeetingNote({ noteId: note.id, dueDate });
+      await onRefresh();
+    } catch (e) {
+      setWorkingDaysError(e instanceof Error ? e.message : "Could not save due date");
+    }
+  }
+
+  async function saveStartedAt() {
+    if (!canEdit) return;
+    if (currentRoadmapStatus !== "PROGRESS" && currentRoadmapStatus !== "SHIPPED") return;
+    if (!startedAt) {
+      setWorkingDaysError("Starting date is required");
+      return;
+    }
+    setWorkingDaysError(null);
+    try {
+      await updateMeetingNote({ noteId: note.id, startedAt });
+      await onRefresh();
+    } catch (e) {
+      setWorkingDaysError(e instanceof Error ? e.message : "Could not save starting date");
     }
   }
 
@@ -1079,7 +1087,8 @@ export function NoteFullScreenDetail({
     setIsEditing(false);
     setTitle(note.title);
     setContent(note.content);
-    setDueDate(note.dueDate ? new Date(note.dueDate).toISOString().split("T")[0] : "");
+    setDueDate(note.dueDate ? toDateInputValue(note.dueDate) : "");
+    setStartedAt(note.startedAt ? toDateInputValue(note.startedAt) : "");
     setWorkingDays(note.workingDays != null ? String(note.workingDays) : "");
     setWorkingDaysError(null);
   }
@@ -1182,83 +1191,85 @@ export function NoteFullScreenDetail({
                   {deadlineStatus.label}
                 </span>
               )}
-              {!(isDeadline && isEditing) && (
+              {isDeadline && currentRoadmapStatus === "PLANNED" && (
+                <span className="text-[13px] text-muted-foreground">Planned</span>
+              )}
+              {!isDeadline && (
               <span className="text-[13px] text-muted-foreground">
-                {isDeadline
-                  ? [
-                      note.dueDate ? `Due ${format(new Date(note.dueDate), "MMMM d, yyyy")}` : null,
-                      note.workingDays != null ? formatWorkingDays(note.workingDays) : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ") || "No due date"
-                  : format(new Date(note.date), "MMMM d, yyyy")}
+                {format(new Date(note.date), "MMMM d, yyyy")}
               </span>
               )}
             </div>
 
-            {isDeadline && (
-              <div className="mb-4 flex flex-wrap items-center gap-1.5">
-                {ROADMAP_COLUMNS.map((col) => {
-                  const active = normalizeRoadmapStatus(note.roadmapStatus, completedAt) === col.id;
-                  return (
-                    <button
-                      key={col.id}
-                      type="button"
-                      disabled={!canEdit || togglingComplete}
-                      onClick={() => {
-                        if (!canEdit || active) return;
-                        void onMoveStatus?.(col.id);
-                      }}
-                      className={cn(
-                        "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:opacity-50",
-                        active
-                          ? "border-foreground bg-foreground text-background"
-                          : "border-border text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {col.label}
-                    </button>
-                  );
-                })}
+            {isDeadline && canEdit && currentRoadmapStatus === "NEXT" && (
+              <div className="mb-6">
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Efforts ( Working days )</label>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="e.g. 5"
+                  value={workingDays}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setWorkingDays(next);
+                    setWorkingDaysError(null);
+                    void saveEfforts(next);
+                  }}
+                  onBlur={() => void saveEfforts()}
+                  className="w-28 text-[13px] h-8"
+                />
+                {workingDaysError ? (
+                  <p className="text-[10px] text-destructive mt-0.5">{workingDaysError}</p>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Required before In Progress</p>
+                )}
               </div>
             )}
-            {isDeadline && scheduleError && (
-              <p className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
-                {scheduleError}
-              </p>
-            )}
-            {isDeadline && isEditing && (
-              <div className="mb-6 flex flex-wrap items-end gap-4">
+            {isDeadline && (currentRoadmapStatus === "PROGRESS" || currentRoadmapStatus === "SHIPPED") && (
+              <div className="mb-6 flex flex-wrap gap-4">
                 <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Due Date</label>
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Starting Date</label>
                   <Input
                     type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="w-auto text-[13px] h-8"
-                  />
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Required before Next</p>
-                </div>
-                <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Working Days</label>
-                  <Input
-                    type="number"
-                    min={1}
-                    step={1}
-                    inputMode="numeric"
-                    placeholder="e.g. 5"
-                    value={workingDays}
+                    value={startedAt}
                     onChange={(e) => {
-                      setWorkingDays(e.target.value);
+                      setStartedAt(e.target.value);
                       setWorkingDaysError(null);
                     }}
-                    className="w-28 text-[13px] h-8"
+                    onBlur={() => {
+                      if (canEdit) void saveStartedAt();
+                    }}
+                    disabled={!canEdit}
+                    className="w-auto text-[13px] h-8"
                   />
-                  {workingDaysError ? (
-                    <p className="text-[10px] text-destructive mt-0.5">{workingDaysError}</p>
-                  ) : (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">Required before Next</p>
-                  )}
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Set when this moved to In Progress. You can adjust it.
+                  </p>
+                </div>
+                <div>
+                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Due Date</label>
+                <Input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => {
+                    setDueDate(e.target.value);
+                    setWorkingDaysError(null);
+                  }}
+                  onBlur={() => {
+                    if (canEdit) void saveDueDate();
+                  }}
+                  disabled={!canEdit}
+                  className="w-auto text-[13px] h-8"
+                />
+                {workingDaysError ? (
+                  <p className="text-[10px] text-destructive mt-0.5">{workingDaysError}</p>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Calculated from Efforts. You can adjust it.
+                  </p>
+                )}
                 </div>
               </div>
             )}

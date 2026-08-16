@@ -7,6 +7,7 @@ import { Undo2, Loader2, AlertTriangle, ArrowRight, Paperclip, X, FileText, User
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Stage } from "@/store/kanban";
 import { uploadFileToR2 } from "@/lib/upload";
+import { usePasteFiles } from "@/hooks/use-paste-files";
 
 const STAGE_LABELS: Record<string, string> = {
   INTERNAL_REVIEW: "Internal Review",
@@ -50,13 +51,17 @@ export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pasteRef = usePasteFiles(
+    (files) => handleFilesSelected(files),
+    { capture: true },
+  );
 
   const me = user?.fullName || user?.firstName || "You";
   const meAvatar = user?.imageUrl || null;
   const toLabel = STAGE_LABELS[DECLINE_TARGETS[fromStage]] ?? "the previous stage";
 
-  function handleFilesSelected(files: FileList | null) {
-    if (!files) return;
+  function handleFilesSelected(files: FileList | File[] | null) {
+    if (!files || files.length === 0) return;
     const newFiles: PendingFile[] = [];
     for (const file of Array.from(files)) {
       if (file.size > MAX_FILE_SIZE) {
@@ -106,7 +111,10 @@ export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm
         className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[900]"
         onClick={onCancel}
       />
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[901] w-full max-w-md">
+      <div
+        ref={pasteRef}
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[901] w-full max-w-md"
+      >
         <div className="rounded-xl border border-destructive/30 bg-card shadow-2xl overflow-hidden">
           <div className="px-5 pt-5 pb-4">
             <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-surface/60 p-3 mb-4">
@@ -210,7 +218,7 @@ export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm
               <Paperclip className="w-5 h-5 text-muted-foreground" />
               <span className="text-[13px] text-muted-foreground">Attach files</span>
               <span className="text-[11px] text-muted-foreground/70">
-                Drop a file or click to browse
+                Drop, paste, or click to browse
               </span>
             </button>
             <input

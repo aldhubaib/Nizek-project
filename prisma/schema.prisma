@@ -114,6 +114,7 @@ model User {
   equityPermission  EquityPermission?         @relation("UserEquityPermission")
   vaultPermissions  VaultPermission[]         @relation("UserVaultPermissions")
   vaultCredentials  VaultCredential[]         @relation("VaultCredentialAuthor")
+  vaultFolders      VaultFolder[]             @relation("VaultFolderAuthor")
   vaultActivities   VaultActivity[]           @relation("VaultActivityUser")
   taskAudits        TaskAudit[]               @relation("AuditCreator")
   auditBlames       TaskAuditItem[]           @relation("AuditBlamedUser")
@@ -191,6 +192,7 @@ model Project {
   conversations Conversation[]
   equityPortfolio EquityPortfolio?
   vaultCredentials VaultCredential[]
+  vaultFolders     VaultFolder[]
   vaultPermissions VaultPermission[]
   @@index([teamId])
 }
@@ -420,6 +422,7 @@ model MeetingNote {
   noteType NoteType @default(MEETING_NOTE)
 
   dueDate        DateTime?
+  startedAt      DateTime?
   workingDays    Int?
   completedAt    DateTime?
   roadmapStatus  RoadmapStatus @default(PLANNED)
@@ -1851,10 +1854,31 @@ model VaultPermission {
   @@index([projectId])
 }
 
+model VaultFolder {
+  id        String  @id @default(cuid())
+  name      String
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation("VaultFolderAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  credentials VaultCredential[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+}
+
 model VaultCredential {
   id        String  @id @default(cuid())
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  folderId String?
+  folder   VaultFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
 
   title    String
   username String?
@@ -1875,6 +1899,7 @@ model VaultCredential {
   activities VaultActivity[]
 
   @@index([projectId, deletedAt])
+  @@index([projectId, folderId])
   @@index([deletedAt])
 }
 

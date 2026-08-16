@@ -20,6 +20,8 @@ export type VaultCredentialDTO = {
   id: string;
   projectId: string;
   projectName: string;
+  folderId: string | null;
+  folderName: string | null;
   title: string;
   username: string | null;
   hasPassword: boolean;
@@ -29,6 +31,12 @@ export type VaultCredentialDTO = {
   createdAt: string;
   updatedAt: string;
   createdBy: { id: string; name: string | null; imageUrl: string | null };
+};
+
+export type VaultFolderDTO = {
+  id: string;
+  name: string;
+  credentialCount: number;
 };
 
 export type VaultActivityDTO = {
@@ -97,12 +105,15 @@ function toDTO(row: {
   createdAt: Date;
   updatedAt: Date;
   project: { name: string };
+  folder: { id: string; name: string } | null;
   createdBy: { id: string; name: string | null; imageUrl: string | null };
 }): VaultCredentialDTO {
   return {
     id: row.id,
     projectId: row.projectId,
     projectName: row.project.name,
+    folderId: row.folder?.id ?? null,
+    folderName: row.folder?.name ?? null,
     title: row.title,
     username: row.username,
     hasPassword: Boolean(row.passwordEnc),
@@ -117,8 +128,47 @@ function toDTO(row: {
 
 const CREDENTIAL_INCLUDE = {
   project: { select: { name: true } },
+  folder: { select: { id: true, name: true } },
   createdBy: { select: { id: true, name: true, imageUrl: true } },
 } as const;
+
+const FOLDER_NAME_MAX = 40;
+
+function normalizeFolderName(raw: string): string {
+  const name = raw.trim().replace(/\s+/g, " ");
+  if (!name) throw new Error("Folder name is required");
+  if (name.length > FOLDER_NAME_MAX) {
+    throw new Error(`Folder name must be ${FOLDER_NAME_MAX} characters or fewer`);
+  }
+  return name;
+}
+
+async function assertUniqueFolderName(
+  projectId: string,
+  name: string,
+  excludeId?: string,
+) {
+  const existing = await prisma.vaultFolder.findMany({
+    where: { projectId, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    select: { name: true },
+  });
+  if (existing.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
+    throw new Error("A folder with that name already exists");
+  }
+}
+
+async function resolveFolderId(
+  projectId: string,
+  folderId: string | null | undefined,
+): Promise<string | null> {
+  if (!folderId) return null;
+  const folder = await prisma.vaultFolder.findFirst({
+    where: { id: folderId, projectId },
+    select: { id: true },
+  });
+  if (!folder) throw new Error("Folder not found");
+  return folder.id;
+}
 
 async function requireVaultAccess(projectId: string) {
   const user = await requireUser();
@@ -210,6 +260,102 @@ export async function listVaultProjectFolders(): Promise<VaultProjectFolderDTO[]
   }));
 }
 
+export async function listVaultFolders(
+  projectId: string,
+): Promise<VaultFolderDTO[]> {
+  await requireVaultAccess(projectId);
+  const rows = await prisma.vaultFolder.findMany({
+    where: { projectId },
+    select: {
+      id: true,
+      name: true,
+      _count: {
+        select: { credentials: { where: { deletedAt: null } } },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    credentialCount: row._count.credentials,
+  }));
+}
+
+export async function createVaultFolder(
+  projectId: string,
+  name: string,
+): Promise<ActionResult<VaultFolderDTO>> {
+  return vaultAction("create-folder", async () => {
+    const user = await requireVaultAccess(projectId);
+    const folderName = normalizeFolderName(name);
+    await assertUniqueFolderName(projectId, folderName);
+
+    const row = await prisma.vaultFolder.create({
+      data: {
+        projectId,
+        name: folderName,
+        createdById: user.id,
+      },
+    });
+
+    revalidatePath("/dashboard/vault");
+    revalidatePath(`/dashboard/projects/${projectId}`);
+    return { id: row.id, name: row.name, credentialCount: 0 };
+  });
+}
+
+export async function renameVaultFolder(
+  id: string,
+  name: string,
+): Promise<ActionResult<VaultFolderDTO>> {
+  return vaultAction("rename-folder", async () => {
+    const existing = await prisma.vaultFolder.findUnique({ where: { id } });
+    if (!existing) throw new Error("Folder not found");
+    await requireVaultAccess(existing.projectId);
+
+    const folderName = normalizeFolderName(name);
+    await assertUniqueFolderName(existing.projectId, folderName, id);
+
+    const row = await prisma.vaultFolder.update({
+      where: { id },
+      data: { name: folderName },
+      select: {
+        id: true,
+        name: true,
+        _count: {
+          select: { credentials: { where: { deletedAt: null } } },
+        },
+      },
+    });
+
+    revalidatePath("/dashboard/vault");
+    revalidatePath(`/dashboard/projects/${existing.projectId}`);
+    return {
+      id: row.id,
+      name: row.name,
+      credentialCount: row._count.credentials,
+    };
+  });
+}
+
+/** Deletes the folder. Credentials stay and become unfiled. */
+export async function deleteVaultFolder(
+  id: string,
+): Promise<ActionResult<{ id: string }>> {
+  return vaultAction("delete-folder", async () => {
+    const existing = await prisma.vaultFolder.findUnique({ where: { id } });
+    if (!existing) throw new Error("Folder not found");
+    await requireVaultAccess(existing.projectId);
+
+    await prisma.vaultFolder.delete({ where: { id } });
+
+    revalidatePath("/dashboard/vault");
+    revalidatePath(`/dashboard/projects/${existing.projectId}`);
+    return { id };
+  });
+}
+
 export async function createVaultCredential(input: {
   projectId: string;
   title: string;
@@ -218,6 +364,7 @@ export async function createVaultCredential(input: {
   url?: string | null;
   notes?: string | null;
   category?: string | null;
+  folderId?: string | null;
 }): Promise<ActionResult<VaultCredentialDTO>> {
   return vaultAction("create", async () => {
     const user = await requireVaultAccess(input.projectId);
@@ -226,10 +373,12 @@ export async function createVaultCredential(input: {
 
     const password = input.password?.trim() || null;
     const notes = input.notes?.trim() || null;
+    const folderId = await resolveFolderId(input.projectId, input.folderId);
 
     const row = await prisma.vaultCredential.create({
       data: {
         projectId: input.projectId,
+        folderId,
         title,
         username: input.username?.trim() || null,
         passwordEnc: password ? encryptVaultSecret(password) : null,
@@ -266,13 +415,17 @@ export async function updateVaultCredential(
     url?: string | null;
     notes?: string | null;
     category?: string | null;
+    folderId?: string | null;
     /** When true, clear the password even if password is empty. */
     clearPassword?: boolean;
     clearNotes?: boolean;
   },
 ): Promise<ActionResult<VaultCredentialDTO>> {
   return vaultAction("update", async () => {
-    const existing = await prisma.vaultCredential.findUnique({ where: { id } });
+    const existing = await prisma.vaultCredential.findUnique({
+      where: { id },
+      include: { folder: { select: { name: true } } },
+    });
     if (!existing || existing.deletedAt) throw new Error("Credential not found");
 
     const user = await requireVaultAccess(existing.projectId);
@@ -291,6 +444,24 @@ export async function updateVaultCredential(
       input.category !== undefined
         ? normalizeCategory(input.category)
         : existing.category;
+
+    const folderId =
+      input.folderId !== undefined
+        ? await resolveFolderId(existing.projectId, input.folderId)
+        : existing.folderId;
+
+    let nextFolderName = existing.folder?.name ?? null;
+    if (folderId !== existing.folderId) {
+      if (folderId) {
+        const folder = await prisma.vaultFolder.findUnique({
+          where: { id: folderId },
+          select: { name: true },
+        });
+        nextFolderName = folder?.name ?? null;
+      } else {
+        nextFolderName = null;
+      }
+    }
 
     let passwordEnc = existing.passwordEnc;
     let passwordChanged = false;
@@ -323,6 +494,7 @@ export async function updateVaultCredential(
       fieldDiff("Username / email", existing.username, username),
       fieldDiff("URL", existing.url, url),
       fieldDiff("Category", existing.category, category),
+      fieldDiff("Folder", existing.folder?.name, nextFolderName),
     ].filter(Boolean) as { label: string; old: string | null; new: string | null }[];
 
     if (passwordChanged) {
@@ -342,7 +514,7 @@ export async function updateVaultCredential(
 
     const row = await prisma.vaultCredential.update({
       where: { id },
-      data: { title, username, url, category, passwordEnc, notesEnc },
+      data: { title, username, url, category, folderId, passwordEnc, notesEnc },
       include: CREDENTIAL_INCLUDE,
     });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -30,13 +30,22 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import {
   createVaultCredential,
+  createVaultFolder,
   deleteVaultCredential,
+  deleteVaultFolder,
   getVaultActivity,
+  listVaultFolders,
+  renameVaultFolder,
   revealVaultSecret,
   updateVaultCredential,
   type VaultActivityDTO,
   type VaultCredentialDTO,
+  type VaultFolderDTO,
 } from "@/actions/vault";
+import {
+  VaultFolderToolbar,
+  type VaultFolderFilter,
+} from "@/components/vault/vault-folders";
 
 const CATEGORY_OPTIONS = [
   { value: "LOGIN", label: "Login" },
@@ -52,6 +61,7 @@ type FormState = {
   url: string;
   notes: string;
   category: string;
+  folderId: string;
 };
 
 const EMPTY_FORM: FormState = {
@@ -61,6 +71,7 @@ const EMPTY_FORM: FormState = {
   url: "",
   notes: "",
   category: "LOGIN",
+  folderId: "",
 };
 
 interface VaultCredentialsPanelProps {
@@ -77,6 +88,8 @@ export function VaultCredentialsPanel({
 }: VaultCredentialsPanelProps) {
   const router = useRouter();
   const [credentials, setCredentials] = useState(initial);
+  const [folders, setFolders] = useState<VaultFolderDTO[]>([]);
+  const [folderFilter, setFolderFilter] = useState<VaultFolderFilter>("all");
   const [query, setQuery] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<VaultCredentialDTO | null>(null);
@@ -92,21 +105,61 @@ export function VaultCredentialsPanel({
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  useEffect(() => {
+    setCredentials(initial);
+  }, [initial]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    listVaultFolders(projectId)
+      .then((rows) => {
+        if (!cancelled) setFolders(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setFolders([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  const unfiledCount = useMemo(
+    () => credentials.filter((c) => !c.folderId).length,
+    [credentials],
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return credentials;
-    return credentials.filter(
-      (c) =>
+    return credentials.filter((c) => {
+      if (folderFilter === "all" && !q && c.folderId) return false;
+      if (folderFilter === "unfiled" && c.folderId) return false;
+      if (
+        folderFilter !== "all" &&
+        folderFilter !== "unfiled" &&
+        c.folderId !== folderFilter
+      ) {
+        return false;
+      }
+      if (!q) return true;
+      return (
         c.title.toLowerCase().includes(q) ||
         (c.username ?? "").toLowerCase().includes(q) ||
         (c.url ?? "").toLowerCase().includes(q) ||
-        c.projectName.toLowerCase().includes(q),
-    );
-  }, [credentials, query]);
+        c.projectName.toLowerCase().includes(q) ||
+        (c.folderName ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [credentials, query, folderFilter]);
+
+  function defaultFolderId() {
+    if (folderFilter !== "all" && folderFilter !== "unfiled") return folderFilter;
+    return "";
+  }
 
   function openCreate() {
     setEditing(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, folderId: defaultFolderId() });
     setError(null);
     setShowPassword(false);
     setEditorOpen(true);
@@ -121,10 +174,39 @@ export function VaultCredentialsPanel({
       url: c.url ?? "",
       notes: "",
       category: c.category ?? "LOGIN",
+      folderId: c.folderId ?? "",
     });
     setError(null);
     setShowPassword(false);
     setEditorOpen(true);
+    if (!projectId) {
+      listVaultFolders(c.projectId)
+        .then(setFolders)
+        .catch(() => setFolders([]));
+    }
+  }
+
+  function applyCredential(next: VaultCredentialDTO, previousFolderId?: string | null) {
+    setCredentials((prev) => {
+      const exists = prev.some((c) => c.id === next.id);
+      const list = exists
+        ? prev.map((c) => (c.id === next.id ? next : c))
+        : [...prev, next];
+      return list.sort((a, b) => a.title.localeCompare(b.title));
+    });
+    if (!projectId) return;
+    setFolders((prev) =>
+      prev.map((folder) => {
+        let delta = 0;
+        if (previousFolderId === folder.id) delta -= 1;
+        if (next.folderId === folder.id) delta += 1;
+        if (delta === 0) return folder;
+        return {
+          ...folder,
+          credentialCount: Math.max(0, folder.credentialCount + delta),
+        };
+      }),
+    );
   }
 
   function save() {
@@ -137,6 +219,7 @@ export function VaultCredentialsPanel({
             username: form.username,
             url: form.url,
             category: form.category,
+            folderId: form.folderId || null,
             ...(form.password.trim()
               ? { password: form.password }
               : {}),
@@ -146,9 +229,7 @@ export function VaultCredentialsPanel({
             setError(result.error);
             return;
           }
-          setCredentials((prev) =>
-            prev.map((c) => (c.id === result.data.id ? result.data : c)),
-          );
+          applyCredential(result.data, editing.folderId);
         } else {
           const targetProjectId = projectId;
           if (!targetProjectId) {
@@ -163,16 +244,13 @@ export function VaultCredentialsPanel({
             url: form.url,
             notes: form.notes,
             category: form.category,
+            folderId: form.folderId || null,
           });
           if (!result.ok) {
             setError(result.error);
             return;
           }
-          setCredentials((prev) =>
-            [...prev, result.data].sort((a, b) =>
-              a.title.localeCompare(b.title),
-            ),
-          );
+          applyCredential(result.data);
         }
         setEditorOpen(false);
         router.refresh();
@@ -253,6 +331,18 @@ export function VaultCredentialsPanel({
         return;
       }
       setCredentials((prev) => prev.filter((x) => x.id !== c.id));
+      if (c.folderId) {
+        setFolders((prev) =>
+          prev.map((folder) =>
+            folder.id === c.folderId
+              ? {
+                  ...folder,
+                  credentialCount: Math.max(0, folder.credentialCount - 1),
+                }
+              : folder,
+          ),
+        );
+      }
       router.refresh();
     } catch (err) {
       alert((err as Error).message || "Could not delete");
@@ -262,6 +352,50 @@ export function VaultCredentialsPanel({
   }
 
   const canCreate = Boolean(projectId);
+
+  async function handleCreateFolder(name: string) {
+    if (!projectId) return { ok: false as const, error: "No project" };
+    const result = await createVaultFolder(projectId, name);
+    if (result.ok) {
+      setFolders((prev) =>
+        [...prev, result.data].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      router.refresh();
+    }
+    return result;
+  }
+
+  async function handleRenameFolder(id: string, name: string) {
+    const result = await renameVaultFolder(id, name);
+    if (result.ok) {
+      setFolders((prev) =>
+        prev
+          .map((f) => (f.id === id ? result.data : f))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      setCredentials((prev) =>
+        prev.map((c) =>
+          c.folderId === id ? { ...c, folderName: result.data.name } : c,
+        ),
+      );
+      router.refresh();
+    }
+    return result;
+  }
+
+  async function handleDeleteFolder(id: string) {
+    const result = await deleteVaultFolder(id);
+    if (result.ok) {
+      setFolders((prev) => prev.filter((f) => f.id !== id));
+      setCredentials((prev) =>
+        prev.map((c) =>
+          c.folderId === id ? { ...c, folderId: null, folderName: null } : c,
+        ),
+      );
+      router.refresh();
+    }
+    return result;
+  }
 
   return (
     <div className="space-y-4">
@@ -283,23 +417,49 @@ export function VaultCredentialsPanel({
         )}
       </div>
 
+      {projectId && (
+        <VaultFolderToolbar
+          folders={folders}
+          unfiledCount={unfiledCount}
+          filter={folderFilter}
+          onFilterChange={setFolderFilter}
+          onCreate={handleCreateFolder}
+          onRename={handleRenameFolder}
+          onDelete={handleDeleteFolder}
+        />
+      )}
+
       {filtered.length === 0 ? (
+        folderFilter === "all" && folders.length > 0 && !query.trim() ? null : (
         <div className="rounded-xl border border-dashed border-border px-6 py-12 text-center">
           <KeyRound className="mx-auto h-8 w-8 text-muted-foreground/50" />
           <p className="mt-3 text-[13px] font-medium text-foreground">
-            {credentials.length === 0 ? "No credentials yet" : "No matches"}
+            {credentials.length === 0
+              ? "No credentials yet"
+              : folderFilter !== "all" && folderFilter !== "unfiled" && !query.trim()
+                ? "This folder is empty"
+                : "No matches"}
           </p>
           <p className="mt-1 text-[12px] text-muted-foreground">
-            Store logins, emails, and API keys for this project — like a password manager.
+            {folderFilter !== "all" && credentials.length > 0
+              ? "Add a credential here, or pick another folder."
+              : "Store logins, emails, and API keys for this project — like a password manager."}
           </p>
-          {canCreate && credentials.length === 0 && (
+          {canCreate && (credentials.length === 0 || folderFilter !== "all") && !query.trim() && (
             <Button size="sm" className="mt-4 gap-1.5" onClick={openCreate}>
               <Plus className="h-3.5 w-3.5" />
-              Add the first one
+              {credentials.length === 0 ? "Add the first one" : "Add credential"}
             </Button>
           )}
         </div>
+        )
       ) : (
+        <div className="space-y-2">
+          {folderFilter === "all" && !query.trim() && unfiledCount > 0 && (
+            <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Unfiled
+            </p>
+          )}
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <ul className="divide-y divide-border/50">
             {filtered.map((c) => {
@@ -319,6 +479,11 @@ export function VaultCredentialsPanel({
                         <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                           {CATEGORY_OPTIONS.find((o) => o.value === c.category)
                             ?.label ?? c.category}
+                        </span>
+                      )}
+                      {c.folderName && (
+                        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                          {c.folderName}
                         </span>
                       )}
                     </div>
@@ -402,6 +567,7 @@ export function VaultCredentialsPanel({
             })}
           </ul>
         </div>
+        </div>
       )}
 
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
@@ -467,6 +633,24 @@ export function VaultCredentialsPanel({
                 placeholder="https://"
               />
             </Field>
+            {folders.length > 0 && (
+              <Field label="Folder">
+                <select
+                  value={form.folderId}
+                  onChange={(e) =>
+                    setForm({ ...form, folderId: e.target.value })
+                  }
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                >
+                  <option value="">Unfiled</option>
+                  {folders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
             <Field label="Category">
               <select
                 value={form.category}

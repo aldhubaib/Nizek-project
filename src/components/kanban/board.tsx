@@ -541,7 +541,7 @@ export function KanbanBoard({
             No active contract — this project is read-only. Add a new contract to re-enable editing.
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-4 sm:overflow-x-auto pb-4 sm:h-[calc(100vh-220px)] scrollbar-hidden">
+        <div className="flex flex-col gap-4 pb-4 lg:h-[calc(100vh-220px)] lg:flex-row lg:overflow-x-auto scrollbar-hidden">
           {STAGES.map((stage) => {
             const stageTasks = tasksByStage[stage.id] ?? [];
             return (
@@ -567,9 +567,9 @@ export function KanbanBoard({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      {/* Phones read the board top to bottom, one stage after another; from sm
-          up it's the classic rail of columns scrolled sideways. */}
-      <div className="flex flex-col sm:flex-row gap-4 sm:overflow-x-auto pb-4 sm:h-[calc(100vh-220px)] scrollbar-hidden">
+      {/* Below the desktop breakpoint columns stack like the phone board; from
+          lg up it's a full kanban rail that scrolls sideways. */}
+      <div className="flex flex-col gap-4 pb-4 lg:h-[calc(100vh-220px)] lg:flex-row lg:overflow-x-auto scrollbar-hidden">
         {STAGES.map((stage) => {
           const stageTasks = tasksByStage[stage.id] ?? [];
           return (

@@ -12,6 +12,9 @@ export const ROADMAP_COLUMNS: {
   { id: "SHIPPED", label: "Shipped" },
 ];
 
+export const ROADMAP_NEXT_MAX = 3;
+export const ROADMAP_NEXT_FULL_ERROR = "You can drag this item max number is 3";
+
 const LABELS: Record<RoadmapStatus, string> = {
   PLANNED: "Planned",
   NEXT: "Next",
@@ -46,23 +49,36 @@ export function roadmapCreateTaskError(status: RoadmapStatus): string | null {
   return "Move this to In Progress before creating a task.";
 }
 
-/** Planned can be empty; Next / In Progress / Shipped need due date + effort. */
+function hasEffort(workingDays: number | null | undefined): boolean {
+  return (
+    workingDays != null &&
+    Number.isInteger(Number(workingDays)) &&
+    Number(workingDays) >= 1
+  );
+}
+
+/**
+ * Planned / Next can be empty.
+ * In Progress needs Efforts (due date is set on the drag).
+ * Shipped needs Efforts and a due date (set when it entered In Progress).
+ */
 export function roadmapScheduleError(
   status: RoadmapStatus,
   dueDate: Date | string | null | undefined,
   workingDays: number | null | undefined,
 ): string | null {
-  if (status === "PLANNED") return null;
-  const needDate = !dueDate;
-  const needEffort =
-    workingDays == null ||
-    (typeof workingDays === "number" && !Number.isInteger(workingDays)) ||
-    Number(workingDays) < 1;
-  if (!needDate && !needEffort) return null;
-  if (needDate && needEffort) {
-    return "Add a due date and working days before moving this to Next.";
+  if (status === "PLANNED" || status === "NEXT") return null;
+  if (!hasEffort(workingDays)) {
+    return "Please enter the Efforts before moving to In Progress.";
   }
-  if (needDate) return "Add a due date before moving this to Next.";
-  return "Add working days before moving this to Next.";
+  if (status === "SHIPPED" && !dueDate) {
+    return "Move this to In Progress first so a due date can be set.";
+  }
+  return null;
 }
 
+/** `nextCount` is how many items are already in Next, excluding the card being moved. */
+export function roadmapNextColumnError(nextCount: number): string | null {
+  if (nextCount >= ROADMAP_NEXT_MAX) return ROADMAP_NEXT_FULL_ERROR;
+  return null;
+}

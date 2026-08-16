@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Upload, FileIcon, Trash2, Download, Image, FileText as FileTextIcon } from "lucide-react";
 import { createAsset, deleteAsset } from "@/actions/asset";
 import { uploadFileToR2 } from "@/lib/upload";
+import { usePasteFiles } from "@/hooks/use-paste-files";
 
 interface Asset {
   id: string;
@@ -39,27 +40,39 @@ export function AssetsTab({ assets, projectId, canEdit }: Props) {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  async function uploadFiles(files: File[]) {
+    if (!files.length) return;
     setUploading(true);
     try {
-      const { url } = await uploadFileToR2(file);
-
-      await createAsset({
-        projectId,
-        filename: file.name,
-        url,
-        fileSize: file.size,
-        mimeType: file.type,
-      });
+      for (const file of files) {
+        const { url } = await uploadFileToR2(file);
+        await createAsset({
+          projectId,
+          filename: file.name,
+          url,
+          fileSize: file.size,
+          mimeType: file.type,
+        });
+      }
     } catch (err) {
       console.error(err);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  }
+
+  const pasteRef = usePasteFiles(
+    (files) => {
+      void uploadFiles(files);
+    },
+    { enabled: canEdit && !uploading, capture: true },
+  );
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files?.length) return;
+    await uploadFiles(Array.from(files));
   }
 
   async function handleDelete(assetId: string) {
@@ -71,7 +84,7 @@ export function AssetsTab({ assets, projectId, canEdit }: Props) {
   }
 
   return (
-    <div>
+    <div ref={pasteRef}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Assets</h2>
         {canEdit && (
@@ -79,6 +92,7 @@ export function AssetsTab({ assets, projectId, canEdit }: Props) {
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               className="hidden"
               onChange={handleUpload}
             />
@@ -88,7 +102,7 @@ export function AssetsTab({ assets, projectId, canEdit }: Props) {
               disabled={uploading}
             >
               <Upload className="mr-1.5 h-3.5 w-3.5" />
-              {uploading ? "Uploading..." : "Upload"}
+              {uploading ? "Uploading..." : "Upload or paste"}
             </Button>
           </>
         )}
