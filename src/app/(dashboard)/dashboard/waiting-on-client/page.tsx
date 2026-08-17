@@ -36,7 +36,7 @@ export default async function WaitingOnClientPage({
 
   return (
     <div>
-      <div className="h-12 sticky top-0 z-10 flex items-center justify-between px-6 pr-14 border-b border-border bg-background shrink-0">
+      <div className="sticky top-0 z-10 flex app-top-bar items-center justify-between px-6 pr-14 border-b border-border bg-background shrink-0">
         <div className="flex items-center gap-3">
           <Link
             href={backHref}

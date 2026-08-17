@@ -348,7 +348,7 @@ export function ThreadSidebar({
       )}
     >
 
-      <div className="flex h-14 items-center gap-1 border-b border-border/60 px-4">
+      <div className="flex app-top-bar-tall items-center gap-1 border-b border-border/60 px-4">
         <div className="text-sm font-semibold">Inbox</div>
         <Button
           variant="ghost"

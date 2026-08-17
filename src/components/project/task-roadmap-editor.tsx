@@ -48,7 +48,7 @@ export function TaskRoadmapEditor({
 
   return (
     <div className="fixed inset-0 z-[200] bg-background flex flex-col">
-      <div className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0">
+      <div className="flex app-top-bar items-center justify-between border-b border-border px-4 shrink-0">
         <div className="flex items-center gap-3">
           <button onClick={onClose} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" /> Back

@@ -65,7 +65,7 @@ export function AuditClient({ access, reports }: Props) {
 
   return (
     <div>
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-6 pr-14">
+      <div className="flex app-top-bar shrink-0 items-center justify-between border-b border-border px-6 pr-14">
         <h1 className="flex items-center gap-2 text-sm font-semibold">
           <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
           Task Audit

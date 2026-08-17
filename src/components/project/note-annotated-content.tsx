@@ -544,7 +544,7 @@ export function NoteAnnotatedContent({
         ? createPortal(
             <div
               data-note-comment-ui
-              className="fixed inset-x-0 top-0 z-[300] flex h-12 items-center gap-0.5 border-b border-border bg-background px-1"
+              className="fixed inset-x-0 top-0 z-[300] flex app-top-bar items-center gap-0.5 border-b border-border bg-background px-1"
             >
               <button
                 type="button"

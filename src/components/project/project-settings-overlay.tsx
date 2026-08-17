@@ -181,7 +181,7 @@ export function ProjectSettingsOverlay({
 
   return (
     <div className="fixed inset-0 z-[9999] bg-background flex flex-col">
-      <div className="h-12 flex items-center justify-between px-6 border-b border-border shrink-0">
+      <div className="flex app-top-bar items-center justify-between px-6 border-b border-border shrink-0">
         <div className="flex items-center gap-3">
           <button onClick={onClose} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-[13px]">
             <XIcon className="w-4 h-4" />

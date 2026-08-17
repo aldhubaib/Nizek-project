@@ -87,7 +87,7 @@ export function ReportClient({ report }: { report: AuditReportDTO }) {
 
   return (
     <div>
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-6 pr-14">
+      <div className="flex app-top-bar shrink-0 items-center justify-between border-b border-border px-6 pr-14">
         <div className="flex min-w-0 items-center gap-3">
           <Link
             href="/dashboard/audit"

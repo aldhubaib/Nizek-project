@@ -2439,7 +2439,7 @@ export function ThreadChat({
 
       {/* Thread header — swaps to WhatsApp-style selection toolbar on mobile. */}
       {selectedMessage ? (
-        <div className="flex h-14 items-center gap-0.5 border-b border-border/60 bg-surface/80 px-1 sm:px-2 lg:hidden">
+        <div className="flex app-top-bar-tall items-center gap-0.5 border-b border-border/60 bg-surface/80 px-1 sm:px-2 lg:hidden">
           <button
             type="button"
             onClick={clearSelection}
@@ -2550,7 +2550,7 @@ export function ThreadChat({
       ) : null}
       <div
         className={cn(
-          "flex h-14 items-center gap-2 border-b border-border/60 px-3 sm:gap-3 sm:px-4",
+          "flex app-top-bar-tall items-center gap-2 border-b border-border/60 px-3 sm:gap-3 sm:px-4",
           selectedMessage && "hidden lg:flex",
         )}
       >
@@ -3303,7 +3303,7 @@ export function ThreadChat({
       )}
       {searchOpen && (
         <div className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80">
-          <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border/60 px-3">
+          <div className="flex app-top-bar-tall shrink-0 items-center gap-2 border-b border-border/60 px-3">
             <Button
               variant="ghost"
               size="icon"
@@ -3388,7 +3388,7 @@ export function ThreadChat({
       )}
       {view === "important" && (
         <div className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80">
-          <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border/60 px-3">
+          <div className="flex app-top-bar-tall shrink-0 items-center gap-2 border-b border-border/60 px-3">
             <Button
               variant="ghost"
               size="icon"
@@ -3443,7 +3443,7 @@ export function ThreadChat({
 
       {peopleOpen && isClientRoom && target.projectId && (
         <div className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80">
-          <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border/60 px-3">
+          <div className="flex app-top-bar-tall shrink-0 items-center gap-2 border-b border-border/60 px-3">
             <Button
               variant="ghost"
               size="icon"

@@ -118,7 +118,7 @@ export function DashboardShell({
 
       {/* Bell + ⋮ overlay the page's own header instead of stacking a second bar. */}
       {!isDesktop && !onInbox && (
-        <div className="fixed top-0 right-0 z-[100] h-12 flex items-center gap-1 bg-background px-4">
+        <div className="fixed top-0 right-0 z-[100] flex app-top-bar items-center gap-1 bg-background px-4">
           {headerActions}
         </div>
       )}

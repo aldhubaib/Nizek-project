@@ -466,7 +466,7 @@ export function TaskDetailPage({
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <div className="h-12 flex items-center gap-3 px-6 pr-14 border-b border-border shrink-0 sticky top-0 bg-background z-10">
+      <div className="flex app-top-bar items-center gap-3 px-6 pr-14 border-b border-border shrink-0 sticky top-0 bg-background z-10">
         <button
           onClick={() =>
             router.push(

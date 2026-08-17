@@ -23,7 +23,7 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "h-12 sticky top-0 z-10 shrink-0 flex items-center gap-2.5 px-6 border-b border-border bg-background",
+        "app-top-bar sticky top-0 z-10 shrink-0 flex items-center gap-2.5 px-6 border-b border-border bg-background",
         hasMenu ? "pr-24" : "pr-14",
         className,
       )}

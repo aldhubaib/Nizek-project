@@ -32,7 +32,7 @@ export default async function AssigneeDetailPage({
 
   return (
     <div>
-      <div className="h-12 sticky top-0 z-10 flex items-center gap-3 px-6 pr-14 border-b border-border bg-background shrink-0">
+      <div className="sticky top-0 z-10 flex app-top-bar items-center gap-3 px-6 pr-14 border-b border-border bg-background shrink-0">
         <Link
           href={backHref}
           className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-[13px]"

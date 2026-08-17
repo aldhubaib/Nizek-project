@@ -366,7 +366,7 @@ export function ProjectDetailClient({
         onValueChange={(val) => setActiveTab(val as string)}
         className="w-full min-w-0 gap-0"
       >
-      <div className="relative sticky top-0 z-10 flex h-12 w-full min-w-0 items-center border-b border-border bg-background px-4 pr-24 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-2">
+      <div className="relative sticky top-0 z-10 flex app-top-bar w-full min-w-0 items-center border-b border-border bg-background px-4 pr-24 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-2">
         <div className="relative z-10 flex min-w-0 items-center gap-2.5">
           {noteFullscreen ? (
             <button

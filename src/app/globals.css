@@ -197,6 +197,17 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* iOS PWA (viewport-fit: cover) — keep header content below the notch/status bar. */
+  .app-top-bar {
+    padding-top: env(safe-area-inset-top);
+    min-height: calc(3rem + env(safe-area-inset-top));
+  }
+
+  .app-top-bar-tall {
+    padding-top: env(safe-area-inset-top);
+    min-height: calc(3.5rem + env(safe-area-inset-top));
+  }
 }
 
 /* Tiptap editor heading styles */
