@@ -86,7 +86,7 @@ export function AssetsTab({ assets, projectId, canEdit }: Props) {
   return (
     <div ref={pasteRef}>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">Assets</h2>
+        <h2 className="text-m font-semibold">Assets</h2>
         {canEdit && (
           <>
             <input
@@ -101,7 +101,7 @@ export function AssetsTab({ assets, projectId, canEdit }: Props) {
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
             >
-              <Upload className="mr-1.5 h-3.5 w-3.5" />
+              <Upload className="me-1.5 h-3.5 w-3.5" />
               {uploading ? "Uploading..." : "Upload or paste"}
             </Button>
           </>
@@ -111,7 +111,7 @@ export function AssetsTab({ assets, projectId, canEdit }: Props) {
       {assets.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <FileIcon className="h-10 w-10 mb-2 opacity-40" />
-          <p className="text-sm">No assets uploaded yet</p>
+          <p className="text-s">No assets uploaded yet</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -138,18 +138,18 @@ export function AssetsTab({ assets, projectId, canEdit }: Props) {
                   </div>
                 )}
                 <div className="p-3">
-                  <p className="text-sm font-medium truncate">{asset.filename}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
+                  <p className="text-s font-medium truncate">{asset.filename}</p>
+                  <p className="text-s text-muted-foreground mt-0.5">
                     {formatFileSize(asset.fileSize)} · {format(new Date(asset.createdAt), "MMM d, yyyy")}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
+                  <p className="text-s text-muted-foreground mt-0.5">
                     by {asset.uploadedBy.name ?? "Unknown"}
                   </p>
                   <div className="mt-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <a
                       href={asset.url}
                       download={asset.filename}
-                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-s text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                     >
                       <Download className="h-3 w-3" />
                       Download

@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UserPlus, Shield, Check, Search, Mail, X, Loader2 } from "lucide-react";
+import { AddButton } from "@/components/add-button";
 import { inviteMember, addMemberToProject, getAvailableUsers } from "@/actions/project";
 import { cn } from "@/lib/utils";
 
@@ -166,10 +167,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger render={<Button />}>
-        <UserPlus className="mr-2 h-4 w-4" />
-        Add Member
-      </DialogTrigger>
+      <DialogTrigger render={<AddButton label="Add Member" />} />
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add Team Members</DialogTitle>
@@ -180,7 +178,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
             type="button"
             onClick={() => setMode("add")}
             className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors",
+              "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-s font-medium transition-colors",
               mode === "add"
                 ? "bg-card text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -193,7 +191,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
             type="button"
             onClick={() => setMode("invite")}
             className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors",
+              "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-s font-medium transition-colors",
               mode === "invite"
                 ? "bg-card text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -214,14 +212,14 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
                   value={userSearch}
                   onChange={(e) => setUserSearch(e.target.value)}
                   placeholder="Search by name or email..."
-                  className="pl-8 h-8 text-[13px]"
+                  className="ps-8 h-8 text-s"
                 />
               </div>
               <div className="max-h-[180px] overflow-y-auto rounded-lg border border-border">
                 {loadingUsers ? (
-                  <p className="text-[12px] text-muted-foreground text-center py-4">Loading...</p>
+                  <p className="text-s text-muted-foreground text-center py-4">Loading...</p>
                 ) : filteredUsers.length === 0 ? (
-                  <p className="text-[12px] text-muted-foreground text-center py-4">
+                  <p className="text-s text-muted-foreground text-center py-4">
                     {availableUsers.length === 0 ? "All users are already members" : "No users match"}
                   </p>
                 ) : (
@@ -233,7 +231,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
                         type="button"
                         onClick={() => toggleUser(u.id)}
                         className={cn(
-                          "w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors",
+                          "w-full flex items-center gap-2.5 px-3 py-2 text-start transition-colors",
                           isSelected ? "bg-primary/10" : "hover:bg-muted/30"
                         )}
                       >
@@ -246,20 +244,20 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
                         {u.imageUrl ? (
                           <img src={u.imageUrl} alt="" className="w-6 h-6 rounded-full shrink-0" />
                         ) : (
-                          <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center text-[10px] font-semibold text-primary shrink-0">
+                          <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
                             {(u.name?.[0] || u.email[0]).toUpperCase()}
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <p className="text-[12px] font-medium text-foreground truncate">{u.name || u.email}</p>
+                            <p className="text-s font-medium text-foreground truncate">{u.name || u.email}</p>
                             {u.pending && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-medium shrink-0">
+                              <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-medium shrink-0">
                                 Pending
                               </span>
                             )}
                           </div>
-                          {u.name && <p className="text-[10px] text-muted-foreground truncate">{u.email}</p>}
+                          {u.name && <p className="text-xs text-muted-foreground truncate">{u.email}</p>}
                         </div>
                       </button>
                     );
@@ -272,7 +270,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   Selected
-                  <span className="text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-semibold">
+                  <span className="text-xs bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-semibold">
                     {selected.length}
                   </span>
                 </Label>
@@ -285,18 +283,18 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
                         {user.imageUrl ? (
                           <img src={user.imageUrl} alt="" className="w-5 h-5 rounded-full shrink-0" />
                         ) : (
-                          <div className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-[9px] font-semibold text-primary shrink-0">
+                          <div className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
                             {(user.name?.[0] || user.email[0]).toUpperCase()}
                           </div>
                         )}
-                        <span className="text-[12px] font-medium text-foreground truncate flex-1 min-w-0">
+                        <span className="text-s font-medium text-foreground truncate flex-1 min-w-0">
                           {user.name || user.email}
                         </span>
                         <Select
                           value={entry.roleId}
                           onValueChange={(val) => val && setRoleForUser(entry.userId, val)}
                         >
-                          <SelectTrigger className="h-6 w-auto min-w-[90px] text-[10px] border-border px-2 gap-1">
+                          <SelectTrigger className="h-6 w-auto min-w-[90px] text-xs border-border px-2 gap-1">
                             <SelectValue>
                               <span className="flex items-center gap-1">
                                 <Shield className="w-2.5 h-2.5 text-muted-foreground" strokeWidth={1.5} />
@@ -337,7 +335,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
                     style={{ width: `${(addProgress.done / addProgress.total) * 100}%` }}
                   />
                 </div>
-                <p className="text-[11px] text-muted-foreground text-center">
+                <p className="text-xs text-muted-foreground text-center">
                   Adding {addProgress.done}/{addProgress.total}...
                 </p>
               </div>
@@ -349,7 +347,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
               </Button>
               <Button type="submit" disabled={loading || selected.length === 0}>
                 {loading ? (
-                  <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Adding...</>
+                  <><Loader2 className="w-3.5 h-3.5 me-1.5 animate-spin" />Adding...</>
                 ) : (
                   `Add ${selected.length} Member${selected.length !== 1 ? "s" : ""}`
                 )}

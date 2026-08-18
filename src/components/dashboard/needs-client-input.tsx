@@ -52,7 +52,7 @@ function Tooltip({ children, text }: { children: React.ReactNode; text: string }
   return (
     <div className="relative group/tip">
       {children}
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-popover border border-border text-[10px] text-popover-foreground whitespace-nowrap opacity-0 pointer-events-none group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-popover border border-border text-xs text-popover-foreground whitespace-nowrap opacity-0 pointer-events-none group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">
         {text}
       </div>
     </div>
@@ -77,22 +77,22 @@ function CompactRow({ task }: { task: ClientInputTask }) {
       </Tooltip>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[12px] font-medium truncate group-hover:text-primary transition-colors">
+          <p className="text-s font-medium truncate group-hover:text-primary transition-colors">
             {task.title}
           </p>
-          <span className={cn("text-[11px] font-bold tabular-nums shrink-0", color)}>
+          <span className={cn("text-xs font-bold tabular-nums shrink-0", color)}>
             {formatDuration(task.waitingMs)}
           </span>
         </div>
         <div className="flex items-center gap-1 mt-0.5">
-          <span className="text-[10px] text-muted-foreground truncate">
+          <span className="text-xs text-muted-foreground truncate">
             {task.assignee?.name ?? "Unassigned"}
             <span className="mx-1">·</span>
             {task.project.name}
           </span>
           {task.note && (
             <Tooltip text={task.note}>
-              <StickyNote className="w-2.5 h-2.5 text-amber-400/60 shrink-0 ml-1" />
+              <StickyNote className="w-2.5 h-2.5 text-amber-400/60 shrink-0 ms-1" />
             </Tooltip>
           )}
         </div>
@@ -107,21 +107,21 @@ export function NeedsClientInput({ data, tab }: { data: ClientInputTask[]; tab?:
   const prefix = tab === "product" ? "PM" : tab === "dev" ? "Dev" : "";
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div className="app-card rounded-xl border border-border bg-card overflow-hidden">
       <div className="px-4 py-3.5 border-b border-border">
         <div className="flex items-center justify-between mb-2.5">
-          <h2 className="text-[14px] font-semibold flex items-center gap-2">
+          <h2 className="text-s font-semibold flex items-center gap-2">
             <UserCircle2 className="w-4 h-4 text-muted-foreground" />
             {prefix} Needs Client Input
           </h2>
           {data.length > 0 && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
+            <span className="flex items-center gap-1 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
               <AlertTriangle className="w-3 h-3" />
               {data.length} waiting
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 text-[11px]">
+        <div className="flex items-center gap-3 text-xs">
           {data.length > 0 ? (
             <span className="text-muted-foreground">
               {data.length} {data.length === 1 ? "task" : "tasks"} &gt; 2d
@@ -135,7 +135,7 @@ export function NeedsClientInput({ data, tab }: { data: ClientInputTask[]; tab?:
       {data.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <UserCircle2 className="w-7 h-7 text-muted-foreground/20 mb-2" strokeWidth={1.5} />
-          <p className="text-[12px] text-muted-foreground">No tasks waiting on client</p>
+          <p className="text-s text-muted-foreground">No tasks waiting on client</p>
         </div>
       ) : (
         <div className="divide-y divide-border/50">
@@ -148,7 +148,7 @@ export function NeedsClientInput({ data, tab }: { data: ClientInputTask[]; tab?:
       {data.length > PREVIEW_COUNT && (
         <Link
           href={`/dashboard/needs-client-input${tab ? `?tab=${tab}` : ""}`}
-          className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
+          className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
         >
           <ExternalLink className="w-3 h-3" />
           View All ({data.length})

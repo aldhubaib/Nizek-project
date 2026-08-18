@@ -108,7 +108,7 @@ export function NoteCommentReplyDialog({
   if (loading && !note) {
     return (
       <NoteSlideOver title={noteTitle} onClose={() => onOpenChange(false)}>
-        <div className="flex flex-1 items-center justify-center gap-2 text-[13px] text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center gap-2 text-s text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading note…
         </div>
@@ -119,7 +119,7 @@ export function NoteCommentReplyDialog({
   if (error && !note) {
     return (
       <NoteSlideOver title={noteTitle} onClose={() => onOpenChange(false)}>
-        <p className="px-4 py-10 text-center text-[13px] text-destructive">{error}</p>
+        <p className="px-4 py-10 text-center text-s text-destructive">{error}</p>
       </NoteSlideOver>
     );
   }

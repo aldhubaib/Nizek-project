@@ -12,12 +12,12 @@ import {
   KeyRound,
   Loader2,
   Pencil,
-  Plus,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AddButton } from "@/components/add-button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -406,14 +406,11 @@ export function VaultCredentialsPanel({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={projectId ? "Search in this project" : "Search credentials"}
-            className="h-9 pl-8 text-sm"
+            className="h-9 ps-8 text-s"
           />
         </div>
         {canCreate && (
-          <Button size="sm" onClick={openCreate} className="gap-1.5">
-            <Plus className="h-3.5 w-3.5" />
-            Add credential
-          </Button>
+          <AddButton label="Add credential" onClick={openCreate} />
         )}
       </div>
 
@@ -433,30 +430,31 @@ export function VaultCredentialsPanel({
         folderFilter === "all" && folders.length > 0 && !query.trim() ? null : (
         <div className="rounded-xl border border-dashed border-border px-6 py-12 text-center">
           <KeyRound className="mx-auto h-8 w-8 text-muted-foreground/50" />
-          <p className="mt-3 text-[13px] font-medium text-foreground">
+          <p className="mt-3 text-s font-medium text-foreground">
             {credentials.length === 0
               ? "No credentials yet"
               : folderFilter !== "all" && folderFilter !== "unfiled" && !query.trim()
                 ? "This folder is empty"
                 : "No matches"}
           </p>
-          <p className="mt-1 text-[12px] text-muted-foreground">
+          <p className="mt-1 text-s text-muted-foreground">
             {folderFilter !== "all" && credentials.length > 0
               ? "Add a credential here, or pick another folder."
               : "Store logins, emails, and API keys for this project — like a password manager."}
           </p>
           {canCreate && (credentials.length === 0 || folderFilter !== "all") && !query.trim() && (
-            <Button size="sm" className="mt-4 gap-1.5" onClick={openCreate}>
-              <Plus className="h-3.5 w-3.5" />
-              {credentials.length === 0 ? "Add the first one" : "Add credential"}
-            </Button>
+            <AddButton
+              label={credentials.length === 0 ? "Add the first one" : "Add credential"}
+              className="mt-4"
+              onClick={openCreate}
+            />
           )}
         </div>
         )
       ) : (
         <div className="space-y-2">
           {folderFilter === "all" && !query.trim() && unfiledCount > 0 && (
-            <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Unfiled
             </p>
           )}
@@ -472,17 +470,17 @@ export function VaultCredentialsPanel({
                 >
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate text-[13px] font-semibold">
+                      <p className="truncate text-s font-semibold">
                         {c.title}
                       </p>
                       {c.category && (
-                        <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        <span className="rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
                           {CATEGORY_OPTIONS.find((o) => o.value === c.category)
                             ?.label ?? c.category}
                         </span>
                       )}
                       {c.folderName && (
-                        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
                           {c.folderName}
                         </span>
                       )}
@@ -490,12 +488,12 @@ export function VaultCredentialsPanel({
                     {showProjectColumn && (
                       <Link
                         href={`/dashboard/projects/${c.projectId}?tab=vault`}
-                        className="text-[11px] text-muted-foreground hover:text-foreground"
+                        className="text-xs text-muted-foreground hover:text-foreground"
                       >
                         {c.projectName}
                       </Link>
                     )}
-                    <p className="truncate font-mono text-[12px] text-muted-foreground">
+                    <p className="truncate font-mono text-s text-muted-foreground">
                       {c.username || "No username"}
                       {c.hasPassword && (
                         <>
@@ -515,7 +513,7 @@ export function VaultCredentialsPanel({
                         href={c.url.startsWith("http") ? c.url : `https://${c.url}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="block truncate text-[11px] text-primary hover:underline"
+                        className="block truncate text-xs text-primary hover:underline"
                       >
                         {c.url}
                       </a>
@@ -609,7 +607,7 @@ export function VaultCredentialsPanel({
                   }
                   placeholder={editing ? "••••••••" : ""}
                   autoComplete="new-password"
-                  className="pr-9"
+                  className="pe-9"
                 />
                 <button
                   type="button"
@@ -640,7 +638,7 @@ export function VaultCredentialsPanel({
                   onChange={(e) =>
                     setForm({ ...form, folderId: e.target.value })
                   }
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-s"
                 >
                   <option value="">Unfiled</option>
                   {folders.map((folder) => (
@@ -655,7 +653,7 @@ export function VaultCredentialsPanel({
               <select
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-s"
               >
                 {CATEGORY_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -679,7 +677,7 @@ export function VaultCredentialsPanel({
               />
             </Field>
             {error && (
-              <p className="text-[12px] text-destructive">{error}</p>
+              <p className="text-s text-destructive">{error}</p>
             )}
           </div>
           <DialogFooter>
@@ -712,9 +710,9 @@ export function VaultCredentialsPanel({
           </DialogHeader>
           <div className="max-h-[60vh] space-y-3 overflow-y-auto py-1">
             {history === null ? (
-              <p className="text-[12px] text-muted-foreground">Loading…</p>
+              <p className="text-s text-muted-foreground">Loading…</p>
             ) : history.length === 0 ? (
-              <p className="text-[12px] text-muted-foreground">No history yet</p>
+              <p className="text-s text-muted-foreground">No history yet</p>
             ) : (
               history.map((entry) => (
                 <HistoryRow key={entry.id} entry={entry} />
@@ -736,7 +734,7 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-[12px]">{label}</Label>
+      <Label className="text-s">{label}</Label>
       {children}
     </div>
   );
@@ -805,12 +803,12 @@ function HistoryRow({ entry }: { entry: VaultActivityDTO }) {
     <div className="flex gap-2.5">
       <Avatar className="mt-0.5 h-6 w-6 shrink-0">
         <AvatarImage src={entry.user.imageUrl ?? undefined} />
-        <AvatarFallback className="text-[8px]">
+        <AvatarFallback className="text-xs">
           {(entry.user.name ?? "?").slice(0, 2).toUpperCase()}
         </AvatarFallback>
       </Avatar>
       <div className="min-w-0 flex-1">
-        <p className="text-[12px] text-foreground">
+        <p className="text-s text-foreground">
           <span className="font-medium">{entry.user.name ?? "Someone"}</span>
           {" "}
           <span className="text-muted-foreground">{actionLabel.toLowerCase()}</span>
@@ -822,13 +820,13 @@ function HistoryRow({ entry }: { entry: VaultActivityDTO }) {
           ) : null}
         </p>
         {(entry.oldValue || entry.newValue) && entry.action !== "revealed" && (
-          <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+          <p className="mt-0.5 font-mono text-xs text-muted-foreground">
             {entry.oldValue ?? "—"}
             {" → "}
             {entry.newValue ?? "—"}
           </p>
         )}
-        <p className="mt-0.5 text-[10px] text-muted-foreground/70">{when}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground/70">{when}</p>
       </div>
     </div>
   );

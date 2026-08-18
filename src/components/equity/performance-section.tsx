@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Activity, Plus, Trash2 } from "lucide-react";
+import { Activity, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AddButton } from "@/components/add-button";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
 import {
   RecordDetail,
@@ -22,12 +23,12 @@ import {
 } from "@/actions/equity";
 
 const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "w-full h-9 px-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
 
-const selectCls = cn(inputCls, "appearance-none pr-8");
+const selectCls = cn(inputCls, "appearance-none pe-8");
 
 const labelCls =
-  "block text-[11px] font-medium text-muted-foreground mb-1 uppercase tracking-wide";
+  "block text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide";
 
 type Entry = EquityPortfolioDTO["performance"][number];
 
@@ -127,7 +128,7 @@ function PerformanceForm({
 
   return (
     <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-4 mb-3">
-      <div className="grid gap-3 sm:grid-cols-[200px_minmax(0,1fr)]">
+      <div className="grid gap-3 @md/card:grid-cols-[200px_minmax(0,1fr)]">
         <div>
           <label className={labelCls}>Date</label>
           <input
@@ -152,11 +153,11 @@ function PerformanceForm({
       </div>
 
       <div className="space-y-2">
-        <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-0.5">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        <div className="@max-md/card:hidden @md/card:grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-0.5">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
             Data
           </span>
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
             Value
           </span>
           <span className="w-8" />
@@ -167,7 +168,7 @@ function PerformanceForm({
           return (
             <div
               key={row.key}
-              className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-center"
+              className="grid grid-cols-1 @md/card:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-center"
             >
               <select
                 value={row.metricId}
@@ -203,17 +204,17 @@ function PerformanceForm({
                     className={cn(
                       inputCls,
                       "disabled:opacity-50",
-                      metric?.type === "PERCENT" && "pr-7",
-                      metric?.unit && metric.type === "NUMBER" && "pr-14",
+                      metric?.type === "PERCENT" && "pe-7",
+                      metric?.unit && metric.type === "NUMBER" && "pe-14",
                     )}
                   />
                   {metric?.type === "PERCENT" && (
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[12px] text-muted-foreground pointer-events-none">
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-s text-muted-foreground pointer-events-none">
                       %
                     </span>
                   )}
                   {metric?.type === "NUMBER" && metric.unit && (
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground pointer-events-none max-w-12 truncate">
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none max-w-12 truncate">
                       {metric.unit}
                     </span>
                   )}
@@ -240,28 +241,24 @@ function PerformanceForm({
           );
         })}
 
-        <button
-          type="button"
+        <AddButton
+          label="Add row"
           onClick={() =>
             setDraft((d) => ({ ...d, rows: [...d.rows, blankRow()] }))
           }
-          className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-dashed border-border text-[12px] text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add row
-        </button>
+        />
       </div>
 
       <div className="flex items-center justify-end gap-2">
         {blocked && (
-          <span className="text-[11px] text-muted-foreground mr-auto">
+          <span className="text-xs text-muted-foreground me-auto">
             {blocked}
           </span>
         )}
         <button
           type="button"
           onClick={onCancel}
-          className="px-3 h-9 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors"
+          className="px-3 h-9 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
         >
           Cancel
         </button>
@@ -269,7 +266,7 @@ function PerformanceForm({
           type="button"
           onClick={() => onSubmit(draft)}
           disabled={busy || blocked != null}
-          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
+          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-s font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
         >
           {submitLabel}
         </button>
@@ -333,21 +330,18 @@ export function PerformanceSection({
       actions={
         !adding &&
         metrics.length > 0 && (
-          <button
+          <AddButton
+            label="Add reading"
             onClick={() => {
               setAdding(true);
               setEditingId(null);
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add reading
-          </button>
+          />
         )
       }
     >
       {metrics.length === 0 ? (
-        <p className="text-[12px] text-muted-foreground py-2">
+        <p className="text-s text-muted-foreground py-2">
           Nothing to record yet — define what a project is measured on under{" "}
           <Link
             href="/dashboard/equity"
@@ -376,7 +370,7 @@ export function PerformanceSection({
           )}
 
           {entries.length === 0 && !adding && (
-            <p className="text-[12px] text-muted-foreground py-2">
+            <p className="text-s text-muted-foreground py-2">
               No readings yet.
             </p>
           )}

@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AddButton } from "@/components/add-button";
 import {
-  Plus,
   Trash2,
   Shield,
   Pencil,
@@ -214,15 +214,15 @@ export function RolesManager({ roles }: Props) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-[13px] font-semibold text-foreground">Roles & Permissions</h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <h2 className="text-s font-semibold text-foreground">Roles & Permissions</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
             Define roles with specific task permissions per stage.
           </p>
         </div>
-        <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
-          <Plus className="w-3.5 h-3.5 mr-1" strokeWidth={1.5} />
-          New Role
-        </Button>
+        <AddButton
+          label="New Role"
+          onClick={() => setShowCreate((v) => !v)}
+        />
       </div>
 
       {/* Create form */}
@@ -235,7 +235,7 @@ export function RolesManager({ roles }: Props) {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Role name (e.g. QA Lead, Designer)"
-            className="h-8 text-[13px]"
+            className="h-8 text-s"
             autoFocus
           />
 
@@ -267,7 +267,7 @@ export function RolesManager({ roles }: Props) {
       {roles.length === 0 ? (
         <div className="flex flex-col items-center justify-center text-center gap-3 py-8 rounded-lg border border-border bg-card">
           <Shield className="w-8 h-8 text-muted-foreground opacity-50" strokeWidth={1.5} />
-          <p className="text-[13px] text-muted-foreground">No roles defined yet.</p>
+          <p className="text-s text-muted-foreground">No roles defined yet.</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -285,7 +285,7 @@ export function RolesManager({ roles }: Props) {
                     <Input
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
-                      className="h-8 text-[13px]"
+                      className="h-8 text-s"
                       autoFocus
                     />
 
@@ -304,10 +304,10 @@ export function RolesManager({ roles }: Props) {
 
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="sm" onClick={() => setEditingId(null)}>
-                        <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                        <X className="w-3.5 h-3.5 me-1" /> Cancel
                       </Button>
                       <Button size="sm" onClick={() => handleSave(role.id)}>
-                        <Check className="w-3.5 h-3.5 mr-1" /> Save
+                        <Check className="w-3.5 h-3.5 me-1" /> Save
                       </Button>
                     </div>
                   </div>
@@ -316,19 +316,19 @@ export function RolesManager({ roles }: Props) {
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <Shield className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-                        <span className="text-[13px] font-medium">{role.name}</span>
+                        <span className="text-s font-medium">{role.name}</span>
                         {role.isTeamLead && (
-                          <span className="text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1">
+                          <span className="text-xs bg-amber-500/15 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1">
                             <Crown className="w-2.5 h-2.5" strokeWidth={2} />
                             Team Lead
                           </span>
                         )}
                         {role.isAdmin && (
-                          <span className="text-[10px] bg-purple-500/15 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded-full font-medium">
+                          <span className="text-xs bg-purple-500/15 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded-full font-medium">
                             Admin
                           </span>
                         )}
-                        <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                        <span className="text-xs text-muted-foreground flex items-center gap-0.5">
                           <Users className="w-3 h-3" /> {role._count.members}
                         </span>
                       </div>
@@ -384,7 +384,7 @@ function RoleStageSummary({ parsed }: { parsed: StagePerms; canMoveTask?: boolea
   return (
     <div className="space-y-1 mt-2">
       {hasCreate && (
-        <div className="flex items-center gap-1.5 text-[10px]">
+        <div className="flex items-center gap-1.5 text-xs">
           <span className="text-muted-foreground shrink-0 w-12">Create:</span>
           <div className="flex flex-wrap gap-1">
             {parsed.createStages.map((s) => (
@@ -394,7 +394,7 @@ function RoleStageSummary({ parsed }: { parsed: StagePerms; canMoveTask?: boolea
         </div>
       )}
       {hasModify && (
-        <div className="flex items-center gap-1.5 text-[10px]">
+        <div className="flex items-center gap-1.5 text-xs">
           <span className="text-muted-foreground shrink-0 w-12">Modify:</span>
           <div className="flex flex-wrap gap-1">
             {parsed.modifyStages.map((s) => (
@@ -404,7 +404,7 @@ function RoleStageSummary({ parsed }: { parsed: StagePerms; canMoveTask?: boolea
         </div>
       )}
       {hasTransitions && (
-        <div className="flex items-center gap-1.5 text-[10px]">
+        <div className="flex items-center gap-1.5 text-xs">
           <span className="text-muted-foreground shrink-0 w-12">Move:</span>
           <div className="flex flex-wrap gap-1">
             {Object.entries(parsed.transitions).map(([from, targets]) =>
@@ -479,9 +479,9 @@ function StagePermissionsTable({
 
   return (
     <div>
-      <p className="text-[11px] text-muted-foreground mb-2 font-medium">Stage Permissions</p>
-      <div className="rounded-lg border border-border overflow-hidden">
-        <div className="grid grid-cols-[1fr_64px_64px_64px_64px] text-[10px] font-medium text-muted-foreground bg-muted/30 px-3 py-2 border-b border-border">
+      <p className="text-xs text-muted-foreground mb-2 font-medium">Stage Permissions</p>
+      <div className="app-card rounded-lg border border-border overflow-x-auto">
+        <div className="grid grid-cols-[1fr_64px_64px_64px_64px] text-xs font-medium text-muted-foreground bg-muted/30 px-3 py-2 border-b border-border">
           <span>Stage</span>
           <span className="text-center">Create</span>
           <span className="text-center">Modify</span>
@@ -499,7 +499,7 @@ function StagePermissionsTable({
               key={stage.id}
               className="grid grid-cols-[1fr_64px_64px_64px_64px] items-center px-3 py-1.5 border-b border-border last:border-b-0 hover:bg-muted/10 transition-colors"
             >
-              <span className="text-[11px] font-medium text-foreground/80">{stage.label}</span>
+              <span className="text-xs font-medium text-foreground/80">{stage.label}</span>
               <div className="flex justify-center">
                 <StageCheckbox enabled={createEnabled} onClick={() => toggleCreate(stage.id)} color="blue" />
               </div>
@@ -510,21 +510,21 @@ function StagePermissionsTable({
                 {stage.next ? (
                   <StageCheckbox enabled={forwardEnabled} onClick={() => toggleForward(stage.id, stage.next!.id)} color="emerald" />
                 ) : (
-                  <span className="text-[10px] text-muted-foreground/30">—</span>
+                  <span className="text-xs text-muted-foreground/30">—</span>
                 )}
               </div>
               <div className="flex justify-center">
                 {stage.prev ? (
                   <StageCheckbox enabled={rollbackEnabled} onClick={() => toggleRollback(stage.id, stage.prev!.id)} color="amber" />
                 ) : (
-                  <span className="text-[10px] text-muted-foreground/30">—</span>
+                  <span className="text-xs text-muted-foreground/30">—</span>
                 )}
               </div>
             </div>
           );
         })}
       </div>
-      <p className="text-[10px] text-muted-foreground/50 mt-1.5">
+      <p className="text-xs text-muted-foreground/50 mt-1.5">
         Create = can create tasks in this stage. Modify = can edit tasks in this stage. Forward/Rollback = can move tasks to next/previous stage.
       </p>
     </div>
@@ -568,7 +568,7 @@ function PermToggle({
       type="button"
       onClick={() => onChange(!checked)}
       className={cn(
-        "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-colors",
+        "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
         checked
           ? "bg-primary/15 border-primary/40 text-primary"
           : "border-border text-muted-foreground hover:border-muted-foreground/40"
@@ -591,7 +591,7 @@ function PermBadge({ label, enabled }: { label: string; enabled: boolean }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border",
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border",
         enabled
           ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
           : "bg-muted text-muted-foreground/50 border-border line-through"

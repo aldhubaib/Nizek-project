@@ -41,7 +41,7 @@ function ProjectAvatar({ project, size = "w-6 h-6" }: { project: UpNextEntry["pr
     // eslint-disable-next-line @next/next/no-img-element
     <img src={project.logoUrl} alt="" className={cn(size, "rounded object-cover shrink-0")} />
   ) : (
-    <div className={cn(size, "rounded bg-primary/15 flex items-center justify-center text-[10px] font-semibold text-primary shrink-0")}>
+    <div className={cn(size, "rounded bg-primary/15 flex items-center justify-center text-xs font-semibold text-primary shrink-0")}>
       {project.name[0]?.toUpperCase()}
     </div>
   );
@@ -62,12 +62,12 @@ function Row({ entry }: { entry: UpNextEntry }) {
       <ProjectAvatar project={entry.project} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-semibold text-muted-foreground truncate">
+          <span className="text-xs font-semibold text-muted-foreground truncate">
             {entry.project.name}
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
             {entry.task.priority != null && (
-              <span className={cn("text-[10px] font-bold tabular-nums", priorityColor(entry.task.priority))}>
+              <span className={cn("text-xs font-bold tabular-nums", priorityColor(entry.task.priority))}>
                 P{entry.task.priority}
               </span>
             )}
@@ -76,10 +76,10 @@ function Row({ entry }: { entry: UpNextEntry }) {
             </div>
           </div>
         </div>
-        <p className="text-[12px] font-medium truncate group-hover:text-primary transition-colors mt-0.5">
+        <p className="text-s font-medium truncate group-hover:text-primary transition-colors mt-0.5">
           {entry.task.title}
         </p>
-        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
+        <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
           <span className="font-mono">{fmtTaskNumber(entry.task.taskNumber)}</span>
           <span>·</span>
           <span className="truncate">{entry.task.assignee?.name ?? "Unassigned"}</span>
@@ -97,23 +97,23 @@ function FullRow({ entry }: { entry: UpNextEntry }) {
     <Link
       href={`/dashboard/projects/${entry.project.id}/tasks/${entry.task.id}`}
       target="_blank"
-      className="grid grid-cols-[150px_24px_1fr_120px_50px] gap-3 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
+      className="grid grid-cols-[minmax(0,7rem)_1fr_auto] @md/card:grid-cols-[150px_24px_1fr_120px_50px] gap-3 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
     >
       <div className="flex items-center gap-2 min-w-0">
         <ProjectAvatar project={entry.project} />
-        <span className="text-[12px] font-semibold truncate">{entry.project.name}</span>
+        <span className="text-s font-semibold truncate">{entry.project.name}</span>
       </div>
-      <div className={cn("w-6 h-6 rounded flex items-center justify-center border shrink-0", typeInfo?.color ?? "text-muted-foreground bg-muted border-border")}>
+      <div className={cn("w-6 h-6 rounded flex items-center justify-center border shrink-0 @max-md/card:hidden", typeInfo?.color ?? "text-muted-foreground bg-muted border-border")}>
         <TypeIcon className="w-3.5 h-3.5" />
       </div>
-      <p className="text-[13px] font-medium truncate group-hover:text-primary transition-colors min-w-0">
-        <span className="text-muted-foreground/50 font-mono mr-1.5 text-[11px]">{fmtTaskNumber(entry.task.taskNumber)}</span>
+      <p className="text-s font-medium truncate group-hover:text-primary transition-colors min-w-0">
+        <span className="text-muted-foreground/50 font-mono me-1.5 text-xs">{fmtTaskNumber(entry.task.taskNumber)}</span>
         {entry.task.title}
       </p>
-      <span className="text-[11px] text-muted-foreground truncate">
+      <span className="text-xs text-muted-foreground truncate @max-md/card:hidden">
         {entry.task.assignee?.name ?? "Unassigned"}
       </span>
-      <span className={cn("text-[12px] font-bold tabular-nums text-right", priorityColor(entry.task.priority))}>
+      <span className={cn("text-s font-bold tabular-nums text-end", priorityColor(entry.task.priority))}>
         {entry.task.priority != null ? `P${entry.task.priority}` : "—"}
       </span>
     </Link>
@@ -130,21 +130,21 @@ export function UpNextByProject({ data }: { data: UpNextEntry[] }) {
 
   return (
     <>
-      <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col h-full">
+      <div className="app-card rounded-xl border border-border bg-card overflow-hidden flex flex-col h-full">
         {/* Header */}
         <div className="px-4 py-3.5 border-b border-border">
           <div className="flex items-center justify-between mb-2.5">
-            <h2 className="text-[14px] font-semibold flex items-center gap-2">
+            <h2 className="text-s font-semibold flex items-center gap-2">
               <Zap className="w-4 h-4 text-cyan-400" />
               Up Next By Project
             </h2>
             {data.length > 0 && (
-              <span className="flex items-center gap-1 text-[10px] font-semibold text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 rounded-full px-2 py-0.5">
+              <span className="flex items-center gap-1 text-xs font-semibold text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 rounded-full px-2 py-0.5">
                 {data.length} project{data.length !== 1 ? "s" : ""}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3 text-[11px]">
+          <div className="flex items-center gap-3 text-xs">
             <span className="text-muted-foreground">
               {data.length === 0
                 ? "Nothing is ready to pull"
@@ -158,8 +158,8 @@ export function UpNextByProject({ data }: { data: UpNextEntry[] }) {
           {data.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <Zap className="w-7 h-7 text-muted-foreground/20 mb-2" strokeWidth={1.5} />
-              <p className="text-[12px] text-muted-foreground">No tasks ready to start</p>
-              <p className="text-[10px] text-muted-foreground/60 mt-1 max-w-56">
+              <p className="text-s text-muted-foreground">No tasks ready to start</p>
+              <p className="text-xs text-muted-foreground/60 mt-1 max-w-56">
                 A task shows here once its required questions are answered and a priority is set.
               </p>
             </div>
@@ -177,7 +177,7 @@ export function UpNextByProject({ data }: { data: UpNextEntry[] }) {
           <button
             type="button"
             onClick={() => setShowAll(true)}
-            className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5 mt-auto"
+            className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5 mt-auto"
           >
             <ExternalLink className="w-3 h-3" />
             View All ({data.length})
@@ -187,20 +187,20 @@ export function UpNextByProject({ data }: { data: UpNextEntry[] }) {
 
       {showAll && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[9999] bg-background/95 backdrop-blur-sm flex flex-col">
-          <div className="h-12 flex items-center justify-between px-6 border-b border-border shrink-0">
+          <div className="flex app-top-bar items-center justify-between border-b border-border shrink-0">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setShowAll(false)}
-                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-[13px]"
+                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s"
               >
                 <X className="w-4 h-4" />
                 Close
               </button>
               <span className="text-border">|</span>
-              <h2 className="text-[13px] font-semibold flex items-center gap-2">
+              <h2 className="text-s font-semibold flex items-center gap-2">
                 <Zap className="w-4 h-4 text-cyan-400" />
                 Up Next By Project
-                <span className="text-[11px] font-normal text-muted-foreground">
+                <span className="text-xs font-normal text-muted-foreground">
                   ({data.length} project{data.length !== 1 ? "s" : ""})
                 </span>
               </h2>
@@ -208,13 +208,13 @@ export function UpNextByProject({ data }: { data: UpNextEntry[] }) {
           </div>
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-4xl mx-auto py-4">
-              <div className="rounded-xl border border-border bg-card divide-y divide-border">
-                <div className="grid grid-cols-[150px_24px_1fr_120px_50px] gap-3 px-5 py-2.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+              <div className="app-card rounded-xl border border-border bg-card divide-y divide-border">
+                <div className="grid grid-cols-[minmax(0,7rem)_1fr_auto] @md/card:grid-cols-[150px_24px_1fr_120px_50px] gap-3 px-5 py-2.5 text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">
                   <span>Project</span>
-                  <span />
+                  <span className="@max-md/card:hidden" />
                   <span>Up Next Task</span>
-                  <span>Assignee</span>
-                  <span className="text-right">Prio</span>
+                  <span className="@max-md/card:hidden">Assignee</span>
+                  <span className="text-end">Prio</span>
                 </div>
                 {data.map((entry) => (
                   <FullRow key={entry.project.id} entry={entry} />

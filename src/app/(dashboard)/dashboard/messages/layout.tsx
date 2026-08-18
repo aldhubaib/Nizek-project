@@ -16,7 +16,7 @@ export default async function MessagesLayout({
   // Normal page inside the dashboard shell (app sidebar stays visible). The
   // shell hides its mobile header on inbox routes, so full height everywhere.
   return (
-    <div className="flex h-dvh min-h-0 bg-background text-foreground">
+    <div className="flex h-dvh min-h-0 text-foreground">
       <ThreadSidebar threads={threads} isClient={isClient} />
       <MessagesMain>{children}</MessagesMain>
     </div>

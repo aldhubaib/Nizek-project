@@ -49,12 +49,12 @@ function DeadlineRow({ item }: { item: IncompleteDeadlineRow }) {
         <CalendarClock className="size-4" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[12px] font-medium">{item.title}</p>
-        <p className="truncate text-[10px] text-muted-foreground">{item.project.name}</p>
+        <p className="truncate text-s font-medium">{item.title}</p>
+        <p className="truncate text-xs text-muted-foreground">{item.project.name}</p>
       </div>
       <span
         className={cn(
-          "inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+          "inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-xs font-semibold",
           status.bg,
           status.color,
         )}
@@ -70,21 +70,21 @@ export function IncompleteDeadlines({ data }: { data: IncompleteDeadlineRow[] })
   const preview = data.slice(0, PREVIEW_COUNT);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card">
+    <div className="app-card flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card">
       <div className="border-b border-border px-4 py-3.5">
         <div className="mb-2.5 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-[14px] font-semibold">
+          <h2 className="flex items-center gap-2 text-s font-semibold">
             <CalendarClock className="h-4 w-4 text-muted-foreground" />
             Incomplete Roadmap
           </h2>
           {overdueCount > 0 && (
-            <span className="flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-400">
+            <span className="flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-xs font-semibold text-red-400">
               <AlertTriangle className="h-3 w-3" />
               {overdueCount} overdue
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 text-[11px]">
+        <div className="flex items-center gap-3 text-xs">
           {data.length > 0 ? (
             <span className="text-muted-foreground">
               {data.length} open item{data.length === 1 ? "" : "s"}
@@ -102,7 +102,7 @@ export function IncompleteDeadlines({ data }: { data: IncompleteDeadlineRow[] })
               className="mb-2 h-7 w-7 text-muted-foreground/20"
               strokeWidth={1.5}
             />
-            <p className="text-[12px] text-muted-foreground">Nothing on the roadmap</p>
+            <p className="text-s text-muted-foreground">Nothing on the roadmap</p>
           </div>
         ) : (
           <div className="divide-y divide-border/50">
@@ -115,7 +115,7 @@ export function IncompleteDeadlines({ data }: { data: IncompleteDeadlineRow[] })
 
       <Link
         href="/dashboard/deadlines"
-        className="mt-auto flex w-full items-center justify-center gap-1.5 border-t border-border px-4 py-2.5 text-[12px] font-medium text-primary transition-colors hover:bg-accent/30"
+        className="mt-auto flex w-full items-center justify-center gap-1.5 border-t border-border px-4 py-2.5 text-s font-medium text-primary transition-colors hover:bg-accent/30"
       >
         <ExternalLink className="h-3 w-3" />
         View All ({data.length})

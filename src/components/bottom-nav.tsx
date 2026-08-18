@@ -134,7 +134,7 @@ export function BottomNav({
   return (
     <nav
       className={cn(
-        "fixed inset-x-0 bottom-0 z-[400] border-t border-border bg-sidebar pb-[env(safe-area-inset-bottom)]",
+        "app-bottom-bar fixed inset-x-0 bottom-0 z-[400] border-t border-border bg-sidebar",
         hidden && "hidden",
       )}
       aria-label="Primary"
@@ -161,14 +161,14 @@ export function BottomNav({
                   strokeWidth={active ? 2 : 1.5}
                 />
                 {showBadge && (
-                  <span className="absolute -right-2.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-none text-primary-foreground">
+                  <span className="absolute -right-2.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold leading-none text-primary-foreground">
                     {inboxUnread > 9 ? "9+" : inboxUnread}
                   </span>
                 )}
               </span>
               <span
                 className={cn(
-                  "text-[10px] leading-none",
+                  "text-xs leading-none",
                   active && "font-semibold",
                 )}
               >
@@ -183,7 +183,7 @@ export function BottomNav({
           className="flex flex-1 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
         >
           <Menu className="h-5 w-5" strokeWidth={1.5} />
-          <span className="text-[10px] leading-none">Menu</span>
+          <span className="text-xs leading-none">Menu</span>
         </button>
       </div>
     </nav>

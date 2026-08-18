@@ -49,8 +49,8 @@ export async function GET() {
       scope: "/",
       display: "standalone",
       orientation: "any",
-      background_color: "#000000",
-      theme_color: "#000000",
+      background_color: "#0e0e10",
+      theme_color: "rgba(14, 14, 16, 0.4)",
       icons,
     },
     {

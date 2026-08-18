@@ -98,7 +98,7 @@ export function TaskAnnotatedContent({
     editorProps: {
       attributes: {
         class:
-          "focus:outline-none prose prose-invert max-w-none text-[13px] leading-relaxed text-muted-foreground prose-p:my-0",
+          "focus:outline-none prose prose-invert max-w-none text-s leading-relaxed text-muted-foreground prose-p:my-0",
       },
       handleClick: (view, pos) => {
         const marks = view.state.doc.resolve(pos).marks();
@@ -216,7 +216,7 @@ export function TaskAnnotatedContent({
   const openIcon = icons.find((i) => i.threadId === openThreadId);
 
   return (
-    <div ref={wrapRef} className="relative pr-12">
+    <div ref={wrapRef} className="relative pe-12">
       <EditorContent editor={editor} />
 
       {icons.map((icon) => (
@@ -244,7 +244,7 @@ export function TaskAnnotatedContent({
               <Check className="h-2.5 w-2.5" strokeWidth={3} />
             </span>
           ) : icon.count > 0 ? (
-            <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-amber-400 px-1 text-[9px] font-bold leading-4 text-background">
+            <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-amber-400 px-1 text-xs font-bold leading-4 text-background">
               {icon.count}
             </span>
           ) : null}
@@ -278,7 +278,7 @@ export function TaskAnnotatedContent({
               setCommenting(true);
               setDraft("");
             }}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-foreground hover:bg-accent"
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-s font-medium text-foreground hover:bg-accent"
           >
             <MessageSquare className="h-3.5 w-3.5 text-amber-400" />
             Comment
@@ -291,7 +291,7 @@ export function TaskAnnotatedContent({
           className="absolute z-30 w-[min(100%,340px)] -translate-x-1/2 rounded-xl border border-border bg-popover p-3 shadow-xl"
           style={{ top: Math.max(0, selection.top), left: selection.left }}
         >
-          <p className="mb-2 line-clamp-2 border-l-2 border-amber-400/70 pl-2 text-[11px] italic text-muted-foreground">
+          <p className="mb-2 line-clamp-2 border-s-2 border-amber-400/70 ps-2 text-xs italic text-muted-foreground">
             {selection.text}
           </p>
           <div className="relative">
@@ -318,7 +318,7 @@ export function TaskAnnotatedContent({
               }}
               placeholder="Comment… use @ to mention"
               rows={3}
-              className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-2 text-[13px] outline-none focus:border-primary/40"
+              className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-2 text-s outline-none focus:border-primary/40"
             />
             {mentionOpen && mentionResults.length > 0 && (
               <div className="absolute left-0 right-0 top-full z-40 mt-1 max-h-40 overflow-y-auto rounded-md border border-border bg-popover shadow-lg">
@@ -326,7 +326,7 @@ export function TaskAnnotatedContent({
                   <button
                     key={m.id}
                     type="button"
-                    className="block w-full px-2.5 py-1.5 text-left text-[12px] hover:bg-accent"
+                    className="block w-full px-2.5 py-1.5 text-start text-s hover:bg-accent"
                     onMouseDown={(e) => {
                       e.preventDefault();
                       const replaced = draft.replace(
@@ -343,7 +343,7 @@ export function TaskAnnotatedContent({
               </div>
             )}
           </div>
-          {error && <p className="mt-1.5 text-[11px] text-destructive">{error}</p>}
+          {error && <p className="mt-1.5 text-xs text-destructive">{error}</p>}
           <div className="mt-2 flex justify-end gap-2">
             <Button type="button" size="sm" variant="ghost" onClick={closeComposer}>
               Cancel
@@ -355,9 +355,9 @@ export function TaskAnnotatedContent({
               disabled={submitting || !draft.trim()}
             >
               {submitting ? (
-                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="me-1 h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Send className="mr-1 h-3.5 w-3.5" />
+                <Send className="me-1 h-3.5 w-3.5" />
               )}
               Comment
             </Button>

@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState, useTransition } from "react";
 import Image from "next/image";
-import { Loader2, Plus, UserMinus, Users } from "lucide-react";
+import { Loader2, UserMinus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AddButton } from "@/components/add-button";
 import {
   Dialog,
   DialogContent,
@@ -37,15 +38,15 @@ function PersonRow({
           className="h-8 w-8 rounded-full object-cover"
         />
       ) : (
-        <div className="grid h-8 w-8 place-items-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary">
+        <div className="grid h-8 w-8 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
           {label.charAt(0).toUpperCase()}
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-medium text-foreground">
+        <div className="truncate text-s font-medium text-foreground">
           {label}
         </div>
-        <div className="truncate text-[11px] text-muted-foreground">
+        <div className="truncate text-xs text-muted-foreground">
           {person.kind === "client" ? "Client · auto" : person.email}
         </div>
       </div>
@@ -106,44 +107,38 @@ export function ClientChatPeopleManager({
     <div className={cn(!compact && "mt-3 space-y-3 border-t border-border/50 pt-3")}>
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[13px] font-semibold">
+          <div className="flex items-center gap-1.5 text-s font-semibold">
             <Users className="h-3.5 w-3.5 text-muted-foreground" />
             People in client chat
           </div>
           {!compact && (
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Clients on the project are added automatically. Add staff from your
               side who should talk to the client.
             </p>
           )}
         </div>
         {canManage && (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 shrink-0 gap-1 text-xs"
+          <AddButton
+            label="Add staff"
             disabled={pending || addable.length === 0}
             onClick={() => setAddOpen(true)}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add staff
-          </Button>
+          />
         )}
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 py-4 text-s text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Loading…
         </div>
       ) : error ? (
-        <p className="text-[12px] text-destructive">{error}</p>
+        <p className="text-s text-destructive">{error}</p>
       ) : (
         <div className={cn("divide-y divide-border/40", compact && "max-h-80 overflow-y-auto")}>
           {staff.length > 0 && (
             <div className="pb-1">
-              <div className="py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Your team ({staff.length})
               </div>
               {staff.map((p) => (
@@ -180,7 +175,7 @@ export function ClientChatPeopleManager({
           )}
           {clients.length > 0 && (
             <div className="pb-1">
-              <div className="py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Clients ({clients.length})
               </div>
               {clients.map((p) => (
@@ -189,7 +184,7 @@ export function ClientChatPeopleManager({
             </div>
           )}
           {people.length === 0 && (
-            <p className="py-3 text-[12px] text-muted-foreground">
+            <p className="py-3 text-s text-muted-foreground">
               No one in this chat yet. Add staff and invite clients to the project.
             </p>
           )}
@@ -203,7 +198,7 @@ export function ClientChatPeopleManager({
           </DialogHeader>
           <ul className="max-h-72 divide-y divide-border/40 overflow-y-auto">
             {addable.length === 0 ? (
-              <li className="py-6 text-center text-sm text-muted-foreground">
+              <li className="py-6 text-center text-s text-muted-foreground">
                 Everyone on the project is already in this chat.
               </li>
             ) : (
@@ -212,7 +207,7 @@ export function ClientChatPeopleManager({
                   <button
                     type="button"
                     disabled={pending}
-                    className="flex w-full items-center gap-2.5 py-2.5 text-left transition-colors hover:bg-surface/60 disabled:opacity-60"
+                    className="flex w-full items-center gap-2.5 py-2.5 text-start transition-colors hover:bg-surface/60 disabled:opacity-60"
                     onClick={() => {
                       startTransition(async () => {
                         const res = await addClientChatStaff({

@@ -153,7 +153,7 @@ export function NoteActivityCard({
         {payload.excerpt ? (
           <blockquote
             className={cn(
-              "border-l-2 pl-3 text-[12px] italic text-muted-foreground",
+              "border-s-2 ps-3 text-s italic text-muted-foreground",
               visual.theme.quote ?? "border-primary/60",
             )}
           >
@@ -161,7 +161,7 @@ export function NoteActivityCard({
           </blockquote>
         ) : null}
         {payload.action === "updated" && changed.length > 0 ? (
-          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">
+          <p className="whitespace-pre-wrap text-s leading-relaxed text-foreground">
             Changed {changed.join(", ")}
           </p>
         ) : null}

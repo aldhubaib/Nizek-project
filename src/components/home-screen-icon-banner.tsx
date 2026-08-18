@@ -73,10 +73,10 @@ export function HomeScreenIconBanner() {
             <Smartphone className="w-4 h-4 text-primary" strokeWidth={1.5} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-foreground">
+            <p className="text-s font-semibold text-foreground">
               Home-screen icon updated
             </p>
-            <p className="text-[12px] text-muted-foreground mt-0.5 leading-snug">
+            <p className="text-s text-muted-foreground mt-0.5 leading-snug">
               {ios
                 ? "The logo inside the app is updated. If the home-screen glyph is still old after you reopen, remove the app and add it again from Safari."
                 : "Tap the ⋮ menu → Review app update, then fully close the app on Wi‑Fi."}
@@ -85,7 +85,7 @@ export function HomeScreenIconBanner() {
               <button
                 type="button"
                 onClick={dismiss}
-                className="h-7 px-3 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium hover:bg-primary/80 transition-colors"
+                className="h-7 px-3 rounded-lg bg-primary text-primary-foreground text-s font-medium hover:bg-primary/80 transition-colors"
               >
                 Got it
               </button>

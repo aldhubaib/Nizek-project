@@ -7,13 +7,13 @@ import {
   Coins,
   Megaphone,
   Pencil,
-  Plus,
   Target,
   Trash2,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AddButton } from "@/components/add-button";
 import {
   countryLabel,
   countryName,
@@ -43,16 +43,16 @@ export type PitchItem = NonNullable<
 >["items"][number];
 
 export const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "w-full h-9 px-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 export const textareaCls =
-  "w-full px-3 py-2 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 resize-y";
+  "w-full px-3 py-2 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 resize-y";
 
 export const readCellCls =
-  "min-h-9 px-3 py-2 rounded-lg border border-border bg-muted/30 flex items-center text-[13px] text-foreground";
+  "min-h-9 px-3 py-2 rounded-lg border border-border bg-muted/30 flex items-center text-s text-foreground";
 
 const labelCls =
-  "block text-[11px] font-medium text-muted-foreground uppercase tracking-wide";
+  "block text-xs font-medium text-muted-foreground uppercase tracking-wide";
 
 /** The columns a row carries. Which ones a section uses is its own business. */
 type FieldKey =
@@ -110,7 +110,7 @@ export const PITCH_SECTIONS: Record<string, SectionSpec> = {
     title: "Market validation",
     description: "Proof the demand is already there, and where you measured it.",
     grid:
-      "sm:grid-cols-[minmax(0,1fr)_7rem_9rem_minmax(0,1.1fr)_minmax(0,1fr)_1.75rem]",
+      "@md/card:grid-cols-[minmax(0,1fr)_7rem_9rem_minmax(0,1.1fr)_minmax(0,1fr)_1.75rem]",
     fields: [
       { key: "heading", label: "Source", placeholder: "couchsurfing.com", kind: "text" },
       { key: "figure", label: "Figure", placeholder: "670,000", kind: "text" },
@@ -127,7 +127,7 @@ export const PITCH_SECTIONS: Record<string, SectionSpec> = {
     title: "Business model",
     description:
       "How the money is made, a line at a time. The scale is picked rather than typed, so a fee and a run rate can be told apart.",
-    grid: "sm:grid-cols-[minmax(0,1fr)_9rem_9rem_7rem_1.75rem]",
+    grid: "@md/card:grid-cols-[minmax(0,1fr)_9rem_9rem_7rem_1.75rem]",
     fields: [
       {
         key: "heading",
@@ -148,7 +148,7 @@ export const PITCH_SECTIONS: Record<string, SectionSpec> = {
     title: "Market adoption",
     description:
       "How the first users are reached, and how much of the reach each channel carries. The report draws them as a split, so the shares have to come to 100%.",
-    grid: "sm:grid-cols-[12rem_6rem_minmax(0,1fr)_1.75rem]",
+    grid: "@md/card:grid-cols-[12rem_6rem_minmax(0,1fr)_1.75rem]",
     fields: [
       { key: "heading", label: "Channel", placeholder: "Events", kind: "text" },
       { key: "share", label: "Share %", placeholder: "25", kind: "percent" },
@@ -169,7 +169,7 @@ export const PITCH_SECTIONS: Record<string, SectionSpec> = {
     title: "Competition",
     description:
       "Who else is in the market, scored 0–10 against the anchors the market is fought on. The report draws everyone on one radar, each anchor a corner.",
-    grid: "sm:grid-cols-[minmax(0,1fr)_7rem_7rem_5rem_1.75rem]",
+    grid: "@md/card:grid-cols-[minmax(0,1fr)_7rem_7rem_5rem_1.75rem]",
     fields: [
       { key: "heading", label: "Who", placeholder: "Craigslist", kind: "text" },
       { key: "axisX", label: "Offline → online", kind: "axis" },
@@ -184,7 +184,7 @@ export const PITCH_SECTIONS: Record<string, SectionSpec> = {
     id: "ADVANTAGE",
     title: "Competitive advantage",
     description: "What the competition can't easily copy.",
-    grid: "sm:grid-cols-[12rem_minmax(0,1fr)_1.75rem]",
+    grid: "@md/card:grid-cols-[12rem_minmax(0,1fr)_1.75rem]",
     fields: [
       { key: "heading", label: "The edge", placeholder: "First to market", kind: "text" },
       {
@@ -243,7 +243,7 @@ function CountryPicker({
       {codes.map((code) => (
         <span
           key={code}
-          className="flex items-center gap-1 pl-1.5 pr-1 py-0.5 rounded-md bg-muted text-[11px] text-foreground"
+          className="flex items-center gap-1 ps-1.5 pe-1 py-0.5 rounded-md bg-muted text-xs text-foreground"
         >
           {countryLabel(code)}
           <button
@@ -278,7 +278,7 @@ function CountryPicker({
         }}
         onBlur={() => commit(draft)}
         placeholder={codes.length === 0 ? "Add a country…" : ""}
-        className="flex-1 min-w-20 h-6 px-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+        className="flex-1 min-w-20 h-6 px-1 bg-transparent text-s text-foreground placeholder:text-muted-foreground focus:outline-none"
       />
       <datalist id={listId}>
         {all.map((c) => (
@@ -425,7 +425,7 @@ function readValue(spec: FieldSpec, item: PitchItem): string {
 /** A section that hasn't been filled in, said plainly rather than left out. */
 export function Blank({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[13px] text-muted-foreground px-3 py-2 rounded-lg border border-dashed border-border">
+    <p className="text-s text-muted-foreground px-3 py-2 rounded-lg border border-dashed border-border">
       {children}
     </p>
   );
@@ -442,7 +442,7 @@ export function EditButton({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors shrink-0"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-s font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors shrink-0"
     >
       <Pencil className="w-3.5 h-3.5" />
       {filled ? "Edit" : "Fill in"}
@@ -465,12 +465,12 @@ export function FormButtons({
   return (
     <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
       {blocked && (
-        <span className="text-[12px] text-destructive mr-auto">{blocked}</span>
+        <span className="text-s text-destructive me-auto">{blocked}</span>
       )}
       <button
         type="button"
         onClick={onCancel}
-        className="px-3 h-9 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors"
+        className="px-3 h-9 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
       >
         Cancel
       </button>
@@ -478,7 +478,7 @@ export function FormButtons({
         type="button"
         onClick={onSave}
         disabled={busy || Boolean(blocked)}
-        className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
+        className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-s font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
       >
         {busy ? "Saving…" : "Save"}
       </button>
@@ -497,7 +497,7 @@ export function PitchRowsView({
   if (rows.length === 0) return <Blank>{spec.emptyLabel}</Blank>;
   return (
     <div className="space-y-2">
-      <div className={cn("hidden sm:grid gap-2 px-0.5", spec.grid)}>
+      <div className={cn("@max-md/card:hidden @md/card:grid gap-2 px-0.5", spec.grid)}>
         {spec.fields.map((f) => (
           <span key={f.key} className={labelCls}>
             {f.label}
@@ -656,7 +656,7 @@ export function PitchRowsEditor({
   return (
     <div className="space-y-2">
       {rows.length > 0 && (
-        <div className={cn("hidden sm:grid gap-2 px-0.5", spec.grid)}>
+        <div className={cn("@max-md/card:hidden @md/card:grid gap-2 px-0.5", spec.grid)}>
           {spec.fields.map((f) => (
             <span key={f.key} className={labelCls}>
               {f.label}
@@ -682,14 +682,10 @@ export function PitchRowsEditor({
         </div>
       ))}
 
-      <button
-        type="button"
+      <AddButton
+        label={spec.addLabel}
         onClick={() => setRows((rs) => [...rs, emptyItem(currency)])}
-        className="flex items-center gap-1 px-2.5 h-8 rounded-lg border border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
-      >
-        <Plus className="w-3 h-3" />
-        {spec.addLabel}
-      </button>
+      />
     </div>
   );
 }
@@ -1075,7 +1071,7 @@ function CompetitionForm({
                 placeholder="Anchor"
                 className={cn(
                   inputCls,
-                  "h-8 px-2 pr-6 text-[11px] font-medium uppercase tracking-wide",
+                  "h-8 px-2 pe-6 text-xs font-medium uppercase tracking-wide",
                 )}
               />
               <button
@@ -1091,14 +1087,10 @@ function CompetitionForm({
             </div>
           ))}
           {anchors.length < ANCHORS_MAX ? (
-            <button
-              type="button"
+            <AddButton
+              label="Add an anchor"
               onClick={() => setAnchors((as) => [...as, anchorDraft()])}
-              title="Add an anchor"
-              className="w-7 h-8 rounded-md border border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" strokeWidth={1.5} />
-            </button>
+            />
           ) : (
             <span />
           )}
@@ -1187,14 +1179,10 @@ function CompetitionForm({
           </div>
         ))}
 
-        <button
-          type="button"
+        <AddButton
+          label="Add a competitor"
           onClick={() => setRows((rs) => [...rs, emptyCompetitor()])}
-          className="flex items-center gap-1 px-2.5 h-8 rounded-lg border border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
-        >
-          <Plus className="w-3 h-3" />
-          Add a competitor
-        </button>
+        />
       </div>
 
       <FormButtons
@@ -1221,7 +1209,7 @@ function CompetitionMatrixView({
   const grid = competitionGrid(anchors.length, "");
   return (
     <div className="space-y-2 overflow-x-auto">
-      <div className="hidden sm:grid gap-2 px-0.5" style={grid}>
+      <div className="@max-md/card:hidden @md/card:grid gap-2 px-0.5" style={grid}>
         <span className={labelCls}>Who</span>
         {anchors.map((a) => (
           <span key={a} className={cn(labelCls, "truncate")}>
@@ -1234,7 +1222,7 @@ function CompetitionMatrixView({
           <div className={readCellCls}>
             <span className="truncate">{row.heading || "—"}</span>
             {row.isUs && (
-              <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary shrink-0">
+              <span className="ms-2 px-1.5 py-0.5 rounded text-xs font-medium bg-primary/15 text-primary shrink-0">
                 us
               </span>
             )}
@@ -1258,7 +1246,7 @@ function ShareTally({ rows }: { rows: ItemDraft[] }) {
   const total = Math.round(shareTotal(rows) * 100) / 100;
   const done = Math.abs(total - 100) <= 0.01;
   return (
-    <p className="text-[12px] tabular-nums">
+    <p className="text-s tabular-nums">
       <span className="text-muted-foreground">Shares total </span>
       <span className={done ? "text-foreground" : "text-destructive"}>
         {total}%

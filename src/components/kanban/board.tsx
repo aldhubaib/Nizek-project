@@ -537,11 +537,11 @@ export function KanbanBoard({
     return (
       <div>
         <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-          <p className="text-sm font-medium text-amber-400">
+          <p className="text-s font-medium text-amber-400">
             No active contract — this project is read-only. Add a new contract to re-enable editing.
           </p>
         </div>
-        <div className="flex flex-col gap-4 pb-4 lg:h-[calc(100vh-220px)] lg:flex-row lg:overflow-x-auto scrollbar-hidden">
+        <div className="flex flex-col gap-4 pb-4 lg:h-full lg:min-h-0 lg:flex-1 lg:flex-row lg:overflow-x-auto lg:pb-0 scrollbar-hidden">
           {STAGES.map((stage) => {
             const stageTasks = tasksByStage[stage.id] ?? [];
             return (
@@ -569,7 +569,7 @@ export function KanbanBoard({
     >
       {/* Below the desktop breakpoint columns stack like the phone board; from
           lg up it's a full kanban rail that scrolls sideways. */}
-      <div className="flex flex-col gap-4 pb-4 lg:h-[calc(100vh-220px)] lg:flex-row lg:overflow-x-auto scrollbar-hidden">
+      <div className="flex flex-col gap-4 pb-4 lg:h-full lg:min-h-0 lg:flex-1 lg:flex-row lg:overflow-x-auto lg:pb-0 scrollbar-hidden">
         {STAGES.map((stage) => {
           const stageTasks = tasksByStage[stage.id] ?? [];
           return (
@@ -644,13 +644,13 @@ function PermissionDeniedDialog({ message, onClose }: { message: string; onClose
               <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
             </svg>
           </div>
-          <h3 className="text-[14px] font-semibold text-foreground">Permission Denied</h3>
+          <h3 className="text-s font-semibold text-foreground">Permission Denied</h3>
         </div>
-        <p className="text-[13px] text-muted-foreground mb-1">{message}</p>
-        <p className="text-[11px] text-muted-foreground/60 mb-5">The task has been returned to its previous stage.</p>
+        <p className="text-s text-muted-foreground mb-1">{message}</p>
+        <p className="text-xs text-muted-foreground/60 mb-5">The task has been returned to its previous stage.</p>
         <button
           onClick={onClose}
-          className="w-full rounded-lg bg-primary text-primary-foreground py-2 text-[13px] font-medium hover:bg-primary/90 transition-colors"
+          className="w-full rounded-lg bg-primary text-primary-foreground py-2 text-s font-medium hover:bg-primary/90 transition-colors"
         >
           OK
         </button>

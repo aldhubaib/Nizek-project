@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getLongestInPipeline } from "@/actions/dashboard";
 import { PipelineFullTable } from "@/components/dashboard/pipeline-full-table";
+import { PageHeader } from "@/components/page-header";
 
 const STAGE_FILTERS: Record<string, string[]> = {
   product: ["INTERNAL_REVIEW", "CLIENT_REVIEW"],
@@ -21,20 +22,20 @@ export default async function PipelinePage({
 
   return (
     <div>
-      <div className="sticky top-0 z-10 flex app-top-bar items-center gap-3 px-6 pr-14 border-b border-border bg-background shrink-0">
+      <PageHeader>
         <Link
           href={backHref}
-          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-[13px]"
+          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s"
         >
           <ArrowLeft className="w-4 h-4" />
           Dashboard
         </Link>
         <span className="text-border">|</span>
-        <h1 className="text-sm font-semibold">{tab === "product" ? "PM" : tab === "dev" ? "Dev" : ""} Longest in Stage By Task</h1>
-        <span className="text-[11px] text-muted-foreground">({data.length} tasks)</span>
-      </div>
+        <h1 className="text-s font-semibold">{tab === "product" ? "PM" : tab === "dev" ? "Dev" : ""} Longest in Stage By Task</h1>
+        <span className="text-xs text-muted-foreground">({data.length} tasks)</span>
+      </PageHeader>
 
-      <div className="px-6 py-6">
+      <div className="px-app py-6">
         <PipelineFullTable data={JSON.parse(JSON.stringify(data))} />
       </div>
     </div>

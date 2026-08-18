@@ -52,7 +52,7 @@ export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
     ) : (
       <span
         className={cn(
-          "grid shrink-0 place-items-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary",
+          "grid shrink-0 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary",
           size,
         )}
       >
@@ -65,18 +65,18 @@ export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
       <DropdownMenu>
         <DropdownMenuTrigger
           className={cn(
-            "flex w-full items-center gap-2.5 rounded-lg p-1 text-left outline-none transition-colors hover:bg-card/60",
+            "flex w-full items-center gap-2.5 rounded-lg p-1 text-start outline-none transition-colors hover:bg-card/60",
             collapsed && "justify-center",
           )}
         >
           {avatar("h-7 w-7")}
           {!collapsed && (
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium text-foreground">
+              <span className="block truncate text-s font-medium text-foreground">
                 {name}
               </span>
               {email && (
-                <span className="block truncate text-[11px] text-muted-foreground">
+                <span className="block truncate text-xs text-muted-foreground">
                   {email}
                 </span>
               )}
@@ -87,11 +87,11 @@ export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
           <div className="flex items-center gap-2.5 px-1.5 py-1.5">
             {avatar("h-8 w-8")}
             <div className="min-w-0">
-              <div className="truncate text-[13px] font-medium text-foreground">
+              <div className="truncate text-s font-medium text-foreground">
                 {name}
               </div>
               {email && (
-                <div className="truncate text-[11px] text-muted-foreground">
+                <div className="truncate text-xs text-muted-foreground">
                   {email}
                 </div>
               )}

@@ -90,13 +90,13 @@ export function PhotoGallery({
                   className="w-full aspect-[4/3] object-cover rounded-xl border border-border/60 bg-muted/20 transition-opacity group-hover:opacity-90"
                 />
                 {last && hidden > 0 && (
-                  <span className="absolute inset-0 grid place-items-center rounded-xl bg-background/70 backdrop-blur-[2px] text-[22px] font-semibold text-foreground transition-colors group-hover:bg-background/60">
+                  <span className="absolute inset-0 grid place-items-center rounded-xl bg-background/70 backdrop-blur-[2px] text-m font-semibold text-foreground transition-colors group-hover:bg-background/60">
                     +{hidden}
                   </span>
                 )}
               </button>
               {photo.caption && !(last && hidden > 0) && (
-                <figcaption className="text-[11px] text-muted-foreground mt-2.5">
+                <figcaption className="text-xs text-muted-foreground mt-2.5">
                   {photo.caption}
                 </figcaption>
               )}
@@ -153,11 +153,11 @@ function PhotoLightbox({
         className="flex items-center justify-between gap-3 px-5 py-3 shrink-0"
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="text-[13px] text-white/70 truncate">
+        <span className="text-s text-white/70 truncate">
           {current.caption ?? ""}
         </span>
         <div className="flex items-center gap-3 shrink-0">
-          <span className="text-[12px] text-white/40 tabular-nums">
+          <span className="text-s text-white/40 tabular-nums">
             {index + 1} / {photos.length}
           </span>
           <a

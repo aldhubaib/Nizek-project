@@ -167,7 +167,7 @@ function Avatar({ user }: { user: { name: string | null; imageUrl: string | null
   }
   return (
     <div className="w-[18px] h-[18px] rounded-full bg-muted ring-2 ring-card flex items-center justify-center">
-      <span className="text-[7px] font-bold text-muted-foreground">
+      <span className="text-xs font-bold text-muted-foreground">
         {user.name?.charAt(0)?.toUpperCase() ?? "?"}
       </span>
     </div>
@@ -330,8 +330,8 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
         {/* Header */}
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border shrink-0">
           <History className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-          <h3 className="text-[13px] font-semibold">Task History</h3>
-          <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-foreground/80">
+          <h3 className="text-s font-semibold">Task History</h3>
+          <span className="ms-auto inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium text-foreground/80">
             <Clock className="w-3 h-3 text-muted-foreground" />
             Total {formatDuration(totalMs)}
           </span>
@@ -353,7 +353,7 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
                 key={f.id}
                 onClick={() => selectFilter(f.id)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors border",
+                  "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border",
                   active
                     ? "bg-primary/15 border-primary/30 text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -376,7 +376,7 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
               <button
                 onClick={() => setStatusFilter(null)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors border",
+                  "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium transition-colors border",
                   statusFilter === null
                     ? "bg-foreground/10 border-foreground/20 text-foreground"
                     : "border-border text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -389,7 +389,7 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
                   key={s}
                   onClick={() => setStatusFilter(s)}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors border",
+                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium transition-colors border",
                     statusFilter === s
                       ? "bg-primary/15 border-primary/30 text-primary"
                       : "border-border text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -402,16 +402,16 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
             </div>
             {selectedTotal && (
               <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
-                <span className="text-[11px] font-medium text-foreground/80 flex items-center gap-1.5">
+                <span className="text-xs font-medium text-foreground/80 flex items-center gap-1.5">
                   <span className={cn("w-2 h-2 rounded-full", STAGE_DOT[statusFilter!] ?? "bg-primary")} />
                   Total in {stageLabel(statusFilter)}
                   {statusFilter === currentStage && (
-                    <span className="text-[9px] text-primary">(ongoing)</span>
+                    <span className="text-xs text-primary">(ongoing)</span>
                   )}
                 </span>
-                <span className="text-[12px] font-semibold font-mono tabular-nums text-primary">
+                <span className="text-s font-semibold font-mono tabular-nums text-primary">
                   {formatDuration(selectedTotal.ms)}
-                  <span className="text-[10px] font-normal text-muted-foreground ml-1.5">
+                  <span className="text-xs font-normal text-muted-foreground ms-1.5">
                     · {selectedTotal.visits} {selectedTotal.visits === 1 ? "visit" : "visits"}
                   </span>
                 </span>
@@ -439,10 +439,10 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-medium text-foreground leading-snug">
+                      <p className="text-s font-medium text-foreground leading-snug">
                         Currently in {stageLabel(currentStage)}
                       </p>
-                      <span className="inline-flex items-center gap-1 mt-1 rounded-full bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                      <span className="inline-flex items-center gap-1 mt-1 rounded-full bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-xs font-medium text-primary">
                         <Clock className="w-2.5 h-2.5" />
                         {formatDuration(currentStageMs)} · ongoing
                       </span>
@@ -453,7 +453,7 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
                 {visibleItems.length === 0 && !showCurrentStage && (
                   <div className="flex flex-col items-center justify-center text-center py-8 gap-2">
                     <History className="w-6 h-6 text-muted-foreground opacity-40" strokeWidth={1.5} />
-                    <p className="text-[11px] text-muted-foreground/60">Nothing to show</p>
+                    <p className="text-xs text-muted-foreground/60">Nothing to show</p>
                   </div>
                 )}
 
@@ -489,16 +489,16 @@ function ActivityRow({
         <Avatar user={activity.user} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[12px] text-foreground/80 leading-snug">{describeActivity(activity)}</p>
+        <p className="text-s text-foreground/80 leading-snug">{describeActivity(activity)}</p>
         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-          <span className="text-[10px] text-muted-foreground/50 mr-0.5">{timeAgo(activity.createdAt)}</span>
+          <span className="text-xs text-muted-foreground/50 me-0.5">{timeAgo(activity.createdAt)}</span>
           {durationMs !== undefined && durationStage && (
             <>
-              <span className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium border tabular-nums", stageBadgeClass(durationStage))}>
+              <span className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium border tabular-nums", stageBadgeClass(durationStage))}>
                 <Clock className="w-2.5 h-2.5" />
                 {formatDuration(durationMs)}
               </span>
-              <span className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium border", stageBadgeClass(durationStage))}>
+              <span className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium border", stageBadgeClass(durationStage))}>
                 <span className={cn("w-1.5 h-1.5 rounded-full", STAGE_DOT[durationStage] ?? "bg-current")} />
                 {stageLabel(durationStage)}
               </span>
@@ -518,12 +518,12 @@ function CommentRow({ comment }: { comment: Comment }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-[12px] font-semibold text-foreground/90">{comment.user.name ?? "Unknown"}</span>
-          <span className="text-[10px] text-muted-foreground/50">commented</span>
-          <span className="text-[10px] text-muted-foreground/50">· {timeAgo(comment.createdAt)}</span>
+          <span className="text-s font-semibold text-foreground/90">{comment.user.name ?? "Unknown"}</span>
+          <span className="text-xs text-muted-foreground/50">commented</span>
+          <span className="text-xs text-muted-foreground/50">· {timeAgo(comment.createdAt)}</span>
         </div>
         <div className="mt-1 rounded-lg border border-border/60 bg-background px-2.5 py-2">
-          <p className="text-[12px] text-foreground/80 leading-relaxed whitespace-pre-wrap break-words">
+          <p className="text-s text-foreground/80 leading-relaxed whitespace-pre-wrap break-words">
             {comment.content}
           </p>
           {comment.attachments && comment.attachments.length > 0 && (
@@ -542,8 +542,8 @@ function CommentRow({ comment }: { comment: Comment }) {
                     className="flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1.5 hover:border-primary/50 transition-colors"
                   >
                     <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-[11px] text-foreground/70 truncate max-w-[120px]">{a.filename}</span>
-                    {a.fileSize && <span className="text-[9px] text-muted-foreground/50 shrink-0">{formatFileSize(a.fileSize)}</span>}
+                    <span className="text-xs text-foreground/70 truncate max-w-[120px]">{a.filename}</span>
+                    {a.fileSize && <span className="text-xs text-muted-foreground/50 shrink-0">{formatFileSize(a.fileSize)}</span>}
                     <Download className="w-3 h-3 text-muted-foreground/40 shrink-0" />
                   </a>
                 )

@@ -56,7 +56,7 @@ function Tooltip({ children, text }: { children: React.ReactNode; text: string }
   return (
     <div className="relative group/tip">
       {children}
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-popover border border-border text-[10px] text-popover-foreground whitespace-nowrap opacity-0 pointer-events-none group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-popover border border-border text-xs text-popover-foreground whitespace-nowrap opacity-0 pointer-events-none group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">
         {text}
       </div>
     </div>
@@ -76,7 +76,7 @@ function CompactRow({ item, maxDays }: { item: ContractHealthItem; maxDays: numb
       {item.logoUrl ? (
         <img src={item.logoUrl} alt="" className="w-6 h-6 rounded-md object-cover border border-border shrink-0" />
       ) : (
-        <div className="w-6 h-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
+        <div className="w-6 h-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0">
           {item.name.charAt(0).toUpperCase()}
         </div>
       )}
@@ -95,9 +95,9 @@ function CompactRow({ item, maxDays }: { item: ContractHealthItem; maxDays: numb
                 </div>
               </Tooltip>
             )}
-            <p className="text-[12px] font-medium truncate group-hover:text-primary transition-colors">{item.name}</p>
+            <p className="text-s font-medium truncate group-hover:text-primary transition-colors">{item.name}</p>
           </div>
-          <span className={cn("text-[11px] font-bold tabular-nums shrink-0", colors.text)}>
+          <span className={cn("text-xs font-bold tabular-nums shrink-0", colors.text)}>
             {item.daysLeft !== null ? (item.daysLeft <= 0 ? "Expired" : `${item.daysLeft}d`) : "—"}
           </span>
         </div>
@@ -117,13 +117,13 @@ function FullRow({ item }: { item: ContractHealthItem }) {
   return (
     <Link
       href={`/dashboard/projects/${item.id}`}
-      className="grid grid-cols-[1fr_90px_130px_150px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
+      className="grid grid-cols-[1fr_90px] @md/card:grid-cols-[1fr_90px_130px_150px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
     >
       <div className="flex items-center gap-3 min-w-0">
         {item.logoUrl ? (
           <img src={item.logoUrl} alt="" className="w-7 h-7 rounded-lg object-cover border border-border shrink-0" />
         ) : (
-          <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-[11px] font-bold text-primary shrink-0">
+          <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0">
             {item.name.charAt(0).toUpperCase()}
           </div>
         )}
@@ -140,32 +140,32 @@ function FullRow({ item }: { item: ContractHealthItem }) {
           </Tooltip>
         )}
         <div className="min-w-0">
-          <p className="text-[13px] font-medium truncate group-hover:text-primary transition-colors">{item.name}</p>
-          {item.contractCode && <p className="text-[10px] text-muted-foreground/50 font-mono truncate">{item.contractCode}</p>}
+          <p className="text-s font-medium truncate group-hover:text-primary transition-colors">{item.name}</p>
+          {item.contractCode && <p className="text-xs text-muted-foreground/50 font-mono truncate">{item.contractCode}</p>}
         </div>
       </div>
 
       <div className="flex justify-center">
-        <span className={cn("inline-flex items-center justify-center min-w-[48px] rounded-full px-2 py-0.5 text-[12px] font-bold border tabular-nums", colors.bg, colors.text, colors.border)}>
+        <span className={cn("inline-flex items-center justify-center min-w-[48px] rounded-full px-2 py-0.5 text-s font-bold border tabular-nums", colors.bg, colors.text, colors.border)}>
           {item.daysLeft !== null ? (item.daysLeft <= 0 ? "Expired" : `${item.daysLeft}d`) : "—"}
         </span>
       </div>
 
-      <div className="flex items-center justify-center gap-1.5 min-w-0">
+      <div className="flex items-center justify-center gap-1.5 min-w-0 @max-md/card:hidden">
         {item.typeTransition ? (
           <>
-            <span className="text-[11px] font-medium text-muted-foreground truncate">{CONTRACT_TYPE_LABELS[item.typeTransition.from] ?? item.typeTransition.from}</span>
+            <span className="text-xs font-medium text-muted-foreground truncate">{CONTRACT_TYPE_LABELS[item.typeTransition.from] ?? item.typeTransition.from}</span>
             <ArrowRight className="w-3 h-3 text-amber-400 shrink-0" />
-            <span className="text-[11px] font-semibold text-amber-400 truncate">{CONTRACT_TYPE_LABELS[item.typeTransition.to] ?? item.typeTransition.to}</span>
+            <span className="text-xs font-semibold text-amber-400 truncate">{CONTRACT_TYPE_LABELS[item.typeTransition.to] ?? item.typeTransition.to}</span>
           </>
         ) : (
-          <span className="text-[11px] font-medium text-muted-foreground">{item.currentType ? (CONTRACT_TYPE_LABELS[item.currentType] ?? item.currentType) : "—"}</span>
+          <span className="text-xs font-medium text-muted-foreground">{item.currentType ? (CONTRACT_TYPE_LABELS[item.currentType] ?? item.currentType) : "—"}</span>
         )}
       </div>
 
-      <div className="text-right">
-        <span className={cn("text-[12px] tabular-nums", colors.text)}>{item.endDate ? formatEndDate(item.endDate) : "—"}</span>
-        {item.contractCount > 1 && <p className="text-[10px] text-muted-foreground/40">{item.contractCount} contracts</p>}
+      <div className="text-end @max-md/card:hidden">
+        <span className={cn("text-s tabular-nums", colors.text)}>{item.endDate ? formatEndDate(item.endDate) : "—"}</span>
+        {item.contractCount > 1 && <p className="text-xs text-muted-foreground/40">{item.contractCount} contracts</p>}
       </div>
     </Link>
   );
@@ -182,23 +182,23 @@ export function ContractsHealth({ data }: { data: ContractHealthItem[] }) {
 
   return (
     <>
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="app-card rounded-xl border border-border bg-card overflow-hidden">
         {/* Header */}
         <div className="px-4 py-3.5 border-b border-border">
           <div className="flex items-center justify-between mb-2.5">
-            <h2 className="text-[14px] font-semibold flex items-center gap-2">
+            <h2 className="text-s font-semibold flex items-center gap-2">
               <FileText className="w-4 h-4 text-muted-foreground" />
               Contracts Health
             </h2>
             {urgentCount > 0 && (
-              <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
+              <span className="flex items-center gap-1 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
                 <AlertTriangle className="w-3 h-3" />
                 {urgentCount} soon
               </span>
             )}
           </div>
           {/* Summary bar */}
-          <div className="flex items-center gap-3 text-[11px]">
+          <div className="flex items-center gap-3 text-xs">
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-emerald-500" />
               <span className="text-muted-foreground">{healthyCount} healthy</span>
@@ -220,7 +220,7 @@ export function ContractsHealth({ data }: { data: ContractHealthItem[] }) {
         {data.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <FileText className="w-7 h-7 text-muted-foreground/20 mb-2" strokeWidth={1.5} />
-            <p className="text-[12px] text-muted-foreground">No active contracts</p>
+            <p className="text-s text-muted-foreground">No active contracts</p>
           </div>
         ) : (
           <div className="divide-y divide-border/50">
@@ -234,7 +234,7 @@ export function ContractsHealth({ data }: { data: ContractHealthItem[] }) {
         {data.length > PREVIEW_COUNT && (
           <button
             onClick={() => setShowAll(true)}
-            className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
+            className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
           >
             <ExternalLink className="w-3 h-3" />
             View All ({data.length})
@@ -245,21 +245,21 @@ export function ContractsHealth({ data }: { data: ContractHealthItem[] }) {
       {/* Full overlay */}
       {showAll && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[9999] bg-background/95 backdrop-blur-sm flex flex-col">
-          <div className="h-12 flex items-center justify-between px-6 border-b border-border shrink-0">
+          <div className="flex app-top-bar items-center justify-between border-b border-border shrink-0">
             <div className="flex items-center gap-3">
-              <button onClick={() => setShowAll(false)} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-[13px]">
+              <button onClick={() => setShowAll(false)} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s">
                 <X className="w-4 h-4" />
                 Close
               </button>
               <span className="text-border">|</span>
-              <h2 className="text-[13px] font-semibold flex items-center gap-2">
+              <h2 className="text-s font-semibold flex items-center gap-2">
                 <FileText className="w-4 h-4 text-muted-foreground" />
                 Contracts Health
-                <span className="text-[11px] font-normal text-muted-foreground">({data.length} projects)</span>
+                <span className="text-xs font-normal text-muted-foreground">({data.length} projects)</span>
               </h2>
             </div>
             {urgentCount > 0 && (
-              <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5">
+              <span className="flex items-center gap-1 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5">
                 <AlertTriangle className="w-3 h-3" />
                 {urgentCount} expiring soon
               </span>
@@ -267,12 +267,12 @@ export function ContractsHealth({ data }: { data: ContractHealthItem[] }) {
           </div>
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-4xl mx-auto py-4">
-              <div className="rounded-xl border border-border bg-card divide-y divide-border">
-                <div className="grid grid-cols-[1fr_90px_130px_150px] gap-4 px-5 py-2.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+              <div className="app-card rounded-xl border border-border bg-card divide-y divide-border">
+                <div className="grid grid-cols-[1fr_90px] @md/card:grid-cols-[1fr_90px_130px_150px] gap-4 px-5 py-2.5 text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">
                   <span>Project</span>
                   <span className="text-center">Days Left</span>
-                  <span className="text-center">Contract Type</span>
-                  <span className="text-right">Ends</span>
+                  <span className="text-center @max-md/card:hidden">Contract Type</span>
+                  <span className="text-end @max-md/card:hidden">Ends</span>
                 </div>
                 {data.map((item) => (
                   <FullRow key={item.id} item={item} />

@@ -112,7 +112,7 @@ export function EditContractDialog({ contract, contractPrefixes = [], open, onCl
                 <select
                   value={prefixId}
                   onChange={(e) => setPrefixId(e.target.value)}
-                  className="rounded-l-md rounded-r-none border border-r-0 border-border bg-muted/50 px-3 py-2 text-[13px] text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-ring shrink-0"
+                  className="rounded-l-md rounded-r-none border border-e-0 border-border bg-muted/50 px-3 py-2 text-s text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-ring shrink-0"
                 >
                   <option value="">No prefix</option>
                   {contractPrefixes.map((p) => (
@@ -124,11 +124,11 @@ export function EditContractDialog({ contract, contractPrefixes = [], open, onCl
                   onChange={(e) => setContractNumber(e.target.value)}
                   placeholder="001"
                   disabled={!prefixId}
-                  className="rounded-l-none text-[13px] font-mono"
+                  className="rounded-l-none text-s font-mono"
                 />
               </div>
               {prefixId && contractNumber && (
-                <p className="text-[10px] text-muted-foreground font-mono">
+                <p className="text-xs text-muted-foreground font-mono">
                   Code: {contractPrefixes.find((p) => p.id === prefixId)?.prefix}-{contractNumber}
                 </p>
               )}
@@ -163,7 +163,7 @@ export function EditContractDialog({ contract, contractPrefixes = [], open, onCl
           </div>
           {error && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
-              <p className="text-[12px] text-destructive">{error}</p>
+              <p className="text-s text-destructive">{error}</p>
             </div>
           )}
           <div className="flex justify-end gap-2">

@@ -49,18 +49,18 @@ export function DeadlineReminderCard({
         createdAt={createdAt}
         footer={
           <div className="rounded-lg border border-dashed border-border/70 bg-muted/15 px-3 py-2.5">
-            <p className="text-[10px] leading-relaxed text-muted-foreground">
+            <p className="text-xs leading-relaxed text-muted-foreground">
               This is an automated system message. Mark the note as completed to
               stop receiving this alert.
             </p>
           </div>
         }
       >
-        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Calendar className="size-3.5 shrink-0 opacity-70" />
           <span>{dueLabel}</span>
         </div>
-        <span className="inline-flex rounded-md border border-border/60 bg-muted/30 px-2 py-0.5 text-[11px] font-medium text-foreground">
+        <span className="inline-flex rounded-md border border-border/60 bg-muted/30 px-2 py-0.5 text-xs font-medium text-foreground">
           @all
         </span>
       </ActivityCard>

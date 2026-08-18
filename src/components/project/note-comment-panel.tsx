@@ -90,7 +90,7 @@ export function NoteCommentPopover({
     >
       <div className="flex items-start gap-2 border-b border-border px-3 py-2.5">
         <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
-        <p className="min-w-0 flex-1 line-clamp-3 border-l-2 border-amber-400/70 pl-2 text-[11px] italic leading-snug text-muted-foreground">
+        <p className="min-w-0 flex-1 line-clamp-3 border-s-2 border-amber-400/70 ps-2 text-xs italic leading-snug text-muted-foreground">
           {thread.quoteText}
         </p>
         <div className="flex shrink-0 items-center gap-0.5">
@@ -126,7 +126,7 @@ export function NoteCommentPopover({
         <div className="border-b border-border px-3 py-1.5">
           <Link
             href={`/dashboard/messages/conv-${thread.conversationId}`}
-            className="text-[11px] font-medium text-primary hover:underline"
+            className="text-xs font-medium text-primary hover:underline"
           >
             Open in chat →
           </Link>
@@ -137,7 +137,7 @@ export function NoteCommentPopover({
           <button
             type="button"
             onClick={onViewNote}
-            className="text-[11px] font-medium text-primary hover:underline"
+            className="text-xs font-medium text-primary hover:underline"
           >
             View full note
           </button>
@@ -151,7 +151,7 @@ export function NoteCommentPopover({
         )}
       >
         {thread.comments.length === 0 ? (
-          <p className="text-[12px] text-muted-foreground">No comments yet.</p>
+          <p className="text-s text-muted-foreground">No comments yet.</p>
         ) : (
           thread.comments.map((c) => (
             <div key={c.id} className="flex gap-2">
@@ -162,20 +162,20 @@ export function NoteCommentPopover({
                   className="size-7 shrink-0 rounded-full object-cover"
                 />
               ) : (
-                <div className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-[10px] font-semibold">
+                <div className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-xs font-semibold">
                   {(c.user.name ?? "?").charAt(0).toUpperCase()}
                 </div>
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                  <span className="truncate text-[12px] font-medium">
+                  <span className="truncate text-s font-medium">
                     {c.user.name ?? "Someone"}
                   </span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
+                  <span className="shrink-0 text-xs text-muted-foreground">
                     {formatDistanceToNow(new Date(c.createdAt), { addSuffix: true })}
                   </span>
                 </div>
-                <p className="whitespace-pre-wrap text-[13px] leading-relaxed">
+                <p className="whitespace-pre-wrap text-s leading-relaxed">
                   {c.content}
                 </p>
               </div>
@@ -197,15 +197,15 @@ export function NoteCommentPopover({
           }}
           placeholder="Reply…"
           rows={2}
-          className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-2 text-[13px] outline-none focus:border-primary/40"
+          className="w-full resize-none rounded-md border border-border bg-background px-2.5 py-2 text-s outline-none focus:border-primary/40"
         />
-        {error && <p className="mt-1 text-[11px] text-destructive">{error}</p>}
+        {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
         <div className="mt-2 flex justify-end">
           <Button size="sm" onClick={() => void reply()} disabled={submitting || !draft.trim()}>
             {submitting ? (
-              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="me-1 h-3.5 w-3.5 animate-spin" />
             ) : (
-              <Send className="mr-1 h-3.5 w-3.5" />
+              <Send className="me-1 h-3.5 w-3.5" />
             )}
             Reply
           </Button>

@@ -3,7 +3,8 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Gauge, Timer, FileText, Plus, Maximize2, Trash2, MoreVertical, CalendarClock } from "lucide-react";
+import { AddButton } from "@/components/add-button";
+import { X, Loader2, MessageCircleQuestion, History, MessageSquare, ChevronRight, ChevronDown, Pencil, Check, Clock, Gauge, Timer, FileText, Maximize2, Trash2, MoreVertical, CalendarClock, CircleSlash } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, getTaskStageLogs, deleteTask } from "@/actions/task";
 import { createMeetingNote, updateMeetingNote, getTaskNotes, getMeetingNote } from "@/actions/meeting-note";
@@ -141,21 +142,18 @@ function AttachedLinkBlock({
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Icon className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-          <h3 className="text-[13px] font-semibold">{title}</h3>
+          <h3 className="text-s font-semibold">{title}</h3>
           {items.length > 0 && (
-            <span className="text-[10px] font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
+            <span className="text-xs font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
               {items.length}
             </span>
           )}
         </div>
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={onAttach} className="h-7 text-xs">
+          <Button size="sm" variant="ghost" onClick={onAttach} className="h-7 text-s">
             Attach
           </Button>
-          <Button size="sm" variant="ghost" onClick={onCreate} className="h-7 text-xs">
-            <Plus className="w-3 h-3 mr-1" />
-            New
-          </Button>
+          <AddButton label="New note" onClick={onCreate} />
         </div>
       </div>
 
@@ -164,14 +162,14 @@ function AttachedLinkBlock({
           <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
         </div>
       ) : items.length === 0 ? (
-        <p className="text-[12px] text-muted-foreground/60 py-2">{emptyText}</p>
+        <p className="text-s text-muted-foreground/60 py-2">{emptyText}</p>
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full text-left">
+          <table className="w-full text-start">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-[11px] font-medium text-muted-foreground px-3 py-1.5">Title</th>
-                <th className="text-[11px] font-medium text-muted-foreground px-3 py-1.5 w-24 text-right">Date</th>
+                <th className="text-xs font-medium text-muted-foreground px-3 py-1.5">Title</th>
+                <th className="text-xs font-medium text-muted-foreground px-3 py-1.5 w-24 text-end">Date</th>
               </tr>
             </thead>
             <tbody>
@@ -182,11 +180,11 @@ function AttachedLinkBlock({
                   className="border-b border-border/30 last:border-0 hover:bg-accent/50 cursor-pointer transition-colors"
                 >
                   <td className="px-3 py-2">
-                    <p className="text-[12px] font-medium text-primary truncate max-w-[220px]">{note.title}</p>
-                    <p className="text-[10px] text-muted-foreground">by {note.author.name ?? "Unknown"}</p>
+                    <p className="text-s font-medium text-primary truncate max-w-[220px]">{note.title}</p>
+                    <p className="text-xs text-muted-foreground">by {note.author.name ?? "Unknown"}</p>
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                  <td className="px-3 py-2 text-end">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
                       {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
                     </span>
                   </td>
@@ -426,17 +424,17 @@ function NoteFullScreenViewer({
 
   return (
     <div className="fixed inset-0 z-[200] bg-background flex flex-col">
-      <div className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0">
+      <div className="flex app-top-bar items-center justify-between px-4 border-b border-border shrink-0">
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onClose} className="flex items-center gap-2 text-s text-muted-foreground hover:text-foreground transition-colors">
             <X className="w-4 h-4" />
             Close
           </button>
-          <span className="text-[11px] text-muted-foreground/50">|</span>
-          <span className={`text-[12px] font-medium ${taskTypeMeta.color}`}>
+          <span className="text-xs text-muted-foreground/50">|</span>
+          <span className={`text-s font-medium ${taskTypeMeta.color}`}>
             {taskTypeMeta.prefix}-{String(task.taskNumber).padStart(3, "0")}
           </span>
-          <span className="text-[12px] text-muted-foreground truncate max-w-[200px]">
+          <span className="text-s text-muted-foreground truncate max-w-[200px]">
             {task.title}
           </span>
         </div>
@@ -482,10 +480,10 @@ function NoteFullScreenViewer({
                 <input
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-4"
+                  className="w-full text-m font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-4"
                   autoFocus
                 />
-                <div className="text-[12px] text-muted-foreground mb-8">
+                <div className="text-s text-muted-foreground mb-8">
                   by {note.author.name ?? "Unknown"} · {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
                 </div>
                 <RichTextEditor
@@ -497,8 +495,8 @@ function NoteFullScreenViewer({
               </>
             ) : (
               <>
-                <h1 className="text-4xl font-bold mb-4">{note.title}</h1>
-                <div className="text-[12px] text-muted-foreground mb-8">
+                <h1 className="text-m font-bold mb-4">{note.title}</h1>
+                <div className="text-s text-muted-foreground mb-8">
                   by {note.author.name ?? "Unknown"} · {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
                 </div>
                 {note.content ? (
@@ -507,7 +505,7 @@ function NoteFullScreenViewer({
                     dangerouslySetInnerHTML={{ __html: note.content }}
                   />
                 ) : (
-                  <p className="text-sm text-muted-foreground/50 italic">No content</p>
+                  <p className="text-s text-muted-foreground/50 italic">No content</p>
                 )}
               </>
             )}
@@ -742,35 +740,38 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
       {/* Panel */}
       <div
         className={cn(
-          "fixed top-0 right-0 h-full z-50 w-full max-w-md bg-background border-l border-border shadow-2xl transition-transform duration-200 ease-out",
+          "fixed top-0 right-0 h-full z-50 w-full max-w-md bg-background border-s border-border shadow-2xl transition-transform duration-200 ease-out",
           open ? "translate-x-0" : "translate-x-full"
         )}
       >
         {/* Header */}
-        <div className="h-12 flex items-center justify-between px-4 border-b border-border shrink-0">
+        <div className="flex app-top-bar items-center justify-between px-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[11px] font-mono text-muted-foreground shrink-0">
+            <span className="text-xs font-mono text-muted-foreground shrink-0">
               {TASK_TYPE_META[task.taskType]?.prefix ?? "F"}-{String(task.taskNumber).padStart(3, "0")}
             </span>
             <span className={cn(
-              "text-[11px] font-semibold shrink-0",
+              "text-xs font-semibold shrink-0",
               TASK_TYPE_META[task.taskType]?.color ?? "text-primary"
             )}>
               {TASK_TYPE_META[task.taskType]?.label ?? task.taskType}
             </span>
             {priorityValue != null ? (
-              <span className="text-[11px] font-semibold text-muted-foreground tabular-nums shrink-0">
+              <span className="text-xs font-semibold text-muted-foreground tabular-nums shrink-0">
                 P{priorityValue}
               </span>
             ) : (
-              <span className="text-[11px] text-muted-foreground/50 shrink-0">
-                No priority
+              <span
+                className="inline-flex items-center justify-center rounded-full border border-border bg-muted px-1.5 py-0.5 text-muted-foreground/50 shrink-0"
+                title="No priority"
+              >
+                <CircleSlash className="w-3 h-3" strokeWidth={1.75} />
               </span>
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {task.estimatedMinutes ? (
-              <span className="mr-1 inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold tabular-nums text-foreground">
+              <span className="me-1 inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums text-foreground">
                 <Timer className="w-3 h-3 text-muted-foreground" />
                 Est {formatEstimate(task.estimatedMinutes)}
               </span>
@@ -819,7 +820,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
         <div className="overflow-y-auto h-[calc(100%-48px)] p-5">
           {/* Feature Name */}
           <div className="mb-5">
-            <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
               {TASK_TYPE_META[task.taskType]?.label ?? "Task"} Name
             </label>
             {editingTitle && !isPostClarification ? (
@@ -835,11 +836,11 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
                     setEditingTitle(false);
                   }
                 }}
-                className="text-sm font-semibold bg-transparent border-b border-primary outline-none w-full"
+                className="text-s font-semibold bg-transparent border-b border-primary outline-none w-full"
               />
             ) : (
               <h2
-                className={cn("text-sm font-semibold", !isPostClarification && "cursor-text hover:text-primary/80 transition-colors")}
+                className={cn("text-s font-semibold", !isPostClarification && "cursor-text hover:text-primary/80 transition-colors")}
                 onClick={() => !isPostClarification && setEditingTitle(true)}
               >
                 {task.title}
@@ -849,7 +850,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
 
           {task.description && (
             <div className="mb-5">
-              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
                 Description
               </label>
               <TaskDescriptionComments
@@ -862,13 +863,13 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
 
           {/* Priority */}
           <div className="mb-5">
-            <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
               Priority
             </label>
             {isPostClarification ? (
               priorityValue != null ? (
                 <span className={cn(
-                  "inline-flex items-center rounded-md border px-2.5 py-1 text-[12px] font-semibold",
+                  "inline-flex items-center rounded-md border px-2.5 py-1 text-s font-semibold",
                   priorityValue >= 9
                     ? "bg-destructive/20 border-destructive/40 text-destructive"
                     : priorityValue >= 7
@@ -880,7 +881,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
                   P{priorityValue}
                 </span>
               ) : (
-                <span className="text-[12px] text-muted-foreground/50">No priority</span>
+                <span className="text-s text-muted-foreground/50">No priority</span>
               )
             ) : (
               <div className="flex flex-wrap gap-1.5">
@@ -888,7 +889,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
                   type="button"
                   onClick={() => handlePrioritySave(null)}
                   className={cn(
-                    "h-7 rounded-md border px-2 text-[12px] font-medium transition-colors",
+                    "h-7 rounded-md border px-2 text-s font-medium transition-colors",
                     priorityValue == null
                       ? "bg-amber-500/20 border-amber-500/40 text-amber-400"
                       : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
@@ -902,7 +903,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
                     type="button"
                     onClick={() => handlePrioritySave(n)}
                     className={cn(
-                      "h-7 w-7 rounded-md border text-[12px] font-medium transition-colors",
+                      "h-7 w-7 rounded-md border text-s font-medium transition-colors",
                       priorityValue === n
                         ? n >= 9
                           ? "bg-destructive/20 border-destructive/40 text-destructive"
@@ -930,10 +931,10 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
             <div>
               <button
                 onClick={() => setQuestionsOpen((v) => !v)}
-                className="flex items-center gap-2 w-full text-left mb-2"
+                className="flex items-center gap-2 w-full text-start mb-2"
               >
                 <MessageCircleQuestion className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-                <h3 className="text-[13px] font-semibold flex-1">Questions</h3>
+                <h3 className="text-s font-semibold flex-1">Questions</h3>
                 <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", questionsOpen && "rotate-180")} />
               </button>
 
@@ -1005,7 +1006,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
           <div className="mt-6 pt-6 border-t border-border">
             <div className="flex items-center gap-2 mb-4">
               <MessageSquare className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-              <h3 className="text-[13px] font-semibold">Comments</h3>
+              <h3 className="text-s font-semibold">Comments</h3>
             </div>
             <CommentSection key={`comments-${task.id}-${commentKey}`} taskId={task.id} projectId={projectId} />
           </div>
@@ -1024,7 +1025,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <div className="flex items-center gap-2">
                 <History className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-                <h3 className="text-sm font-semibold">Activity</h3>
+                <h3 className="text-s font-semibold">Activity</h3>
               </div>
               <button
                 onClick={() => setActivityOpen(false)}
@@ -1050,7 +1051,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-                <h3 className="text-sm font-semibold">Time Tracking</h3>
+                <h3 className="text-s font-semibold">Time Tracking</h3>
               </div>
               <button
                 onClick={() => setTimeTrackingOpen(false)}
@@ -1063,11 +1064,11 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
               {startedAt && stageLogs.length > 0 ? (
                 <>
                   <div className="flex items-center justify-between">
-                    <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                    <span className="text-s text-muted-foreground flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5" />
                       Total time
                     </span>
-                    <span className="text-[14px] font-semibold font-mono tabular-nums">
+                    <span className="text-s font-semibold font-mono tabular-nums">
                       {formatDuration(new Date(startedAt), new Date())}
                     </span>
                   </div>
@@ -1080,12 +1081,12 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
                         const stageInfo = STAGES.find((s) => s.id === log.stage);
                         return (
                           <div key={i} className="flex items-center justify-between">
-                            <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                            <span className="text-s text-muted-foreground flex items-center gap-1.5">
                               <span className={cn("w-2 h-2 rounded-full", stageInfo?.color ?? "bg-zinc-500")} />
                               {stageInfo?.label ?? log.stage}
-                              {!log.exitedAt && <span className="text-[10px] text-primary ml-1">(current)</span>}
+                              {!log.exitedAt && <span className="text-xs text-primary ms-1">(current)</span>}
                             </span>
-                            <span className="text-[12px] font-mono tabular-nums text-muted-foreground">
+                            <span className="text-s font-mono tabular-nums text-muted-foreground">
                               {formatDuration(entered, exited)}
                             </span>
                           </div>
@@ -1096,22 +1097,22 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
               ) : (
                 <div className="flex flex-col items-center justify-center py-6 text-center">
                   <Clock className="w-8 h-8 text-muted-foreground/30 mb-2" />
-                  <p className="text-[12px] text-muted-foreground">No time tracking yet</p>
-                  <p className="text-[11px] text-muted-foreground/60">Tracking starts when the task moves to Ready for Dev</p>
+                  <p className="text-s text-muted-foreground">No time tracking yet</p>
+                  <p className="text-xs text-muted-foreground/60">Tracking starts when the task moves to Ready for Dev</p>
                 </div>
               )}
               {(task.estimatedMinutes || task.estimateAccuracy) && (
                 <div className="border-t border-border/30 pt-3">
                   <div className="flex items-center gap-2 flex-wrap">
                     {task.estimatedMinutes && (
-                      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-1 text-[12px] font-semibold text-foreground">
+                      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-1 text-s font-semibold text-foreground">
                         <Timer className="w-3 h-3 text-muted-foreground" />
                         Est: {formatEstimate(task.estimatedMinutes)}
                       </span>
                     )}
                     {task.estimateAccuracy && ACCURACY_CONFIG[task.estimateAccuracy] && (
                       <span className={cn(
-                        "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[12px] font-semibold",
+                        "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-s font-semibold",
                         ACCURACY_CONFIG[task.estimateAccuracy].bg,
                         ACCURACY_CONFIG[task.estimateAccuracy].color
                       )}>
@@ -1201,14 +1202,14 @@ function TaskNotesPanel({
               <button onClick={() => setViewingNote(null)} className="text-muted-foreground hover:text-foreground transition-colors">
                 <ChevronRight className="w-4 h-4 rotate-180" />
               </button>
-              <h3 className="text-sm font-semibold truncate">{viewingNote.title}</h3>
+              <h3 className="text-s font-semibold truncate">{viewingNote.title}</h3>
             </div>
             <button onClick={onClose} className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
               <X className="w-4 h-4" />
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-6">
-            <div className="text-[11px] text-muted-foreground mb-4">
+            <div className="text-xs text-muted-foreground mb-4">
               by {viewingNote.author.name ?? "Unknown"} · {formatDistanceToNow(new Date(viewingNote.createdAt), { addSuffix: true })}
             </div>
             {viewingNote.content ? (
@@ -1217,7 +1218,7 @@ function TaskNotesPanel({
                 dangerouslySetInnerHTML={{ __html: viewingNote.content }}
               />
             ) : (
-              <p className="text-sm text-muted-foreground/50 italic">No content</p>
+              <p className="text-s text-muted-foreground/50 italic">No content</p>
             )}
           </div>
         </div>
@@ -1233,19 +1234,16 @@ function TaskNotesPanel({
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-            <h3 className="text-sm font-semibold">Notes</h3>
-            <span className={`text-[11px] font-medium ${taskTypeMeta.color}`}>
+            <h3 className="text-s font-semibold">Notes</h3>
+            <span className={`text-xs font-medium ${taskTypeMeta.color}`}>
               {taskTypeMeta.prefix}-{String(task.taskNumber).padStart(3, "0")}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setAttachOpen(true)} className="h-7 text-xs">
+            <Button size="sm" variant="ghost" onClick={() => setAttachOpen(true)} className="h-7 text-s">
               Attach
             </Button>
-            <Button size="sm" variant="ghost" onClick={onCreateNote} className="h-7 text-xs">
-              <Plus className="w-3 h-3 mr-1" />
-              New
-            </Button>
+            <AddButton label="New note" onClick={onCreateNote} />
             <button onClick={onClose} className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
               <X className="w-4 h-4" />
             </button>
@@ -1259,11 +1257,8 @@ function TaskNotesPanel({
           ) : displayNotes.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <FileText className="w-8 h-8 mb-2 opacity-30" />
-              <p className="text-sm">No notes for this task</p>
-              <Button size="sm" variant="ghost" onClick={onCreateNote} className="mt-3 text-xs">
-                <Plus className="w-3 h-3 mr-1" />
-                Create first note
-              </Button>
+              <p className="text-s">No notes for this task</p>
+              <AddButton label="Create first note" className="mt-3" onClick={onCreateNote} />
             </div>
           ) : (
             <div className="py-1">
@@ -1271,10 +1266,10 @@ function TaskNotesPanel({
                 <button
                   key={note.id}
                   onClick={() => setViewingNote(note)}
-                  className="w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors border-b border-border/30 last:border-0"
+                  className="w-full text-start px-4 py-3 hover:bg-accent/50 transition-colors border-b border-border/30 last:border-0"
                 >
-                  <p className="text-[13px] font-medium truncate">{note.title}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                  <p className="text-s font-medium truncate">{note.title}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     by {note.author.name ?? "Unknown"} · {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
                   </p>
                 </button>
@@ -1346,17 +1341,17 @@ function TaskNoteEditor({
 
   return (
     <div className="fixed inset-0 z-[200] bg-background flex flex-col">
-      <div className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0">
+      <div className="flex app-top-bar items-center justify-between px-4 border-b border-border shrink-0">
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onClose} className="flex items-center gap-2 text-s text-muted-foreground hover:text-foreground transition-colors">
             <X className="w-4 h-4" />
             Close
           </button>
-          <span className="text-[11px] text-muted-foreground/50">|</span>
-          <span className={`text-[12px] font-medium ${taskTypeMeta.color}`}>
+          <span className="text-xs text-muted-foreground/50">|</span>
+          <span className={`text-s font-medium ${taskTypeMeta.color}`}>
             {taskTypeMeta.prefix}-{String(task.taskNumber).padStart(3, "0")}
           </span>
-          <span className="text-[12px] text-muted-foreground truncate max-w-[200px]">
+          <span className="text-s text-muted-foreground truncate max-w-[200px]">
             {task.title}
           </span>
         </div>
@@ -1371,7 +1366,7 @@ function TaskNoteEditor({
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
           <div className="mb-6">
-            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold ${taskTypeMeta.color} bg-muted/50 border-border`}>
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${taskTypeMeta.color} bg-muted/50 border-border`}>
               {taskTypeMeta.label} Note
             </span>
           </div>
@@ -1380,7 +1375,7 @@ function TaskNoteEditor({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Note title..."
-            className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-8"
+            className="w-full text-m font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-8"
             autoFocus
           />
 

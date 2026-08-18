@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useLayoutEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
@@ -110,6 +110,18 @@ export function ThreadSidebar({
   // On mobile/tablet the search field is collapsed behind a header icon.
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const chromeRef = useRef<HTMLDivElement>(null);
+  const [chromeH, setChromeH] = useState(120);
+
+  useLayoutEffect(() => {
+    const el = chromeRef.current;
+    if (!el) return;
+    const update = () => setChromeH(el.getBoundingClientRect().height);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [searchOpen]);
 
   const toggleSearch = () => {
     setSearchOpen((open) => {
@@ -343,30 +355,31 @@ export function ThreadSidebar({
     <aside
       className={cn(
         // ~WhatsApp list column: wider than w-80, ~30% of a typical desktop pane.
-        "flex-col border-r border-border/60 lg:flex lg:w-[min(420px,32vw)] lg:min-w-[360px] lg:shrink-0",
+        "relative h-full min-h-0 flex-col border-e border-border/60 lg:w-[min(420px,32vw)] lg:min-w-[360px] lg:shrink-0",
         onThread ? "hidden lg:flex" : "flex w-full",
       )}
     >
-
-      <div className="flex app-top-bar-tall items-center gap-1 border-b border-border/60 px-4">
-        <div className="text-sm font-semibold">Inbox</div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            "ml-auto size-11 rounded-full lg:size-9 lg:hidden",
-            searchOpen && "text-foreground bg-surface/80",
-          )}
-          aria-label="Search conversations"
-          onClick={toggleSearch}
-        >
-          <Search className="h-5 w-5 lg:h-4 lg:w-4" />
-        </Button>
-      </div>
-
-      <div className="border-b border-border/60 p-3 max-lg:px-4 max-lg:pb-3.5">
+      <div
+        ref={chromeRef}
+        className="absolute inset-x-0 top-0 z-20 flex app-top-bar-tall flex-col items-stretch gap-0 border-b border-border/60 pb-3.5"
+      >
+        <div className="flex items-center gap-1">
+          <div className="text-s font-semibold">Inbox</div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "ms-auto size-11 rounded-full lg:size-9 lg:hidden",
+              searchOpen && "text-foreground bg-surface/80",
+            )}
+            aria-label="Search conversations"
+            onClick={toggleSearch}
+          >
+            <Search className="h-5 w-5 lg:h-4 lg:w-4" />
+          </Button>
+        </div>
         {/* Always shown on desktop; on mobile/tablet only when toggled open. */}
-        <div className={cn("relative", !searchOpen && "max-lg:hidden")}>
+        <div className={cn("relative mt-2.5", !searchOpen && "max-lg:hidden")}>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             ref={searchInputRef}
@@ -377,7 +390,7 @@ export function ThreadSidebar({
                 ? "Search important messages"
                 : "Search conversations"
             }
-            className="h-10 rounded-full border-0 bg-muted pl-10 text-sm shadow-none lg:h-9"
+            className="h-10 rounded-full border-0 bg-muted ps-10 text-s shadow-none lg:h-9"
           />
         </div>
         <OverflowTabBar
@@ -389,11 +402,14 @@ export function ThreadSidebar({
       </div>
 
       {/* Bottom padding clears the mobile bottom navigation bar. */}
-      <ul className="min-h-0 flex-1 overflow-y-auto max-lg:pb-[calc(4rem+env(safe-area-inset-bottom))]">
+      <ul
+        className="min-h-0 flex-1 overflow-y-auto max-lg:pb-[calc(4rem+env(safe-area-inset-bottom))]"
+        style={{ paddingTop: chromeH }}
+      >
         {tab === "important" ? (
           <>
             {importantLoading && importantRows.length === 0 && (
-              <li className="px-6 py-12 text-center text-sm text-muted-foreground">
+              <li className="px-6 py-12 text-center text-s text-muted-foreground">
                 Loading…
               </li>
             )}
@@ -401,10 +417,10 @@ export function ThreadSidebar({
               <li className="flex flex-col items-center gap-3 px-6 py-12 text-center">
                 <Star className="h-8 w-8 text-muted-foreground/50" />
                 <div>
-                  <div className="text-sm font-medium text-foreground">
+                  <div className="text-s font-medium text-foreground">
                     No important messages
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="mt-1 text-s text-muted-foreground">
                     Star a message from its menu to find it here.
                   </p>
                 </div>
@@ -425,7 +441,7 @@ export function ThreadSidebar({
           <li className="flex flex-col items-center gap-3 px-6 py-12 text-center">
             <MessageSquare className="h-8 w-8 text-muted-foreground/50" />
             <div>
-              <div className="text-sm font-medium text-foreground">
+              <div className="text-s font-medium text-foreground">
                 {isClient
                   ? "No client chats yet"
                   : tab === "direct"
@@ -436,7 +452,7 @@ export function ThreadSidebar({
                         ? "No project chats yet"
                         : "No conversations yet"}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-s text-muted-foreground">
                 {isClient
                   ? "Waiting for your project team to enable client chat."
                   : tab === "direct"
@@ -539,18 +555,18 @@ function ThreadGroup({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 border-t border-border/40 bg-surface/30 px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface/60"
+        className="flex w-full items-center gap-2 border-t border-border/40 bg-surface/30 px-app py-2.5 text-s font-medium text-muted-foreground transition-colors hover:bg-surface/60"
       >
         <Icon className="h-3.5 w-3.5" />
         <span>{label}</span>
         {!open && unread > 0 && (
-          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-none text-primary-foreground">
+          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold leading-none text-primary-foreground">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
         <ChevronDown
           className={cn(
-            "ml-auto h-3.5 w-3.5 transition-transform",
+            "ms-auto h-3.5 w-3.5 transition-transform",
             open && "rotate-180",
           )}
         />
@@ -586,7 +602,7 @@ function ImportantMessageRow({
     <Link
       href={`/dashboard/messages/${message.threadId}?msg=${message.id}`}
       className={cn(
-        "flex min-h-[76px] items-center gap-3.5 border-b border-border/30 px-4 py-3.5 transition-colors active:bg-surface/70 hover:bg-surface/60 max-lg:min-h-[80px] max-lg:gap-4 max-lg:px-4 max-lg:py-4 lg:min-h-[68px] lg:py-3",
+        "flex min-h-[76px] items-center gap-3.5 border-b border-border/30 px-app py-3.5 transition-colors active:bg-surface/70 hover:bg-surface/60 max-lg:min-h-[80px] max-lg:gap-4 max-lg:py-4 lg:min-h-[68px] lg:py-3",
         active && "bg-surface/80",
       )}
     >
@@ -595,14 +611,14 @@ function ImportantMessageRow({
       </div>
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-[15px] font-medium leading-tight max-lg:text-base">
+          <span className="truncate text-s font-medium leading-tight">
             {message.threadName}
           </span>
-          <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+          <span className="ms-auto shrink-0 text-s text-muted-foreground">
             {formatRelative(message.createdAt)}
           </span>
         </div>
-        <p className="truncate text-sm text-muted-foreground">
+        <p className="truncate text-s text-muted-foreground">
           <span className="text-foreground/80">{message.authorName}:</span>{" "}
           {message.body}
         </p>
@@ -625,7 +641,7 @@ function ThreadRow({
       href={`/dashboard/messages/${thread.id}`}
       className={cn(
         // WhatsApp-like row: tall touch target (~72–80px), large avatar, roomy padding.
-        "flex min-h-[76px] items-center gap-3.5 border-b border-border/30 px-4 py-3.5 transition-colors active:bg-surface/70 hover:bg-surface/60 max-lg:min-h-[80px] max-lg:gap-4 max-lg:px-4 max-lg:py-4 lg:min-h-[68px] lg:py-3",
+        "flex min-h-[76px] items-center gap-3.5 border-b border-border/30 px-app py-3.5 transition-colors active:bg-surface/70 hover:bg-surface/60 max-lg:min-h-[80px] max-lg:gap-4 max-lg:py-4 lg:min-h-[68px] lg:py-3",
         active && "bg-surface/80",
         !thread.inactive && thread.unread > 0 && !active && "bg-primary/[0.05]",
         thread.inactive && "opacity-70 hover:opacity-100",
@@ -643,7 +659,7 @@ function ThreadRow({
           />
         ) : (
           <div
-            className="grid h-12 w-12 place-items-center rounded-full text-sm font-semibold text-white max-lg:h-[52px] max-lg:w-[52px] lg:h-11 lg:w-11 lg:text-xs"
+            className="grid h-12 w-12 place-items-center rounded-full text-s font-semibold text-white max-lg:h-[52px] max-lg:w-[52px] lg:h-11 lg:w-11 lg:text-s"
             style={{ background: thread.avatar }}
             aria-hidden
           >
@@ -658,7 +674,7 @@ function ThreadRow({
         <div className="flex items-center gap-2">
           <span
             className={cn(
-              "truncate text-[15px] font-medium leading-tight max-lg:text-base",
+              "truncate text-s font-medium leading-tight",
               thread.unread > 0 && !active && "font-semibold text-foreground",
               thread.inactive && "text-muted-foreground",
             )}
@@ -666,18 +682,18 @@ function ThreadRow({
             {thread.name}
           </span>
           {thread.kind === "client" && !thread.inactive && (
-            <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-amber-400">
+            <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-amber-400">
               Client
             </span>
           )}
           {thread.inactive && (
-            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Inactive
             </span>
           )}
           <span
             className={cn(
-              "ml-auto shrink-0 text-[11px] leading-none",
+              "ms-auto shrink-0 text-xs leading-none",
               thread.unread > 0 && !active
                 ? "font-medium text-primary"
                 : "text-muted-foreground",
@@ -689,7 +705,7 @@ function ThreadRow({
         <div className="flex items-center gap-2">
           <div
             className={cn(
-              "min-w-0 flex-1 truncate text-[13px] leading-snug max-lg:text-sm",
+              "min-w-0 flex-1 truncate text-s leading-snug max-lg:text-s",
               thread.unread > 0 && !active
                 ? "text-foreground/80"
                 : "text-muted-foreground",
@@ -700,7 +716,7 @@ function ThreadRow({
               : thread.subtitle}
           </div>
           {thread.unread > 0 && !active && (
-            <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-none text-primary-foreground">
+            <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold leading-none text-primary-foreground">
               {thread.unread > 9 ? "9+" : thread.unread}
             </span>
           )}

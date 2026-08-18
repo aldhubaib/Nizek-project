@@ -53,7 +53,7 @@ function CompactRow({ mention, onMarkRead }: { mention: Mention; onMarkRead: (id
         href={`/dashboard/projects/${mention.projectId}/tasks/${mention.taskId}`}
         className="flex-1 min-w-0"
       >
-        <div className="flex items-center gap-1.5 text-[12px] flex-wrap">
+        <div className="flex items-center gap-1.5 text-s flex-wrap">
           <Avatar user={mention.commentedBy} />
           <span className="font-medium">{mention.commentedBy.name}</span>
           <span className="text-muted-foreground">in</span>
@@ -61,11 +61,11 @@ function CompactRow({ mention, onMarkRead }: { mention: Mention; onMarkRead: (id
             #{mention.taskNumber} {mention.taskTitle}
           </span>
         </div>
-        <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1">{mention.comment}</p>
+        <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{mention.comment}</p>
         <div className="flex items-center gap-2 mt-1">
-          <span className="text-[10px] text-muted-foreground/50">{mention.projectName}</span>
-          <span className="text-[10px] text-muted-foreground/30">·</span>
-          <span className="text-[10px] text-muted-foreground/50">
+          <span className="text-xs text-muted-foreground/50">{mention.projectName}</span>
+          <span className="text-xs text-muted-foreground/30">·</span>
+          <span className="text-xs text-muted-foreground/50">
             {formatDistanceToNow(new Date(mention.commentedAt), { addSuffix: true })}
           </span>
         </div>
@@ -93,7 +93,7 @@ function FullRow({ mention, onMarkRead }: { mention: Mention; onMarkRead: (id: s
         href={`/dashboard/projects/${mention.projectId}/tasks/${mention.taskId}`}
         className="flex-1 min-w-0"
       >
-        <div className="flex items-center gap-1.5 text-[13px]">
+        <div className="flex items-center gap-1.5 text-s">
           <span className="font-semibold">{mention.commentedBy.name}</span>
           <span className="text-muted-foreground">mentioned you in</span>
         </div>
@@ -101,16 +101,16 @@ function FullRow({ mention, onMarkRead }: { mention: Mention; onMarkRead: (id: s
           <div className={cn("w-5 h-5 rounded flex items-center justify-center border shrink-0", typeInfo?.color ?? "text-muted-foreground bg-muted border-border")}>
             <TypeIcon className="w-3 h-3" />
           </div>
-          <span className="text-[13px] font-medium group-hover:text-primary transition-colors">
-            <span className="text-muted-foreground/50 font-mono mr-1">#{mention.taskNumber}</span>
+          <span className="text-s font-medium group-hover:text-primary transition-colors">
+            <span className="text-muted-foreground/50 font-mono me-1">#{mention.taskNumber}</span>
             {mention.taskTitle}
           </span>
         </div>
-        <p className="text-[12px] text-muted-foreground mt-1.5 line-clamp-2">{mention.comment}</p>
+        <p className="text-s text-muted-foreground mt-1.5 line-clamp-2">{mention.comment}</p>
         <div className="flex items-center gap-2 mt-1.5">
-          <span className="text-[10px] text-muted-foreground/50">{mention.projectName}</span>
-          <span className="text-[10px] text-muted-foreground/30">·</span>
-          <span className="text-[10px] text-muted-foreground/50">
+          <span className="text-xs text-muted-foreground/50">{mention.projectName}</span>
+          <span className="text-xs text-muted-foreground/30">·</span>
+          <span className="text-xs text-muted-foreground/50">
             {formatDistanceToNow(new Date(mention.commentedAt), { addSuffix: true })}
           </span>
         </div>
@@ -157,20 +157,20 @@ export function UnreadMentions({ data }: { data: Mention[] }) {
 
   return (
     <>
-      <div className={cn("rounded-xl border border-border bg-card overflow-hidden", isPending && "opacity-70 pointer-events-none")}>
+      <div className={cn("app-card rounded-xl border border-border bg-card overflow-hidden", isPending && "opacity-70 pointer-events-none")}>
         <div className="px-4 py-3.5 border-b border-border">
           <div className="flex items-center justify-between mb-2.5">
-            <h2 className="text-[14px] font-semibold flex items-center gap-2">
+            <h2 className="text-s font-semibold flex items-center gap-2">
               <AtSign className="w-4 h-4 text-muted-foreground" />
               Unread Mentions
             </h2>
             {mentions.length > 0 && (
-              <span className="flex items-center gap-1 text-[10px] font-semibold text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-full px-2 py-0.5">
+              <span className="flex items-center gap-1 text-xs font-semibold text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-full px-2 py-0.5">
                 {mentions.length} unread
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3 text-[11px] flex-wrap">
+          <div className="flex items-center gap-3 text-xs flex-wrap">
             {projectBreakdown.slice(0, 4).map(([name, count]) => (
               <span key={name} className="text-muted-foreground">
                 {name}: <span className="font-semibold text-foreground">{count}</span>
@@ -188,7 +188,7 @@ export function UnreadMentions({ data }: { data: Mention[] }) {
         {mentions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <AtSign className="w-7 h-7 text-muted-foreground/20 mb-2" strokeWidth={1.5} />
-            <p className="text-[12px] text-muted-foreground">No unread mentions</p>
+            <p className="text-s text-muted-foreground">No unread mentions</p>
           </div>
         ) : (
           <div className="divide-y divide-border/50">
@@ -201,7 +201,7 @@ export function UnreadMentions({ data }: { data: Mention[] }) {
         {mentions.length > PREVIEW_COUNT && (
           <button
             onClick={() => setShowAll(true)}
-            className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
+            className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
           >
             <ExternalLink className="w-3 h-3" />
             View All ({mentions.length})
@@ -211,23 +211,23 @@ export function UnreadMentions({ data }: { data: Mention[] }) {
 
       {showAll && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[9999] bg-background/95 backdrop-blur-sm flex flex-col">
-          <div className="h-12 flex items-center justify-between px-6 border-b border-border shrink-0">
+          <div className="flex app-top-bar items-center justify-between border-b border-border shrink-0">
             <div className="flex items-center gap-3">
-              <button onClick={() => setShowAll(false)} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-[13px]">
+              <button onClick={() => setShowAll(false)} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s">
                 <X className="w-4 h-4" />
                 Close
               </button>
               <span className="text-border">|</span>
-              <h2 className="text-[13px] font-semibold flex items-center gap-2">
+              <h2 className="text-s font-semibold flex items-center gap-2">
                 <AtSign className="w-4 h-4 text-muted-foreground" />
                 Unread Mentions
-                <span className="text-[11px] font-normal text-muted-foreground">({mentions.length} unread)</span>
+                <span className="text-xs font-normal text-muted-foreground">({mentions.length} unread)</span>
               </h2>
             </div>
             {mentions.length > 0 && (
               <button
                 onClick={handleMarkAllRead}
-                className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-accent/30 border border-border"
+                className="flex items-center gap-1.5 text-s font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg hover:bg-accent/30 border border-border"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
                 Mark all read
@@ -236,7 +236,7 @@ export function UnreadMentions({ data }: { data: Mention[] }) {
           </div>
           <div className="flex-1 overflow-y-auto">
             <div className={cn("max-w-3xl mx-auto py-4", isPending && "opacity-70 pointer-events-none")}>
-              <div className="rounded-xl border border-border bg-card divide-y divide-border">
+              <div className="app-card rounded-xl border border-border bg-card divide-y divide-border">
                 {mentions.map((m) => (
                   <FullRow key={m.id} mention={m} onMarkRead={handleMarkRead} />
                 ))}
@@ -244,7 +244,7 @@ export function UnreadMentions({ data }: { data: Mention[] }) {
               {mentions.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <AtSign className="w-8 h-8 text-muted-foreground/20 mb-3" strokeWidth={1.5} />
-                  <p className="text-[13px] text-muted-foreground">All caught up!</p>
+                  <p className="text-s text-muted-foreground">All caught up!</p>
                 </div>
               )}
             </div>

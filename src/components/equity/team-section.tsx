@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, Plus, Trash2, Users } from "lucide-react";
+import { ChevronDown, ChevronUp, Trash2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AddButton } from "@/components/add-button";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
 import { HolderAvatar } from "@/components/equity/holder-avatar";
 import {
@@ -24,12 +25,12 @@ import {
 } from "@/actions/equity";
 
 const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "w-full h-9 px-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
 
-const selectCls = cn(inputCls, "appearance-none pr-8");
+const selectCls = cn(inputCls, "appearance-none pe-8");
 
 const labelCls =
-  "block text-[11px] font-medium text-muted-foreground mb-1 uppercase tracking-wide";
+  "block text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide";
 
 type Snapshot = EquityPortfolioDTO["teamSnapshots"][number];
 
@@ -165,7 +166,7 @@ function TeamForm({
 
   return (
     <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-4 mb-3">
-      <div className="grid gap-3 sm:grid-cols-[200px_minmax(0,1fr)]">
+      <div className="grid gap-3 @md/card:grid-cols-[200px_minmax(0,1fr)]">
         <div>
           <label className={labelCls}>As of</label>
           <input
@@ -190,14 +191,14 @@ function TeamForm({
       </div>
 
       <div className="space-y-2">
-        <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto] gap-2 px-0.5">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        <div className="@max-md/card:hidden @md/card:grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto] gap-2 px-0.5">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
             Name
           </span>
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
             Role
           </span>
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
             What they bring
           </span>
           <span className="w-[5.25rem]" />
@@ -206,7 +207,7 @@ function TeamForm({
         {draft.members.map((member, idx) => (
           <div
             key={member.key}
-            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto] gap-2 items-center"
+            className="grid grid-cols-1 @md/card:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)_auto] gap-2 items-center"
           >
             <select
               value={member.holderId}
@@ -285,28 +286,24 @@ function TeamForm({
           </div>
         ))}
 
-        <button
-          type="button"
+        <AddButton
+          label="Add person"
           onClick={() =>
             setDraft((d) => ({ ...d, members: [...d.members, blankMember()] }))
           }
-          className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-dashed border-border text-[12px] text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add person
-        </button>
+        />
       </div>
 
       <div className="flex items-center justify-end gap-2">
         {blocked && (
-          <span className="text-[11px] text-muted-foreground mr-auto">
+          <span className="text-xs text-muted-foreground me-auto">
             {blocked}
           </span>
         )}
         <button
           type="button"
           onClick={onCancel}
-          className="px-3 h-9 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors"
+          className="px-3 h-9 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
         >
           Cancel
         </button>
@@ -314,7 +311,7 @@ function TeamForm({
           type="button"
           onClick={() => onSubmit(draft)}
           disabled={busy || blocked != null}
-          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
+          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-s font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
         >
           {submitLabel}
         </button>
@@ -387,21 +384,18 @@ export function TeamSection({
       actions={
         !adding &&
         holders.length > 0 && (
-          <button
+          <AddButton
+            label={current ? "New lineup" : "Add the team"}
             onClick={() => {
               setAdding(true);
               setEditingId(null);
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            {current ? "New lineup" : "Add the team"}
-          </button>
+          />
         )
       }
     >
       {holders.length === 0 ? (
-        <p className="text-[12px] text-muted-foreground py-2">
+        <p className="text-s text-muted-foreground py-2">
           Nobody to pick from yet — add the people under{" "}
           <Link
             href="/dashboard/equity"
@@ -431,7 +425,7 @@ export function TeamSection({
           )}
 
           {snapshots.length === 0 && !adding && (
-            <p className="text-[12px] text-muted-foreground py-2">
+            <p className="text-s text-muted-foreground py-2">
               No team recorded yet.
             </p>
           )}

@@ -55,7 +55,7 @@ export function RecordRow({
           onClick={() => expandable && setOpen((v) => !v)}
           aria-expanded={expandable ? open : undefined}
           className={cn(
-            "flex-1 min-w-0 flex items-center gap-2 text-left",
+            "flex-1 min-w-0 flex items-center gap-2 text-start",
             expandable ? "cursor-pointer" : "cursor-default",
           )}
         >
@@ -68,17 +68,17 @@ export function RecordRow({
             strokeWidth={1.5}
           />
           {index != null && (
-            <span className="text-[11px] font-mono text-muted-foreground/60 shrink-0">
+            <span className="text-xs font-mono text-muted-foreground/60 shrink-0">
               {index}
             </span>
           )}
-          <span className="text-[13px] font-medium text-foreground truncate">
+          <span className="text-s font-medium text-foreground truncate">
             {title}
           </span>
           {badges}
         </button>
         {meta != null && (
-          <span className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap shrink-0">
+          <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap shrink-0">
             {meta}
           </span>
         )}
@@ -105,7 +105,7 @@ export function RecordBadge({
   return (
     <span
       className={cn(
-        "text-[10px] px-1.5 py-0.5 rounded-full border font-medium whitespace-nowrap shrink-0",
+        "text-xs px-1.5 py-0.5 rounded-full border font-medium whitespace-nowrap shrink-0",
         tone === "good" &&
           "text-emerald-400 bg-emerald-500/15 border-emerald-500/30",
         tone === "warn" && "text-amber-400 bg-amber-500/15 border-amber-500/30",
@@ -154,10 +154,10 @@ export function RecordDetail({
 }) {
   return (
     <div className={cn("min-w-0", span && "col-span-2 md:col-span-4")}>
-      <dt className="text-[10px] text-muted-foreground">{label}</dt>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd
         className={cn(
-          "text-[12px] tabular-nums",
+          "text-s tabular-nums",
           tone === "positive" && "text-emerald-400",
           tone === "negative" && "text-rose-400",
           !tone && "text-foreground",

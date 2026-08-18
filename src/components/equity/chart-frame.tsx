@@ -84,7 +84,7 @@ export function ChartFrame({
       )}
     >
       <div className="flex items-center justify-between gap-3 mb-10">
-        <h3 className="text-[13px] font-semibold text-foreground m-0">
+        <h3 className="text-s font-semibold text-foreground m-0">
           {title}
         </h3>
         {!showData && aside}
@@ -110,20 +110,20 @@ export function ChartFrame({
             </div>
           )}
 
-          <p className="text-[11px] text-muted-foreground leading-relaxed mb-4">
+          <p className="text-xs text-muted-foreground leading-relaxed mb-4">
             {shown?.note ?? note}
           </p>
 
           <div className="max-h-72 overflow-auto rounded-lg border border-border">
-            <table className="w-full border-collapse text-[12px]">
+            <table className="w-full border-collapse text-s">
               <thead className="sticky top-0 bg-muted">
                 <tr>
                   {table.columns.map((column, i) => (
                     <th
                       key={column}
                       className={cn(
-                        "px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground border-b border-border whitespace-nowrap",
-                        i === 0 ? "text-left" : "text-right",
+                        "px-2.5 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground border-b border-border whitespace-nowrap",
+                        i === 0 ? "text-start" : "text-end",
                       )}
                     >
                       {column}
@@ -140,8 +140,8 @@ export function ChartFrame({
                         className={cn(
                           "px-2.5 py-1.5 tabular-nums",
                           c === 0
-                            ? "text-left text-foreground"
-                            : "text-right text-muted-foreground",
+                            ? "text-start text-foreground"
+                            : "text-end text-muted-foreground",
                         )}
                       >
                         {cell ?? "—"}
@@ -172,7 +172,7 @@ export function ChartFrame({
           type="button"
           onClick={() => setShowData((v) => !v)}
           aria-pressed={showData}
-          className="flex items-center gap-2.5 pl-3 pr-2.5 h-9 rounded-xl border border-border bg-card/40 text-[12px] font-semibold text-foreground hover:border-muted-foreground/40 hover:bg-muted/40 transition-colors shrink-0"
+          className="flex items-center gap-2.5 ps-3 pe-2.5 h-9 rounded-xl border border-border bg-card/40 text-s font-semibold text-foreground hover:border-muted-foreground/40 hover:bg-muted/40 transition-colors shrink-0"
         >
           {showData ? (
             <BarChart3
@@ -201,7 +201,7 @@ export function ChartFrame({
             strokeWidth={1.75}
           />
         </button>
-        <span className="text-[10px] text-muted-foreground/70 truncate">
+        <span className="text-xs text-muted-foreground/70 truncate">
           {(showData && shown?.source) || source}
         </span>
       </div>
@@ -224,7 +224,7 @@ function VersionTab({
       onClick={onClick}
       aria-pressed={on}
       className={cn(
-        "px-2 h-6 rounded-md text-[11px] font-medium whitespace-nowrap transition-colors shrink-0",
+        "px-2 h-6 rounded-md text-xs font-medium whitespace-nowrap transition-colors shrink-0",
         on
           ? "bg-foreground text-background"
           : "text-muted-foreground hover:text-foreground hover:bg-muted/60",

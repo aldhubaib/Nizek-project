@@ -3,10 +3,11 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { AddButton } from "@/components/add-button";
 import {
   ArrowLeft, Loader2, MessageCircleQuestion, History, MessageSquare,
   ChevronRight, ChevronDown, Pencil, Check, Clock, Undo2, Gauge, Timer,
-  FileText, Plus, Paperclip, X, MoreVertical, Trash2, ExternalLink,
+  FileText, Paperclip, X, MoreVertical, Trash2, ExternalLink,
   CalendarClock,
 } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
@@ -25,6 +26,7 @@ import { StageConfirmDialog, getCheckpoint } from "@/components/kanban/stage-con
 import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
 import { projectNoteUrl, isRoadmapNote } from "@/lib/project-note-url";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import { markThreadRead } from "@/actions/messages";
@@ -466,7 +468,7 @@ export function TaskDetailPage({
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <div className="flex app-top-bar items-center gap-3 px-6 pr-14 border-b border-border shrink-0 sticky top-0 bg-background z-10">
+      <PageHeader>
         <button
           onClick={() =>
             router.push(
@@ -482,16 +484,16 @@ export function TaskDetailPage({
           <ArrowLeft className="w-4 h-4" />
         </button>
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[11px] text-muted-foreground font-mono truncate">{projectName}</span>
-          <span className="text-[11px] text-muted-foreground/40">/</span>
-          <span className={cn("text-[11px] font-semibold", taskTypeMeta.color)}>
+          <span className="text-xs text-muted-foreground font-mono truncate">{projectName}</span>
+          <span className="text-xs text-muted-foreground/40">/</span>
+          <span className={cn("text-xs font-semibold", taskTypeMeta.color)}>
             {taskTypeMeta.prefix}-{String(initialTask.taskNumber).padStart(3, "0")}
           </span>
         </div>
         <button
           onClick={() => setShowHistory(true)}
           title="Task history"
-          className="ml-auto flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          className="ms-auto flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
         >
           <History className="w-3.5 h-3.5" />
           History
@@ -510,7 +512,7 @@ export function TaskDetailPage({
               <div className="absolute top-full right-0 mt-1.5 z-50 rounded-lg border border-border bg-card shadow-xl py-1 min-w-[160px]">
                 <button
                   onClick={handleDeleteTask}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] font-medium text-destructive hover:bg-destructive/10 transition-colors text-left"
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-s font-medium text-destructive hover:bg-destructive/10 transition-colors text-start"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   Delete task
@@ -519,10 +521,10 @@ export function TaskDetailPage({
             )}
           </div>
         )}
-      </div>
+      </PageHeader>
 
       {/* Single-column layout */}
-      <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-2xl mx-auto px-app py-8 space-y-6">
         {/* Title */}
         <div>
           {editingTitle && !isPostClarification ? (
@@ -535,18 +537,18 @@ export function TaskDetailPage({
                 if (e.key === "Enter") handleTitleSave();
                 if (e.key === "Escape") { setTitleValue(initialTask.title); setEditingTitle(false); }
               }}
-              className="text-2xl font-bold bg-transparent border-b border-primary outline-none w-full"
+              className="text-m font-bold bg-transparent border-b border-primary outline-none w-full"
             />
           ) : (
             <h1
-              className={cn("text-2xl font-bold", !isPostClarification && "cursor-text hover:text-primary/80 transition-colors")}
+              className={cn("text-m font-bold", !isPostClarification && "cursor-text hover:text-primary/80 transition-colors")}
               onClick={() => !isPostClarification && setEditingTitle(true)}
             >
               {titleValue}
             </h1>
           )}
           {(attachedNotes.length > 0 || attachedRoadmaps.length > 0 || highlightThreads.length > 0) && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground/70">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-s text-muted-foreground/70">
               {attachedNotes.length > 0 && (
                 <LinkedCountPopover
                   count={attachedNotes.length}
@@ -564,7 +566,7 @@ export function TaskDetailPage({
                         setNotesOpen(false);
                         router.push(projectNoteUrl(projectId, note.id, { noteType: note.noteType }));
                       }}
-                      className="flex w-full items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-left text-sm hover:border-border"
+                      className="flex w-full items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-start text-s hover:border-border"
                     >
                       <span className="min-w-0 flex-1 truncate">{note.title}</span>
                       <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -589,7 +591,7 @@ export function TaskDetailPage({
                         setRoadmapOpen(false);
                         router.push(projectNoteUrl(projectId, note.id, { noteType: note.noteType }));
                       }}
-                      className="flex w-full items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-left text-sm hover:border-border"
+                      className="flex w-full items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-start text-s hover:border-border"
                     >
                       <span className="min-w-0 flex-1 truncate">{note.title}</span>
                       <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -617,7 +619,7 @@ export function TaskDetailPage({
                         setHeaderThreadId(t.id);
                       }}
                       className={cn(
-                        "flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                        "flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-start text-s transition-colors",
                         t.understood
                           ? "border-border/40 text-muted-foreground"
                           : "border-border/50 hover:border-border",
@@ -637,7 +639,7 @@ export function TaskDetailPage({
                           <Check className="h-3 w-3" strokeWidth={3} />
                         </span>
                       ) : (
-                        <span className="grid min-w-5 shrink-0 place-items-center rounded-full bg-amber-400 px-1 text-[10px] font-bold leading-5 text-background">
+                        <span className="grid min-w-5 shrink-0 place-items-center rounded-full bg-amber-400 px-1 text-xs font-bold leading-5 text-background">
                           {t.comments.length}
                         </span>
                       )}
@@ -664,8 +666,8 @@ export function TaskDetailPage({
         <div className="rounded-xl bg-card border border-border p-5 space-y-5">
           <div className="grid grid-cols-2 gap-5">
             <div>
-              <label className="text-[13px] font-semibold text-foreground mb-2 block">Type</label>
-              <span className={cn("inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-medium", taskTypeMeta.color,
+              <label className="text-s font-semibold text-foreground mb-2 block">Type</label>
+              <span className={cn("inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-s font-medium", taskTypeMeta.color,
                 taskTypeMeta.color === "text-primary" ? "bg-primary/15 border-primary/20"
                 : taskTypeMeta.color === "text-violet-400" ? "bg-violet-500/15 border-violet-500/20"
                 : taskTypeMeta.color === "text-amber-400" ? "bg-amber-500/15 border-amber-500/20"
@@ -675,57 +677,57 @@ export function TaskDetailPage({
             </div>
 
             <div>
-              <label className="text-[13px] font-semibold text-foreground mb-2 block">Created By</label>
+              <label className="text-s font-semibold text-foreground mb-2 block">Created By</label>
               <div className="flex items-center gap-2">
                 {initialTask.createdBy.imageUrl ? (
                   <img src={initialTask.createdBy.imageUrl} alt="" className="w-6 h-6 rounded-full" />
                 ) : (
-                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground">
+                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground">
                     {(initialTask.createdBy.name ?? "?")[0]}
                   </div>
                 )}
-                <span className="text-[13px] text-foreground">{initialTask.createdBy.name ?? "Unknown"}</span>
+                <span className="text-s text-foreground">{initialTask.createdBy.name ?? "Unknown"}</span>
               </div>
             </div>
           </div>
 
           {initialTask.assignee && (
             <div>
-              <label className="text-[13px] font-semibold text-foreground mb-2 block">Assigned To</label>
+              <label className="text-s font-semibold text-foreground mb-2 block">Assigned To</label>
               <div className="flex items-center gap-2">
                 {initialTask.assignee.imageUrl ? (
                   <img src={initialTask.assignee.imageUrl} alt="" className="w-6 h-6 rounded-full" />
                 ) : (
-                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground">
+                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground">
                     {(initialTask.assignee.name ?? "?")[0]}
                   </div>
                 )}
-                <span className="text-[13px] text-foreground">{initialTask.assignee.name ?? "Unknown"}</span>
+                <span className="text-s text-foreground">{initialTask.assignee.name ?? "Unknown"}</span>
               </div>
             </div>
           )}
 
           <div>
-            <label className="text-[13px] font-semibold text-foreground mb-2 block">Priority</label>
+            <label className="text-s font-semibold text-foreground mb-2 block">Priority</label>
             {isPostClarification ? (
               priorityValue != null ? (
                 <span className={cn(
-                  "inline-flex items-center rounded-md border px-2.5 py-1 text-[12px] font-semibold",
+                  "inline-flex items-center rounded-md border px-2.5 py-1 text-s font-semibold",
                   priorityValue >= 9 ? "bg-destructive/20 border-destructive/40 text-destructive"
                     : priorityValue >= 7 ? "bg-orange-500/20 border-orange-500/40 text-orange-400"
                     : priorityValue >= 4 ? "bg-primary/20 border-primary/40 text-primary"
                     : "bg-muted border-border text-foreground"
                 )}>P{priorityValue}</span>
-              ) : <span className="text-[12px] text-muted-foreground/50">No priority</span>
+              ) : <span className="text-s text-muted-foreground/50">No priority</span>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 <button type="button" onClick={() => handlePrioritySave(null)}
-                  className={cn("h-8 rounded-md border px-3 text-[12px] font-medium transition-colors",
+                  className={cn("h-8 rounded-md border px-3 text-s font-medium transition-colors",
                     priorityValue == null ? "bg-amber-500/20 border-amber-500/40 text-amber-400" : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
                   )}>None</button>
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
                   <button key={n} type="button" onClick={() => handlePrioritySave(n)}
-                    className={cn("h-8 w-8 rounded-md border text-[12px] font-medium transition-colors",
+                    className={cn("h-8 w-8 rounded-md border text-s font-medium transition-colors",
                       priorityValue === n
                         ? n >= 9 ? "bg-destructive/20 border-destructive/40 text-destructive"
                           : n >= 7 ? "bg-orange-500/20 border-orange-500/40 text-orange-400"
@@ -741,14 +743,14 @@ export function TaskDetailPage({
 
         {/* Status */}
         <div className="rounded-xl bg-card border border-border p-5">
-          <label className="text-[13px] font-semibold text-foreground mb-3 block">Status</label>
+          <label className="text-s font-semibold text-foreground mb-3 block">Status</label>
           <div className="flex items-center gap-2 flex-wrap">
             {isAdmin ? (
               <div className="relative" ref={adminStagesRef}>
                 <button
                   onClick={() => setShowAdminStages(!showAdminStages)}
                   disabled={movingStage}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-primary/15 border-primary/20 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-primary/15 border-primary/20 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50"
                 >
                   {movingStage ? (
                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -756,7 +758,7 @@ export function TaskDetailPage({
                     <>
                       <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
                       {STAGES[currentStageIndex]?.label}
-                      <ChevronDown className="w-3 h-3 ml-0.5" />
+                      <ChevronDown className="w-3 h-3 ms-0.5" />
                     </>
                   )}
                 </button>
@@ -768,7 +770,7 @@ export function TaskDetailPage({
                         onClick={() => handleAdminStageChange(s.id)}
                         disabled={s.id === taskStage}
                         className={cn(
-                          "w-full flex items-center gap-2 px-3 py-1.5 text-[12px] font-medium transition-colors text-left",
+                          "w-full flex items-center gap-2 px-3 py-1.5 text-s font-medium transition-colors text-start",
                           s.id === taskStage
                             ? "text-primary bg-primary/10"
                             : "text-foreground hover:bg-accent"
@@ -776,14 +778,14 @@ export function TaskDetailPage({
                       >
                         <span className={cn("w-2 h-2 rounded-full shrink-0", s.color)} />
                         {s.label}
-                        {s.id === taskStage && <Check className="w-3 h-3 ml-auto text-primary" />}
+                        {s.id === taskStage && <Check className="w-3 h-3 ms-auto text-primary" />}
                       </button>
                     ))}
                   </div>
                 )}
               </div>
             ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-primary/15 border-primary/20 text-primary">
+              <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-primary/15 border-primary/20 text-primary">
                 <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
                 {STAGES[currentStageIndex]?.label}
               </span>
@@ -794,7 +796,7 @@ export function TaskDetailPage({
                 <button
                   onClick={handleMoveToNext}
                   disabled={movingStage}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold bg-muted border-border text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-muted border-border text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30 transition-colors disabled:opacity-50"
                 >
                   {movingStage ? (
                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -813,7 +815,7 @@ export function TaskDetailPage({
               <button
                 onClick={handleSkipClientReview}
                 disabled={movingStage}
-                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-400/80 hover:text-amber-400 transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400/80 hover:text-amber-400 transition-colors disabled:opacity-50"
               >
                 <ChevronRight className="w-3 h-3" />
                 Skip Client Review → Ready for Release
@@ -825,7 +827,7 @@ export function TaskDetailPage({
               {!showDecline ? (
                 <button
                   onClick={() => setShowDecline(true)}
-                  className="inline-flex items-center gap-1.5 text-[11px] font-medium text-destructive/70 hover:text-destructive transition-colors"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-destructive/70 hover:text-destructive transition-colors"
                 >
                   <Undo2 className="w-3 h-3" />
                   Decline &amp; return to {declineTargetLabel}
@@ -835,19 +837,19 @@ export function TaskDetailPage({
                   ref={declinePasteRef}
                   className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2.5 mt-2"
                 >
-                  <p className="text-[11px] font-medium text-destructive">Why is this being declined?</p>
+                  <p className="text-xs font-medium text-destructive">Why is this being declined?</p>
                   <textarea
                     value={declineComment}
                     onChange={(e) => setDeclineComment(e.target.value)}
                     placeholder="Explain what needs to be fixed... Paste screenshots to attach"
-                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-[12px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-destructive/50 resize-none"
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-s text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-destructive/50 resize-none"
                     rows={3}
                     autoFocus
                   />
                   {declineFiles.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {declineFiles.map((f, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 rounded bg-muted/50 px-1.5 py-0.5 text-[10px] text-foreground/70">
+                        <span key={i} className="inline-flex items-center gap-1 rounded bg-muted/50 px-1.5 py-0.5 text-xs text-foreground/70">
                           <FileText className="w-2.5 h-2.5" />
                           <span className="truncate max-w-[80px]">{f.name}</span>
                           <button onClick={() => setDeclineFiles((prev) => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive">
@@ -858,8 +860,8 @@ export function TaskDetailPage({
                     </div>
                   )}
                   <div className="flex items-center gap-2">
-                    <Button size="sm" variant="destructive" onClick={handleDecline} disabled={!declineComment.trim() || declining} className="h-7 text-[11px]">
-                      {declining ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Undo2 className="w-3 h-3 mr-1" />}
+                    <Button size="sm" variant="destructive" onClick={handleDecline} disabled={!declineComment.trim() || declining} className="h-7 text-xs">
+                      {declining ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <Undo2 className="w-3 h-3 me-1" />}
                       Decline
                     </Button>
                     <button
@@ -879,7 +881,7 @@ export function TaskDetailPage({
                         e.target.value = "";
                       }}
                     />
-                    <Button size="sm" variant="ghost" onClick={() => { setShowDecline(false); setDeclineComment(""); setDeclineFiles([]); }} className="h-7 text-[11px]">
+                    <Button size="sm" variant="ghost" onClick={() => { setShowDecline(false); setDeclineComment(""); setDeclineFiles([]); }} className="h-7 text-xs">
                       Cancel
                     </Button>
                   </div>
@@ -889,10 +891,10 @@ export function TaskDetailPage({
           )}
           {moveError && (
             <div className="mt-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
-              <p className="text-[11px] font-medium text-destructive mb-1">Answer these required questions first:</p>
+              <p className="text-xs font-medium text-destructive mb-1">Answer these required questions first:</p>
               <ul className="space-y-0.5">
                 {moveError.map((q, i) => (
-                  <li key={i} className="text-[11px] text-destructive/80">• {q}</li>
+                  <li key={i} className="text-xs text-destructive/80">• {q}</li>
                 ))}
               </ul>
             </div>
@@ -902,9 +904,9 @@ export function TaskDetailPage({
         {/* Questions */}
         {questions.length > 0 && (
           <div className="rounded-xl bg-card border border-border p-5">
-            <button onClick={() => setQuestionsOpen((v) => !v)} className="flex items-center gap-2 w-full text-left">
+            <button onClick={() => setQuestionsOpen((v) => !v)} className="flex items-center gap-2 w-full text-start">
               <MessageCircleQuestion className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-              <h3 className="text-[13px] font-semibold flex-1">Questions</h3>
+              <h3 className="text-s font-semibold flex-1">Questions</h3>
               <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", questionsOpen && "rotate-180")} />
             </button>
             {questionsOpen && (
@@ -949,11 +951,11 @@ export function TaskDetailPage({
 
         {/* Time Tracking */}
         <div className="rounded-xl bg-card border border-border p-5">
-          <button onClick={() => setTimeTrackingOpen(!timeTrackingOpen)} className="flex items-center gap-2 w-full text-left">
+          <button onClick={() => setTimeTrackingOpen(!timeTrackingOpen)} className="flex items-center gap-2 w-full text-start">
             <Clock className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-            <h3 className="text-[13px] font-semibold flex-1">Time Tracking</h3>
+            <h3 className="text-s font-semibold flex-1">Time Tracking</h3>
             {initialTask.estimatedMinutes ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold tabular-nums text-foreground">
+              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums text-foreground">
                 <Timer className="w-3 h-3 text-muted-foreground" />
                 Est {formatEstimate(initialTask.estimatedMinutes)}
               </span>
@@ -965,10 +967,10 @@ export function TaskDetailPage({
               {startedAt && stageLogs.length > 0 ? (
                 <>
                   <div className="flex items-center justify-between">
-                    <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                    <span className="text-s text-muted-foreground flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5" /> Total time
                     </span>
-                    <span className="text-[14px] font-semibold font-mono tabular-nums">
+                    <span className="text-s font-semibold font-mono tabular-nums">
                       {formatDuration(new Date(startedAt), new Date())}
                     </span>
                   </div>
@@ -981,12 +983,12 @@ export function TaskDetailPage({
                         const stageInfo = STAGES.find((s) => s.id === log.stage);
                         return (
                           <div key={i} className="flex items-center justify-between">
-                            <span className="text-[12px] text-muted-foreground flex items-center gap-1.5">
+                            <span className="text-s text-muted-foreground flex items-center gap-1.5">
                               <span className={cn("w-2 h-2 rounded-full", stageInfo?.color ?? "bg-zinc-500")} />
                               {stageInfo?.label ?? log.stage}
-                              {!log.exitedAt && <span className="text-[10px] text-primary ml-1">(current)</span>}
+                              {!log.exitedAt && <span className="text-xs text-primary ms-1">(current)</span>}
                             </span>
-                            <span className="text-[12px] font-mono tabular-nums text-muted-foreground">
+                            <span className="text-s font-mono tabular-nums text-muted-foreground">
                               {formatDuration(entered, exited)}
                             </span>
                           </div>
@@ -997,19 +999,19 @@ export function TaskDetailPage({
               ) : (
                 <div className="flex flex-col items-center justify-center py-4 text-center">
                   <Clock className="w-6 h-6 text-muted-foreground/30 mb-1" />
-                  <p className="text-[11px] text-muted-foreground/60">Tracking starts at Ready for Dev</p>
+                  <p className="text-xs text-muted-foreground/60">Tracking starts at Ready for Dev</p>
                 </div>
               )}
               {(initialTask.estimatedMinutes || initialTask.estimateAccuracy) && (
                 <div className="border-t border-border/30 pt-3">
                   <div className="flex items-center gap-2 flex-wrap">
                     {initialTask.estimatedMinutes && (
-                      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-1 text-[12px] font-semibold text-foreground">
+                      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-1 text-s font-semibold text-foreground">
                         <Timer className="w-3 h-3 text-muted-foreground" /> Est: {formatEstimate(initialTask.estimatedMinutes)}
                       </span>
                     )}
                     {initialTask.estimateAccuracy && ACCURACY_CONFIG[initialTask.estimateAccuracy] && (
-                      <span className={cn("inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[12px] font-semibold", ACCURACY_CONFIG[initialTask.estimateAccuracy].bg, ACCURACY_CONFIG[initialTask.estimateAccuracy].color)}>
+                      <span className={cn("inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-s font-semibold", ACCURACY_CONFIG[initialTask.estimateAccuracy].bg, ACCURACY_CONFIG[initialTask.estimateAccuracy].color)}>
                         <Gauge className="w-3 h-3" /> {ACCURACY_CONFIG[initialTask.estimateAccuracy].label}
                       </span>
                     )}
@@ -1025,40 +1027,37 @@ export function TaskDetailPage({
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-              <h3 className="text-[13px] font-semibold">Notes</h3>
+              <h3 className="text-s font-semibold">Notes</h3>
               {attachedNotes.length > 0 && (
-                <span className="text-[10px] font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
+                <span className="text-xs font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
                   {attachedNotes.length}
                 </span>
               )}
             </div>
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onClick={() => setAttachNoteOpen(true)} className="h-7 text-xs">
+              <Button size="sm" variant="ghost" onClick={() => setAttachNoteOpen(true)} className="h-7 text-s">
                 Attach
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setNoteEditorOpen(true)} className="h-7 text-xs">
-                <Plus className="w-3 h-3 mr-1" />
-                New
-              </Button>
+              <AddButton label="New note" onClick={() => setNoteEditorOpen(true)} />
             </div>
           </div>
           {attachedNotes.length === 0 ? (
-            <p className="text-[12px] text-muted-foreground/60 py-2">No notes attached</p>
+            <p className="text-s text-muted-foreground/60 py-2">No notes attached</p>
           ) : (
             <div className="space-y-2">
               {attachedNotes.map((note) => (
                 <button
                   key={note.id}
                   onClick={() => router.push(projectNoteUrl(projectId, note.id, { noteType: note.noteType }))}
-                  className="w-full text-left rounded-lg border border-border/60 bg-background p-3 hover:border-border transition-colors"
+                  className="w-full text-start rounded-lg border border-border/60 bg-background p-3 hover:border-border transition-colors"
                 >
                   <div className="flex items-center justify-between">
-                    <p className="text-[12px] font-medium text-primary truncate">{note.title}</p>
-                    <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">
+                    <p className="text-s font-medium text-primary truncate">{note.title}</p>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap ms-2">
                       {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
                     </span>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">by {note.author.name ?? "Unknown"}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">by {note.author.name ?? "Unknown"}</p>
                 </button>
               ))}
             </div>
@@ -1070,40 +1069,37 @@ export function TaskDetailPage({
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <CalendarClock className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-              <h3 className="text-[13px] font-semibold">Roadmap</h3>
+              <h3 className="text-s font-semibold">Roadmap</h3>
               {attachedRoadmaps.length > 0 && (
-                <span className="text-[10px] font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
+                <span className="text-xs font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
                   {attachedRoadmaps.length}
                 </span>
               )}
             </div>
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onClick={() => setAttachRoadmapOpen(true)} className="h-7 text-xs">
+              <Button size="sm" variant="ghost" onClick={() => setAttachRoadmapOpen(true)} className="h-7 text-s">
                 Attach
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setRoadmapEditorOpen(true)} className="h-7 text-xs">
-                <Plus className="w-3 h-3 mr-1" />
-                New
-              </Button>
+              <AddButton label="New roadmap item" onClick={() => setRoadmapEditorOpen(true)} />
             </div>
           </div>
           {attachedRoadmaps.length === 0 ? (
-            <p className="text-[12px] text-muted-foreground/60 py-2">No roadmap items attached</p>
+            <p className="text-s text-muted-foreground/60 py-2">No roadmap items attached</p>
           ) : (
             <div className="space-y-2">
               {attachedRoadmaps.map((note) => (
                 <button
                   key={note.id}
                   onClick={() => router.push(projectNoteUrl(projectId, note.id, { noteType: note.noteType }))}
-                  className="w-full text-left rounded-lg border border-border/60 bg-background p-3 hover:border-border transition-colors"
+                  className="w-full text-start rounded-lg border border-border/60 bg-background p-3 hover:border-border transition-colors"
                 >
                   <div className="flex items-center justify-between">
-                    <p className="text-[12px] font-medium text-primary truncate">{note.title}</p>
-                    <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">
+                    <p className="text-s font-medium text-primary truncate">{note.title}</p>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap ms-2">
                       {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
                     </span>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">by {note.author.name ?? "Unknown"}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">by {note.author.name ?? "Unknown"}</p>
                 </button>
               ))}
             </div>
@@ -1114,7 +1110,7 @@ export function TaskDetailPage({
         <div className="rounded-xl bg-card border border-border p-5">
           <div className="flex items-center gap-2 mb-4">
             <MessageSquare className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-            <h3 className="text-[13px] font-semibold">Comments</h3>
+            <h3 className="text-s font-semibold">Comments</h3>
           </div>
           <CommentSection key={`comments-${initialTask.id}-${commentKey}`} taskId={initialTask.id} projectId={projectId} />
         </div>
@@ -1234,16 +1230,16 @@ function TaskNoteEditor({
 
   return (
     <div className="fixed inset-0 z-[200] bg-background flex flex-col">
-      <div className="h-12 border-b border-border flex items-center justify-between px-4 shrink-0">
+      <div className="flex app-top-bar items-center justify-between px-4 shrink-0 border-b border-border">
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={onClose} className="flex items-center gap-2 text-s text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" /> Back
           </button>
-          <span className="text-[11px] text-muted-foreground/50">|</span>
-          <span className={`text-[12px] font-medium ${taskTypeMeta.color}`}>
+          <span className="text-xs text-muted-foreground/50">|</span>
+          <span className={`text-s font-medium ${taskTypeMeta.color}`}>
             {taskTypeMeta.prefix}-{String(task.taskNumber).padStart(3, "0")}
           </span>
-          <span className="text-[12px] text-muted-foreground truncate max-w-[200px]">{task.title}</span>
+          <span className="text-s text-muted-foreground truncate max-w-[200px]">{task.title}</span>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
@@ -1255,7 +1251,7 @@ function TaskNoteEditor({
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
           <div className="mb-6">
-            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold ${taskTypeMeta.color} bg-muted/50 border-border`}>
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${taskTypeMeta.color} bg-muted/50 border-border`}>
               {taskTypeMeta.label} Note
             </span>
           </div>
@@ -1263,7 +1259,7 @@ function TaskNoteEditor({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Note title..."
-            className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-8"
+            className="w-full text-m font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-8"
             autoFocus
           />
           <RichTextEditor content={content} onChange={setContent} placeholder="Write your note... (type / for commands)" borderless projectId={projectId} />

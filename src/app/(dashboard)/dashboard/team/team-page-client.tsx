@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Mail, Clock, FolderKanban, Search, UserPlus, X, Ban, RotateCw, Trash2, ShieldCheck, Shield, AlertTriangle, ArrowRightLeft, ChevronDown, Check, Eye, Plus, Pencil } from "lucide-react";
+import { Users, Mail, Clock, FolderKanban, Search, X, Ban, RotateCw, Trash2, ShieldCheck, Shield, AlertTriangle, ArrowRightLeft, ChevronDown, Check, Eye, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AddButton } from "@/components/add-button";
 import { formatDistanceToNow } from "date-fns";
 import { updateUserAdmin, updateUserEmail, inviteToTeam, toggleBlockUser, cancelTeamInvite, resendTeamInvite, getUserTaskSummary } from "@/actions/team";
 import { updateMemberRole, removeMember } from "@/actions/project";
@@ -313,29 +314,26 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+          <div className="flex items-center gap-2 text-s text-muted-foreground">
             <Users className="w-4 h-4" />
             <span>{members.length} member{members.length !== 1 ? "s" : ""}</span>
           </div>
           {totalPending > 0 && (
-            <div className="flex items-center gap-2 text-[13px] text-amber-400">
+            <div className="flex items-center gap-2 text-s text-amber-400">
               <Mail className="w-4 h-4" />
               <span>{totalPending} pending</span>
             </div>
           )}
-          <div className="flex items-center gap-2 text-[13px] text-muted-foreground/60">
+          <div className="flex items-center gap-2 text-s text-muted-foreground/60">
             <Shield className="w-4 h-4" />
             <span>{roles.length} role{roles.length !== 1 ? "s" : ""}</span>
           </div>
         </div>
         {isAdmin && (
-          <button
+          <AddButton
+            label="Invite Member"
             onClick={() => setShowInvite(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 transition-colors"
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            Invite Member
-          </button>
+          />
         )}
       </div>
 
@@ -344,7 +342,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="w-full max-w-sm rounded-xl border border-border bg-sidebar p-5 shadow-xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[14px] font-semibold text-foreground">Invite Member</h3>
+              <h3 className="text-s font-semibold text-foreground">Invite Member</h3>
               <button
                 onClick={() => setShowInvite(false)}
                 className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-card transition-colors text-muted-foreground"
@@ -355,45 +353,45 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
             <form onSubmit={handleInvite} className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">First name</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">First name</label>
                   <input
                     type="text"
                     required
                     value={inviteFirstName}
                     onChange={(e) => setInviteFirstName(e.target.value)}
                     placeholder="Jane"
-                    className="w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                    className="w-full h-9 px-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Last name</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Last name</label>
                   <input
                     type="text"
                     required
                     value={inviteLastName}
                     onChange={(e) => setInviteLastName(e.target.value)}
                     placeholder="Doe"
-                    className="w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                    className="w-full h-9 px-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
                   />
                 </div>
               </div>
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Email</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Email</label>
                 <input
                   type="email"
                   required
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   placeholder="colleague@company.com"
-                  className="w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                  className="w-full h-9 px-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Team</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Team</label>
                 <select
                   value={inviteTeamId}
                   onChange={(e) => setInviteTeamId(e.target.value)}
-                  className="w-full h-9 px-2 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                  className="w-full h-9 px-2 rounded-lg border border-border bg-card text-s text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
                 >
                   <option value="">No team</option>
                   {workspaceTeams.map((t) => (
@@ -402,7 +400,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                 </select>
               </div>
               <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Projects</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Projects</label>
                 <div className="space-y-2">
                   {inviteProjects.map((row, idx) => (
                     <div key={idx} className="flex items-center gap-2">
@@ -413,7 +411,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                             rows.map((r, i) => (i === idx ? { ...r, projectId: e.target.value } : r)),
                           )
                         }
-                        className="flex-1 min-w-0 h-9 px-2 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                        className="flex-1 min-w-0 h-9 px-2 rounded-lg border border-border bg-card text-s text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
                       >
                         <option value="">Select project...</option>
                         {projectOptions
@@ -434,7 +432,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                           )
                         }
                         disabled={!row.projectId}
-                        className="flex-1 min-w-0 h-9 px-2 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50"
+                        className="flex-1 min-w-0 h-9 px-2 rounded-lg border border-border bg-card text-s text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50"
                       >
                         <option value="">Select role...</option>
                         {roles.map((r) => (
@@ -451,15 +449,11 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                       </button>
                     </div>
                   ))}
-                  <button
-                    type="button"
-                    onClick={() => setInviteProjects((rows) => [...rows, { projectId: "", roleId: "" }])}
+                  <AddButton
+                    label="Add project"
                     disabled={inviteProjects.length >= projectOptions.length}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-border text-[12px] text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add project
-                  </button>
+                    onClick={() => setInviteProjects((rows) => [...rows, { projectId: "", roleId: "" }])}
+                  />
                 </div>
               </div>
               <div>
@@ -467,7 +461,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                   type="button"
                   onClick={() => setInviteIsAdmin(!inviteIsAdmin)}
                   className={cn(
-                    "flex items-center gap-2 rounded-lg border px-3 py-2 text-[12px] font-medium transition-colors w-full",
+                    "flex items-center gap-2 rounded-lg border px-3 py-2 text-s font-medium transition-colors w-full",
                     inviteIsAdmin
                       ? "bg-purple-500/15 border-purple-500/30 text-purple-400"
                       : "border-border text-muted-foreground hover:border-muted-foreground/40"
@@ -483,7 +477,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                   </div>
                   Grant system admin access
                 </button>
-                <p className="text-[10px] text-muted-foreground/60 mt-1 ml-1">
+                <p className="text-xs text-muted-foreground/60 mt-1 ms-1">
                   Admins have full access. Assign project roles when adding members to projects.
                 </p>
               </div>
@@ -491,14 +485,14 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                 <button
                   type="button"
                   onClick={() => setShowInvite(false)}
-                  className="px-3 py-1.5 rounded-lg text-[13px] text-muted-foreground hover:bg-card transition-colors"
+                  className="px-3 py-1.5 rounded-lg text-s text-muted-foreground hover:bg-card transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={inviting || !inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim() || inviteProjects.some((p) => !p.projectId || !p.roleId)}
-                  className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-s font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {inviting ? "Sending..." : "Send Invite"}
                 </button>
@@ -517,8 +511,8 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                 <AlertTriangle className="w-5 h-5 text-amber-400" />
               </div>
               <div>
-                <h3 className="text-[14px] font-semibold text-foreground">Transfer Tasks Before Blocking</h3>
-                <p className="text-[12px] text-muted-foreground mt-0.5">
+                <h3 className="text-s font-semibold text-foreground">Transfer Tasks Before Blocking</h3>
+                <p className="text-s text-muted-foreground mt-0.5">
                   <strong>{blockTransfer.userName}</strong> has tasks across {blockTransfer.projects.length} project{blockTransfer.projects.length !== 1 ? "s" : ""}.
                   Select who should take over in each project.
                 </p>
@@ -529,8 +523,8 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
               {blockTransfer.projects.map((proj) => (
                 <div key={proj.id} className="rounded-lg bg-muted/30 border border-border p-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[13px] font-medium text-foreground">{proj.name}</span>
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-s font-medium text-foreground">{proj.name}</span>
+                    <span className="text-xs text-muted-foreground">
                       {proj.taskCount} task{proj.taskCount !== 1 ? "s" : ""}
                     </span>
                   </div>
@@ -547,7 +541,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                         };
                       });
                     }}
-                    className="w-full h-8 px-2 rounded-md border border-border bg-card text-[12px] text-foreground"
+                    className="w-full h-8 px-2 rounded-md border border-border bg-card text-s text-foreground"
                   >
                     <option value="">Select transfer target...</option>
                     {proj.eligibleTransferTargets.map((t) => (
@@ -564,14 +558,14 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
               <button
                 onClick={() => setBlockTransfer(null)}
                 disabled={blockLoading}
-                className="px-3 py-1.5 rounded-lg text-[13px] text-muted-foreground hover:bg-muted transition-colors"
+                className="px-3 py-1.5 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleBlockWithTransfer}
                 disabled={blockLoading || blockTransfer.projects.some((p) => !p.transferToUserId)}
-                className="px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-[13px] font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50"
+                className="px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-s font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50"
               >
                 {blockLoading ? "Processing..." : "Transfer & Block"}
               </button>
@@ -588,7 +582,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
           placeholder="Search by name or email..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full h-9 pl-9 pr-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+          className="w-full h-9 ps-9 pe-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
         />
       </div>
 
@@ -599,7 +593,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
             type="button"
             onClick={() => setTeamFilter("all")}
             className={cn(
-              "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
+              "px-2.5 py-1 rounded-full text-xs font-medium border transition-colors",
               teamFilter === "all"
                 ? "bg-primary/15 border-primary/40 text-primary"
                 : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
@@ -615,14 +609,14 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                 type="button"
                 onClick={() => setTeamFilter(teamFilter === t.id ? "all" : t.id)}
                 className={cn(
-                  "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors flex items-center gap-1",
+                  "px-2.5 py-1 rounded-full text-xs font-medium border transition-colors flex items-center gap-1",
                   teamFilter === t.id
                     ? "bg-primary/15 border-primary/40 text-primary"
                     : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
                 )}
               >
                 {t.name}
-                <span className={cn("text-[10px]", teamFilter === t.id ? "text-primary/70" : "text-muted-foreground/50")}>
+                <span className={cn("text-xs", teamFilter === t.id ? "text-primary/70" : "text-muted-foreground/50")}>
                   {count}
                 </span>
               </button>
@@ -633,7 +627,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
 
       {/* Members */}
       <div>
-        <h2 className="text-[13px] font-semibold text-foreground mb-3">Members</h2>
+        <h2 className="text-s font-semibold text-foreground mb-3">Members</h2>
         <div className="space-y-1">
           {filteredMembers.map((member) => (
             <div
@@ -643,23 +637,23 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
               {member.imageUrl ? (
                 <img src={member.imageUrl} alt="" className="w-8 h-8 rounded-full shrink-0" />
               ) : (
-                <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-[11px] font-semibold text-primary shrink-0">
+                <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
                   {(member.name?.[0] || member.email[0]).toUpperCase()}
                 </div>
               )}
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-medium text-foreground truncate">
+                  <span className="text-s font-medium text-foreground truncate">
                     {member.name || member.email}
                   </span>
                   {member.systemRole === "ADMIN" && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full border font-medium text-purple-400 bg-purple-500/15 border-purple-500/30">
+                    <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-purple-400 bg-purple-500/15 border-purple-500/30">
                       Admin
                     </span>
                   )}
                   {member.blocked && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full border font-medium text-destructive bg-destructive/15 border-destructive/30">
+                    <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-destructive bg-destructive/15 border-destructive/30">
                       Blocked
                     </span>
                   )}
@@ -679,12 +673,12 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                       disabled={emailEdit.saving}
                       onChange={(e) => setEmailEdit({ ...emailEdit, value: e.target.value, error: null })}
                       onKeyDown={(e) => e.key === "Escape" && setEmailEdit(null)}
-                      className="h-6 w-56 rounded-md border border-border bg-background px-2 text-[11px] text-foreground outline-none focus:border-muted-foreground/50 disabled:opacity-50"
+                      className="h-6 w-56 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-muted-foreground/50 disabled:opacity-50"
                     />
                     <button
                       type="submit"
                       disabled={emailEdit.saving}
-                      className="h-6 px-2 rounded-md text-[10px] font-medium bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50"
+                      className="h-6 px-2 rounded-md text-xs font-medium bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50"
                     >
                       {emailEdit.saving ? "Saving..." : "Save"}
                     </button>
@@ -692,12 +686,12 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                       type="button"
                       onClick={() => setEmailEdit(null)}
                       disabled={emailEdit.saving}
-                      className="h-6 px-2 rounded-md text-[10px] font-medium border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
+                      className="h-6 px-2 rounded-md text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
                     >
                       Cancel
                     </button>
                     <span
-                      className="text-[10px] text-muted-foreground/60"
+                      className="text-xs text-muted-foreground/60"
                       title="Google is the only sign-in method, so the new address has to be a Google account. Their old address keeps working either way."
                     >
                       {emailEdit.error ? (
@@ -710,7 +704,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                 ) : (
                   <div className="flex items-center gap-3 mt-0.5">
                     <span className="flex items-center gap-1 min-w-0">
-                      <span className="text-[11px] text-muted-foreground truncate">{member.email}</span>
+                      <span className="text-xs text-muted-foreground truncate">{member.email}</span>
                       {isAdmin && (
                         <button
                           onClick={() =>
@@ -723,7 +717,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                         </button>
                       )}
                     </span>
-                    <span className="text-[11px] text-muted-foreground/50 flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       Joined {formatDistanceToNow(new Date(member.createdAt), { addSuffix: true })}
                     </span>
@@ -745,11 +739,11 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                         ) : (
                           <span
                             key={p.id}
-                            className="text-[10px] px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground"
+                            className="text-xs px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground"
                           >
                             {p.name}
                             {p.roleName && (
-                              <span className="text-muted-foreground/50 ml-0.5">({p.roleName})</span>
+                              <span className="text-muted-foreground/50 ms-0.5">({p.roleName})</span>
                             )}
                           </span>
                         ),
@@ -777,7 +771,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                       disabled={changingRole === member.id}
                       title={member.systemRole === "ADMIN" ? "Remove admin" : "Make admin"}
                       className={cn(
-                        "h-7 px-2.5 text-[11px] font-medium rounded-md border transition-colors disabled:opacity-50",
+                        "h-7 px-2.5 text-xs font-medium rounded-md border transition-colors disabled:opacity-50",
                         member.systemRole === "ADMIN"
                           ? "bg-purple-500/15 border-purple-500/30 text-purple-400 hover:bg-purple-500/25"
                           : "border-border text-muted-foreground hover:border-muted-foreground/40"
@@ -804,7 +798,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
             </div>
           ))}
           {filteredMembers.length === 0 && (
-            <p className="text-[13px] text-muted-foreground py-4 text-center">No members found.</p>
+            <p className="text-s text-muted-foreground py-4 text-center">No members found.</p>
           )}
         </div>
       </div>
@@ -812,7 +806,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
       {/* Pending Invitations */}
       {(filteredTeamInvites.length > 0 || filteredInvitations.length > 0) && (
         <div>
-          <h2 className="text-[13px] font-semibold text-foreground mb-3">Pending Invitations</h2>
+          <h2 className="text-s font-semibold text-foreground mb-3">Pending Invitations</h2>
           <div className="space-y-1">
             {filteredTeamInvites.map((inv) => (
               <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors">
@@ -820,15 +814,15 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                   <Mail className="w-3.5 h-3.5 text-amber-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="text-[13px] font-medium text-foreground truncate block">{inv.email}</span>
+                  <span className="text-s font-medium text-foreground truncate block">{inv.email}</span>
                   <div className="flex items-center gap-2 mt-0.5">
                     {inv.systemRole === "ADMIN" && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full border font-medium text-purple-400 bg-purple-500/15 border-purple-500/30">Admin</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-purple-400 bg-purple-500/15 border-purple-500/30">Admin</span>
                     )}
                     {inv.team && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground">{inv.team.name}</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground">{inv.team.name}</span>
                     )}
-                    <span className="text-[11px] text-muted-foreground/50">
+                    <span className="text-xs text-muted-foreground/50">
                       Invited {formatDistanceToNow(new Date(inv.createdAt), { addSuffix: true })}
                     </span>
                   </div>
@@ -853,16 +847,16 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                   <Mail className="w-3.5 h-3.5 text-amber-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="text-[13px] font-medium text-foreground truncate block">{inv.email}</span>
+                  <span className="text-s font-medium text-foreground truncate block">{inv.email}</span>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground">{inv.project.name}</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground">{inv.project.name}</span>
                     <span className={cn(
-                      "text-[10px] px-1.5 py-0.5 rounded-full border",
+                      "text-xs px-1.5 py-0.5 rounded-full border",
                       inv.role === "ADMIN" ? "bg-primary/10 border-primary/20 text-primary" : "bg-card border-border text-muted-foreground"
                     )}>
                       {inv.projectRole?.name ?? inv.role}
                     </span>
-                    <span className="text-[11px] text-muted-foreground/50">
+                    <span className="text-xs text-muted-foreground/50">
                       Invited {formatDistanceToNow(new Date(inv.createdAt), { addSuffix: true })}
                     </span>
                   </div>
@@ -961,7 +955,7 @@ function ProjectRoleChip({
         onClick={() => setOpen((v) => !v)}
         disabled={saving}
         className={cn(
-          "text-[10px] px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground",
+          "text-xs px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground",
           "inline-flex items-center gap-0.5 hover:border-muted-foreground/40 hover:text-foreground transition-colors",
           saving && "opacity-50",
         )}
@@ -977,7 +971,7 @@ function ProjectRoleChip({
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute left-0 top-full mt-1 z-50 min-w-[180px] rounded-lg border border-border bg-sidebar shadow-xl py-1">
-            <p className="px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/50 truncate">
+            <p className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/50 truncate">
               {project.name}
             </p>
             {roles.map((r) => (
@@ -987,7 +981,7 @@ function ProjectRoleChip({
                 onClick={() => handlePick(r.id)}
                 disabled={saving}
                 className={cn(
-                  "w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left text-[11px] transition-colors",
+                  "w-full flex items-center gap-1.5 px-2.5 py-1.5 text-start text-xs transition-colors",
                   r.id === project.roleId
                     ? "text-foreground font-medium"
                     : "text-muted-foreground hover:text-foreground hover:bg-card",
@@ -999,7 +993,7 @@ function ProjectRoleChip({
               </button>
             ))}
             {roles.length === 0 && (
-              <p className="px-2.5 py-1.5 text-[11px] text-muted-foreground/60">No roles defined.</p>
+              <p className="px-2.5 py-1.5 text-xs text-muted-foreground/60">No roles defined.</p>
             )}
             <div className="border-t border-border/60 my-1" />
             <button
@@ -1010,7 +1004,7 @@ function ProjectRoleChip({
                 }
               }}
               disabled={saving}
-              className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left text-[11px] text-destructive hover:bg-destructive/10 transition-colors"
+              className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-start text-xs text-destructive hover:bg-destructive/10 transition-colors"
             >
               <Trash2 className="w-3 h-3 shrink-0" strokeWidth={1.5} />
               Remove from project
@@ -1027,8 +1021,8 @@ function ProjectRoleChip({
                 <AlertTriangle className="w-5 h-5 text-amber-400" />
               </div>
               <div>
-                <h3 className="text-[14px] font-semibold text-foreground">Transfer Tasks Required</h3>
-                <p className="text-[12px] text-muted-foreground mt-0.5">
+                <h3 className="text-s font-semibold text-foreground">Transfer Tasks Required</h3>
+                <p className="text-s text-muted-foreground mt-0.5">
                   <strong>{userName}</strong> has <strong>{transfer.taskCount}</strong> task
                   {transfer.taskCount !== 1 ? "s" : ""} in <strong>{project.name}</strong>.
                   Select a member to transfer them to before removal.
@@ -1037,13 +1031,13 @@ function ProjectRoleChip({
             </div>
 
             <div className="mb-4">
-              <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">Transfer tasks to</label>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Transfer tasks to</label>
               <select
                 value={transfer.transferToUserId}
                 onChange={(e) =>
                   setTransfer((s) => (s ? { ...s, transferToUserId: e.target.value } : s))
                 }
-                className="w-full h-9 px-2 rounded-lg border border-border bg-background text-[13px] text-foreground"
+                className="w-full h-9 px-2 rounded-lg border border-border bg-background text-s text-foreground"
               >
                 <option value="">Select a member...</option>
                 {transfer.targets.map((t) => (
@@ -1053,7 +1047,7 @@ function ProjectRoleChip({
                 ))}
               </select>
               {transfer.targets.length === 0 && (
-                <p className="text-[11px] text-destructive mt-1.5">
+                <p className="text-xs text-destructive mt-1.5">
                   No other members in this project to transfer tasks to.
                 </p>
               )}
@@ -1064,7 +1058,7 @@ function ProjectRoleChip({
                 type="button"
                 onClick={() => setTransfer(null)}
                 disabled={saving}
-                className="px-3 py-1.5 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors"
+                className="px-3 py-1.5 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
               >
                 Cancel
               </button>
@@ -1072,7 +1066,7 @@ function ProjectRoleChip({
                 type="button"
                 onClick={() => void handleRemove(transfer.transferToUserId)}
                 disabled={!transfer.transferToUserId || saving}
-                className="px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-[12px] font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50"
+                className="px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-s font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50"
               >
                 {saving ? "Transferring..." : "Transfer & Remove"}
               </button>

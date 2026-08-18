@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Activity, BarChart3, Pencil, Plus, Trash2 } from "lucide-react";
+import { Activity, BarChart3, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AddButton } from "@/components/add-button";
 import {
   EQUITY_FORMULA_OP,
   EQUITY_METRIC_GROUP,
@@ -20,9 +21,9 @@ import {
 } from "@/actions/equity";
 
 const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "w-full h-9 px-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
 
-const selectCls = cn(inputCls, "appearance-none pr-8");
+const selectCls = cn(inputCls, "appearance-none pe-8");
 
 type Draft = {
   name: string;
@@ -252,14 +253,14 @@ function MetricGroup({
     <div className="rounded-xl border border-border bg-card/50 p-4">
       <div className="flex items-center gap-2 mb-1">
         <Icon className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-        <h2 className="text-[13px] font-semibold text-foreground">
+        <h2 className="text-s font-semibold text-foreground">
           {EQUITY_METRIC_GROUP[group as keyof typeof EQUITY_METRIC_GROUP]} data
         </h2>
-        <span className="text-[11px] text-muted-foreground/60 tabular-nums">
+        <span className="text-xs text-muted-foreground/60 tabular-nums">
           {rows.length}
         </span>
       </div>
-      <p className="text-[11px] text-muted-foreground mb-3">{description}</p>
+      <p className="text-xs text-muted-foreground mb-3">{description}</p>
 
       <div className="flex items-start gap-2 mb-3">
         <MetricFields
@@ -267,19 +268,15 @@ function MetricGroup({
           onChange={setDraft}
           operands={operandsIn(metrics, group)}
         />
-        <button
-          type="button"
+        <AddButton
+          label="Add"
           onClick={add}
           disabled={busy || !draft.name.trim()}
-          className="flex items-center gap-1.5 px-3 h-9 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add
-        </button>
+        />
       </div>
 
       {rows.length === 0 ? (
-        <p className="text-[12px] text-muted-foreground py-1">
+        <p className="text-s text-muted-foreground py-1">
           No fields yet.
         </p>
       ) : (
@@ -297,14 +294,14 @@ function MetricGroup({
                   type="button"
                   onClick={() => save(metric.id)}
                   disabled={busy || !editDraft.name.trim()}
-                  className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium disabled:opacity-40 transition-colors shrink-0"
+                  className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-s font-medium disabled:opacity-40 transition-colors shrink-0"
                 >
                   Save
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditingId(null)}
-                  className="px-3 h-9 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors shrink-0"
+                  className="px-3 h-9 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors shrink-0"
                 >
                   Cancel
                 </button>
@@ -314,15 +311,15 @@ function MetricGroup({
                 key={metric.id}
                 className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5"
               >
-                <span className="flex-1 min-w-0 truncate text-[13px] text-foreground">
+                <span className="flex-1 min-w-0 truncate text-s text-foreground">
                   {metric.name}
                   {metric.unit && !isDateMetric(metric.type) && (
-                    <span className="ml-1.5 text-[11px] text-muted-foreground">
+                    <span className="ms-1.5 text-xs text-muted-foreground">
                       {metric.unit}
                     </span>
                   )}
                   {isFormulaMetric(metric.type) && (
-                    <span className="ml-1.5 text-[11px] text-muted-foreground">
+                    <span className="ms-1.5 text-xs text-muted-foreground">
                       {formulaLabel(
                         metric.formulaOp,
                         byId.get(metric.leftId ?? "")?.name,
@@ -331,12 +328,12 @@ function MetricGroup({
                     </span>
                   )}
                 </span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-border bg-muted/40 text-muted-foreground font-medium shrink-0">
+                <span className="text-xs px-1.5 py-0.5 rounded-full border border-border bg-muted/40 text-muted-foreground font-medium shrink-0">
                   {EQUITY_METRIC_TYPE[
                     metric.type as keyof typeof EQUITY_METRIC_TYPE
                   ] ?? metric.type}
                 </span>
-                <span className="text-[10px] text-muted-foreground/70 tabular-nums shrink-0">
+                <span className="text-xs text-muted-foreground/70 tabular-nums shrink-0">
                   {isFormulaMetric(metric.type)
                     ? "worked out"
                     : usage(metric.valueCount)}

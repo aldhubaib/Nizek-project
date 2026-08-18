@@ -35,11 +35,11 @@ export function NoteCommentCard({
         createdAt={createdAt}
       >
         {payload.quoteText ? (
-          <blockquote className="border-l-2 border-amber-400/60 pl-3 text-[12px] italic text-muted-foreground">
+          <blockquote className="border-s-2 border-amber-400/60 ps-3 text-s italic text-muted-foreground">
             {payload.quoteText}
           </blockquote>
         ) : null}
-        <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">
+        <p className="whitespace-pre-wrap text-s leading-relaxed text-foreground">
           {payload.comment}
         </p>
       </ActivityCard>

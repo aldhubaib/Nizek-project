@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PieChart, Plus, X, FileSignature, ChevronRight } from "lucide-react";
+import { PieChart, X, FileSignature, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
+import { AddButton } from "@/components/add-button";
 import { EquityMenu } from "@/components/equity/equity-menu";
 import {
   createEquityPortfolio,
@@ -35,7 +36,7 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 function ProjectLogo({ name, logoUrl, size = 9 }: { name: string; logoUrl: string | null; size?: number }) {
-  const cls = size === 9 ? "w-9 h-9 text-[13px]" : "w-6 h-6 text-[10px]";
+  const cls = size === 9 ? "w-9 h-9 text-s" : "w-6 h-6 text-xs";
   if (logoUrl) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={logoUrl} alt="" className={cn(cls, "rounded-full object-cover shrink-0")} />;
@@ -74,21 +75,18 @@ export function EquityPageClient({
     <div>
       <PageHeader hasMenu>
         <PieChart className="w-4 h-4 text-primary shrink-0" strokeWidth={1.5} />
-        <h1 className="text-sm font-semibold text-foreground flex-1">Equity</h1>
+        <h1 className="text-s font-semibold text-foreground flex-1">Equity</h1>
         <EquityMenu />
         {tab === "portfolios" && (
-          <button
+          <AddButton
+            label="Add Portfolio"
             onClick={() => setShowPicker(true)}
-            className="flex items-center gap-1.5 px-2.5 h-7 rounded-md bg-primary text-primary-foreground text-[12px] font-medium hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Portfolio
-          </button>
+          />
         )}
       </PageHeader>
 
-      <div className="px-6 py-6 max-w-5xl mx-auto">
-      <p className="text-[13px] text-muted-foreground mb-4">
+      <div className="px-app py-6 max-w-5xl mx-auto">
+      <p className="text-s text-muted-foreground mb-4">
         Equity deals across startups — vesting, dilution and tranche triggers.
       </p>
 
@@ -98,7 +96,7 @@ export function EquityPageClient({
             key={t.id}
             onClick={() => setTab(t.id)}
             className={cn(
-              "px-3 py-2 text-[13px] font-medium border-b-2 -mb-px transition-colors",
+              "px-3 py-2 text-s font-medium border-b-2 -mb-px transition-colors",
               tab === t.id
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground",
@@ -119,7 +117,7 @@ export function EquityPageClient({
         (portfolios.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-12 text-center">
             <PieChart className="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" strokeWidth={1} />
-            <p className="text-[13px] text-muted-foreground">
+            <p className="text-s text-muted-foreground">
               No portfolios yet. Add one by picking a project.
             </p>
           </div>
@@ -139,12 +137,12 @@ export function EquityPageClient({
                   <ProjectLogo name={p.project.name} logoUrl={p.project.logoUrl} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-[14px] font-semibold text-foreground truncate">
+                      <span className="text-s font-semibold text-foreground truncate">
                         {p.project.name}
                       </span>
                       {signedCount > 0 && (
                         <span
-                          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border font-medium text-emerald-400 bg-emerald-500/15 border-emerald-500/30"
+                          className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full border font-medium text-emerald-400 bg-emerald-500/15 border-emerald-500/30"
                           title={`${signedCount} signed contract${signedCount !== 1 ? "s" : ""}`}
                         >
                           <FileSignature className="w-2.5 h-2.5" />
@@ -152,7 +150,7 @@ export function EquityPageClient({
                         </span>
                       )}
                     </div>
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {entries === 0
                         ? "No equity defined yet"
                         : `${entries} equity ${entries === 1 ? "entry" : "entries"}`}
@@ -162,26 +160,26 @@ export function EquityPageClient({
                 </div>
                 <div className="grid grid-cols-4 gap-2">
                   <div className="rounded-lg bg-muted/40 px-2.5 py-2">
-                    <p className="text-[10px] text-muted-foreground mb-0.5">Equity</p>
-                    <p className="text-[15px] font-semibold text-foreground tabular-nums">
+                    <p className="text-xs text-muted-foreground mb-0.5">Equity</p>
+                    <p className="text-s font-semibold text-foreground tabular-nums">
                       {formatPct(held)}
                     </p>
                   </div>
                   <div className="rounded-lg bg-muted/40 px-2.5 py-2">
-                    <p className="text-[10px] text-muted-foreground mb-0.5">Vested</p>
-                    <p className="text-[15px] font-semibold text-primary tabular-nums">
+                    <p className="text-xs text-muted-foreground mb-0.5">Vested</p>
+                    <p className="text-s font-semibold text-primary tabular-nums">
                       {formatPct(vested)}
                     </p>
                   </div>
                   <div className="rounded-lg bg-muted/40 px-2.5 py-2">
-                    <p className="text-[10px] text-muted-foreground mb-0.5">Contracts</p>
-                    <p className="text-[15px] font-semibold text-foreground tabular-nums">
+                    <p className="text-xs text-muted-foreground mb-0.5">Contracts</p>
+                    <p className="text-s font-semibold text-foreground tabular-nums">
                       {p.contracts.length || "—"}
                     </p>
                   </div>
                   <div className="rounded-lg bg-muted/40 px-2.5 py-2">
-                    <p className="text-[10px] text-muted-foreground mb-0.5">Signed</p>
-                    <p className="text-[15px] font-semibold text-foreground tabular-nums">
+                    <p className="text-xs text-muted-foreground mb-0.5">Signed</p>
+                    <p className="text-s font-semibold text-foreground tabular-nums">
                       {signedCount || "—"}
                     </p>
                   </div>
@@ -198,7 +196,7 @@ export function EquityPageClient({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-xl border border-border bg-sidebar p-5 shadow-xl mx-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[14px] font-semibold text-foreground">Add Portfolio</h3>
+              <h3 className="text-s font-semibold text-foreground">Add Portfolio</h3>
               <button
                 onClick={() => setShowPicker(false)}
                 className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-card transition-colors text-muted-foreground"
@@ -206,7 +204,7 @@ export function EquityPageClient({
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
-            <p className="text-[12px] text-muted-foreground mb-3">
+            <p className="text-s text-muted-foreground mb-3">
               Pick the project this equity deal belongs to.
             </p>
             <div className="max-h-72 overflow-y-auto space-y-1">
@@ -216,20 +214,20 @@ export function EquityPageClient({
                   onClick={() => handleCreate(proj.id)}
                   disabled={creating !== null}
                   className={cn(
-                    "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors",
-                    "hover:bg-card text-[13px] text-foreground disabled:opacity-50",
+                    "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-start transition-colors",
+                    "hover:bg-card text-s text-foreground disabled:opacity-50",
                     creating === proj.id && "bg-card",
                   )}
                 >
                   <ProjectLogo name={proj.name} logoUrl={proj.logoUrl} size={6} />
                   <span className="flex-1 truncate">{proj.name}</span>
                   {creating === proj.id && (
-                    <span className="text-[11px] text-muted-foreground">Creating…</span>
+                    <span className="text-xs text-muted-foreground">Creating…</span>
                   )}
                 </button>
               ))}
               {projectOptions.length === 0 && (
-                <p className="text-[12px] text-muted-foreground py-4 text-center">
+                <p className="text-s text-muted-foreground py-4 text-center">
                   Every project already has a portfolio.
                 </p>
               )}

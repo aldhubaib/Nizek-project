@@ -41,7 +41,7 @@ export function CollapsibleCard({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-card/50 p-5 mb-6",
+        "app-card rounded-xl border border-border bg-card/50 p-5 mb-6",
         className,
       )}
     >
@@ -50,7 +50,7 @@ export function CollapsibleCard({
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={expanded}
-          className="flex items-center gap-2 min-w-0 text-left"
+          className="flex items-center gap-2 min-w-0 text-start"
         >
           <ChevronRight
             className={cn(
@@ -60,11 +60,11 @@ export function CollapsibleCard({
             strokeWidth={1.5}
           />
           <Icon className="w-4 h-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
-          <h2 className="text-[13px] font-semibold text-foreground whitespace-nowrap">
+          <h2 className="text-s font-semibold text-foreground whitespace-nowrap">
             {title}
           </h2>
           {summary != null && (
-            <span className="text-[11px] text-muted-foreground/60 tabular-nums truncate">
+            <span className="text-xs text-muted-foreground/60 tabular-nums truncate">
               {summary}
             </span>
           )}
@@ -74,7 +74,7 @@ export function CollapsibleCard({
 
       {expanded && (
         <>
-          <p className="text-[11px] text-muted-foreground mt-1 mb-4">
+          <p className="text-xs text-muted-foreground mt-1 mb-4">
             {description}
           </p>
           {children}

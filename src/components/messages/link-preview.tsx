@@ -151,7 +151,7 @@ export function LinkPreviewCard({
       <div className="min-w-0 flex-1">
         <div
           className={cn(
-            "truncate text-xs font-semibold",
+            "truncate text-s font-semibold",
             mine ? "text-primary-foreground" : "text-foreground",
           )}
         >
@@ -159,7 +159,7 @@ export function LinkPreviewCard({
         </div>
         <div
           className={cn(
-            "truncate text-[11px]",
+            "truncate text-xs",
             mine ? "text-primary-foreground/70" : "text-muted-foreground",
           )}
         >

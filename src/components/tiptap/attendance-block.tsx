@@ -18,11 +18,11 @@ function PersonAvatar({ person }: { person: AttendancePerson }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img src={person.imageUrl} alt="" className="size-5 rounded-full object-cover" />
       ) : (
-        <span className="grid size-5 place-items-center rounded-full bg-muted text-[9px] font-semibold text-muted-foreground">
+        <span className="grid size-5 place-items-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
           {initial}
         </span>
       )}
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-md transition-opacity group-hover/person:opacity-100">
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs font-medium text-foreground opacity-0 shadow-md transition-opacity group-hover/person:opacity-100">
         {name}
       </span>
     </span>

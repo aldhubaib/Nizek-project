@@ -41,7 +41,7 @@ export function ClientDashboard({ projects }: Props) {
   if (projects.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-        <p className="text-sm">No projects assigned to you yet.</p>
+        <p className="text-s">No projects assigned to you yet.</p>
       </div>
     );
   }
@@ -58,7 +58,7 @@ export function ClientDashboard({ projects }: Props) {
           <Card key={project.id} className="border-border/60">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">{project.name}</CardTitle>
+                <CardTitle className="text-s">{project.name}</CardTitle>
                 <Badge
                   variant="outline"
                   className={
@@ -71,14 +71,14 @@ export function ClientDashboard({ projects }: Props) {
                 </Badge>
               </div>
               {project.description && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-s text-muted-foreground">
                   {project.description}
                 </p>
               )}
             </CardHeader>
             <CardContent>
               <div className="mb-4">
-                <div className="flex items-center justify-between text-sm mb-2">
+                <div className="flex items-center justify-between text-s mb-2">
                   <span className="text-muted-foreground">Progress</span>
                   <span className="font-medium">{completionPercent}%</span>
                 </div>
@@ -96,11 +96,11 @@ export function ClientDashboard({ projects }: Props) {
                     >
                       <div className="flex items-center gap-2">
                         <Icon className={`h-4 w-4 ${stage.color}`} />
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-s text-muted-foreground">
                           {stage.label}
                         </span>
                       </div>
-                      <p className="mt-1 text-2xl font-semibold">{count}</p>
+                      <p className="mt-1 text-l font-semibold">{count}</p>
                     </div>
                   );
                 })}

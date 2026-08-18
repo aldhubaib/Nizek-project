@@ -111,10 +111,10 @@ export function TaskPreviewPopover({
           <CheckSquare className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {taskCode(type, number)} · {TYPE_LABEL[type] ?? type}
           </p>
-          <h3 className="mt-0.5 text-[14px] font-semibold leading-snug text-foreground">
+          <h3 className="mt-0.5 text-s font-semibold leading-snug text-foreground">
             {title}
           </h3>
         </div>
@@ -129,12 +129,12 @@ export function TaskPreviewPopover({
 
       <div className="space-y-2 px-3 py-3">
         {loading && !preview?.stage && !preview?.snippet ? (
-          <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+          <div className="flex items-center gap-2 text-s text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Loading preview…
           </div>
         ) : error ? (
-          <p className="text-[12px] text-destructive">{error}</p>
+          <p className="text-s text-destructive">{error}</p>
         ) : (
           <>
             {(stageLabel || preview?.assigneeName) && (
@@ -142,7 +142,7 @@ export function TaskPreviewPopover({
                 {stageLabel && preview?.stage && (
                   <span
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                      "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium",
                       STAGE_BADGE[preview.stage] ?? "bg-muted text-muted-foreground border-border",
                     )}
                   >
@@ -158,7 +158,7 @@ export function TaskPreviewPopover({
                 {preview?.assigneeName && (
                   <Avatar
                     size="sm"
-                    className="ml-auto"
+                    className="ms-auto"
                     title={preview.assigneeName}
                   >
                     <AvatarImage src={preview.assigneeImageUrl ?? undefined} alt="" />
@@ -170,11 +170,11 @@ export function TaskPreviewPopover({
               </div>
             )}
             {preview?.snippet ? (
-              <p className="line-clamp-5 text-[13px] leading-relaxed text-foreground/90">
+              <p className="line-clamp-5 text-s leading-relaxed text-foreground/90">
                 {preview.snippet}
               </p>
             ) : (
-              <p className="text-[12px] italic text-muted-foreground">No description yet.</p>
+              <p className="text-s italic text-muted-foreground">No description yet.</p>
             )}
           </>
         )}
@@ -183,7 +183,7 @@ export function TaskPreviewPopover({
       <div className="border-t border-border p-3">
         <Link
           href={href}
-          className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-[12px] font-medium text-emerald-400 transition-colors hover:bg-emerald-500/10"
+          className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-s font-medium text-emerald-400 transition-colors hover:bg-emerald-500/10"
         >
           <span className="min-w-0 flex-1 truncate text-foreground">
             Open original task

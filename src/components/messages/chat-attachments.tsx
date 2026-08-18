@@ -96,7 +96,7 @@ export function Lightbox({
       >
         <div className="min-w-0">
           <div className="truncate text-sm font-medium">{current.name}</div>
-          <div className="text-xs text-white/60">
+          <div className="text-s text-white/60">
             {index + 1} of {images.length}
             {current.sizeBytes ? ` · ${formatBytes(current.sizeBytes)}` : ""}
           </div>
@@ -264,7 +264,7 @@ export function AttachmentBubble({
           style={{ colorScheme: "light" }}
         />
         {timeLabel && (
-          <span className="shrink-0 pr-1 text-[10px] leading-none text-muted-foreground">
+          <span className="shrink-0 pe-1 text-xs leading-none text-muted-foreground">
             {timeLabel}
           </span>
         )}
@@ -280,7 +280,7 @@ export function AttachmentBubble({
           <FileAudio className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-xs font-medium">{attachment.name}</div>
+          <div className="truncate text-s font-medium">{attachment.name}</div>
           <audio
             src={attachment.url}
             controls
@@ -317,9 +317,9 @@ export function AttachmentBubble({
           <Icon className="h-5 w-5 transition-opacity max-lg:opacity-0 group-hover:opacity-0" />
           <Download className="absolute h-5 w-5 opacity-0 transition-opacity max-lg:opacity-100 group-hover:opacity-100" />
         </div>
-        <div className="min-w-0 flex-1 pr-6">
+        <div className="min-w-0 flex-1 pe-6">
           <div className="truncate text-sm font-semibold">{attachment.name}</div>
-          <div className="text-xs text-muted-foreground">
+          <div className="text-s text-muted-foreground">
             {(attachment.contentType ?? "").split("/")[1]?.toUpperCase() ?? "FILE"}
             {attachment.sizeBytes ? ` · ${formatBytes(attachment.sizeBytes)}` : ""}
           </div>
@@ -380,8 +380,8 @@ export function FilesPanel({
   const images = items.filter((i) => i.att.isImage).map((i) => i.att);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col border-l border-border/60">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
+    <div className="flex min-h-0 flex-1 flex-col border-s border-border/60">
+      <div className="flex app-top-bar-tall shrink-0 items-center justify-between border-b border-border/60 px-4">
         <span className="text-sm font-semibold">Shared Files</span>
         <button
           type="button"
@@ -398,7 +398,7 @@ export function FilesPanel({
             key={f.id}
             onClick={() => setFilter(f.id)}
             className={cn(
-              "rounded-full px-3 py-1.5 text-xs transition-colors",
+              "rounded-full px-3 py-1.5 text-s transition-colors",
               filter === f.id
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-surface hover:text-foreground",
@@ -410,7 +410,7 @@ export function FilesPanel({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {items.length === 0 ? (
-          <div className="py-16 text-center text-xs text-muted-foreground">
+          <div className="py-16 text-center text-s text-muted-foreground">
             No {filter === "all" ? "files" : filter + "s"} shared yet.
           </div>
         ) : filter === "image" ? (
@@ -460,7 +460,7 @@ export function FilesPanel({
                       <div className="truncate text-sm font-medium">
                         {att.name}
                       </div>
-                      <div className="truncate text-xs text-muted-foreground">
+                      <div className="truncate text-s text-muted-foreground">
                         {authorName} ·{" "}
                         {new Date(createdAt).toLocaleDateString([], {
                           month: "short",

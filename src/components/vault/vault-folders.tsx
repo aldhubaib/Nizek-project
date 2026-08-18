@@ -3,7 +3,6 @@
 import { useMemo, useState, useTransition } from "react";
 import {
   Folder,
-  FolderPlus,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -11,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AddButton } from "@/components/add-button";
 import {
   Dialog,
   DialogContent,
@@ -144,7 +144,7 @@ export function VaultFolderToolbar({
               type="button"
               onClick={() => onFilterChange(pill.id)}
               className={cn(
-                "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium whitespace-nowrap transition-colors",
+                "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-s font-medium whitespace-nowrap transition-colors",
                 filter === pill.id
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
@@ -154,7 +154,7 @@ export function VaultFolderToolbar({
               {pill.count != null && (
                 <span
                   className={cn(
-                    "text-[11px] tabular-nums",
+                    "text-xs tabular-nums",
                     filter === pill.id
                       ? "text-primary-foreground/80"
                       : "text-muted-foreground",
@@ -188,16 +188,7 @@ export function VaultFolderToolbar({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-8 gap-1.5 rounded-full"
-          onClick={openCreate}
-        >
-          <FolderPlus className="h-3.5 w-3.5" />
-          New folder
-        </Button>
+        <AddButton label="New folder" onClick={openCreate} />
       </div>
 
       {filter === "all" && folders.length > 0 && (
@@ -208,16 +199,16 @@ export function VaultFolderToolbar({
                 <button
                   type="button"
                   onClick={() => onFilterChange(folder.id)}
-                  className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40"
+                  className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-start transition-colors hover:bg-accent/40"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15">
                     <Folder className="h-4 w-4 text-amber-500" />
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate text-[13px] font-semibold">
+                    <p className="truncate text-s font-semibold">
                       {folder.name}
                     </p>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {folder.credentialCount} credential
                       {folder.credentialCount === 1 ? "" : "s"}
                     </p>
@@ -226,7 +217,7 @@ export function VaultFolderToolbar({
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     aria-label={`Folder actions for ${folder.name}`}
-                    className="mr-2 grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    className="me-2 grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   >
                     <MoreHorizontal className="h-4 w-4" />
                   </DropdownMenuTrigger>
@@ -259,7 +250,7 @@ export function VaultFolderToolbar({
           </DialogHeader>
           <div className="space-y-3 py-1">
             <div className="space-y-1.5">
-              <Label className="text-[12px]">Name</Label>
+              <Label className="text-s">Name</Label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -281,14 +272,14 @@ export function VaultFolderToolbar({
                     key={suggestion}
                     type="button"
                     onClick={() => setName(suggestion)}
-                    className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+                    className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
                   >
                     {suggestion}
                   </button>
                 ))}
               </div>
             )}
-            {error && <p className="text-[12px] text-destructive">{error}</p>}
+            {error && <p className="text-s text-destructive">{error}</p>}
           </div>
           <DialogFooter>
             <Button

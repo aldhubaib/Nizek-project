@@ -66,12 +66,12 @@ export function PushNotifier() {
     <div className="fixed inset-x-3 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] z-[9999] flex justify-center animate-in slide-in-from-bottom-4 fade-in duration-300 sm:inset-x-0">
       <div className="flex w-full max-w-sm items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-foreground shadow-2xl">
         <Bell className="h-5 w-5 shrink-0 text-primary" />
-        <span className="min-w-0 flex-1 text-sm font-medium">
+        <span className="min-w-0 flex-1 text-s font-medium">
           Get notified about new messages
         </span>
         <button
           onClick={handleEnablePush}
-          className="flex h-9 shrink-0 items-center rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+          className="flex h-9 shrink-0 items-center rounded-xl bg-primary px-4 text-s font-bold text-primary-foreground transition-colors hover:bg-primary/90"
         >
           Enable
         </button>

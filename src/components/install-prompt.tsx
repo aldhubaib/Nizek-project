@@ -90,7 +90,7 @@ export function InstallPrompt() {
         {showIosHint ? (
           // iOS only delivers push notifications to installed (home-screen)
           // apps, so the install step IS the notification-enable step here.
-          <span className="min-w-0 flex-1 text-sm">
+          <span className="min-w-0 flex-1 text-s">
             To get notifications, install this app: tap{" "}
             <Share className="inline h-3.5 w-3.5 -translate-y-0.5" /> then{" "}
             <span className="font-semibold">
@@ -99,12 +99,12 @@ export function InstallPrompt() {
           </span>
         ) : (
           <>
-            <span className="min-w-0 flex-1 text-sm font-medium">
+            <span className="min-w-0 flex-1 text-s font-medium">
               Install Nizek on your device
             </span>
             <button
               onClick={install}
-              className="flex h-9 shrink-0 items-center rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+              className="flex h-9 shrink-0 items-center rounded-xl bg-primary px-4 text-s font-bold text-primary-foreground transition-colors hover:bg-primary/90"
             >
               Install
             </button>

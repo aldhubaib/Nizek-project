@@ -41,24 +41,24 @@ function AssigneeRow({ item, tab }: { item: AssigneeData; tab?: string }) {
         />
       ) : (
         <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
-          <span className="text-[11px] font-semibold text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             {(item.assignee.name ?? "?").charAt(0).toUpperCase()}
           </span>
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <p className="text-[12px] font-medium truncate">
+        <p className="text-s font-medium truncate">
           {item.assignee.name ?? "Unassigned"}
         </p>
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Longest: <span className={cn("font-mono font-semibold", color)}>{formatDuration(item.longestMs)}</span>
         </p>
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-[18px] font-bold tabular-nums text-foreground">
+        <span className="text-l font-bold tabular-nums text-foreground">
           {item.taskCount}
         </span>
-        <span className="text-[10px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           {item.taskCount === 1 ? "task" : "tasks"}
         </span>
       </div>
@@ -72,21 +72,21 @@ export function ClientInputByAssignee({ data, tab }: { data: AssigneeData[]; tab
   const prefix = tab === "product" ? "PM" : tab === "dev" ? "Dev" : "";
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden flex flex-col h-full">
+    <div className="app-card rounded-xl border border-border bg-card overflow-hidden flex flex-col h-full">
       <div className="px-4 py-3.5 border-b border-border">
         <div className="flex items-center justify-between mb-2.5">
-          <h2 className="text-[14px] font-semibold flex items-center gap-2">
+          <h2 className="text-s font-semibold flex items-center gap-2">
             <UserCircle2 className="w-4 h-4 text-muted-foreground" />
             {prefix} Needs Client Input By Assignee
           </h2>
           {totalTasks > 0 && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
+            <span className="flex items-center gap-1 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
               <AlertTriangle className="w-3 h-3" />
               {totalTasks} waiting
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 text-[11px]">
+        <div className="flex items-center gap-3 text-xs">
           {data.length > 0 ? (
             <span className="text-muted-foreground">
               {data.length} {data.length === 1 ? "person" : "people"} with tasks &gt; 2d
@@ -101,7 +101,7 @@ export function ClientInputByAssignee({ data, tab }: { data: AssigneeData[]; tab
         {data.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <UserCircle2 className="w-7 h-7 text-muted-foreground/20 mb-2" strokeWidth={1.5} />
-            <p className="text-[12px] text-muted-foreground">No one waiting on client input</p>
+            <p className="text-s text-muted-foreground">No one waiting on client input</p>
           </div>
         ) : (
           <div className="divide-y divide-border/50">
@@ -114,7 +114,7 @@ export function ClientInputByAssignee({ data, tab }: { data: AssigneeData[]; tab
 
       <Link
         href={`/dashboard/needs-client-input${tab ? `?tab=${tab}` : ""}`}
-        className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5 mt-auto"
+        className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5 mt-auto"
       >
         <ExternalLink className="w-3 h-3" />
         View All ({data.length})

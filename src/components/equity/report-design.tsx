@@ -45,8 +45,8 @@ export const ACCENT = "#ff3366";
 
 export const cardCls = "rounded-xl border border-white/10 bg-white/[0.04]";
 export const thCls =
-  "py-1.5 pr-4 text-left text-[10px] font-normal text-white/40 whitespace-nowrap";
-export const tdCls = "py-1.5 pr-4 text-[11px] text-white align-top";
+  "py-1.5 pe-4 text-start text-xs font-normal text-white/40 whitespace-nowrap";
+export const tdCls = "py-1.5 pe-4 text-xs text-white align-top";
 
 function formatDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString() : "—";
@@ -83,7 +83,7 @@ export function Wordmark({ className }: { className?: string }) {
 export function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <p
-      className="text-[9px] font-bold uppercase tracking-[0.12em] mb-1.5"
+      className="text-xs font-bold uppercase tracking-[0.12em] mb-1.5"
       style={{ color: ACCENT }}
     >
       {children}
@@ -104,10 +104,10 @@ export function Stat({
     <div className={cn(cardCls, "flex items-center gap-2.5 px-3 py-2.5")}>
       <Icon className="w-5 h-5 shrink-0" strokeWidth={1.5} />
       <div className="min-w-0">
-        <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-white/40">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/40">
           {label}
         </p>
-        <p className="text-[13px] font-bold text-white tabular-nums truncate">
+        <p className="text-s font-bold text-white tabular-nums truncate">
           {value}
         </p>
       </div>
@@ -195,7 +195,7 @@ export function PortfolioSummary({
             strokeWidth={1.5}
             style={{ color: ACCENT }}
           />
-          <p className="text-[10px] text-white/55">
+          <p className="text-xs text-white/55">
             Valuation totals cover the {summary.valuedCompanies} of{" "}
             {summary.companies}{" "}
             {summary.companies === 1 ? "company" : "companies"} with a valuation
@@ -303,13 +303,13 @@ export function PortfolioSection({
         {/* Centred against the title rather than sat on its baseline, so the
             pill reads as a tag on the heading instead of a dropped word. */}
         <div className="flex items-center gap-2.5 flex-wrap">
-          <h2 className="text-[19px] font-bold text-white tracking-tight">
+          <h2 className="text-3xl font-bold text-white tracking-tight">
             {portfolio.project.name}
           </h2>
           {portfolio.liveDate && (
             <span
               className={cn(
-                "px-1.5 py-0.5 rounded text-[9px] font-semibold whitespace-nowrap",
+                "px-1.5 py-0.5 rounded text-xs font-semibold whitespace-nowrap",
                 liveStatus(portfolio.liveDate) === "LIVE"
                   ? "bg-emerald-500/15 text-emerald-400"
                   : "bg-amber-500/15 text-amber-400",
@@ -322,7 +322,7 @@ export function PortfolioSection({
         {portfolio.project.description && (
           <LinkifiedText
             text={portfolio.project.description}
-            className="text-[11px] text-white/50 leading-relaxed mt-1.5"
+            className="text-xs text-white/50 leading-relaxed mt-1.5"
             linkClassName="text-white/75"
           />
         )}
@@ -357,7 +357,7 @@ export function PortfolioSection({
 
       <SectionLabel>Contracts</SectionLabel>
       {portfolio.contracts.length === 0 ? (
-        <p className="text-[11px] text-white/40 mb-8">No contracts recorded.</p>
+        <p className="text-xs text-white/40 mb-8">No contracts recorded.</p>
       ) : (
         <table className="w-full border-collapse mb-8">
           <thead>
@@ -396,7 +396,7 @@ export function PortfolioSection({
 
       <SectionLabel>Equity</SectionLabel>
       {!latest || latest.grants.length === 0 ? (
-        <p className="text-[11px] text-white/40">No equity defined yet.</p>
+        <p className="text-xs text-white/40">No equity defined yet.</p>
       ) : (
         latest.grants.map((g) => {
           const contract = portfolio.contracts.find((c) => c.id === g.contractId);
@@ -410,14 +410,14 @@ export function PortfolioSection({
               className={cn(cardCls, "px-3.5 py-3 mb-2 break-inside-avoid")}
             >
               <div className="flex items-baseline justify-between gap-4">
-                <span className="text-[11px] font-semibold text-white">
+                <span className="text-xs font-semibold text-white">
                   {contractLabel(portfolio.contracts, g.contractId)}
                   <span className="font-normal text-white/40">
                     {" · "}
                     {equityLabel(EQUITY_STRUCTURE, g.structureType)}
                   </span>
                 </span>
-                <span className="text-[11px] text-white/70 tabular-nums whitespace-nowrap">
+                <span className="text-xs text-white/70 tabular-nums whitespace-nowrap">
                   {formatPct(g.equityPct)} granted
                   {grantVested != null && ` · ${formatPct(grantVested)} vested`}
                 </span>
@@ -453,7 +453,7 @@ export function PortfolioSection({
               )}
 
               {g.notes && (
-                <p className="text-[10px] text-white/50 mt-1.5 whitespace-pre-wrap">
+                <p className="text-xs text-white/50 mt-1.5 whitespace-pre-wrap">
                   {g.notes}
                 </p>
               )}
@@ -469,7 +469,7 @@ export function PortfolioSection({
             strokeWidth={1.5}
             style={{ color: ACCENT }}
           />
-          <p className="text-[10px] text-white/55">
+          <p className="text-xs text-white/55">
             At {formatValuation(current, currency)}, {formatPct(held)}{" "}
             {diluted ? "held" : "granted"} is worth{" "}
             {formatValuation(Math.round(heldWorth), currency)}

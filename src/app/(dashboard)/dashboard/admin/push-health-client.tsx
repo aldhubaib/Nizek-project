@@ -15,13 +15,13 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "go
   return (
     <div className="rounded-xl border border-border/60 bg-surface p-4">
       <div
-        className={`text-xl font-semibold tabular-nums ${
+        className={`text-l font-semibold tabular-nums ${
           tone === "good" ? "text-emerald-500" : tone === "bad" ? "text-destructive" : ""
         }`}
       >
         {value}
       </div>
-      <div className="mt-0.5 text-[11px] text-muted-foreground">{label}</div>
+      <div className="mt-0.5 text-xs text-muted-foreground">{label}</div>
     </div>
   );
 }
@@ -49,7 +49,7 @@ export function PushHealthClient() {
 
   if (loading && !data) {
     return (
-      <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+      <div className="flex items-center gap-2 py-10 text-s text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading push health…
       </div>
     );
@@ -57,7 +57,7 @@ export function PushHealthClient() {
 
   if (!data) {
     return (
-      <div className="py-10 text-sm text-destructive">
+      <div className="py-10 text-s text-destructive">
         Failed to load push health data.
       </div>
     );
@@ -72,14 +72,14 @@ export function PushHealthClient() {
     <div className="space-y-6">
       {/* Configuration alerts — these make push silently dead for EVERYONE. */}
       {!data.vapidConfigured && (
-        <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-s text-destructive">
           <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           VAPID keys are not configured — web push is disabled for all users.
           Set NEXT_PUBLIC_VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.
         </div>
       )}
       {!data.centrifugoConfigured && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-600">
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-s text-amber-600">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           Centrifugo is not configured — realtime bells and in-app sounds are
           disabled; clients fall back to polling.
@@ -87,12 +87,12 @@ export function PushHealthClient() {
       )}
 
       <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold">Last 7 days</div>
+        <div className="text-s font-semibold">Last 7 days</div>
         <button
           type="button"
           onClick={load}
           disabled={loading}
-          className="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+          className="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
         >
           <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
           Refresh
@@ -130,12 +130,12 @@ export function PushHealthClient() {
 
       {data.last7d.failuresByStatus.length > 0 && (
         <section>
-          <div className="mb-2 text-sm font-semibold">Failures by status (7d)</div>
+          <div className="mb-2 text-s font-semibold">Failures by status (7d)</div>
           <div className="divide-y divide-border/50 rounded-xl border border-border/60">
             {data.last7d.failuresByStatus.map((f) => (
               <div
                 key={String(f.statusCode)}
-                className="flex items-center justify-between px-3 py-2 text-xs"
+                className="flex items-center justify-between px-3 py-2 text-s"
               >
                 <span className="font-medium">
                   {f.statusCode === null
@@ -155,25 +155,25 @@ export function PushHealthClient() {
       )}
 
       <section>
-        <div className="mb-2 text-sm font-semibold">
+        <div className="mb-2 text-s font-semibold">
           Users with no push device ({data.usersWithoutPush.length})
         </div>
         {data.usersWithoutPush.length === 0 ? (
-          <div className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-3 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-3 text-s text-muted-foreground">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
             Everyone has at least one device registered for push.
           </div>
         ) : (
           <div className="divide-y divide-border/50 rounded-xl border border-border/60">
             {data.usersWithoutPush.map((u) => (
-              <div key={u.id} className="flex items-center justify-between px-3 py-2 text-xs">
+              <div key={u.id} className="flex items-center justify-between px-3 py-2 text-s">
                 <span className="font-medium">{u.name ?? u.email}</span>
                 <span className="text-muted-foreground">{u.email}</span>
               </div>
             ))}
           </div>
         )}
-        <p className="mt-1.5 text-[11px] text-muted-foreground">
+        <p className="mt-1.5 text-xs text-muted-foreground">
           These people only see notifications while the app is open. Ask them to
           enable notifications from Account → Notifications (iPhone requires
           installing the app to the home screen first).
@@ -182,19 +182,19 @@ export function PushHealthClient() {
 
       {data.recentFailures.length > 0 && (
         <section>
-          <div className="mb-2 text-sm font-semibold">Recent failures</div>
+          <div className="mb-2 text-s font-semibold">Recent failures</div>
           <div className="divide-y divide-border/50 rounded-xl border border-border/60">
             {data.recentFailures.map((f) => (
               <div key={f.id} className="px-3 py-2">
-                <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center justify-between text-s">
                   <span className="font-medium">
                     {f.recipientName ?? f.recipientEmail}
                   </span>
-                  <span className="text-[10px] text-muted-foreground/70">
+                  <span className="text-xs text-muted-foreground/70">
                     {formatDistanceToNow(new Date(f.createdAt), { addSuffix: true })}
                   </span>
                 </div>
-                <div className="mt-0.5 text-[11px] text-muted-foreground">
+                <div className="mt-0.5 text-xs text-muted-foreground">
                   {f.endpointHost ?? "unknown endpoint"}
                   {f.statusCode ? ` — HTTP ${f.statusCode}` : " — network error"}
                   {f.error ? ` — ${f.error}` : ""}

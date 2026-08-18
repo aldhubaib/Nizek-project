@@ -20,19 +20,19 @@ import {
 type Tier = EquityPortfolioDTO["marketTiers"][number];
 
 const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "w-full h-9 px-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 const readCellCls =
-  "min-h-9 px-3 py-2 rounded-lg border border-border bg-muted/30 flex items-center text-[13px] text-foreground";
+  "min-h-9 px-3 py-2 rounded-lg border border-border bg-muted/30 flex items-center text-s text-foreground";
 
 const labelCls =
-  "block text-[11px] font-medium text-muted-foreground uppercase tracking-wide";
+  "block text-xs font-medium text-muted-foreground uppercase tracking-wide";
 
 /** Tier name, then number, unit and currency. */
-const GRID = "sm:grid-cols-[minmax(0,1fr)_9rem_9rem_7rem]";
+const GRID = "@md/card:grid-cols-[minmax(0,1fr)_9rem_9rem_7rem]";
 
 /** Read back, the three amount columns are one line of text again. */
-const READ_GRID = "sm:grid-cols-[minmax(0,1fr)_minmax(0,25rem)]";
+const READ_GRID = "@md/card:grid-cols-[minmax(0,1fr)_minmax(0,25rem)]";
 
 const HEADINGS = ["Tier", "Number", "Unit", "Currency"];
 
@@ -99,7 +99,7 @@ export function MarketSizeSection({
         !editing && (
           <button
             onClick={() => setEditing(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors shrink-0"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-s font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors shrink-0"
           >
             <Pencil className="w-3.5 h-3.5" />
             {tiers.length > 0 ? "Edit" : "Fill in"}
@@ -121,12 +121,12 @@ export function MarketSizeSection({
           onCancel={() => setEditing(false)}
         />
       ) : tiers.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground px-3 py-2 rounded-lg border border-dashed border-border">
+        <p className="text-s text-muted-foreground px-3 py-2 rounded-lg border border-dashed border-border">
           No market size yet.
         </p>
       ) : (
         <div className="space-y-2">
-          <div className={cn("hidden sm:grid gap-2 px-0.5", READ_GRID)}>
+          <div className={cn("@max-md/card:hidden @md/card:grid gap-2 px-0.5", READ_GRID)}>
             <span className={labelCls}>Tier</span>
             <span className={labelCls}>Amount</span>
           </div>
@@ -199,7 +199,7 @@ function MarketSizeForm({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <div className={cn("hidden sm:grid gap-2 px-0.5", GRID)}>
+        <div className={cn("@max-md/card:hidden @md/card:grid gap-2 px-0.5", GRID)}>
           {HEADINGS.map((h) => (
             <span key={h} className={labelCls}>
               {h}
@@ -250,7 +250,7 @@ function MarketSizeForm({
         <button
           type="button"
           onClick={onCancel}
-          className="px-3 h-9 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors"
+          className="px-3 h-9 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
         >
           Cancel
         </button>
@@ -258,7 +258,7 @@ function MarketSizeForm({
           type="button"
           onClick={save}
           disabled={busy}
-          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
+          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-s font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
         >
           {busy ? "Saving…" : "Save"}
         </button>

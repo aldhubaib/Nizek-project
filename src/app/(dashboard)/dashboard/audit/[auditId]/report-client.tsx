@@ -23,6 +23,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { PageHeader } from "@/components/page-header";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { formatStageHours, FLAG_LABELS, type AuditFlagType } from "@/lib/audit-flags";
@@ -87,30 +88,30 @@ export function ReportClient({ report }: { report: AuditReportDTO }) {
 
   return (
     <div>
-      <div className="flex app-top-bar shrink-0 items-center justify-between border-b border-border px-6 pr-14">
+      <PageHeader className="justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <Link
             href="/dashboard/audit"
-            className="flex shrink-0 items-center gap-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+            className="flex shrink-0 items-center gap-1.5 text-s text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
             Reports
           </Link>
           <span className="text-border">|</span>
-          <h1 className="truncate text-sm font-semibold">
+          <h1 className="truncate text-s font-semibold">
             {format(new Date(report.auditDate), "EEEE, MMM d, yyyy")}
           </h1>
-          <span className="hidden truncate text-[11px] text-muted-foreground sm:inline">
+          <span className="hidden truncate text-xs text-muted-foreground sm:inline">
             {report.teamNames.join(", ")}
           </span>
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {decided}/{items.length} reviewed
           </span>
           {report.status === "submitted" ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-400">
               <ShieldCheck className="h-3 w-3" />
               Submitted
             </span>
@@ -131,17 +132,17 @@ export function ReportClient({ report }: { report: AuditReportDTO }) {
             </Button>
           ) : null}
         </div>
-      </div>
+      </PageHeader>
 
       {submitError && (
-        <p className="px-6 pt-3 text-[12px] text-red-400">{submitError}</p>
+        <p className="px-app pt-3 text-s text-red-400">{submitError}</p>
       )}
 
-      <div className="space-y-3 p-6">
+      <div className="space-y-3 px-app py-6">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <ShieldCheck className="mb-2 h-8 w-8 text-emerald-400/40" />
-            <p className="text-sm text-muted-foreground">
+            <p className="text-s text-muted-foreground">
               Nothing flagged for the selected teams — clean day.
             </p>
           </div>
@@ -240,18 +241,18 @@ function AuditItemCard({
       <button
         type="button"
         onClick={toggleExpanded}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-accent/10"
+        className="flex w-full items-center gap-3 px-4 py-3 text-start hover:bg-accent/10"
       >
         <FlagIcon className={cn("h-4 w-4 shrink-0", style.color)} />
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-medium">
+          <p className="truncate text-s font-medium">
             {item.taskNumber != null && (
               <span className="text-muted-foreground">#{item.taskNumber} </span>
             )}
             {item.title}
           </p>
-          <p className="truncate text-[11px] text-muted-foreground">
+          <p className="truncate text-xs text-muted-foreground">
             {item.projectName}
             {item.teamName ? ` · ${item.teamName}` : ""}
             {item.stageLabel ? ` · ${item.stageLabel}` : ""}
@@ -262,7 +263,7 @@ function AuditItemCard({
         <div className="flex shrink-0 items-center gap-2">
           {item.carriedOver && (
             <span
-              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
               title="Already reviewed in an earlier report — still unresolved"
             >
               <RotateCcw className="h-3 w-3" />
@@ -271,7 +272,7 @@ function AuditItemCard({
           )}
           <span
             className={cn(
-              "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+              "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold",
               style.chip,
             )}
           >
@@ -294,13 +295,13 @@ function AuditItemCard({
       {expanded && (
         <div className="border-t border-border/50 px-4 py-4">
           <div className="mb-3 flex items-center justify-between">
-            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <History className="h-3.5 w-3.5" />
               Ownership history
             </p>
             <Link
               href={linkHref}
-              className="flex items-center gap-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+              className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
               Open {item.taskId ? "task" : "note"}
               <ExternalLink className="h-3 w-3" />
@@ -308,14 +309,14 @@ function AuditItemCard({
           </div>
 
           {loadingCandidates ? (
-            <p className="py-2 text-[12px] text-muted-foreground">Loading history…</p>
+            <p className="py-2 text-s text-muted-foreground">Loading history…</p>
           ) : candidates && candidates.timeline.length > 0 ? (
-            <div className="mb-4 max-h-48 space-y-1.5 overflow-y-auto pr-1">
+            <div className="mb-4 max-h-48 space-y-1.5 overflow-y-auto pe-1">
               {candidates.timeline.map((e, i) => (
-                <div key={i} className="flex items-center gap-2 text-[12px]">
+                <div key={i} className="flex items-center gap-2 text-s">
                   <Avatar className="h-5 w-5 shrink-0">
                     <AvatarImage src={e.imageUrl ?? undefined} />
-                    <AvatarFallback className="text-[8px]">
+                    <AvatarFallback className="text-xs">
                       {(e.userName ?? "?").slice(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
@@ -323,21 +324,21 @@ function AuditItemCard({
                   <span className="min-w-0 flex-1 truncate text-muted-foreground">
                     {e.label}
                   </span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                  <span className="shrink-0 text-xs text-muted-foreground/70">
                     {format(new Date(e.at), "MMM d")}
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="mb-4 py-2 text-[12px] text-muted-foreground">
+            <p className="mb-4 py-2 text-s text-muted-foreground">
               No ownership history recorded.
             </p>
           )}
 
           {!locked && (
             <>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Who is responsible for this delay?
               </p>
               <div className="mb-3 flex flex-wrap gap-2">
@@ -357,7 +358,7 @@ function AuditItemCard({
                         })
                       }
                       className={cn(
-                        "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] transition-colors",
+                        "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-s transition-colors",
                         isBlamed
                           ? "border-red-500/40 bg-red-500/15 text-red-400"
                           : "border-border bg-card text-foreground hover:bg-accent/20",
@@ -365,7 +366,7 @@ function AuditItemCard({
                     >
                       <Avatar className="h-4 w-4">
                         <AvatarImage src={c.imageUrl ?? undefined} />
-                        <AvatarFallback className="text-[7px]">
+                        <AvatarFallback className="text-xs">
                           {(c.userName ?? "?").slice(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
@@ -379,7 +380,7 @@ function AuditItemCard({
                   disabled={saving}
                   onClick={() => applyVerdict("excused")}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] transition-colors",
+                    "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-s transition-colors",
                     item.verdict === "excused"
                       ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
                       : "border-border bg-card text-foreground hover:bg-accent/20",
@@ -393,7 +394,7 @@ function AuditItemCard({
                   disabled={saving}
                   onClick={() => applyVerdict("skipped")}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] transition-colors",
+                    "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-s transition-colors",
                     item.verdict === "skipped"
                       ? "border-border bg-muted text-foreground"
                       : "border-border bg-card text-muted-foreground hover:bg-accent/20",
@@ -407,7 +408,7 @@ function AuditItemCard({
                     type="button"
                     disabled={saving}
                     onClick={() => applyVerdict("pending")}
-                    className="flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-accent/20"
+                    className="flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-s text-muted-foreground transition-colors hover:bg-accent/20"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
                     Reset
@@ -419,14 +420,14 @@ function AuditItemCard({
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Optional note (context, agreed follow-up…)"
-                className="min-h-[60px] text-[13px]"
+                className="min-h-[60px] text-s"
               />
-              {error && <p className="mt-2 text-[12px] text-red-400">{error}</p>}
+              {error && <p className="mt-2 text-s text-red-400">{error}</p>}
             </>
           )}
 
           {locked && item.reasonNote && (
-            <p className="rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-[12px] text-muted-foreground">
+            <p className="rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-s text-muted-foreground">
               {item.reasonNote}
             </p>
           )}
@@ -439,7 +440,7 @@ function AuditItemCard({
 function VerdictBadge({ item }: { item: AuditItemDTO }) {
   if (item.verdict === "blamed") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-400">
+      <span className="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-xs font-semibold text-red-400">
         <UserX className="h-3 w-3" />
         {item.blamedUser?.name ?? "Blamed"}
       </span>
@@ -447,7 +448,7 @@ function VerdictBadge({ item }: { item: AuditItemDTO }) {
   }
   if (item.verdict === "excused") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400">
         <ShieldCheck className="h-3 w-3" />
         Excused
       </span>
@@ -455,7 +456,7 @@ function VerdictBadge({ item }: { item: AuditItemDTO }) {
   }
   if (item.verdict === "skipped") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+      <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
         <SkipForward className="h-3 w-3" />
         Skipped
       </span>

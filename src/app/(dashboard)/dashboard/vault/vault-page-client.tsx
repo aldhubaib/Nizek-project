@@ -15,6 +15,7 @@ import type {
   VaultCredentialDTO,
   VaultProjectFolderDTO,
 } from "@/actions/vault";
+import { PageHeader } from "@/components/page-header";
 
 function credentialMatches(c: VaultCredentialDTO, q: string) {
   return (
@@ -75,25 +76,24 @@ export function VaultPageClient({
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-6 py-8">
-      <div>
-        <h1 className="flex items-center gap-2 text-lg font-semibold">
-          <KeyRound className="h-5 w-5 text-muted-foreground" />
-          Vault
-        </h1>
-        <p className="mt-1 text-[13px] text-muted-foreground">
-          {openFolder
-            ? `Credentials for ${openFolder.name}. Search within this project below.`
-            : "Search projects or credentials inside them. Open a folder to manage its entries."}
-        </p>
-      </div>
+    <div>
+      <PageHeader>
+        <KeyRound className="h-4 w-4 text-muted-foreground" />
+        <h1 className="text-s font-semibold">Vault</h1>
+      </PageHeader>
+      <div className="mx-auto max-w-3xl space-y-6 px-app py-8">
+      <p className="text-s text-muted-foreground">
+        {openFolder
+          ? `Credentials for ${openFolder.name}. Search within this project below.`
+          : "Search projects or credentials inside them. Open a folder to manage its entries."}
+      </p>
 
       {openFolder ? (
         <div className="space-y-4">
           <button
             type="button"
             onClick={backToFolders}
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex items-center gap-1.5 text-s font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             All projects
@@ -102,10 +102,10 @@ export function VaultPageClient({
           <div className="flex items-center gap-2.5">
             <ProjectGlyph name={openFolder.name} logoUrl={openFolder.logoUrl} />
             <div className="min-w-0">
-              <h2 className="truncate text-[15px] font-semibold">
+              <h2 className="truncate text-s font-semibold">
                 {openFolder.name}
               </h2>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {projectCredentials.length} credential
                 {projectCredentials.length === 1 ? "" : "s"}
               </p>
@@ -126,19 +126,19 @@ export function VaultPageClient({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search projects or credentials"
-              className="h-9 pl-8 text-sm"
+              className="h-9 ps-8 text-s"
             />
           </div>
 
           {filteredFolders.length === 0 && matchedCredentials.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border px-6 py-12 text-center">
               <Folder className="mx-auto h-8 w-8 text-muted-foreground/50" />
-              <p className="mt-3 text-[13px] font-medium text-foreground">
+              <p className="mt-3 text-s font-medium text-foreground">
                 {folders.length === 0
                   ? "No project folders yet"
                   : "No matches"}
               </p>
-              <p className="mt-1 text-[12px] text-muted-foreground">
+              <p className="mt-1 text-s text-muted-foreground">
                 {folders.length === 0
                   ? "An admin grants Vault access per project in Admin → Vault Access."
                   : "Try a project name, login title, email, or URL."}
@@ -161,17 +161,17 @@ export function VaultPageClient({
                         <button
                           type="button"
                           onClick={() => openProject(folder.id)}
-                          className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40"
+                          className="flex w-full items-center gap-3 px-4 py-3 text-start transition-colors hover:bg-accent/40"
                         >
                           <ProjectGlyph
                             name={folder.name}
                             logoUrl={folder.logoUrl}
                           />
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-[13px] font-semibold">
+                            <p className="truncate text-s font-semibold">
                               {folder.name}
                             </p>
-                            <p className="text-[11px] text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                               {q && hitCount > 0
                                 ? `${hitCount} match${hitCount === 1 ? "" : "es"} · ${folder.credentialCount} total`
                                 : `${folder.credentialCount} credential${folder.credentialCount === 1 ? "" : "s"}`}
@@ -187,7 +187,7 @@ export function VaultPageClient({
 
               {q && matchedCredentials.length > 0 && (
                 <div className="space-y-2">
-                  <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Matching credentials
                   </p>
                   <VaultCredentialsPanel
@@ -201,6 +201,7 @@ export function VaultPageClient({
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -224,7 +225,7 @@ function ProjectGlyph({
   }
   return (
     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15">
-      <span className="text-[12px] font-bold text-primary">
+      <span className="text-s font-bold text-primary">
         {name.charAt(0).toUpperCase()}
       </span>
     </div>

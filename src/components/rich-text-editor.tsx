@@ -84,7 +84,7 @@ export function RichTextEditor({
           "focus:outline-none prose prose-invert max-w-none",
           borderless
             ? "min-h-[60vh] text-lg leading-relaxed prose-headings:font-bold prose-h1:text-4xl prose-h2:text-2xl prose-h3:text-xl prose-p:text-base prose-img:rounded-lg prose-img:max-w-full"
-            : "min-h-[120px] px-3 py-2 text-sm prose-sm"
+            : "min-h-[120px] px-3 py-2 text-s prose-sm"
         ),
       },
       handleKeyDown: (_view, event) => {
@@ -464,7 +464,7 @@ const SlashCommandMenu = forwardRef<HTMLDivElement, SlashMenuProps>(
         className="absolute z-50 w-56 rounded-lg border border-border bg-popover shadow-xl overflow-hidden"
         style={{ left: x, top: y }}
       >
-        <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Blocks
         </div>
         <div className="max-h-[260px] overflow-y-auto pb-1">
@@ -475,7 +475,7 @@ const SlashCommandMenu = forwardRef<HTMLDivElement, SlashMenuProps>(
                 key={cmd.id}
                 onClick={() => onSelect(cmd.id)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-2.5 py-2 text-left transition-colors",
+                  "w-full flex items-center gap-3 px-2.5 py-2 text-start transition-colors",
                   i === activeIndex ? "bg-accent" : "hover:bg-accent/50"
                 )}
               >
@@ -483,8 +483,8 @@ const SlashCommandMenu = forwardRef<HTMLDivElement, SlashMenuProps>(
                   <Icon className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
                 </div>
                 <div>
-                  <div className="text-[13px] font-medium text-foreground">{cmd.label}</div>
-                  <div className="text-[10px] text-muted-foreground">{cmd.description}</div>
+                  <div className="text-s font-medium text-foreground">{cmd.label}</div>
+                  <div className="text-xs text-muted-foreground">{cmd.description}</div>
                 </div>
               </button>
             );
@@ -521,13 +521,13 @@ const AttendancePicker = forwardRef<HTMLDivElement, AttendancePickerProps>(
         style={{ left: x, top: y }}
       >
         <div className="flex items-center justify-between px-2.5 py-1.5">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             People
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-[11px] text-muted-foreground hover:text-foreground"
+            className="text-xs text-muted-foreground hover:text-foreground"
           >
             Cancel
           </button>
@@ -538,17 +538,17 @@ const AttendancePicker = forwardRef<HTMLDivElement, AttendancePickerProps>(
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder="Search people on this project…"
-            className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-[12px] outline-none focus:border-primary/40"
+            className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-s outline-none focus:border-primary/40"
           />
         </div>
         <div className="max-h-56 overflow-y-auto pb-1">
           {loading ? (
-            <div className="flex items-center gap-2 px-3 py-4 text-[12px] text-muted-foreground">
+            <div className="flex items-center gap-2 px-3 py-4 text-s text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               Loading people…
             </div>
           ) : members.length === 0 ? (
-            <p className="px-3 py-4 text-[12px] text-muted-foreground">
+            <p className="px-3 py-4 text-s text-muted-foreground">
               No matching project members.
             </p>
           ) : (
@@ -560,7 +560,7 @@ const AttendancePicker = forwardRef<HTMLDivElement, AttendancePickerProps>(
                   type="button"
                   onClick={() => onToggle(m.id)}
                   className={cn(
-                    "flex w-full items-center gap-2.5 px-2.5 py-2 text-left transition-colors",
+                    "flex w-full items-center gap-2.5 px-2.5 py-2 text-start transition-colors",
                     selected ? "bg-accent" : "hover:bg-accent/50",
                   )}
                 >
@@ -570,7 +570,7 @@ const AttendancePicker = forwardRef<HTMLDivElement, AttendancePickerProps>(
                       {(m.name ?? "?").charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+                  <span className="min-w-0 flex-1 truncate text-s font-medium">
                     {m.name ?? "Someone"}
                   </span>
                   {selected && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
@@ -580,7 +580,7 @@ const AttendancePicker = forwardRef<HTMLDivElement, AttendancePickerProps>(
           )}
         </div>
         <div className="flex items-center justify-between border-t border-border px-2.5 py-2">
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {selectedIds.size} selected
           </span>
           <Button size="sm" onClick={onInsert} disabled={selectedIds.size === 0}>

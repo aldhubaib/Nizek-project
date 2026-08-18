@@ -162,7 +162,7 @@ export function CreateTaskFromNoteDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
         <DialogHeader className="shrink-0 border-b border-border px-4 py-3">
-          <DialogTitle className="flex items-center gap-2 text-sm">
+          <DialogTitle className="flex items-center gap-2 text-s">
             <CheckSquare className="h-4 w-4 text-primary" />
             Create task from note
           </DialogTitle>
@@ -170,14 +170,14 @@ export function CreateTaskFromNoteDialog({
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
-              <div className="rounded-lg border border-border/60 bg-surface/40 px-3 py-2 text-xs text-muted-foreground">
+              <div className="rounded-lg border border-border/60 bg-surface/40 px-3 py-2 text-s text-muted-foreground">
                 <p className="line-clamp-4 whitespace-pre-wrap">{quote || "(empty)"}</p>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[13px] font-semibold">Type</label>
+                <label className="text-s font-semibold">Type</label>
                 {activeContractType === "MAINTENANCE" && (
-                  <span className="ml-2 text-[10px] text-amber-400">
+                  <span className="ms-2 text-xs text-amber-400">
                     Maintenance — bugs only
                   </span>
                 )}
@@ -194,7 +194,7 @@ export function CreateTaskFromNoteDialog({
                           setAnswers({});
                         }}
                         className={cn(
-                          "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
+                          "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-s font-medium transition-colors",
                           isActive
                             ? t.activeColor
                             : "border-border text-muted-foreground hover:text-foreground",
@@ -209,18 +209,18 @@ export function CreateTaskFromNoteDialog({
               </div>
 
               <div className="space-y-2">
-                <label className="text-[13px] font-semibold">Title</label>
+                <label className="text-s font-semibold">Title</label>
                 <Input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="h-10 text-sm"
+                  className="h-10 text-s"
                   autoFocus
                   required
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="text-[13px] font-semibold">Priority</label>
+                <label className="text-s font-semibold">Priority</label>
                 <div className="flex flex-wrap gap-1.5">
                   {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
                     <button
@@ -228,7 +228,7 @@ export function CreateTaskFromNoteDialog({
                       type="button"
                       onClick={() => setPriority(priority === n ? null : n)}
                       className={cn(
-                        "h-9 w-9 rounded-md border text-[13px] font-medium",
+                        "h-9 w-9 rounded-md border text-s font-medium",
                         priority === n
                           ? "border-primary/40 bg-primary/20 text-primary"
                           : "border-border text-muted-foreground",
@@ -264,7 +264,7 @@ export function CreateTaskFromNoteDialog({
               )}
 
               {mandatoryErrors.length > 0 && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-[12px] text-destructive">
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-s text-destructive">
                   Please fill mandatory fields:
                   <ul className="mt-1 space-y-0.5">
                     {mandatoryErrors.map((q) => (
@@ -273,12 +273,12 @@ export function CreateTaskFromNoteDialog({
                   </ul>
                 </div>
               )}
-              {error && <p className="text-[12px] text-destructive">{error}</p>}
+              {error && <p className="text-s text-destructive">{error}</p>}
             </div>
 
             <div className="flex shrink-0 items-center gap-2 border-t border-border px-4 py-3">
               <Button type="submit" disabled={saving || !title.trim()}>
-                {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                {saving && <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" />}
                 {saving ? "Creating…" : "Create Task"}
               </Button>
               <Button type="button" variant="ghost" onClick={onClose}>

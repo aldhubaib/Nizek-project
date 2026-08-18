@@ -41,21 +41,21 @@ export function AuthLayout({
             <img src={mark} alt="Nizek" className="h-11 w-11 rounded-xl" />
           ) : (
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15">
-              <span className="text-base font-bold text-primary">N</span>
+              <span className="text-m font-bold text-primary">N</span>
             </div>
           )}
 
-          <h1 className="mt-6 text-[26px] font-semibold leading-[1.2] tracking-tight text-white">
+          <h1 className="mt-6 text-3xl font-semibold leading-[1.2] tracking-tight text-white">
             Welcome to Nizek
           </h1>
-          <p className="text-[26px] font-semibold leading-[1.2] tracking-tight text-white/45">
+          <p className="text-3xl font-semibold leading-[1.2] tracking-tight text-white/45">
             Start managing now.
           </p>
 
           {/* Clerk form */}
           <div className="mt-8 w-full">{children}</div>
 
-          <p className="mt-8 text-[10px] text-white/30">
+          <p className="mt-8 text-xs text-white/30">
             Access is restricted to approved accounts only.
           </p>
         </div>
@@ -134,7 +134,7 @@ function GalleryCard({
         color: text,
       }}
     >
-      <div className="text-[15px] font-semibold leading-tight tracking-tight">
+      <div className="text-s font-semibold leading-tight tracking-tight">
         {title}
       </div>
     </div>

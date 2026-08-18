@@ -28,7 +28,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#000000",
+  themeColor: "rgba(14, 14, 16, 0.4)",
   // Shrink the layout viewport when the soft keyboard opens (Android Chrome).
   // iOS still needs the visualViewport frame hook in ThreadChat.
   interactiveWidget: "resizes-content",
@@ -86,6 +86,7 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
       <body className="min-h-full bg-background text-foreground">
+        <div className="app-status-frost" aria-hidden />
         <ClerkProvider appearance={{ baseTheme: dark }}>
           <BrandingProvider initialLogos={logos}>
             <DisablePinchZoom />

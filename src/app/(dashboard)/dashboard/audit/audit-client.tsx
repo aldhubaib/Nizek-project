@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import {
   ClipboardCheck,
-  Plus,
   ChevronRight,
   CheckCircle2,
   CircleDashed,
@@ -21,6 +20,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
+import { AddButton } from "@/components/add-button";
 import {
   createTodayAudit,
   type AuditAccess,
@@ -65,26 +66,26 @@ export function AuditClient({ access, reports }: Props) {
 
   return (
     <div>
-      <div className="flex app-top-bar shrink-0 items-center justify-between border-b border-border px-6 pr-14">
-        <h1 className="flex items-center gap-2 text-sm font-semibold">
+      <PageHeader className="justify-between">
+        <h1 className="flex items-center gap-2 text-s font-semibold">
           <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
           Task Audit
-          <span className="text-[11px] font-normal text-muted-foreground">
+          <span className="text-xs font-normal text-muted-foreground">
             ({reports.length} report{reports.length === 1 ? "" : "s"})
           </span>
         </h1>
-        <Button size="sm" className="h-8 gap-1.5" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-3.5 w-3.5" />
-          {hasTodayReport ? "Today's report" : "Create report"}
-        </Button>
-      </div>
+        <AddButton
+          label={hasTodayReport ? "Today's report" : "Create report"}
+          onClick={() => setCreateOpen(true)}
+        />
+      </PageHeader>
 
-      <div className="p-6">
+      <div className="px-app py-6">
         {reports.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <ClipboardCheck className="mb-2 h-8 w-8 text-muted-foreground/20" />
-            <p className="text-sm text-muted-foreground">No audit reports yet</p>
-            <p className="mt-1 text-[11px] text-muted-foreground/70">
+            <p className="text-s text-muted-foreground">No audit reports yet</p>
+            <p className="mt-1 text-xs text-muted-foreground/70">
               Create today&apos;s report to review flagged tasks across your teams.
             </p>
           </div>
@@ -115,10 +116,10 @@ export function AuditClient({ access, reports }: Props) {
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-medium">
+                      <p className="text-s font-medium">
                         {format(new Date(r.auditDate), "EEEE, MMM d, yyyy")}
                       </p>
-                      <p className="truncate text-[11px] text-muted-foreground">
+                      <p className="truncate text-xs text-muted-foreground">
                         {r.teamNames.join(", ") || "All teams"}
                         {access.isAdmin && r.createdBy.name
                           ? ` · by ${r.createdBy.name}`
@@ -126,7 +127,7 @@ export function AuditClient({ access, reports }: Props) {
                       </p>
                     </div>
 
-                    <div className="hidden items-center gap-4 text-[11px] text-muted-foreground sm:flex">
+                    <div className="hidden items-center gap-4 text-xs text-muted-foreground sm:flex">
                       <span>
                         {r.decidedItems}/{r.totalItems} reviewed
                       </span>
@@ -142,7 +143,7 @@ export function AuditClient({ access, reports }: Props) {
 
                     <span
                       className={cn(
-                        "inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold",
+                        "inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
                         submitted
                           ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
                           : "border-amber-500/20 bg-amber-500/10 text-amber-400",
@@ -179,7 +180,7 @@ export function AuditClient({ access, reports }: Props) {
                   type="button"
                   onClick={() => toggleTeam(team.id)}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                    "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-start transition-colors",
                     checked
                       ? "border-primary/40 bg-primary/10"
                       : "border-border bg-card hover:bg-accent/20",
@@ -196,13 +197,13 @@ export function AuditClient({ access, reports }: Props) {
                     {checked && <CheckCircle2 className="h-3 w-3" />}
                   </div>
                   <Users className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-[13px] font-medium">{team.name}</span>
+                  <span className="text-s font-medium">{team.name}</span>
                 </button>
               );
             })}
           </div>
 
-          {error && <p className="text-[12px] text-red-400">{error}</p>}
+          {error && <p className="text-s text-red-400">{error}</p>}
 
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => setCreateOpen(false)}>

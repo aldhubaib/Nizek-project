@@ -126,12 +126,12 @@ export function StageFunnel({ data }: Props) {
 
   return (
     <>
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="app-card rounded-xl border border-border bg-card overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-primary" />
-            <h2 className="text-[13px] font-semibold text-foreground">Project Funnel</h2>
-            <span className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">
+            <h2 className="text-s font-semibold text-foreground">Project Funnel</h2>
+            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">
               {total}
             </span>
           </div>
@@ -140,7 +140,7 @@ export function StageFunnel({ data }: Props) {
               <button
                 onClick={handleViewDetails}
                 disabled={loading}
-                className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md border border-border text-primary hover:bg-primary/10 hover:border-primary/40 transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border border-border text-primary hover:bg-primary/10 hover:border-primary/40 transition-colors disabled:opacity-50"
               >
                 {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <List className="w-3 h-3" />}
                 View Details
@@ -150,7 +150,7 @@ export function StageFunnel({ data }: Props) {
               <button
                 onClick={() => setFilterOpen((v) => !v)}
                 className={cn(
-                  "flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md border transition-colors",
+                  "flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border transition-colors",
                   selectedProjects.length > 0
                     ? "border-primary/40 bg-primary/10 text-primary"
                     : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40"
@@ -165,11 +165,11 @@ export function StageFunnel({ data }: Props) {
               {filterOpen && (
                 <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-border bg-popover shadow-xl z-50 overflow-hidden">
                   <div className="px-3 py-2 border-b border-border flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-foreground">Filter by project</span>
+                    <span className="text-xs font-semibold text-foreground">Filter by project</span>
                     {selectedProjects.length > 0 && (
                       <button
                         onClick={() => setSelectedProjects([])}
-                        className="text-[10px] text-primary hover:text-primary/80 font-medium"
+                        className="text-xs text-primary hover:text-primary/80 font-medium"
                       >
                         Clear all
                       </button>
@@ -183,7 +183,7 @@ export function StageFunnel({ data }: Props) {
                           key={p.id}
                           onClick={() => toggleProject(p.id)}
                           className={cn(
-                            "flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left transition-colors",
+                            "flex items-center gap-2 w-full px-3 py-1.5 text-s text-start transition-colors",
                             active ? "bg-primary/10 text-primary" : "text-foreground hover:bg-accent/30"
                           )}
                         >
@@ -191,7 +191,7 @@ export function StageFunnel({ data }: Props) {
                             "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
                             active ? "bg-primary border-primary" : "border-border"
                           )}>
-                            {active && <span className="text-[8px] text-primary-foreground font-bold">✓</span>}
+                            {active && <span className="text-xs text-primary-foreground font-bold">✓</span>}
                           </div>
                           <span className="truncate">{p.name}</span>
                         </button>
@@ -209,7 +209,7 @@ export function StageFunnel({ data }: Props) {
             {selectedProjects.map((pid) => {
               const proj = data.projects.find((p) => p.id === pid);
               return (
-                <span key={pid} className="inline-flex items-center gap-1 text-[10px] font-medium bg-primary/10 text-primary rounded-full px-2 py-0.5 border border-primary/20">
+                <span key={pid} className="inline-flex items-center gap-1 text-xs font-medium bg-primary/10 text-primary rounded-full px-2 py-0.5 border border-primary/20">
                   {proj?.name ?? pid}
                   <button onClick={() => toggleProject(pid)} className="hover:text-primary/60">
                     <X className="w-2.5 h-2.5" />
@@ -231,7 +231,7 @@ export function StageFunnel({ data }: Props) {
                 <div className="flex items-center gap-3">
                   <div className="w-[120px] shrink-0 flex items-center gap-2">
                     <span className={cn("w-2 h-2 rounded-full shrink-0", meta.color)} />
-                    <span className="text-[11px] font-medium text-muted-foreground truncate">
+                    <span className="text-xs font-medium text-muted-foreground truncate">
                       {meta.label}
                     </span>
                   </div>
@@ -241,7 +241,7 @@ export function StageFunnel({ data }: Props) {
                       style={{ width: `${Math.max(pct, count > 0 ? 2 : 0)}%` }}
                     />
                   </div>
-                  <span className="w-10 text-right text-[12px] font-semibold tabular-nums text-foreground shrink-0">
+                  <span className="w-10 text-end text-s font-semibold tabular-nums text-foreground shrink-0">
                     {count}
                   </span>
                 </div>
@@ -251,18 +251,18 @@ export function StageFunnel({ data }: Props) {
         </div>
 
         <div className="px-4 py-3 border-t border-border/50 flex items-center justify-between">
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {total > 0 && (
               <>
                 <span className="font-semibold text-emerald-400">{counts[counts.length - 1]}</span>
                 <span className="text-muted-foreground/60"> / {total} done</span>
-                <span className="text-muted-foreground/40 ml-1.5">
+                <span className="text-muted-foreground/40 ms-1.5">
                   ({total > 0 ? Math.round((counts[counts.length - 1] / total) * 100) : 0}%)
                 </span>
               </>
             )}
           </span>
-          <span className="text-[10px] text-muted-foreground/50">
+          <span className="text-xs text-muted-foreground/50">
             {selectedProjects.length === 0
               ? `${data.projects.length} projects`
               : `${selectedProjects.length} of ${data.projects.length} projects`}
@@ -276,8 +276,8 @@ export function StageFunnel({ data }: Props) {
             <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
               <div className="flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-primary" />
-                <h2 className="text-[14px] font-semibold text-foreground">All Tasks by Stage</h2>
-                <span className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">
+                <h2 className="text-s font-semibold text-foreground">All Tasks by Stage</h2>
+                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">
                   {filteredTasks.length}
                 </span>
               </div>
@@ -302,16 +302,16 @@ export function StageFunnel({ data }: Props) {
                   <div key={stage}>
                     <div className="flex items-center gap-2 px-5 py-3 bg-muted/60 border-b border-border sticky top-0 z-20">
                       <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", meta?.dot)} />
-                      <span className="text-[12px] font-semibold text-foreground">{meta?.label ?? stage}</span>
-                      <span className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">
+                      <span className="text-s font-semibold text-foreground">{meta?.label ?? stage}</span>
+                      <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">
                         {stageTasks.length}
                       </span>
                     </div>
                     {sortedProjs.map(([pid, group]) => (
                       <div key={pid}>
                         <div className="flex items-center gap-2 px-5 py-1.5 bg-muted/30 border-b border-border/50 sticky top-[44px] z-10">
-                          <span className="text-[10px] font-semibold text-foreground uppercase tracking-wider">{group.name}</span>
-                          <span className="text-[10px] text-muted-foreground">{group.tasks.length}</span>
+                          <span className="text-xs font-semibold text-foreground uppercase tracking-wider">{group.name}</span>
+                          <span className="text-xs text-muted-foreground">{group.tasks.length}</span>
                         </div>
                         <div className="divide-y divide-border/50">
                           {group.tasks.map((task) => (
@@ -352,23 +352,23 @@ function TaskRow({ task }: { task: FunnelTask }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-mono text-muted-foreground/60">{prefix}-{String(task.taskNumber).padStart(3, "0")}</span>
-          <span className="text-[12px] font-medium text-foreground truncate">{task.title}</span>
+          <span className="text-xs font-mono text-muted-foreground/60">{prefix}-{String(task.taskNumber).padStart(3, "0")}</span>
+          <span className="text-s font-medium text-foreground truncate">{task.title}</span>
         </div>
         {task.assignee && (
-          <span className="text-[10px] text-muted-foreground/50">{task.assignee.name}</span>
+          <span className="text-xs text-muted-foreground/50">{task.assignee.name}</span>
         )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {timeInStage && (
-          <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground/60 font-mono">
+          <span className="flex items-center gap-0.5 text-xs text-muted-foreground/60 font-mono">
             <Clock className="w-2.5 h-2.5" />{timeInStage}
           </span>
         )}
         {task.priority != null && (
-          <span className={cn("text-[10px] font-semibold tabular-nums", priorityColor)}>P{task.priority}</span>
+          <span className={cn("text-xs font-semibold tabular-nums", priorityColor)}>P{task.priority}</span>
         )}
-        <span className={cn("text-[9px] font-semibold px-1.5 py-0.5 rounded-full border", bucketPill)}>
+        <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded-full border", bucketPill)}>
           {bucketLabel}
         </span>
         <ExternalLink className="w-3 h-3 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />

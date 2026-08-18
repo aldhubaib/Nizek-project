@@ -88,7 +88,7 @@ export function AttachToTaskDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex max-h-[80dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
         <DialogHeader className="shrink-0 border-b border-border px-4 py-3">
-          <DialogTitle className="flex items-center gap-2 text-sm">
+          <DialogTitle className="flex items-center gap-2 text-s">
             <Link2 className="h-4 w-4 text-primary" />
             Attach to existing task
           </DialogTitle>
@@ -108,7 +108,7 @@ export function AttachToTaskDialog({
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : visible.length === 0 ? (
-            <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+            <p className="px-2 py-8 text-center text-s text-muted-foreground">
               No matching tasks
             </p>
           ) : (
@@ -118,12 +118,12 @@ export function AttachToTaskDialog({
                 type="button"
                 disabled={attaching !== null}
                 onClick={() => void attach(t.id)}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-accent/60"
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start hover:bg-accent/60"
               >
-                <span className="font-mono text-[11px] font-semibold text-primary">
+                <span className="font-mono text-xs font-semibold text-primary">
                   {taskCode(t.taskType, t.taskNumber)}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-[13px]">{t.title}</span>
+                <span className="min-w-0 flex-1 truncate text-s">{t.title}</span>
                 {attaching === t.id && (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 )}
@@ -132,7 +132,7 @@ export function AttachToTaskDialog({
           )}
         </div>
         {error && (
-          <p className="px-4 pb-3 text-[12px] text-destructive">{error}</p>
+          <p className="px-4 pb-3 text-s text-destructive">{error}</p>
         )}
         <div className="border-t border-border px-4 py-3">
           <Button type="button" variant="ghost" size="sm" onClick={onClose}>

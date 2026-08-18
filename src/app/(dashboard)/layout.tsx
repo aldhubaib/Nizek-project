@@ -28,12 +28,12 @@ export default async function DashboardLayout({
               <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
             </svg>
           </div>
-          <h1 className="text-lg font-semibold text-foreground mb-2">Account Blocked</h1>
-          <p className="text-[13px] text-muted-foreground mb-6">
+          <h1 className="text-s font-semibold text-foreground mb-2">Account Blocked</h1>
+          <p className="text-s text-muted-foreground mb-6">
             Your account has been blocked by an administrator. Contact your team admin if you think this is a mistake.
           </p>
           <SignOutButton>
-            <button className="px-4 py-2 rounded-lg bg-card border border-border text-[13px] text-foreground hover:bg-card/80 transition-colors">
+            <button className="px-4 py-2 rounded-lg bg-card border border-border text-s text-foreground hover:bg-card/80 transition-colors">
               Sign Out
             </button>
           </SignOutButton>

@@ -75,11 +75,11 @@ export function AuditAccessManager() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="flex items-center gap-2 text-sm font-semibold">
+        <h2 className="flex items-center gap-2 text-s font-semibold">
           <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
           Audit access
         </h2>
-        <p className="mt-1 text-[12px] text-muted-foreground">
+        <p className="mt-1 text-s text-muted-foreground">
           Pick which teams each member is allowed to audit. Members with at
           least one team see the Audit module and create daily reports.
           Admins can always audit every team.
@@ -92,15 +92,15 @@ export function AuditAccessManager() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search members"
-          className="h-9 pl-8 text-sm"
+          className="h-9 ps-8 text-s"
         />
       </div>
 
       {loading ? (
-        <p className="py-6 text-[12px] text-muted-foreground">Loading…</p>
+        <p className="py-6 text-s text-muted-foreground">Loading…</p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="flex items-center justify-between border-b border-border/50 px-4 py-2 text-[11px] text-muted-foreground">
+          <div className="flex items-center justify-between border-b border-border/50 px-4 py-2 text-xs text-muted-foreground">
             <span>
               {filtered.length} member{filtered.length === 1 ? "" : "s"}
             </span>
@@ -117,15 +117,15 @@ export function AuditAccessManager() {
                   <div className="flex min-w-0 flex-1 items-center gap-2.5">
                     <Avatar className="h-7 w-7 shrink-0">
                       <AvatarImage src={m.imageUrl ?? undefined} />
-                      <AvatarFallback className="text-[9px]">
+                      <AvatarFallback className="text-xs">
                         {(m.name ?? m.email).slice(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                      <p className="truncate text-[13px] font-medium">
+                      <p className="truncate text-s font-medium">
                         {m.name ?? m.email}
                       </p>
-                      <p className="truncate text-[11px] text-muted-foreground">
+                      <p className="truncate text-xs text-muted-foreground">
                         {m.email}
                       </p>
                     </div>
@@ -140,7 +140,7 @@ export function AuditAccessManager() {
                           type="button"
                           onClick={() => toggle(m.id, t.id)}
                           className={cn(
-                            "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                            "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
                             on
                               ? "border-primary/40 bg-primary/15 text-primary"
                               : "border-border bg-card text-muted-foreground hover:bg-accent/20",

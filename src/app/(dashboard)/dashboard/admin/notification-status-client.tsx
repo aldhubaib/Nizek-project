@@ -62,11 +62,11 @@ function StatCard({
         <Icon className="h-4 w-4" />
       </span>
       <div className="min-w-0">
-        <div className={cn("text-xl font-semibold leading-tight tabular-nums", tones.value)}>
+        <div className={cn("text-l font-semibold leading-tight tabular-nums", tones.value)}>
           {value}
         </div>
-        <div className="mt-0.5 text-[12px] font-medium text-foreground">{label}</div>
-        <div className="text-[11px] text-muted-foreground">{sub}</div>
+        <div className="mt-0.5 text-s font-medium text-foreground">{label}</div>
+        <div className="text-xs text-muted-foreground">{sub}</div>
       </div>
     </div>
   );
@@ -87,7 +87,7 @@ function ChannelPill({
     <span
       title={title}
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium whitespace-nowrap",
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap",
         on
           ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
           : "border-border bg-card text-muted-foreground/70",
@@ -103,20 +103,20 @@ function ChannelPill({
 function StatusPill({ m }: { m: MemberNotificationStatus }) {
   if (!m.lastNotification) {
     return (
-      <span className="inline-flex items-center rounded-full border border-border bg-card px-2 py-0.5 text-[10px] font-medium text-muted-foreground whitespace-nowrap">
+      <span className="inline-flex items-center rounded-full border border-border bg-card px-2 py-0.5 text-xs font-medium text-muted-foreground whitespace-nowrap">
         No Activity
       </span>
     );
   }
   if (m.lastNotification.read) {
     return (
-      <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 whitespace-nowrap">
+      <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400 whitespace-nowrap">
         Opened
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400 whitespace-nowrap">
+    <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 whitespace-nowrap">
       Not Opened
     </span>
   );
@@ -136,7 +136,7 @@ function TestButton({
 }) {
   if (state?.status === "sending") {
     return (
-      <span className="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2.5 text-[10px] font-medium text-muted-foreground whitespace-nowrap">
+      <span className="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium text-muted-foreground whitespace-nowrap">
         <Loader2 className="h-3 w-3 animate-spin" />
         Sending…
       </span>
@@ -146,7 +146,7 @@ function TestButton({
     return (
       <span
         className={cn(
-          "inline-flex h-7 items-center gap-1 rounded-lg border px-2.5 text-[10px] font-medium whitespace-nowrap",
+          "inline-flex h-7 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium whitespace-nowrap",
           state.pushed
             ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
             : "border-amber-500/30 bg-amber-500/15 text-amber-400",
@@ -161,7 +161,7 @@ function TestButton({
   }
   if (state?.status === "error") {
     return (
-      <span className="inline-flex h-7 items-center rounded-lg border border-destructive/40 bg-destructive/10 px-2.5 text-[10px] font-medium text-destructive whitespace-nowrap">
+      <span className="inline-flex h-7 items-center rounded-lg border border-destructive/40 bg-destructive/10 px-2.5 text-xs font-medium text-destructive whitespace-nowrap">
         Failed to send
       </span>
     );
@@ -170,7 +170,7 @@ function TestButton({
     <button
       type="button"
       onClick={onSend}
-      className="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground whitespace-nowrap"
+      className="inline-flex h-7 items-center gap-1 rounded-lg border border-border px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground whitespace-nowrap"
     >
       <Send className="h-3 w-3" />
       Send test
@@ -247,7 +247,7 @@ export function NotificationStatusClient({
             type="button"
             onClick={() => setView(t.id)}
             className={cn(
-              "h-7 rounded-md px-3 text-[12px] font-medium transition-colors",
+              "h-7 rounded-md px-3 text-s font-medium transition-colors",
               view === t.id
                 ? "bg-primary/15 text-primary"
                 : "text-muted-foreground hover:text-foreground",
@@ -321,7 +321,7 @@ function MembersView() {
 
   if (loading && !data) {
     return (
-      <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+      <div className="flex items-center gap-2 py-10 text-s text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading notification status…
       </div>
     );
@@ -329,7 +329,7 @@ function MembersView() {
 
   if (!data) {
     return (
-      <div className="py-10 text-sm text-destructive">
+      <div className="py-10 text-s text-destructive">
         Failed to load notification status.
       </div>
     );
@@ -350,10 +350,10 @@ function MembersView() {
             <Bell className="h-4.5 w-4.5" />
           </span>
           <div className="min-w-0">
-            <div className="text-[15px] font-semibold leading-tight">
+            <div className="text-s font-semibold leading-tight">
               Notification coverage
             </div>
-            <div className="truncate text-[11px] text-muted-foreground">
+            <div className="truncate text-xs text-muted-foreground">
               Overview of notification channels and status
             </div>
           </div>
@@ -362,7 +362,7 @@ function MembersView() {
           type="button"
           onClick={load}
           disabled={loading}
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground disabled:opacity-50"
+          className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground disabled:opacity-50"
         >
           <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
           Refresh
@@ -408,7 +408,7 @@ function MembersView() {
             placeholder="Search by name or email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-8 w-full rounded-lg border border-border bg-card pl-8 pr-3 text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+            className="h-8 w-full rounded-lg border border-border bg-card ps-8 pe-3 text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
           />
         </div>
         {(
@@ -423,7 +423,7 @@ function MembersView() {
             type="button"
             onClick={() => setFilter(f.id)}
             className={cn(
-              "h-8 rounded-lg border px-3 text-[11px] font-medium transition-colors",
+              "h-8 rounded-lg border px-3 text-xs font-medium transition-colors",
               filter === f.id
                 ? "border-primary/40 bg-primary/15 text-primary"
                 : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground",
@@ -435,7 +435,7 @@ function MembersView() {
         <button
           type="button"
           onClick={() => exportCsv(filtered)}
-          className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
+          className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
         >
           <Download className="h-3 w-3" />
           Export
@@ -443,14 +443,14 @@ function MembersView() {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-border/60">
-        <table className="w-full min-w-[46rem] border-collapse text-left">
+        <table className="w-full min-w-[46rem] border-collapse text-start">
           <thead>
             <tr className="border-b border-border/60 bg-card/60">
               {["User", "Last Notification", "Status", "Channels", "Actions"].map(
                 (h) => (
                   <th
                     key={h}
-                    className="px-4 py-2.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+                    className="px-4 py-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground"
                   >
                     {h}
                   </th>
@@ -475,13 +475,13 @@ function MembersView() {
                           className="h-8 w-8 shrink-0 rounded-full"
                         />
                       ) : (
-                        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary">
+                        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
                           {(m.name?.[0] || m.email[0]).toUpperCase()}
                         </div>
                       )}
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="truncate text-[13px] font-medium text-foreground">
+                          <span className="truncate text-s font-medium text-foreground">
                             {m.name || m.email}
                           </span>
                           {enabled ? (
@@ -490,12 +490,12 @@ function MembersView() {
                             <BellOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
                           )}
                           {m.unreadCount > 0 && (
-                            <span className="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+                            <span className="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400">
                               {m.unreadCount} unread
                             </span>
                           )}
                         </div>
-                        <div className="truncate text-[11px] text-muted-foreground">
+                        <div className="truncate text-xs text-muted-foreground">
                           {m.email}
                         </div>
                       </div>
@@ -505,17 +505,17 @@ function MembersView() {
                   <td className="px-4 py-3">
                     {m.lastNotification ? (
                       <div className="space-y-0.5">
-                        <div className="text-[12px] text-foreground">
+                        <div className="text-s text-foreground">
                           {formatDistanceToNow(
                             new Date(m.lastNotification.createdAt),
                             { addSuffix: true },
                           )}
                         </div>
-                        <div className="max-w-64 truncate text-[11px] text-muted-foreground">
+                        <div className="max-w-64 truncate text-xs text-muted-foreground">
                           {m.lastNotification.title}
                         </div>
                         {m.lastNotification.read ? (
-                          <div className="flex items-center gap-1 text-[11px] text-emerald-400">
+                          <div className="flex items-center gap-1 text-xs text-emerald-400">
                             <CheckCheck className="h-3 w-3" />
                             Opened
                             {m.lastNotification.readAt
@@ -523,7 +523,7 @@ function MembersView() {
                               : ""}
                           </div>
                         ) : (
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
                             <span className="inline-flex items-center gap-1 text-amber-400">
                               <Circle className="h-2 w-2 fill-current" />
                               Not opened yet
@@ -542,8 +542,8 @@ function MembersView() {
                       </div>
                     ) : (
                       <div className="space-y-0.5">
-                        <div className="text-[12px] text-foreground">Never</div>
-                        <div className="text-[11px] text-muted-foreground/70">
+                        <div className="text-s text-foreground">Never</div>
+                        <div className="text-xs text-muted-foreground/70">
                           Never received a notification
                         </div>
                       </div>
@@ -589,7 +589,7 @@ function MembersView() {
               <tr>
                 <td
                   colSpan={5}
-                  className="px-4 py-8 text-center text-[13px] text-muted-foreground"
+                  className="px-4 py-8 text-center text-s text-muted-foreground"
                 >
                   No members match.
                 </td>
@@ -599,7 +599,7 @@ function MembersView() {
         </table>
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         “On” means the device holds an active push subscription (permission
         granted), so the member gets OS notifications even with the app closed.
         “Opened” reflects when the member read the notification in the app.

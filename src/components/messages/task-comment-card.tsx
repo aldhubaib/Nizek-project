@@ -27,28 +27,28 @@ export function TaskCommentCard({
             <MessageSquareText className="size-4" strokeWidth={2} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Task comment
             </p>
-            <h3 className="mt-0.5 text-[15px] font-semibold leading-snug text-foreground">
+            <h3 className="mt-0.5 text-s font-semibold leading-snug text-foreground">
               {payload.taskTitle}
             </h3>
           </div>
         </div>
 
         {payload.quoteText && (
-          <blockquote className="border-l-2 border-amber-400/60 pl-3 text-[12px] italic text-muted-foreground">
+          <blockquote className="border-s-2 border-amber-400/60 ps-3 text-s italic text-muted-foreground">
             {payload.quoteText}
           </blockquote>
         )}
 
-        <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground">
+        <p className="whitespace-pre-wrap text-s leading-relaxed text-foreground">
           {payload.comment}
         </p>
 
         <Link
           href={taskUrl}
-          className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-[12px] font-medium text-amber-400 transition-colors hover:bg-amber-500/10"
+          className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-s font-medium text-amber-400 transition-colors hover:bg-amber-500/10"
         >
           <span className="min-w-0 flex-1 truncate text-foreground">
             Open task · reply on the highlight
@@ -57,7 +57,7 @@ export function TaskCommentCard({
         </Link>
 
         <div className="flex justify-end">
-          <span className="text-[10px] text-muted-foreground">{formatTime(createdAt)}</span>
+          <span className="text-xs text-muted-foreground">{formatTime(createdAt)}</span>
         </div>
       </div>
     </div>

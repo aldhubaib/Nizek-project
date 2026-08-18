@@ -66,8 +66,8 @@ export function NotificationPreferencesSection() {
 
   return (
     <section className="rounded-2xl border border-border/60 bg-card p-4">
-      <div className="text-sm font-semibold">What to notify me about</div>
-      <div className="mt-0.5 text-xs text-muted-foreground">
+      <div className="text-s font-semibold">What to notify me about</div>
+      <div className="mt-0.5 text-s text-muted-foreground">
         Applies to all your devices — bell, push, and sound.
       </div>
       <div className="mt-3 divide-y divide-border/50">
@@ -77,8 +77,8 @@ export function NotificationPreferencesSection() {
               <Icon className="h-4 w-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-medium">{label}</div>
-              <div className="text-[11px] text-muted-foreground">{detail}</div>
+              <div className="text-s font-medium">{label}</div>
+              <div className="text-xs text-muted-foreground">{detail}</div>
             </div>
             <Switch
               checked={prefs[key]}

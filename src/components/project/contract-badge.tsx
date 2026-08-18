@@ -48,23 +48,23 @@ export function ContractBadge({ contract }: { contract: Contract }) {
   return (
     <div className="flex items-center gap-2">
       <span
-        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${variants[status]}`}
+        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${variants[status]}`}
       >
         {status === "active" && "Active"}
         {status === "upcoming" && "Upcoming"}
         {status === "expired" && "Expired"}
       </span>
       {typeLabel && (
-        <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+        <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
           {typeLabel}
         </span>
       )}
       {contract.code && (
-        <span className="inline-flex items-center rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-mono font-semibold text-foreground">
+        <span className="inline-flex items-center rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs font-mono font-semibold text-foreground">
           {contract.code}
         </span>
       )}
-      <span className="text-[11px] text-muted-foreground">
+      <span className="text-xs text-muted-foreground">
         {contract.label && `${contract.label} · `}
         {contract.startDate && contract.endDate
           ? `${format(new Date(contract.startDate), "MMM d, yyyy")} — ${format(new Date(contract.endDate), "MMM d, yyyy")}`

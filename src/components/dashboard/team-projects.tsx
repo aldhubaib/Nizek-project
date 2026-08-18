@@ -41,18 +41,18 @@ export function TeamProjects({ data }: { data: TeamData[] }) {
   const maxProjects = Math.max(...data.map((t) => t.projectCount), 1);
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div className="app-card rounded-xl border border-border bg-card overflow-hidden">
       <div className="px-4 py-3.5 border-b border-border">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-[14px] font-semibold flex items-center gap-2">
+          <h2 className="text-s font-semibold flex items-center gap-2">
             <Users className="w-4 h-4 text-muted-foreground" />
             Teams
           </h2>
-          <span className="text-[11px] text-muted-foreground font-mono">
+          <span className="text-xs text-muted-foreground font-mono">
             {data.length} teams
           </span>
         </div>
-        <div className="flex items-center gap-3 text-[11px]">
+        <div className="flex items-center gap-3 text-xs">
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-primary" />
             <span className="text-muted-foreground">{totalProjects} projects</span>
@@ -67,7 +67,7 @@ export function TeamProjects({ data }: { data: TeamData[] }) {
       {data.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <Users className="w-7 h-7 text-muted-foreground/20 mb-2" strokeWidth={1.5} />
-          <p className="text-[12px] text-muted-foreground">No teams yet</p>
+          <p className="text-s text-muted-foreground">No teams yet</p>
         </div>
       ) : (
         <div className="divide-y divide-border/50">
@@ -79,7 +79,7 @@ export function TeamProjects({ data }: { data: TeamData[] }) {
               <div key={team.id}>
                 <button
                   onClick={() => setExpandedTeam(isExpanded ? null : team.id)}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors text-start"
                 >
                   <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 text-muted-foreground">
                     {team.projectCount > 0 ? (
@@ -91,14 +91,14 @@ export function TeamProjects({ data }: { data: TeamData[] }) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className={cn("text-[12px] font-medium truncate", team.id === "__none__" && "text-muted-foreground italic")}>{team.name}</span>
+                        <span className={cn("text-s font-medium truncate", team.id === "__none__" && "text-muted-foreground italic")}>{team.name}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[11px] font-bold tabular-nums text-foreground">
+                        <span className="text-xs font-bold tabular-nums text-foreground">
                           {team.projectCount}
                         </span>
                         {team.activeCount > 0 && (
-                          <span className="text-[10px] text-emerald-400 font-medium">
+                          <span className="text-xs text-emerald-400 font-medium">
                             {team.activeCount} active
                           </span>
                         )}
@@ -119,21 +119,21 @@ export function TeamProjects({ data }: { data: TeamData[] }) {
                       <Link
                         key={project.id}
                         href={`/dashboard/projects/${project.id}`}
-                        className="flex items-center gap-3 px-4 pl-12 py-2 hover:bg-accent/20 transition-colors group"
+                        className="flex items-center gap-3 px-4 ps-12 py-2 hover:bg-accent/20 transition-colors group"
                       >
                         {project.logoUrl ? (
                           <img src={project.logoUrl} alt="" className="w-5 h-5 rounded object-cover border border-border shrink-0" />
                         ) : (
-                          <div className="w-5 h-5 rounded bg-primary/10 border border-primary/20 flex items-center justify-center text-[9px] font-bold text-primary shrink-0">
+                          <div className="w-5 h-5 rounded bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-bold text-primary shrink-0">
                             {project.name.charAt(0).toUpperCase()}
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <span className="text-[11px] font-medium truncate group-hover:text-primary transition-colors block">
+                          <span className="text-xs font-medium truncate group-hover:text-primary transition-colors block">
                             {project.name}
                           </span>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0 text-[10px] text-muted-foreground">
+                        <div className="flex items-center gap-3 shrink-0 text-xs text-muted-foreground">
                           {project.contractType && (
                             <span className="font-medium">{CONTRACT_TYPE_LABELS[project.contractType] ?? project.contractType}</span>
                           )}

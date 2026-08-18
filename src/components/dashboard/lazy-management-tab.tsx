@@ -73,7 +73,7 @@ export function LazyManagementTab() {
   if (isPending || !data || !filtered) {
     if (error) {
       return (
-        <div className="col-span-full flex items-center justify-center py-12 text-[13px] text-destructive">
+        <div className="col-span-full flex items-center justify-center py-12 text-s text-destructive">
           {error}
         </div>
       );
@@ -98,11 +98,11 @@ export function LazyManagementTab() {
       {/* Team filter — applies to every module below. Click to toggle;
           multiple teams can be active at once, "All" clears the selection. */}
       <div className="lg:col-span-2 flex items-center gap-1.5 flex-wrap">
-        <Users className="w-3.5 h-3.5 text-muted-foreground/60 mr-1" strokeWidth={1.5} />
+        <Users className="w-3.5 h-3.5 text-muted-foreground/60 me-1" strokeWidth={1.5} />
         <button
           onClick={() => setTeamFilter([])}
           className={cn(
-            "rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
+            "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
             teamFilter.length === 0
               ? "bg-primary/15 border-primary/40 text-primary"
               : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40",
@@ -115,7 +115,7 @@ export function LazyManagementTab() {
             key={team.id}
             onClick={() => toggleTeam(team.id)}
             className={cn(
-              "rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
+              "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
               teamFilter.includes(team.id)
                 ? "bg-primary/15 border-primary/40 text-primary"
                 : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40",

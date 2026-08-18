@@ -6,7 +6,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, FileText, Trash2, Gavel, Clock, History, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, Link2, MessageSquare, Check, CheckSquare, MessageCircleQuestion, MoreVertical } from "lucide-react";
+import { FileText, Trash2, Gavel, Clock, History, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, Link2, MessageSquare, Check, CheckSquare, MessageCircleQuestion, MoreVertical } from "lucide-react";
 import { createMeetingNote, updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete, updateRoadmapStatus, getMeetingNote } from "@/actions/meeting-note";
 import { getNoteCommentThreads } from "@/actions/note-comment";
 import { testDeadlineReminder } from "@/actions/deadline-reminder";
@@ -16,6 +16,7 @@ import { type NoteCommentThreadView } from "@/components/project/note-comment-pa
 import { AttachToTaskDialog } from "@/components/project/attach-to-task-dialog";
 import { CreateTaskFromNoteDialog } from "@/components/project/create-task-from-note";
 import { PageHeaderActions } from "@/components/page-header-actions";
+import { AddButton } from "@/components/add-button";
 import { PageOverflowItems } from "@/components/page-overflow-menu";
 import { taskCode } from "@/lib/task-label";
 import {
@@ -169,7 +170,7 @@ function NoteCardStatusIcon({
           <Glyph className="h-3.5 w-3.5" />
           <span
             className={cn(
-              "absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold leading-4 text-background",
+              "absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full px-1 text-xs font-bold leading-4 text-background",
               badgeClass,
             )}
           >
@@ -183,7 +184,7 @@ function NoteCardStatusIcon({
           title={doneLabel}
         >
           <Glyph className="h-3.5 w-3.5" />
-          <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-muted px-1 text-[9px] font-bold leading-4 text-muted-foreground">
+          <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-muted px-1 text-xs font-bold leading-4 text-muted-foreground">
             {doneCount}
           </span>
         </span>
@@ -492,12 +493,12 @@ export function MeetingNotesTab({
                 key={t}
                 onClick={() => setFilter(t)}
                 className={cn(
-                  "shrink-0 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors",
+                  "shrink-0 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
                   filter === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 )}
               >
                 {t === "ALL" ? "All" : NOTE_TYPE_CONFIG[t].label}
-                <span className="ml-1 text-[10px] opacity-60">
+                <span className="ms-1 text-xs opacity-60">
                   {t === "ALL" ? notes.length : notes.filter((n) => n.noteType === t).length}
                 </span>
               </button>
@@ -505,15 +506,11 @@ export function MeetingNotesTab({
         </div>
         )}
         {canEdit && (
-          <div className="ml-auto flex items-center gap-2">
-            <Button size="icon" className="shrink-0 sm:hidden" onClick={() => openCreate()} aria-label={isRoadmap ? "New roadmap item" : "New note"}>
-              <Plus className="h-4 w-4" />
-            </Button>
-            <Button size="sm" className="hidden shrink-0 sm:inline-flex" onClick={() => openCreate()}>
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              {isRoadmap ? "New Roadmap" : "New Note"}
-            </Button>
-          </div>
+          <AddButton
+            className="ms-auto"
+            label={isRoadmap ? "New roadmap item" : "New note"}
+            onClick={() => openCreate()}
+          />
         )}
       </div>
       )}
@@ -525,7 +522,7 @@ export function MeetingNotesTab({
           ) : (
             <FileText className="h-10 w-10 mb-2 opacity-40" />
           )}
-          <p className="text-sm">
+          <p className="text-s">
             {filter === "ALL" ? (isRoadmap ? "Nothing on the roadmap yet" : "No notes yet") : `No ${NOTE_TYPE_CONFIG[filter].label.toLowerCase()}s yet`}
           </p>
         </div>
@@ -565,13 +562,13 @@ export function MeetingNotesTab({
                   }
                 }}
                 className={cn(
-                  "flex aspect-[3/4] cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/60 bg-card p-3 text-left transition-colors hover:border-border",
+                  "flex aspect-[3/4] cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/60 bg-card p-3 text-start transition-colors hover:border-border",
                   note.completedAt && "opacity-60",
                 )}
               >
                 <div className="flex items-start justify-between gap-2">
                   {cfg && (
-                    <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${cfg.bgColor} ${cfg.color}`}>
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs font-semibold ${cfg.bgColor} ${cfg.color}`}>
                       <Icon className="h-2.5 w-2.5" />
                       {cfg.label}
                     </span>
@@ -595,12 +592,12 @@ export function MeetingNotesTab({
                   )}
                 </div>
 
-                <h3 className={cn("mt-2.5 text-[15px] font-bold leading-snug line-clamp-4", note.completedAt && "line-through")}>
+                <h3 className={cn("mt-2.5 text-s font-bold leading-snug line-clamp-4", note.completedAt && "line-through")}>
                   {note.title}
                 </h3>
 
                 {(deadlineStatus || note.workingDays != null) && (
-                  <span className={`mt-2 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${deadlineStatus?.bg ?? "bg-muted border-border"} ${deadlineStatus?.color ?? "text-muted-foreground"}`}>
+                  <span className={`mt-2 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${deadlineStatus?.bg ?? "bg-muted border-border"} ${deadlineStatus?.color ?? "text-muted-foreground"}`}>
                     {[
                       deadlineStatus?.label,
                       note.dueDate ? format(new Date(note.dueDate), "MMM d, yyyy") : null,
@@ -614,7 +611,7 @@ export function MeetingNotesTab({
 
                 {bodyPreview ? (
                   <div className="relative mt-2 min-h-0 flex-1 overflow-hidden">
-                    <p className="text-[12px] leading-relaxed text-muted-foreground">
+                    <p className="text-s leading-relaxed text-muted-foreground">
                       {bodyPreview}
                     </p>
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-card to-transparent" />
@@ -624,10 +621,10 @@ export function MeetingNotesTab({
                 )}
 
                 <div className="mt-auto shrink-0 pt-3">
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Created {format(new Date(note.createdAt), "MMM d, yyyy")}
                   </p>
-                  <div className="mt-2 flex items-center gap-2 text-[12px]">
+                  <div className="mt-2 flex items-center gap-2 text-s">
                     <NoteCardStatusIcon
                       openCount={tasksOpenCount}
                       doneCount={tasksDoneCount}
@@ -648,7 +645,7 @@ export function MeetingNotesTab({
                     />
                     <Avatar
                       size="sm"
-                      className="ml-auto"
+                      className="ms-auto"
                       title={note.author.name ?? "Unknown"}
                     >
                       <AvatarImage src={note.author.imageUrl ?? undefined} alt="" />
@@ -734,7 +731,7 @@ function NoteFullScreenCreate({
         </Button>
       </PageHeaderActions>
 
-      <div className="max-w-4xl mx-auto w-full px-4 py-6 sm:px-8 sm:py-10 lg:px-16">
+      <div className="max-w-4xl mx-auto w-full px-app py-6 sm:py-10 lg:px-16">
           {/* Type picker */}
           {createTypes.length > 1 && (
           <div className="mb-6">
@@ -748,7 +745,7 @@ function NoteFullScreenCreate({
                     key={id}
                     onClick={() => { setNoteType(id); setTypeError(false); }}
                     className={cn(
-                      "flex items-center gap-2 rounded-lg border px-4 py-2 text-[13px] font-medium transition-colors",
+                      "flex items-center gap-2 rounded-lg border px-4 py-2 text-s font-medium transition-colors",
                       isActive ? `${cfg.bgColor} ${cfg.color}` : "border-border text-muted-foreground hover:border-muted-foreground/40",
                       typeError && !isActive && "border-destructive/40"
                     )}
@@ -759,7 +756,7 @@ function NoteFullScreenCreate({
                 );
               })}
             </div>
-            {typeError && <p className="text-[11px] text-destructive mt-1.5">Please select a type</p>}
+            {typeError && <p className="text-xs text-destructive mt-1.5">Please select a type</p>}
           </div>
           )}
 
@@ -767,16 +764,16 @@ function NoteFullScreenCreate({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={placeholders[noteType ?? "MEETING_NOTE"] ?? "Title..."}
-            className="w-full text-2xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-4 sm:text-4xl"
+            className="w-full text-m font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-4"
             autoFocus
           />
 
           <div className="flex items-center gap-3 mb-8 pb-6 border-b border-border/50">
             {isDeadline ? (
               saveError ? (
-                <p className="text-[10px] text-destructive">{saveError}</p>
+                <p className="text-xs text-destructive">{saveError}</p>
               ) : (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   New items start in Planned. Drag on the board to change status.
                 </p>
               )
@@ -785,7 +782,7 @@ function NoteFullScreenCreate({
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-auto text-[13px] h-8"
+                className="w-auto text-s h-8"
               />
             )}
           </div>
@@ -1133,7 +1130,7 @@ export function NoteFullScreenDetail({
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent className="w-52">
                           <DropdownMenuGroup>
-                            <DropdownMenuLabel className="text-[10px] text-muted-foreground">
+                            <DropdownMenuLabel className="text-xs text-muted-foreground">
                               Post to project chat @ all
                             </DropdownMenuLabel>
                             {DEADLINE_REMINDER_TEST_SCENARIOS.map((offsetDays) => (
@@ -1177,25 +1174,25 @@ export function NoteFullScreenDetail({
   );
 
   const body = (
-      <div className="max-w-4xl mx-auto w-full px-4 py-6 sm:px-8 sm:py-10 lg:px-16">
+      <div className="max-w-4xl mx-auto w-full px-app py-6 sm:py-10 lg:px-16">
             {/* Type badge + meta */}
             <div className="flex flex-wrap items-center gap-3 mb-2">
               {config && (
-                <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${config.bgColor} ${config.color}`}>
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${config.bgColor} ${config.color}`}>
                   <Icon className="w-3.5 h-3.5" />
                   {config.label}
                 </span>
               )}
               {deadlineStatus && (
-                <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${deadlineStatus.bg} ${deadlineStatus.color}`}>
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${deadlineStatus.bg} ${deadlineStatus.color}`}>
                   {deadlineStatus.label}
                 </span>
               )}
               {isDeadline && currentRoadmapStatus === "PLANNED" && (
-                <span className="text-[13px] text-muted-foreground">Planned</span>
+                <span className="text-s text-muted-foreground">Planned</span>
               )}
               {!isDeadline && (
-              <span className="text-[13px] text-muted-foreground">
+              <span className="text-s text-muted-foreground">
                 {format(new Date(note.date), "MMMM d, yyyy")}
               </span>
               )}
@@ -1203,7 +1200,7 @@ export function NoteFullScreenDetail({
 
             {isDeadline && canEdit && currentRoadmapStatus === "NEXT" && (
               <div className="mb-6">
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Efforts ( Working days )</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Efforts ( Working days )</label>
                 <Input
                   type="number"
                   min={1}
@@ -1218,19 +1215,19 @@ export function NoteFullScreenDetail({
                     void saveEfforts(next);
                   }}
                   onBlur={() => void saveEfforts()}
-                  className="w-28 text-[13px] h-8"
+                  className="w-28 text-s h-8"
                 />
                 {workingDaysError ? (
-                  <p className="text-[10px] text-destructive mt-0.5">{workingDaysError}</p>
+                  <p className="text-xs text-destructive mt-0.5">{workingDaysError}</p>
                 ) : (
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Required before In Progress</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Required before In Progress</p>
                 )}
               </div>
             )}
             {isDeadline && (currentRoadmapStatus === "PROGRESS" || currentRoadmapStatus === "SHIPPED") && (
               <div className="mb-6 flex flex-wrap gap-4">
                 <div>
-                  <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Starting Date</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Starting Date</label>
                   <Input
                     type="date"
                     value={startedAt}
@@ -1242,14 +1239,14 @@ export function NoteFullScreenDetail({
                       if (canEdit) void saveStartedAt();
                     }}
                     disabled={!canEdit}
-                    className="w-auto text-[13px] h-8"
+                    className="w-auto text-s h-8"
                   />
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Set when this moved to In Progress. You can adjust it.
                   </p>
                 </div>
                 <div>
-                <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Due Date</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Due Date</label>
                 <Input
                   type="date"
                   value={dueDate}
@@ -1261,12 +1258,12 @@ export function NoteFullScreenDetail({
                     if (canEdit) void saveDueDate();
                   }}
                   disabled={!canEdit}
-                  className="w-auto text-[13px] h-8"
+                  className="w-auto text-s h-8"
                 />
                 {workingDaysError ? (
-                  <p className="text-[10px] text-destructive mt-0.5">{workingDaysError}</p>
+                  <p className="text-xs text-destructive mt-0.5">{workingDaysError}</p>
                 ) : (
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Calculated from Efforts. You can adjust it.
                   </p>
                 )}
@@ -1274,11 +1271,11 @@ export function NoteFullScreenDetail({
               </div>
             )}
             {isDeadline && canEdit && testMessage && (
-              <p className="mb-4 text-[11px] text-muted-foreground">{testMessage}</p>
+              <p className="mb-4 text-xs text-muted-foreground">{testMessage}</p>
             )}
 
             {/* Created by + timestamps + linked task */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-6 text-[12px] text-muted-foreground/70">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-6 text-s text-muted-foreground/70">
               <span
                 className="inline-flex items-center gap-1.5"
                 title={note.author.name ?? "Unknown"}
@@ -1319,7 +1316,7 @@ export function NoteFullScreenDetail({
                           key={t.id}
                           href={`/dashboard/projects/${projectId}/tasks/${t.id}?from=note&noteId=${note.id}`}
                           className={cn(
-                            "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
+                            "flex items-center gap-2 rounded-lg border px-3 py-2 text-s transition-colors",
                             done
                               ? "border-border/40 text-muted-foreground opacity-60"
                               : "border-border/50 hover:border-border",
@@ -1333,7 +1330,7 @@ export function NoteFullScreenDetail({
                           />
                           <span
                             className={cn(
-                              "font-mono text-[11px] font-semibold",
+                              "font-mono text-xs font-semibold",
                               done ? "text-muted-foreground" : "text-primary",
                             )}
                           >
@@ -1379,7 +1376,7 @@ export function NoteFullScreenDetail({
                           setActiveThreadId(t.id);
                         }}
                         className={cn(
-                          "flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                          "flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-start text-s transition-colors",
                           t.understood
                             ? "border-border/40 text-muted-foreground"
                             : "border-border/50 hover:border-border",
@@ -1399,7 +1396,7 @@ export function NoteFullScreenDetail({
                             <Check className="h-3 w-3" strokeWidth={3} />
                           </span>
                         ) : (
-                          <span className="grid min-w-5 shrink-0 place-items-center rounded-full bg-amber-400 px-1 text-[10px] font-bold leading-5 text-background">
+                          <span className="grid min-w-5 shrink-0 place-items-center rounded-full bg-amber-400 px-1 text-xs font-bold leading-5 text-background">
                             {t.comments.length}
                           </span>
                         )}
@@ -1423,11 +1420,11 @@ export function NoteFullScreenDetail({
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full text-2xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-6 sm:mb-8 sm:text-4xl"
+                className="w-full text-m font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-6 sm:mb-8"
                 autoFocus
               />
             ) : (
-              <h1 className={cn("text-2xl font-bold mb-6 sm:mb-8 sm:text-4xl", completedAt && "line-through opacity-60")}>
+              <h1 className={cn("text-m font-bold mb-6 sm:mb-8", completedAt && "line-through opacity-60")}>
                 {note.title}
               </h1>
             )}

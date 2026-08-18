@@ -33,7 +33,7 @@ export function NoteSlideOver({
         className={cn(
           "relative z-10 flex h-full w-full flex-col bg-background shadow-2xl",
           "animate-in slide-in-from-right duration-200",
-          "lg:w-[min(100%,max(45rem,calc(100%-min(24vw,20rem))))] lg:border-l lg:border-border",
+          "lg:w-[min(100%,max(45rem,calc(100%-min(24vw,20rem))))] lg:border-s lg:border-border",
           className,
         )}
       >
@@ -46,7 +46,7 @@ export function NoteSlideOver({
           >
             <ArrowRight className="h-4 w-4" />
           </button>
-          <div className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</div>
+          <div className="min-w-0 flex-1 truncate text-s font-semibold">{title}</div>
           {headerRight}
         </header>
         {children}

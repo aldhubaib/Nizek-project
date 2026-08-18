@@ -117,8 +117,8 @@ export function OfflineNotice() {
             <WifiOff className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold">You&apos;re offline</div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
+            <div className="text-s font-semibold">You&apos;re offline</div>
+            <div className="mt-0.5 text-s text-muted-foreground">
               Check your internet connection. We&apos;ll reconnect automatically.
             </div>
           </div>
@@ -128,7 +128,7 @@ export function OfflineNotice() {
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-success/15 text-success">
             <Wifi className="h-5 w-5" />
           </div>
-          <div className="min-w-0 flex-1 text-sm font-semibold">Back online</div>
+          <div className="min-w-0 flex-1 text-s font-semibold">Back online</div>
         </div>
       )}
     </div>

@@ -37,29 +37,29 @@ export default async function EquityPreviewPage() {
         >
           <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
         </Link>
-        <h1 className="text-sm font-semibold text-foreground flex-1">
+        <h1 className="text-s font-semibold text-foreground flex-1">
           Report preview
         </h1>
         <EquityMenu />
       </PageHeader>
 
-      <div className="px-6 py-6 max-w-5xl mx-auto">
+      <div className="px-app py-6 max-w-5xl mx-auto">
         {/* The report is designed on its own dark sheet, so the preview keeps
             that ground rather than borrowing the dashboard's — otherwise the
             colours are checked against a background they'll never print on. */}
         <div className="rounded-xl bg-[#0a0a0a] ring-1 ring-white/10 px-8 py-7">
           <header className="flex items-center justify-between gap-4">
-            <Wordmark className="text-[22px]" />
-            <p className="text-[10px] text-white/40">
+            <Wordmark className="text-3xl" />
+            <p className="text-xs text-white/40">
               {portfolios.length} project{portfolios.length === 1 ? "" : "s"}
             </p>
           </header>
-          <h2 className="text-[22px] font-bold text-white tracking-tight mt-3">
+          <h2 className="text-3xl font-bold text-white tracking-tight mt-3">
             Equity status report
           </h2>
 
           {portfolios.length === 0 ? (
-            <p className="text-[12px] text-white/40 mt-6">
+            <p className="text-s text-white/40 mt-6">
               No equity portfolios yet.
             </p>
           ) : (

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ImagePlus, Trash2, ArrowLeftRight, Loader2 } from "lucide-react";
+import { AddButton } from "@/components/add-button";
 import {
   addLoginPhoto,
   removeLoginPhoto,
@@ -18,7 +19,7 @@ export function LoginSettingsClient({ photos }: { photos: LoginPhotoDTO[] }) {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-s text-muted-foreground">
         Add photos to the two scrolling columns shown on the sign-in page. The
         left column scrolls up, the right column scrolls down.
       </p>
@@ -73,22 +74,15 @@ function PhotoColumn({
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between px-1">
-        <div className="text-tiny font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {label}
         </div>
-        <button
-          type="button"
-          onClick={onPick}
+        <AddButton
+          label="Add photos"
+          busy={uploading}
           disabled={uploading}
-          aria-label="Add photos"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 bg-surface text-foreground transition-colors hover:border-border disabled:opacity-60"
-        >
-          {uploading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <ImagePlus className="h-4 w-4" />
-          )}
-        </button>
+          onClick={onPick}
+        />
         <input
           ref={inputRef}
           type="file"
@@ -104,7 +98,7 @@ function PhotoColumn({
           type="button"
           onClick={onPick}
           disabled={uploading}
-          className="grid w-full place-items-center rounded-xl border border-dashed border-border/60 bg-surface p-8 text-sm text-muted-foreground transition-colors hover:border-border disabled:opacity-60"
+          className="grid w-full place-items-center rounded-xl border border-dashed border-border/60 bg-surface p-8 text-s text-muted-foreground transition-colors hover:border-border disabled:opacity-60"
         >
           <div className="flex flex-col items-center gap-2">
             {uploading ? (

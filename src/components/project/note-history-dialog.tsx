@@ -55,7 +55,7 @@ function Quote({ children, className }: { children: string; className?: string }
   return (
     <blockquote
       className={cn(
-        "mt-1.5 border-l-2 pl-2.5 text-[11px] italic leading-relaxed text-muted-foreground",
+        "mt-1.5 border-s-2 ps-2.5 text-xs italic leading-relaxed text-muted-foreground",
         className ?? "border-border",
       )}
     >
@@ -72,7 +72,7 @@ function ParagraphChanges({ changes }: { changes: ParagraphChange[] }) {
           {change.type === "removed" ? (
             <>
               <Quote className="border-destructive/50">{change.before ?? ""}</Quote>
-              <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 was deleted
               </p>
             </>
@@ -80,7 +80,7 @@ function ParagraphChanges({ changes }: { changes: ParagraphChange[] }) {
           {change.type === "added" ? (
             <>
               <Quote className="border-emerald-400/50">{change.after ?? ""}</Quote>
-              <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 was added
               </p>
             </>
@@ -88,7 +88,7 @@ function ParagraphChanges({ changes }: { changes: ParagraphChange[] }) {
           {change.type === "changed" ? (
             <>
               <Quote className="border-destructive/50">{change.before ?? ""}</Quote>
-              <p className="mt-1 text-[10px] text-muted-foreground/70">was changed to</p>
+              <p className="mt-1 text-xs text-muted-foreground/70">was changed to</p>
               <Quote className="border-emerald-400/50">{change.after ?? ""}</Quote>
             </>
           ) : null}
@@ -110,7 +110,7 @@ function Avatar({ user }: { user: NoteTimelineUser }) {
   }
   return (
     <div className="w-[18px] h-[18px] rounded-full bg-muted ring-2 ring-card flex items-center justify-center">
-      <span className="text-[7px] font-bold text-muted-foreground">
+      <span className="text-xs font-bold text-muted-foreground">
         {user.name?.charAt(0)?.toUpperCase() ?? "?"}
       </span>
     </div>
@@ -131,7 +131,7 @@ function TimelineRow({ entry }: { entry: NoteTimelineEvent }) {
     <div className="relative flex gap-3 py-2">
       <div className="relative z-10 mt-1 shrink-0">{icon}</div>
       <div className="flex-1 min-w-0">
-        <p className="text-[12px] text-foreground/80 leading-snug">{describeEvent(entry)}</p>
+        <p className="text-s text-foreground/80 leading-snug">{describeEvent(entry)}</p>
         {entry.kind === "edited" && entry.paragraphChanges && entry.paragraphChanges.length > 0 ? (
           <ParagraphChanges changes={entry.paragraphChanges} />
         ) : null}
@@ -139,24 +139,24 @@ function TimelineRow({ entry }: { entry: NoteTimelineEvent }) {
           <>
             {entry.quoteText ? (
               <>
-                <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="mt-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   On this paragraph
                 </p>
                 <Quote className="border-amber-400/60">{entry.quoteText}</Quote>
               </>
             ) : null}
-            <p className="mt-1.5 text-[12px] leading-relaxed text-foreground">{entry.comment}</p>
+            <p className="mt-1.5 text-s leading-relaxed text-foreground">{entry.comment}</p>
           </>
         ) : null}
         {entry.kind === "task" && entry.quoteText ? (
           <>
-            <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="mt-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               From this paragraph
             </p>
             <Quote className="border-emerald-400/60">{entry.quoteText}</Quote>
           </>
         ) : null}
-        <span className="text-[10px] text-muted-foreground/50 mt-1 block">
+        <span className="text-xs text-muted-foreground/50 mt-1 block">
           {timeAgo(entry.at)}
         </span>
       </div>
@@ -184,8 +184,8 @@ export function NoteHistoryDialog({ events, onClose }: Props) {
       <div className="relative bg-card border border-border rounded-xl shadow-2xl max-w-xl w-full mx-4 flex flex-col max-h-[85vh]">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border shrink-0">
           <History className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-          <h3 className="text-[13px] font-semibold">Note History</h3>
-          <span className="ml-auto text-[11px] text-muted-foreground tabular-nums">
+          <h3 className="text-s font-semibold">Note History</h3>
+          <span className="ms-auto text-xs text-muted-foreground tabular-nums">
             {events.length} {events.length === 1 ? "event" : "events"}
           </span>
           <button
@@ -200,7 +200,7 @@ export function NoteHistoryDialog({ events, onClose }: Props) {
           {events.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center py-8 gap-2">
               <History className="w-6 h-6 text-muted-foreground opacity-40" strokeWidth={1.5} />
-              <p className="text-[11px] text-muted-foreground/60">Nothing to show</p>
+              <p className="text-xs text-muted-foreground/60">Nothing to show</p>
             </div>
           ) : (
             <div className="relative">

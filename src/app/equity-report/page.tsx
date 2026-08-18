@@ -48,18 +48,18 @@ export default async function EquityReportPage({
       <div className="mx-auto w-[210mm] max-w-full bg-[#0a0a0a] px-10 py-9 print:w-full print:px-[14mm] print:py-[14mm]">
         <header>
           <div className="flex items-start justify-between gap-4 mb-5">
-            <Wordmark className="text-[26px]" />
+            <Wordmark className="text-3xl" />
             <div className="flex items-center gap-2">
               <ReportVariantPicker variant={variant} />
               <PrintButton />
             </div>
           </div>
-          <h1 className="text-[26px] font-bold text-white tracking-tight">
+          <h1 className="text-3xl font-bold text-white tracking-tight">
             Equity status report
           </h1>
           {/* Named on the page itself, since the picker is hidden when printing
               and a printed copy would otherwise be impossible to tell apart. */}
-          <p className="text-[10px] text-white/40 mt-1">
+          <p className="text-xs text-white/40 mt-1">
             {REPORT_VARIANT[variant]} · {portfolios.length} project
             {portfolios.length === 1 ? "" : "s"} · generated{" "}
             {generatedAt.toLocaleString()}
@@ -67,7 +67,7 @@ export default async function EquityReportPage({
         </header>
 
         {portfolios.length === 0 ? (
-          <p className="text-[12px] text-white/40 mt-6">
+          <p className="text-s text-white/40 mt-6">
             No equity portfolios yet.
           </p>
         ) : (
@@ -83,16 +83,16 @@ export default async function EquityReportPage({
         )}
 
         <footer className="mt-9 pt-3.5 border-t border-white/10 flex items-center gap-3.5">
-          <Wordmark className="text-[19px]" />
+          <Wordmark className="text-3xl" />
           <div className="w-px self-stretch bg-white/15" />
-          <p className="flex-1 text-[9px] leading-relaxed text-white/40">
+          <p className="flex-1 text-xs leading-relaxed text-white/40">
             Empowering ideas. Building value.
             <br />
             This report reflects the equity status of your projects and
             associated contracts.
           </p>
           <span
-            className="text-[10px] font-semibold"
+            className="text-xs font-semibold"
             style={{ color: ACCENT }}
           >
             nizek.com

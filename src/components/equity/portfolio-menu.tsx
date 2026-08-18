@@ -129,7 +129,7 @@ export function PortfolioMenu({
           </DialogHeader>
 
           <div className="space-y-2">
-            <p className="text-[12px] text-muted-foreground">
+            <p className="text-s text-muted-foreground">
               Type <strong className="text-foreground">{projectName}</strong> to
               confirm:
             </p>
@@ -141,7 +141,7 @@ export function PortfolioMenu({
               onKeyDown={(e) => e.key === "Enter" && handleDelete()}
             />
             {deleteError && (
-              <p className="text-[12px] text-destructive">{deleteError}</p>
+              <p className="text-s text-destructive">{deleteError}</p>
             )}
           </div>
 
@@ -217,7 +217,7 @@ function HistoryDialog({
                 key={id}
                 onClick={() => setSection(id)}
                 className={cn(
-                  "px-2.5 h-7 rounded-lg text-[12px] font-medium transition-colors",
+                  "px-2.5 h-7 rounded-lg text-s font-medium transition-colors",
                   section === id
                     ? "bg-accent text-foreground"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
@@ -230,17 +230,17 @@ function HistoryDialog({
         )}
 
         <div className="max-h-[60vh] overflow-y-auto -mx-1 px-1">
-          {error && <p className="text-[12px] text-destructive py-2">{error}</p>}
+          {error && <p className="text-s text-destructive py-2">{error}</p>}
 
           {entries === null && !error && (
-            <div className="flex items-center gap-2 text-[12px] text-muted-foreground py-6">
+            <div className="flex items-center gap-2 text-s text-muted-foreground py-6">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
               Loading history…
             </div>
           )}
 
           {entries !== null && shown.length === 0 && (
-            <p className="text-[12px] text-muted-foreground py-6">
+            <p className="text-s text-muted-foreground py-6">
               Nothing recorded yet. Changes from here on will show up.
             </p>
           )}
@@ -271,7 +271,7 @@ function HistoryRow({ entry }: { entry: EquityActivityDTO }) {
 
   return (
     <div className="rounded-lg border border-border bg-card/50 px-3 py-2">
-      <div className="flex items-center gap-2 flex-wrap text-[11px]">
+      <div className="flex items-center gap-2 flex-wrap text-xs">
         <span
           className={cn(
             "px-1.5 py-0.5 rounded-full border font-medium capitalize",
@@ -294,7 +294,7 @@ function HistoryRow({ entry }: { entry: EquityActivityDTO }) {
         </span>
       </div>
 
-      <div className="mt-1 text-[13px] text-foreground break-words">
+      <div className="mt-1 text-s text-foreground break-words">
         {entry.label && (
           <span className="text-muted-foreground">{entry.label}: </span>
         )}
@@ -317,7 +317,7 @@ function HistoryRow({ entry }: { entry: EquityActivityDTO }) {
         )}
       </div>
 
-      <p className="mt-0.5 text-[11px] text-muted-foreground/60">{who}</p>
+      <p className="mt-0.5 text-xs text-muted-foreground/60">{who}</p>
     </div>
   );
 }

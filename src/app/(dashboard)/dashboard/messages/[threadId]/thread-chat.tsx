@@ -389,7 +389,7 @@ function UnreadSeparator({ count }: { count: number }) {
       aria-label={label}
     >
       <div className="h-px flex-1 bg-primary/40" />
-      <span className="shrink-0 rounded-full bg-primary/15 px-3 py-0.5 text-[11px] font-semibold text-primary">
+      <span className="shrink-0 rounded-full bg-primary/15 px-3 py-0.5 text-xs font-semibold text-primary">
         {label}
       </span>
       <div className="h-px flex-1 bg-primary/40" />
@@ -439,21 +439,21 @@ function ReactionChips({
                   : `${r.emoji} ${r.memberIds.length} reactions`
               }
               className={cn(
-                "flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs leading-none transition-colors",
+                "flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-s leading-none transition-colors",
                 mineReacted
                   ? "border-primary/50 bg-primary/15 text-foreground"
                   : "border-border/60 bg-surface/60 text-muted-foreground hover:bg-surface",
               )}
             >
               <span>{r.emoji}</span>
-              <span className="text-[10px] font-medium">{r.memberIds.length}</span>
+              <span className="text-xs font-medium">{r.memberIds.length}</span>
             </PopoverTrigger>
             <PopoverContent
               align={mine ? "end" : "start"}
               side="top"
               className="w-56 gap-0 p-1.5"
             >
-              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+              <div className="px-2 py-1.5 text-s font-medium text-muted-foreground">
                 {r.emoji}{" "}
                 {r.memberIds.length === 1
                   ? "1 reaction"
@@ -469,7 +469,7 @@ function ReactionChips({
                       className="flex items-center gap-2 rounded-md px-2 py-1.5"
                     >
                       <div
-                        className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/20 text-[10px] font-semibold text-primary"
+                        className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/20 text-xs font-semibold text-primary"
                         aria-hidden
                       >
                         {initialsFrom(
@@ -533,7 +533,7 @@ function MessageMeta({
   return (
     <span
       className={cn(
-        "ml-1 inline-flex shrink-0 translate-y-0.5 items-center gap-0.5 text-[10px] leading-none",
+        "ml-1 inline-flex shrink-0 translate-y-0.5 items-center gap-0.5 text-xs leading-none",
         blue ? "text-primary-foreground/70" : "text-muted-foreground",
       )}
     >
@@ -708,7 +708,7 @@ const MessageRow = memo(function MessageRow({
       <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
         {showDay && (
           <div className="my-2 flex items-center justify-center">
-            <span className="rounded-full bg-surface px-3 py-1 text-tiny font-medium text-muted-foreground">
+            <span className="rounded-full bg-surface px-3 py-1 text-xs font-medium text-muted-foreground">
               {formatDay(m.createdAt)}
             </span>
           </div>
@@ -727,7 +727,7 @@ const MessageRow = memo(function MessageRow({
           />
           <div className="flex min-w-0 w-full max-w-[420px] flex-col gap-1">
             {showAuthor && (
-              <div className="px-1 text-tiny text-muted-foreground">{authorLabel}</div>
+              <div className="px-1 text-xs text-muted-foreground">{authorLabel}</div>
             )}
             {m.deadlineReminder ? (
               <DeadlineReminderCard payload={m.deadlineReminder} createdAt={m.createdAt} />
@@ -747,7 +747,7 @@ const MessageRow = memo(function MessageRow({
       <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
         {showDay && (
           <div className="my-2 flex items-center justify-center">
-            <span className="rounded-full bg-surface px-3 py-1 text-tiny font-medium text-muted-foreground">
+            <span className="rounded-full bg-surface px-3 py-1 text-xs font-medium text-muted-foreground">
               {formatDay(m.createdAt)}
             </span>
           </div>
@@ -762,7 +762,7 @@ const MessageRow = memo(function MessageRow({
           {!mine && <div className="w-8 shrink-0" aria-hidden />}
           <div className="flex min-w-0 w-full max-w-[420px] flex-col gap-1">
             {showAuthor && (
-              <div className="px-1 text-tiny text-muted-foreground">{m.authorName}</div>
+              <div className="px-1 text-xs text-muted-foreground">{m.authorName}</div>
             )}
             <TaskCommentCard payload={m.taskComment} createdAt={m.createdAt} />
           </div>
@@ -775,7 +775,7 @@ const MessageRow = memo(function MessageRow({
     <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
       {showDay && (
         <div className="my-2 flex items-center justify-center">
-          <span className="rounded-full bg-surface px-3 py-1 text-tiny font-medium text-muted-foreground">
+          <span className="rounded-full bg-surface px-3 py-1 text-xs font-medium text-muted-foreground">
             {formatDay(m.createdAt)}
           </span>
         </div>
@@ -814,7 +814,7 @@ const MessageRow = memo(function MessageRow({
                 />
               ) : (
                 <div
-                  className="grid h-8 w-8 place-items-center rounded-full bg-primary/20 text-xxs font-semibold text-primary"
+                  className="grid h-8 w-8 place-items-center rounded-full bg-primary/20 text-xs font-semibold text-primary"
                   aria-hidden
                 >
                   {m.authorName
@@ -853,7 +853,7 @@ const MessageRow = memo(function MessageRow({
             </div>
           )}
           {showAuthor && (
-            <div className="px-1 text-tiny text-muted-foreground">{m.authorName}</div>
+            <div className="px-1 text-xs text-muted-foreground">{m.authorName}</div>
           )}
           {(m.body || replied || (m.task && showTaskCard) || editing) && (() => {
             const notice = (!!m.task && showTaskCard) || m.kind === "rejection";
@@ -879,10 +879,10 @@ const MessageRow = memo(function MessageRow({
                   >
                     <CheckSquare className="h-4 w-4 shrink-0 text-primary" />
                     <div className="min-w-0 flex-1">
-                      <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                         Task · #{fmtTaskNumber(m.task.number)}
                       </div>
-                      <div className="truncate text-xs font-semibold text-foreground">
+                      <div className="truncate text-s font-semibold text-foreground">
                         {m.task.title}
                       </div>
                     </div>
@@ -894,7 +894,7 @@ const MessageRow = memo(function MessageRow({
                     type="button"
                     onClick={() => scrollToMessage(m.replyToId!)}
                     className={cn(
-                      "-mx-1 flex flex-col gap-0.5 rounded-md border-l-2 px-2 py-1 text-left text-xs",
+                      "-mx-1 flex flex-col gap-0.5 rounded-md border-l-2 px-2 py-1 text-left text-s",
                       blue
                         ? "border-primary-foreground/60 bg-primary-foreground/10 text-primary-foreground/90"
                         : "border-primary/70 bg-primary/10 text-foreground/80",
@@ -902,7 +902,7 @@ const MessageRow = memo(function MessageRow({
                   >
                     <span
                       className={cn(
-                        "text-[11px] font-semibold",
+                        "text-xs font-semibold",
                         blue ? "text-primary-foreground" : "text-primary",
                       )}
                     >
@@ -930,14 +930,14 @@ const MessageRow = memo(function MessageRow({
                       <button
                         type="button"
                         onClick={onCancelEdit}
-                        className="rounded-full px-3 py-1 text-xs text-muted-foreground hover:bg-surface"
+                        className="rounded-full px-3 py-1 text-s text-muted-foreground hover:bg-surface"
                       >
                         Cancel
                       </button>
                       <button
                         type="button"
                         onClick={onSaveEdit}
-                        className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground"
+                        className="rounded-full bg-primary px-3 py-1 text-s font-medium text-primary-foreground"
                       >
                         Save
                       </button>
@@ -955,10 +955,10 @@ const MessageRow = memo(function MessageRow({
                         : m.body;
                       return (
                         <>
-                          <div className="flex items-start gap-2 rounded-lg border-l-2 border-destructive bg-destructive/10 px-2.5 py-2 text-xs">
+                          <div className="flex items-start gap-2 rounded-lg border-l-2 border-destructive bg-destructive/10 px-2.5 py-2 text-s">
                             <AlertOctagon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
                             <div className="min-w-0 flex-1">
-                              <div className="text-[10px] font-bold uppercase tracking-wider text-destructive">
+                              <div className="text-xs font-bold uppercase tracking-wider text-destructive">
                                 Rejected
                               </div>
                               {reason && (
@@ -970,11 +970,11 @@ const MessageRow = memo(function MessageRow({
                           </div>
                           <div className="flex items-end gap-2 px-0.5">
                             {who && (
-                              <span className="rounded bg-primary/15 px-1 py-0.5 text-xs font-medium text-primary">
+                              <span className="rounded bg-primary/15 px-1 py-0.5 text-s font-medium text-primary">
                                 @{who}
                               </span>
                             )}
-                            <span className="ml-auto shrink-0 text-[10px] leading-none text-muted-foreground">
+                            <span className="ml-auto shrink-0 text-xs leading-none text-muted-foreground">
                               {formatTime(m.createdAt)}
                             </span>
                           </div>
@@ -2439,7 +2439,7 @@ export function ThreadChat({
 
       {/* Thread header — swaps to WhatsApp-style selection toolbar on mobile. */}
       {selectedMessage ? (
-        <div className="flex app-top-bar-tall items-center gap-0.5 border-b border-border/60 bg-surface/80 px-1 sm:px-2 lg:hidden">
+        <div className="absolute inset-x-0 top-0 z-10 flex app-top-bar-tall items-center gap-0.5 border-b border-border/60 px-1 sm:px-2 lg:hidden">
           <button
             type="button"
             onClick={clearSelection}
@@ -2448,7 +2448,7 @@ export function ThreadChat({
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <span className="min-w-[1.5rem] px-1 text-base font-semibold tabular-nums">
+          <span className="min-w-[1.5rem] px-1 text-m font-semibold tabular-nums">
             1
           </span>
           <div className="ml-auto flex items-center">
@@ -2550,7 +2550,7 @@ export function ThreadChat({
       ) : null}
       <div
         className={cn(
-          "flex app-top-bar-tall items-center gap-2 border-b border-border/60 px-3 sm:gap-3 sm:px-4",
+          "absolute inset-x-0 top-0 z-10 flex app-top-bar-tall items-center gap-2 border-b border-border/60 sm:gap-3",
           selectedMessage && "hidden lg:flex",
         )}
       >
@@ -2570,7 +2570,7 @@ export function ThreadChat({
             {peerMemberIds.length > 0 && (
               <span
                 className={cn(
-                  "inline-flex items-center gap-1 text-xxs",
+                  "inline-flex items-center gap-1 text-xs",
                   peersOnline ? "text-emerald-500" : "text-muted-foreground",
                 )}
               >
@@ -2584,7 +2584,7 @@ export function ThreadChat({
               </span>
             )}
           </div>
-          <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
+          <div className="truncate text-s text-muted-foreground">{subtitle}</div>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -2639,7 +2639,7 @@ export function ThreadChat({
 
       {/* Messages */}
       <div className="relative min-h-0 flex-1">
-        <div ref={scrollerRef} className="h-full overflow-y-auto px-4 py-4 lg:px-8">
+        <div ref={scrollerRef} className="app-scroll-under-tall h-full overflow-y-auto px-app pb-4 lg:px-8">
           <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-1.5">
             <div ref={topSentinelRef} className="h-px w-full" aria-hidden />
             {hasMore && (
@@ -2648,7 +2648,7 @@ export function ThreadChat({
                   type="button"
                   onClick={loadOlder}
                   disabled={loadingOlder}
-                  className="flex items-center gap-2 rounded-full border border-border/60 bg-surface/60 px-4 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:opacity-60"
+                  className="flex items-center gap-2 rounded-full border border-border/60 bg-surface/60 px-4 py-1.5 text-s font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:opacity-60"
                 >
                   {loadingOlder && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   {loadingOlder ? "Loading…" : "Load earlier messages"}
@@ -2721,7 +2721,7 @@ export function ThreadChat({
                 <div className="text-sm font-medium text-foreground">
                   No messages yet
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-s text-muted-foreground">
                   Send a message to start the conversation.
                 </p>
               </div>
@@ -2737,7 +2737,7 @@ export function ThreadChat({
                       <span className="size-1.5 animate-[typing_1.4s_ease-in-out_infinite] rounded-full bg-primary" />
                     </div>
                   </div>
-                  <span className="px-1 text-tiny text-muted-foreground">{typingLabel}</span>
+                  <span className="px-1 text-xs text-muted-foreground">{typingLabel}</span>
                 </div>
               </div>
             )}
@@ -2747,7 +2747,7 @@ export function ThreadChat({
           <button
             type="button"
             onClick={scrollToBottom}
-            className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-lg"
+            className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-s font-medium text-primary-foreground shadow-lg"
           >
             ↓ New messages{newBelow > 1 ? ` (${newBelow})` : ""}
           </button>
@@ -2755,10 +2755,10 @@ export function ThreadChat({
       </div>
 
       {/* Composer */}
-      <div className="shrink-0 border-t border-border/60 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:px-8">
+      <div className="shrink-0 border-t border-border/60 px-app pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:px-8">
         <div className="mx-auto w-full max-w-[1100px]">
           {inactive || readOnly ? (
-            <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-surface/30 px-4 py-3 text-xs text-muted-foreground">
+            <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-surface/30 px-4 py-3 text-s text-muted-foreground">
               {inactive
                 ? "This project is not active. The channel is read-only."
                 : "You have read-only access to this chat."}
@@ -2766,7 +2766,7 @@ export function ThreadChat({
           ) : (
           <>
           {pendingTaskRef && (
-            <div className="mb-2 flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs">
+            <div className="mb-2 flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-s">
               <CheckSquare className="h-3.5 w-3.5 shrink-0 text-primary" />
               <div className="min-w-0 flex-1 truncate">
                 <span className="text-muted-foreground">Referencing task </span>
@@ -2787,7 +2787,7 @@ export function ThreadChat({
           {mentionPickerOpen && (
             <div className="relative">
               <div className="absolute -top-1 left-0 z-10 w-full -translate-y-full overflow-hidden rounded-lg border border-border/60 bg-popover shadow-lg">
-                <div className="border-b border-border/60 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <div className="border-b border-border/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   People in {title}
                 </div>
                 <ul className="max-h-60 overflow-y-auto py-1">
@@ -2810,7 +2810,7 @@ export function ThreadChat({
                             <Users className="h-3.5 w-3.5" />
                           </span>
                         ) : (
-                          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary">
+                          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
                             {m.name.slice(0, 1).toUpperCase()}
                           </span>
                         )}
@@ -2818,7 +2818,7 @@ export function ThreadChat({
                           {m.isAll ? "@all" : m.name}
                         </span>
                         {m.isAll && (
-                          <span className="shrink-0 text-[10px] text-muted-foreground">
+                          <span className="shrink-0 text-xs text-muted-foreground">
                             Everyone
                           </span>
                         )}
@@ -2832,7 +2832,7 @@ export function ThreadChat({
           {pickerOpen && (
             <div className="relative">
               <div className="absolute -top-1 left-0 z-10 w-full -translate-y-full overflow-hidden rounded-lg border border-border/60 bg-popover shadow-lg">
-                <div className="border-b border-border/60 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <div className="border-b border-border/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Tasks in {title}
                 </div>
                 <ul className="max-h-60 overflow-y-auto py-1">
@@ -2851,12 +2851,12 @@ export function ThreadChat({
                         )}
                       >
                         <CheckSquare className="h-3.5 w-3.5 shrink-0 text-primary" />
-                        <span className="font-mono text-[10px] uppercase text-muted-foreground">
+                        <span className="font-mono text-xs uppercase text-muted-foreground">
                           #{fmtTaskNumber(task.number)}
                         </span>
                         <span className="min-w-0 flex-1 truncate">{task.title}</span>
                         {task.statusName && (
-                          <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-surface/60 px-2 py-0.5 text-[10px] text-muted-foreground">
+                          <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-surface/60 px-2 py-0.5 text-xs text-muted-foreground">
                             <span
                               className="h-1.5 w-1.5 rounded-full"
                               style={{ background: task.statusColor ?? "var(--muted-foreground)" }}
@@ -2875,10 +2875,10 @@ export function ThreadChat({
             <div className="mb-2 flex items-start gap-2 rounded-t-2xl border border-b-0 border-border/60 bg-surface/60 px-3 py-2">
               <Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
               <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-semibold text-primary">
+                <div className="text-xs font-semibold text-primary">
                   Replying to {replyingTo.authorId === currentMemberId ? "yourself" : replyingTo.authorName}
                 </div>
-                <div className="line-clamp-1 text-xs text-muted-foreground">
+                <div className="line-clamp-1 text-s text-muted-foreground">
                   {replyingTo.body || "Attachment"}
                 </div>
               </div>
@@ -2897,7 +2897,7 @@ export function ThreadChat({
               {pending.map((p) => (
                 <div
                   key={p.key}
-                  className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface/60 px-2.5 py-1.5 text-xs"
+                  className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface/60 px-2.5 py-1.5 text-s"
                 >
                   {p.previewUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -2930,12 +2930,12 @@ export function ThreadChat({
             />
           )}
           {recordError && (
-            <div className="mb-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <div className="mb-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-s text-destructive">
               {recordError}
             </div>
           )}
           {fileError && (
-            <div className="mb-2 flex items-start justify-between gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <div className="mb-2 flex items-start justify-between gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-s text-destructive">
               <span>{fileError}</span>
               <button
                 type="button"
@@ -2971,7 +2971,7 @@ export function ThreadChat({
                   />
                   <span
                     className={cn(
-                      "shrink-0 text-xs",
+                      "shrink-0 text-s",
                       slideCancelArmed
                         ? "font-medium text-destructive"
                         : "text-muted-foreground",
@@ -3351,7 +3351,7 @@ export function ThreadChat({
             )}
             {sq && searchMatches && searchMatches.length > 0 && (
               <>
-                <div className="px-4 pb-1 pt-3 text-xs font-medium text-muted-foreground">
+                <div className="px-4 pb-1 pt-3 text-s font-medium text-muted-foreground">
                   {searchMatches.length} result{searchMatches.length === 1 ? "" : "s"}
                 </div>
                 <ul className="flex flex-col">
@@ -3362,7 +3362,7 @@ export function ThreadChat({
                         onClick={() => scrollToMessage(m.id)}
                         className="flex w-full flex-col gap-1 border-b border-border/40 px-4 py-3 text-left hover:bg-surface/60"
                       >
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                           {new Date(m.createdAt).toLocaleDateString([], { day: "2-digit", month: "2-digit", year: "numeric" })}
                         </span>
                         <span className="line-clamp-2 text-sm text-foreground">
@@ -3420,7 +3420,7 @@ export function ThreadChat({
                       onClick={() => jumpToMessage(m.id)}
                       className="flex w-full flex-col gap-1 border-b border-border/40 px-4 py-3 text-left hover:bg-surface/60"
                     >
-                      <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
                         {new Date(m.createdAt).toLocaleDateString([], {
                           day: "2-digit",
@@ -3535,7 +3535,7 @@ function OutboxBubble({
                     {!failed && entry.status === "uploading" && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50">
                         <Loader2 className="h-6 w-6 animate-spin text-white" />
-                        <span className="text-xs font-semibold text-white">
+                        <span className="text-s font-semibold text-white">
                           {pct}%
                         </span>
                       </div>
@@ -3557,7 +3557,7 @@ function OutboxBubble({
                     {f.name}
                   </span>
                   {entry.status === "uploading" && !failed && (
-                    <span className="shrink-0 text-[10px] opacity-80">{pct}%</span>
+                    <span className="shrink-0 text-xs opacity-80">{pct}%</span>
                   )}
                 </div>
               );
@@ -3576,7 +3576,7 @@ function OutboxBubble({
             return previewUrl ? <LinkPreviewCard url={previewUrl} mine /> : null;
           })()}
         {failed ? (
-          <div className="flex max-w-full flex-wrap items-center justify-end gap-2 text-xs text-destructive">
+          <div className="flex max-w-full flex-wrap items-center justify-end gap-2 text-s text-destructive">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             <span className="min-w-0 break-words text-right">
               {entry.errorMessage || "Failed to send"}
@@ -3598,7 +3598,7 @@ function OutboxBubble({
             </button>
           </div>
         ) : (
-          <div className="px-1 text-[10px] text-muted-foreground">
+          <div className="px-1 text-xs text-muted-foreground">
             {entry.status === "uploading" ? "Uploading…" : "Sending…"}
           </div>
         )}

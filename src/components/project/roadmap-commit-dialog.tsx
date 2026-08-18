@@ -23,17 +23,17 @@ export function RoadmapWarningDialog({
             <ShieldAlert className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1 space-y-1">
-            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               {heading}
             </div>
-            <p className="text-[13px] leading-relaxed text-muted-foreground">{message}</p>
+            <p className="text-s leading-relaxed text-muted-foreground">{message}</p>
           </div>
         </div>
 
         {notice ? (
           <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 mt-4">
-            <span className="text-amber-400 text-[13px]">⏱</span>
-            <p className="text-[12px] text-amber-400/90 font-medium">{notice}</p>
+            <span className="text-amber-400 text-s">⏱</span>
+            <p className="text-s text-amber-400/90 font-medium">{notice}</p>
           </div>
         ) : null}
 
@@ -41,7 +41,7 @@ export function RoadmapWarningDialog({
           <button
             type="button"
             onClick={onDismiss}
-            className="px-4 py-2 rounded-lg text-[13px] font-medium text-white transition-colors bg-blue-600 hover:bg-blue-700"
+            className="px-4 py-2 rounded-lg text-s font-medium text-white transition-colors bg-blue-600 hover:bg-blue-700"
           >
             OK
           </button>
@@ -76,10 +76,10 @@ export function RoadmapCommitDialog({
             <ShieldAlert className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1 space-y-1">
-            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Commit to this item
             </div>
-            <p className="text-[13px] leading-relaxed text-muted-foreground">
+            <p className="text-s leading-relaxed text-muted-foreground">
               By confirming, the team will be committed to do{" "}
               <span className="font-semibold text-foreground">“{title}”</span>.
               The starting date and due date will be set automatically.
@@ -88,15 +88,15 @@ export function RoadmapCommitDialog({
         </div>
 
         <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 mt-4">
-          <span className="text-amber-400 text-[13px]">⏱</span>
-          <p className="text-[12px] text-amber-400/90 font-medium">
+          <span className="text-amber-400 text-s">⏱</span>
+          <p className="text-s text-amber-400/90 font-medium">
             Starting date will be set to {startDateLabel}. You can adjust it afterwards.
           </p>
         </div>
 
         <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 mt-2">
-          <span className="text-amber-400 text-[13px]">⏱</span>
-          <p className="text-[12px] text-amber-400/90 font-medium">
+          <span className="text-amber-400 text-s">⏱</span>
+          <p className="text-s text-amber-400/90 font-medium">
             Due date will be set to {dueDateLabel}. You can adjust it afterwards.
           </p>
         </div>
@@ -105,7 +105,7 @@ export function RoadmapCommitDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="px-4 py-2 rounded-lg text-s font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
             Cancel
           </button>
@@ -113,7 +113,7 @@ export function RoadmapCommitDialog({
             type="button"
             onClick={onConfirm}
             disabled={confirming}
-            className="px-4 py-2 rounded-lg text-[13px] font-medium text-white transition-colors disabled:opacity-50 bg-blue-600 hover:bg-blue-700"
+            className="px-4 py-2 rounded-lg text-s font-medium text-white transition-colors disabled:opacity-50 bg-blue-600 hover:bg-blue-700"
           >
             {confirming ? "Moving..." : "Confirm"}
           </button>

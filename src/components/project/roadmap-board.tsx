@@ -15,8 +15,9 @@ import {
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { format } from "date-fns";
-import { CheckCircle2, CheckSquare, Circle, MessageSquare, Plus } from "lucide-react";
+import { CheckCircle2, CheckSquare, Circle, MessageSquare } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AddButton } from "@/components/add-button";
 import { cn } from "@/lib/utils";
 import { RoadmapCommitDialog, RoadmapWarningDialog } from "@/components/project/roadmap-commit-dialog";
 import {
@@ -112,7 +113,7 @@ function NoteCardStatusIcon({
           <Glyph className="h-3.5 w-3.5" />
           <span
             className={cn(
-              "absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold leading-4 text-background",
+              "absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full px-1 text-xs font-bold leading-4 text-background",
               badgeClass,
             )}
           >
@@ -126,7 +127,7 @@ function NoteCardStatusIcon({
           title={doneLabel}
         >
           <Glyph className="h-3.5 w-3.5" />
-          <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-muted px-1 text-[9px] font-bold leading-4 text-muted-foreground">
+          <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-muted px-1 text-xs font-bold leading-4 text-muted-foreground">
             {doneCount}
           </span>
         </span>
@@ -331,20 +332,16 @@ function RoadmapColumn({
     >
       <div className="flex items-center justify-between gap-2 px-3 py-3">
         <div className="flex items-baseline gap-2 min-w-0">
-          <h3 className="text-[15px] font-semibold tracking-tight">{label}</h3>
-          <span className="text-[12px] text-muted-foreground tabular-nums">
+          <h3 className="text-s font-semibold tracking-tight">{label}</h3>
+          <span className="text-s text-muted-foreground tabular-nums">
             {status === "NEXT" ? `${notes.length}/${ROADMAP_NEXT_MAX}` : notes.length}
           </span>
         </div>
         {canEdit && status === "PLANNED" && (
-          <button
-            type="button"
+          <AddButton
+            label={`Add to ${label}`}
             onClick={() => onCreate(status)}
-            className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            aria-label={`Add to ${label}`}
-          >
-            <Plus className="h-4 w-4" />
-          </button>
+          />
         )}
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-2 pb-3">
@@ -417,7 +414,7 @@ function RoadmapCard({
         }
       }}
       className={cn(
-        "flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/60 bg-card p-3 text-left transition-colors hover:border-border",
+        "flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/60 bg-card p-3 text-start transition-colors hover:border-border",
         note.completedAt && "opacity-60",
         canDrag && "cursor-grab active:cursor-grabbing",
         (isDragging || overlay) && "opacity-80 shadow-lg",
@@ -425,7 +422,7 @@ function RoadmapCard({
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <h3 className={cn("min-w-0 text-[15px] font-bold leading-snug line-clamp-2", note.completedAt && "line-through")}>
+        <h3 className={cn("min-w-0 text-s font-bold leading-snug line-clamp-2", note.completedAt && "line-through")}>
           {note.title}
         </h3>
         {canEdit && (
@@ -449,7 +446,7 @@ function RoadmapCard({
       </div>
 
       {(deadlineStatus || note.workingDays != null) && (
-        <span className={`mt-2 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${deadlineStatus?.bg ?? "bg-muted border-border"} ${deadlineStatus?.color ?? "text-muted-foreground"}`}>
+        <span className={`mt-2 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${deadlineStatus?.bg ?? "bg-muted border-border"} ${deadlineStatus?.color ?? "text-muted-foreground"}`}>
           {[
             deadlineStatus?.label,
             note.dueDate ? format(new Date(note.dueDate), "MMM d, yyyy") : null,
@@ -462,16 +459,16 @@ function RoadmapCard({
       )}
 
       {bodyPreview ? (
-        <p className="mt-2 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
+        <p className="mt-2 line-clamp-2 text-s leading-relaxed text-muted-foreground">
           {bodyPreview}
         </p>
       ) : null}
 
       <div className="mt-3 shrink-0">
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Created {format(new Date(note.createdAt), "MMM d, yyyy")}
         </p>
-        <div className="mt-2 flex items-center gap-2 text-[12px]">
+        <div className="mt-2 flex items-center gap-2 text-s">
           <NoteCardStatusIcon
             openCount={tasksOpenCount}
             doneCount={tasksDoneCount}
@@ -492,7 +489,7 @@ function RoadmapCard({
           />
           <Avatar
             size="sm"
-            className="ml-auto"
+            className="ms-auto"
             title={note.author.name ?? "Unknown"}
           >
             <AvatarImage src={note.author.imageUrl ?? undefined} alt="" />

@@ -74,7 +74,7 @@ export function ConfirmDeleteDialog({
         </DialogHeader>
 
         <div className="space-y-2">
-          <p className="text-[12px] text-muted-foreground">
+          <p className="text-s text-muted-foreground">
             Type <strong className="text-foreground">{confirmWord}</strong> to
             confirm:
           </p>
@@ -85,7 +85,7 @@ export function ConfirmDeleteDialog({
             autoFocus
             onKeyDown={(e) => e.key === "Enter" && run()}
           />
-          {error && <p className="text-[12px] text-destructive">{error}</p>}
+          {error && <p className="text-s text-destructive">{error}</p>}
         </div>
 
         <DialogFooter>

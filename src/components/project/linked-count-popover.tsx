@@ -45,7 +45,7 @@ export function LinkedCountPopover({
         {label}
       </PopoverTrigger>
       <PopoverContent align="start" side="bottom" className="w-80 gap-1 p-2">
-        <div className="px-1.5 py-1 text-[12px] font-semibold">{label}</div>
+        <div className="px-1.5 py-1 text-s font-semibold">{label}</div>
         <div className="max-h-72 space-y-1 overflow-y-auto">{children}</div>
       </PopoverContent>
     </Popover>

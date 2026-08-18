@@ -203,16 +203,16 @@ export function UpdateNotifier({
             <Sparkles className="w-4 h-4 text-primary" strokeWidth={1.5} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-foreground">
+            <p className="text-s font-semibold text-foreground">
               A new version is available
             </p>
-            <p className="text-[12px] text-muted-foreground mt-0.5 leading-snug">
+            <p className="text-s text-muted-foreground mt-0.5 leading-snug">
               Update now to get the latest features and fixes.
             </p>
             <div className="flex items-center gap-2 mt-3">
               <button
                 onClick={update}
-                className="h-7 px-3 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium hover:bg-primary/80 transition-colors"
+                className="h-7 px-3 rounded-lg bg-primary text-primary-foreground text-s font-medium hover:bg-primary/80 transition-colors"
               >
                 Update now
               </button>

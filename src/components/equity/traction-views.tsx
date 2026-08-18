@@ -74,7 +74,7 @@ function MilestoneBody({ text }: { text: string }) {
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="mt-1 text-[11px] font-medium text-foreground/70 hover:text-foreground transition-colors"
+          className="mt-1 text-xs font-medium text-foreground/70 hover:text-foreground transition-colors"
         >
           {open ? "Read less" : "Read more"}
         </button>
@@ -93,7 +93,7 @@ export type TractionProgress = { at: number; scrolls: boolean };
  */
 export function TractionCount({ at, total }: { at: number; total: number }) {
   return (
-    <span className="text-[11px] tabular-nums shrink-0">
+    <span className="text-xs tabular-nums shrink-0">
       {/* The report's accent, the same one marking the step you're reading. */}
       <span style={{ color: ACCENT }}>{at + 1}/</span>
       <span className="text-foreground">{total}</span>
@@ -170,7 +170,7 @@ export function TractionTimeline({
     <div
       ref={boxRef}
       onScroll={measure}
-      className="max-h-[520px] overflow-y-auto overscroll-contain pr-3"
+      className="max-h-[520px] overflow-y-auto overscroll-contain pe-3"
     >
       <ol className="relative list-none p-0 m-0 space-y-8">
         {/* The spine, stopped short of the last dot so it doesn't dangle */}
@@ -188,7 +188,7 @@ export function TractionTimeline({
               ref={(el) => {
                 steps.current[i] = el;
               }}
-              className="relative pl-8"
+              className="relative ps-8"
             >
               {/* The accent marks where you are, not what has been achieved:
                 one dot lit at a time, so the list says which step is being
@@ -213,16 +213,16 @@ export function TractionTimeline({
               />
 
               <div className="flex items-baseline gap-2 flex-wrap">
-                <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/70 tabular-nums">
+                <span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground/70 tabular-nums">
                   {/* Numbered from the beginning of the journey, whichever end
                     of it the list leads with. */}
                   Step {String(milestones.length - i).padStart(2, "0")}
                 </span>
-                <span className="text-[11px] tabular-nums text-muted-foreground">
+                <span className="text-xs tabular-nums text-muted-foreground">
                   {longDay(milestone.happenedOn)}
                 </span>
                 {ahead && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-muted/60 text-muted-foreground">
+                  <span className="text-xs px-1.5 py-0.5 rounded-md bg-muted/60 text-muted-foreground">
                     Upcoming
                   </span>
                 )}
@@ -230,7 +230,7 @@ export function TractionTimeline({
 
               <p
                 className={cn(
-                  "text-[15px] font-semibold mt-1.5",
+                  "text-s font-semibold mt-1.5",
                   ahead ? "text-muted-foreground" : "text-foreground",
                 )}
               >
@@ -240,7 +240,7 @@ export function TractionTimeline({
                 lives on the wrapper so the two can't come out different
                 widths. Click the photo to enlarge. */}
               {(milestone.body || milestone.photoUrl) && (
-                <div className="max-w-[70ch] text-[12px]">
+                <div className="max-w-[70ch] text-s">
                   {milestone.body && <MilestoneBody text={milestone.body} />}
                   {milestone.photoUrl && (
                     <PhotoGallery

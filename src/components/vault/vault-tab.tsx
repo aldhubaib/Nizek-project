@@ -12,8 +12,8 @@ export function VaultTab({ projectId, credentials }: Props) {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-[13px] font-semibold">Vault</h2>
-        <p className="mt-0.5 text-[12px] text-muted-foreground">
+        <h2 className="text-s font-semibold">Vault</h2>
+        <p className="mt-0.5 text-s text-muted-foreground">
           Passwords, emails, and API keys for this project. Group them in
           folders (DEV, STAGE, PROD, or any name) and filter to one folder at a
           time. History tracks who changed what. Deletes go to Trash for admin

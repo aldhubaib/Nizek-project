@@ -68,10 +68,10 @@ export function ErrorDisplay({ error, reset, context }: ErrorDisplayProps) {
         </div>
 
         {/* Title */}
-        <h1 className="text-center text-lg font-semibold text-foreground mb-1.5">
+        <h1 className="text-center text-s font-semibold text-foreground mb-1.5">
           Something went wrong
         </h1>
-        <p className="text-center text-[13px] text-muted-foreground mb-6 max-w-sm mx-auto">
+        <p className="text-center text-s text-muted-foreground mb-6 max-w-sm mx-auto">
           An unexpected error occurred. Copy the error details below and share them so we can fix it.
         </p>
 
@@ -79,18 +79,18 @@ export function ErrorDisplay({ error, reset, context }: ErrorDisplayProps) {
         <div className="rounded-xl border border-border bg-card/50 overflow-hidden mb-4">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-destructive bg-destructive/10 px-2 py-0.5 rounded-full shrink-0">
+              <span className="text-xs font-semibold uppercase tracking-wider text-destructive bg-destructive/10 px-2 py-0.5 rounded-full shrink-0">
                 Error
               </span>
               {error.digest && (
-                <code className="text-[11px] text-muted-foreground font-mono truncate">
+                <code className="text-xs text-muted-foreground font-mono truncate">
                   #{error.digest}
                 </code>
               )}
             </div>
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1.5 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors shrink-0"
+              className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors shrink-0"
             >
               {copied ? (
                 <>
@@ -107,11 +107,11 @@ export function ErrorDisplay({ error, reset, context }: ErrorDisplayProps) {
           </div>
 
           <div className="px-4 py-3">
-            <p className="text-[12px] text-foreground font-medium leading-relaxed break-words">
+            <p className="text-s text-foreground font-medium leading-relaxed break-words">
               {error.message || "An unknown error occurred"}
             </p>
             {context && (
-              <p className="text-[11px] text-muted-foreground mt-1.5">
+              <p className="text-xs text-muted-foreground mt-1.5">
                 Page: {context}
               </p>
             )}
@@ -121,7 +121,7 @@ export function ErrorDisplay({ error, reset, context }: ErrorDisplayProps) {
           <div className="border-t border-border">
             <button
               onClick={() => setShowDetails(!showDetails)}
-              className="w-full px-4 py-2.5 flex items-center justify-between text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              className="w-full px-4 py-2.5 flex items-center justify-between text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               <span>Technical Details</span>
               {showDetails ? (
@@ -132,7 +132,7 @@ export function ErrorDisplay({ error, reset, context }: ErrorDisplayProps) {
             </button>
             {showDetails && (
               <div className="px-4 pb-3">
-                <pre className="text-[10px] text-muted-foreground font-mono whitespace-pre-wrap break-all leading-relaxed bg-background/50 rounded-lg p-3 max-h-[200px] overflow-auto border border-border/50">
+                <pre className="text-xs text-muted-foreground font-mono whitespace-pre-wrap break-all leading-relaxed bg-background/50 rounded-lg p-3 max-h-[200px] overflow-auto border border-border/50">
                   {report}
                 </pre>
               </div>
@@ -145,7 +145,7 @@ export function ErrorDisplay({ error, reset, context }: ErrorDisplayProps) {
           {reset && (
             <button
               onClick={reset}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium px-4 py-2 hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground text-s font-medium px-4 py-2 hover:opacity-90 transition-opacity"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               Try Again
@@ -153,7 +153,7 @@ export function ErrorDisplay({ error, reset, context }: ErrorDisplayProps) {
           )}
           <button
             onClick={handleCopy}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card text-[12px] font-medium text-foreground px-4 py-2 hover:bg-card/80 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card text-s font-medium text-foreground px-4 py-2 hover:bg-card/80 transition-colors"
           >
             <Copy className="w-3.5 h-3.5" />
             {copied ? "Copied!" : "Copy Full Report"}

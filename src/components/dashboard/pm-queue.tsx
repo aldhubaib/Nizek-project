@@ -62,13 +62,13 @@ export function PmQueue({ data }: Props) {
 
   if (data.total === 0) {
     return (
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="app-card rounded-xl border border-border bg-card overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
           <ClipboardCheck className="w-4 h-4 text-amber-400" />
-          <h2 className="text-[13px] font-semibold text-foreground">PM Review</h2>
+          <h2 className="text-s font-semibold text-foreground">PM Review</h2>
         </div>
         <div className="px-4 py-8 text-center">
-          <p className="text-[12px] text-muted-foreground">No tasks awaiting internal review.</p>
+          <p className="text-s text-muted-foreground">No tasks awaiting internal review.</p>
         </div>
       </div>
     );
@@ -88,17 +88,17 @@ export function PmQueue({ data }: Props) {
 
   return (
     <>
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="app-card rounded-xl border border-border bg-card overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-2">
             <ClipboardCheck className="w-4 h-4 text-amber-400" />
-            <h2 className="text-[13px] font-semibold text-foreground">PM Review</h2>
-            <span className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">
+            <h2 className="text-s font-semibold text-foreground">PM Review</h2>
+            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">
               {data.total}
             </span>
           </div>
           {hasMore && (
-            <button onClick={() => setExpanded(true)} className="text-[11px] text-primary hover:text-primary/80 font-medium transition-colors">
+            <button onClick={() => setExpanded(true)} className="text-xs text-primary hover:text-primary/80 font-medium transition-colors">
               View all
             </button>
           )}
@@ -112,8 +112,8 @@ export function PmQueue({ data }: Props) {
             return (
               <div key={pid}>
                 <div className="flex items-center gap-2 px-4 py-1.5 bg-muted border-b border-border">
-                  <span className="text-[10px] font-semibold text-foreground uppercase tracking-wider">{group.name}</span>
-                  <span className="text-[10px] text-muted-foreground">{group.tasks.length}</span>
+                  <span className="text-xs font-semibold text-foreground uppercase tracking-wider">{group.name}</span>
+                  <span className="text-xs text-muted-foreground">{group.tasks.length}</span>
                 </div>
                 <div className="divide-y divide-border">
                   {tasksToShow.map((task) => (
@@ -132,8 +132,8 @@ export function PmQueue({ data }: Props) {
             <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
               <div className="flex items-center gap-2">
                 <ClipboardCheck className="w-4 h-4 text-amber-400" />
-                <h2 className="text-[14px] font-semibold text-foreground">PM Review — Internal Review</h2>
-                <span className="text-[11px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">{data.total}</span>
+                <h2 className="text-s font-semibold text-foreground">PM Review — Internal Review</h2>
+                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">{data.total}</span>
               </div>
               <button onClick={() => setExpanded(false)} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-accent transition-colors text-muted-foreground">
                 <X className="w-4 h-4" />
@@ -143,8 +143,8 @@ export function PmQueue({ data }: Props) {
               {sortedProjects.map(([pid, group]) => (
                 <div key={pid}>
                   <div className="flex items-center gap-2 px-5 py-2.5 bg-muted border-b border-border sticky top-0">
-                    <span className="text-[11px] font-semibold text-foreground uppercase tracking-wider">{group.name}</span>
-                    <span className="text-[10px] text-muted-foreground font-medium">{group.tasks.length}</span>
+                    <span className="text-xs font-semibold text-foreground uppercase tracking-wider">{group.name}</span>
+                    <span className="text-xs text-muted-foreground font-medium">{group.tasks.length}</span>
                   </div>
                   <div className="divide-y divide-border">
                     {group.tasks.map((task) => (
@@ -176,13 +176,13 @@ function TaskRow({ task, showProject = false }: { task: Task; showProject?: bool
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-mono text-muted-foreground/60">{prefix}-{String(task.taskNumber).padStart(3, "0")}</span>
-          <span className="text-[12px] font-medium text-foreground truncate">{task.title}</span>
+          <span className="text-xs font-mono text-muted-foreground/60">{prefix}-{String(task.taskNumber).padStart(3, "0")}</span>
+          <span className="text-s font-medium text-foreground truncate">{task.title}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          {showProject && <span className="text-[10px] text-muted-foreground/50">{task.project.name}</span>}
+          {showProject && <span className="text-xs text-muted-foreground/50">{task.project.name}</span>}
           {task.assignee && (
-            <span className="text-[10px] text-muted-foreground/50">
+            <span className="text-xs text-muted-foreground/50">
               {showProject && "· "}{task.assignee.name}
             </span>
           )}
@@ -190,12 +190,12 @@ function TaskRow({ task, showProject = false }: { task: Task; showProject?: bool
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {timeInStage && (
-          <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground/60 font-mono">
+          <span className="flex items-center gap-0.5 text-xs text-muted-foreground/60 font-mono">
             <Clock className="w-2.5 h-2.5" />{timeInStage}
           </span>
         )}
         {task.priority != null && (
-          <span className={cn("text-[10px] font-semibold tabular-nums", priorityColor)}>P{task.priority}</span>
+          <span className={cn("text-xs font-semibold tabular-nums", priorityColor)}>P{task.priority}</span>
         )}
         <ExternalLink className="w-3 h-3 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />
       </div>

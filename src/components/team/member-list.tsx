@@ -177,8 +177,8 @@ export function MemberList({
                 <AlertTriangle className="w-5 h-5 text-amber-400" />
               </div>
               <div>
-                <h3 className="text-[14px] font-semibold text-foreground">Transfer Tasks Required</h3>
-                <p className="text-[12px] text-muted-foreground mt-0.5">
+                <h3 className="text-s font-semibold text-foreground">Transfer Tasks Required</h3>
+                <p className="text-s text-muted-foreground mt-0.5">
                   <strong>{transferState.memberName}</strong> has{" "}
                   <strong>{transferState.taskCount}</strong> task{transferState.taskCount !== 1 ? "s" : ""} in this project.
                   Select a member to transfer them to before removal.
@@ -187,12 +187,12 @@ export function MemberList({
             </div>
 
             <div className="mb-4">
-              <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">Transfer tasks to</label>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Transfer tasks to</label>
               <Select
                 value={transferState.transferToUserId}
                 onValueChange={(val) => setTransferState((s) => s ? { ...s, transferToUserId: val ?? "" } : s)}
               >
-                <SelectTrigger className="h-9 text-[13px]">
+                <SelectTrigger className="h-9 text-s">
                   <SelectValue placeholder="Select a member..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -214,7 +214,7 @@ export function MemberList({
                 size="sm"
                 onClick={() => setTransferState(null)}
                 disabled={removing}
-                className="text-[12px]"
+                className="text-s"
               >
                 Cancel
               </Button>
@@ -222,7 +222,7 @@ export function MemberList({
                 size="sm"
                 onClick={handleTransferAndRemove}
                 disabled={!transferState.transferToUserId || removing}
-                className="text-[12px] bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                className="text-s bg-destructive hover:bg-destructive/90 text-destructive-foreground"
               >
                 {removing ? "Transferring..." : "Transfer & Remove"}
               </Button>
@@ -255,18 +255,18 @@ export function MemberList({
                       className="w-9 h-9 rounded-full object-cover shrink-0"
                     />
                   ) : (
-                    <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-[12px] font-semibold text-primary shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-s font-semibold text-primary shrink-0">
                       {initials}
                     </div>
                   )}
                   <div className="min-w-0">
-                    <p className="text-[13px] font-medium text-foreground truncate">
+                    <p className="text-s font-medium text-foreground truncate">
                       {member.user.name ?? member.user.email}
                       {isSelf && (
-                        <span className="ml-1 text-[10px] text-muted-foreground">(you)</span>
+                        <span className="ms-1 text-xs text-muted-foreground">(you)</span>
                       )}
                     </p>
-                    <p className="text-[11px] text-muted-foreground truncate">
+                    <p className="text-xs text-muted-foreground truncate">
                       {member.user.email}
                     </p>
                   </div>
@@ -276,7 +276,7 @@ export function MemberList({
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => handleRemove(member.id)}
-                    className="text-muted-foreground/40 hover:text-destructive shrink-0 -mt-0.5 -mr-1"
+                    className="text-muted-foreground/40 hover:text-destructive shrink-0 -mt-0.5 -me-1"
                   >
                     <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
                   </Button>
@@ -288,7 +288,7 @@ export function MemberList({
                   value={member.roleId ?? ""}
                   onValueChange={(val) => val && handleRoleChange(member.id, val)}
                 >
-                  <SelectTrigger className="h-7 w-full text-[11px] rounded-full border-border">
+                  <SelectTrigger className="h-7 w-full text-xs rounded-full border-border">
                     <SelectValue placeholder="Assign role">
                       <span className="flex items-center gap-1.5">
                         <Shield className="w-3 h-3 text-muted-foreground" strokeWidth={1.5} />
@@ -308,7 +308,7 @@ export function MemberList({
                   </SelectContent>
                 </Select>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
                   <Shield className="w-3 h-3" strokeWidth={1.5} />
                   {roleName}
                 </span>
@@ -339,7 +339,7 @@ export function MemberList({
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Clock className="w-3.5 h-3.5 text-muted-foreground/50" />
-            <span className="text-[11px] font-medium text-muted-foreground/70">
+            <span className="text-xs font-medium text-muted-foreground/70">
               Pending Invitations
             </span>
           </div>
@@ -359,21 +359,21 @@ export function MemberList({
                         <Mail className="w-4 h-4" strokeWidth={1.5} />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[13px] font-medium text-muted-foreground truncate">
+                        <p className="text-s font-medium text-muted-foreground truncate">
                           {inv.email}
                         </p>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           {expired ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/15 text-destructive border border-destructive/20 px-1.5 py-0.5 text-[9px] font-semibold">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/15 text-destructive border border-destructive/20 px-1.5 py-0.5 text-xs font-semibold">
                               Expired
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 text-[9px] font-semibold">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 text-xs font-semibold">
                               <Clock className="w-2.5 h-2.5" />
                               Waiting
                             </span>
                           )}
-                          <span className="text-[10px] text-muted-foreground/50">
+                          <span className="text-xs text-muted-foreground/50">
                             {new Date(inv.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                           </span>
                         </div>
@@ -385,7 +385,7 @@ export function MemberList({
                         size="icon-sm"
                         onClick={() => handleCancelInvite(inv.id)}
                         title="Cancel invitation"
-                        className="text-muted-foreground/40 hover:text-destructive shrink-0 -mt-0.5 -mr-1"
+                        className="text-muted-foreground/40 hover:text-destructive shrink-0 -mt-0.5 -me-1"
                       >
                         <X className="w-3.5 h-3.5" strokeWidth={1.5} />
                       </Button>
@@ -393,7 +393,7 @@ export function MemberList({
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
                       <Shield className="w-3 h-3" strokeWidth={1.5} />
                       {roleName}
                     </span>
@@ -403,9 +403,9 @@ export function MemberList({
                         size="sm"
                         onClick={() => handleResend(inv.id)}
                         disabled={resendingId === inv.id}
-                        className="text-[10px] text-muted-foreground hover:text-foreground h-6 px-2"
+                        className="text-xs text-muted-foreground hover:text-foreground h-6 px-2"
                       >
-                        <RefreshCw className={`w-3 h-3 mr-1 ${resendingId === inv.id ? "animate-spin" : ""}`} strokeWidth={1.5} />
+                        <RefreshCw className={`w-3 h-3 me-1 ${resendingId === inv.id ? "animate-spin" : ""}`} strokeWidth={1.5} />
                         Resend
                       </Button>
                     )}
@@ -435,7 +435,7 @@ function InviteToggle({ checked, onChange, icon, label }: {
       <div className={`w-6 h-3.5 rounded-full transition-colors relative ${checked ? "bg-primary/70" : "bg-muted"}`}>
         <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full transition-all ${checked ? "left-3 bg-white" : "left-0.5 bg-muted-foreground/40"}`} />
       </div>
-      <span className="text-[10px] text-muted-foreground group-hover/toggle:text-foreground transition-colors flex items-center gap-0.5">
+      <span className="text-xs text-muted-foreground group-hover/toggle:text-foreground transition-colors flex items-center gap-0.5">
         {icon}
         {label}
       </span>

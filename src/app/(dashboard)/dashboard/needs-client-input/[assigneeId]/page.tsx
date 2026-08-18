@@ -3,6 +3,7 @@ import { ArrowLeft, UserCircle2, AlertTriangle, Clock, Sparkles, Zap, Bug, Alert
 import { getTasksNeedingClientInput } from "@/actions/dashboard";
 import { prisma } from "@/lib/prisma";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
 
 const TASK_TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string; label: string }> = {
   FEATURE: { icon: Sparkles, color: "text-blue-400 bg-blue-500/10 border-blue-500/20", label: "Business Case" },
@@ -55,11 +56,11 @@ export default async function ClientInputAssigneeDetailPage({
 
   return (
     <div>
-      <div className="sticky top-0 z-10 flex app-top-bar items-center justify-between px-6 pr-14 border-b border-border bg-background shrink-0">
+      <PageHeader className="justify-between">
         <div className="flex items-center gap-3">
           <Link
             href={backHref}
-            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-[13px]"
+            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s"
           >
             <ArrowLeft className="w-4 h-4" />
             Back
@@ -74,40 +75,40 @@ export default async function ClientInputAssigneeDetailPage({
               />
             ) : (
               <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center">
-                <span className="text-[10px] font-semibold text-muted-foreground">
+                <span className="text-xs font-semibold text-muted-foreground">
                   {(assignee?.name ?? "?").charAt(0).toUpperCase()}
                 </span>
               </div>
             )}
-            <h1 className="text-sm font-semibold">
+            <h1 className="text-s font-semibold">
               {assignee?.name ?? "Unknown User"}
             </h1>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               ({data.length} {data.length === 1 ? "task" : "tasks"} needing client input)
             </span>
           </div>
         </div>
         {data.length > 0 && (
-          <span className="flex items-center gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5">
+          <span className="flex items-center gap-1 text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5">
             <AlertTriangle className="w-3 h-3" />
             {data.length} waiting
           </span>
         )}
-      </div>
+      </PageHeader>
 
-      <div className="px-6 py-6">
+      <div className="px-app py-6">
         {data.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <UserCircle2 className="w-8 h-8 text-muted-foreground/20 mb-3" strokeWidth={1.5} />
-            <p className="text-[13px] text-muted-foreground">No tasks waiting on client input</p>
+            <p className="text-s text-muted-foreground">No tasks waiting on client input</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-border bg-card divide-y divide-border">
-            <div className="grid grid-cols-[1fr_110px_120px_1fr_80px] gap-4 px-5 py-2.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+          <div className="app-card rounded-xl border border-border bg-card divide-y divide-border">
+            <div className="grid grid-cols-[1fr_auto] @md/card:grid-cols-[1fr_110px_120px_1fr_80px] gap-4 px-5 py-2.5 text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">
               <span>Task</span>
-              <span>Project</span>
-              <span className="text-center">Stage</span>
-              <span>Note</span>
+              <span className="@max-md/card:hidden">Project</span>
+              <span className="text-center @max-md/card:hidden">Stage</span>
+              <span className="@max-md/card:hidden">Note</span>
               <span className="text-center">Waiting</span>
             </div>
             {data.map((task) => {
@@ -119,29 +120,29 @@ export default async function ClientInputAssigneeDetailPage({
                   key={task.id}
                   href={`/dashboard/projects/${task.project.id}/tasks/${task.id}`}
                   target="_blank"
-                  className="grid grid-cols-[1fr_110px_120px_1fr_80px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
+                  className="grid grid-cols-[1fr_auto] @md/card:grid-cols-[1fr_110px_120px_1fr_80px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className={cn("w-6 h-6 rounded flex items-center justify-center border shrink-0", typeInfo?.color ?? "text-muted-foreground bg-muted border-border")}>
                       <TypeIcon className="w-3.5 h-3.5" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[13px] font-medium truncate group-hover:text-primary transition-colors">{task.title}</p>
-                      <p className="text-[10px] text-muted-foreground/50">
+                      <p className="text-s font-medium truncate group-hover:text-primary transition-colors">{task.title}</p>
+                      <p className="text-xs text-muted-foreground/50">
                         <span className="font-mono">#{task.taskNumber}</span>
                       </p>
                     </div>
                   </div>
 
-                  <span className="text-[11px] text-muted-foreground truncate">{task.project.name}</span>
+                  <span className="text-xs text-muted-foreground truncate @max-md/card:hidden">{task.project.name}</span>
 
-                  <div className="flex justify-center">
-                    <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border truncate", STAGE_COLORS[task.stage] ?? "bg-muted text-muted-foreground border-border")}>
+                  <div className="flex justify-center @max-md/card:hidden">
+                    <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full border truncate", STAGE_COLORS[task.stage] ?? "bg-muted text-muted-foreground border-border")}>
                       {task.stageLabel}
                     </span>
                   </div>
 
-                  <p className="text-[11px] text-muted-foreground/60 truncate italic flex items-center gap-1">
+                  <p className="text-xs text-muted-foreground/60 truncate italic flex items-center gap-1 @max-md/card:hidden">
                     {task.note ? (
                       <>
                         <StickyNote className="w-3 h-3 text-amber-400/60 shrink-0" />
@@ -151,7 +152,7 @@ export default async function ClientInputAssigneeDetailPage({
                   </p>
 
                   <div className="flex justify-center">
-                    <span className={cn("text-[12px] font-mono font-bold tabular-nums flex items-center gap-1", durationColor)}>
+                    <span className={cn("text-s font-mono font-bold tabular-nums flex items-center gap-1", durationColor)}>
                       <Clock className="w-3 h-3" />
                       {formatDuration(task.waitingMs)}
                     </span>

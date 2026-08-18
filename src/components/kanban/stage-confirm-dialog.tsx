@@ -120,17 +120,17 @@ export function StageConfirmDialog({
 
           {checkpoint.assignToMe ? (
             <div className="min-w-0 flex-1 space-y-2">
-              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {checkpoint.title}
               </div>
-              <div className="flex min-w-0 flex-wrap items-center gap-2 text-[13px]">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-s">
                 {currentAssigneeName ? (
-                  <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-muted/60 py-0.5 pl-0.5 pr-2.5 text-muted-foreground">
+                  <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-muted/60 py-0.5 ps-0.5 pe-2.5 text-muted-foreground">
                     <Avatar className="size-5">
                       {currentAssigneeAvatar && (
                         <AvatarImage src={currentAssigneeAvatar} alt={currentAssigneeName} />
                       )}
-                      <AvatarFallback className="bg-muted text-[10px] font-semibold text-muted-foreground">
+                      <AvatarFallback className="bg-muted text-xs font-semibold text-muted-foreground">
                         {currentAssigneeName.slice(0, 1).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
@@ -142,26 +142,26 @@ export function StageConfirmDialog({
                   </span>
                 )}
                 <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-primary/15 py-0.5 pl-0.5 pr-2.5 font-medium text-primary">
+                <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-primary/15 py-0.5 ps-0.5 pe-2.5 font-medium text-primary">
                   <Avatar className="size-5">
                     {meAvatar && <AvatarImage src={meAvatar} alt={me} />}
-                    <AvatarFallback className="bg-primary text-[10px] font-bold text-primary-foreground">
+                    <AvatarFallback className="bg-primary text-xs font-bold text-primary-foreground">
                       {me.slice(0, 1).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <span className="truncate">{me}</span>
                 </span>
               </div>
-              <p className="text-[12px] leading-relaxed text-muted-foreground">
+              <p className="text-s leading-relaxed text-muted-foreground">
                 {checkpoint.message}
               </p>
             </div>
           ) : (
             <div className="min-w-0 flex-1 space-y-1">
-              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {checkpoint.title}
               </div>
-              <p className="text-[13px] leading-relaxed text-muted-foreground">
+              <p className="text-s leading-relaxed text-muted-foreground">
                 {checkpoint.message}
               </p>
             </div>
@@ -170,7 +170,7 @@ export function StageConfirmDialog({
 
         {checkpoint.requiresEstimate && (
           <div className="mt-4">
-            <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
               Estimated Time
             </label>
             <div className="flex flex-wrap gap-1.5">
@@ -179,7 +179,7 @@ export function StageConfirmDialog({
                   key={p.label}
                   type="button"
                   onClick={() => { setSelectedMinutes(p.minutes); setEstimateError(false); }}
-                  className={`h-7 rounded-md border px-2.5 text-[12px] font-medium transition-colors ${
+                  className={`h-7 rounded-md border px-2.5 text-s font-medium transition-colors ${
                     selectedMinutes === p.minutes
                       ? "bg-blue-600/20 border-blue-500/40 text-blue-400"
                       : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
@@ -190,7 +190,7 @@ export function StageConfirmDialog({
               ))}
             </div>
             {estimateError && (
-              <p className="text-[11px] text-destructive mt-1.5 font-medium">
+              <p className="text-xs text-destructive mt-1.5 font-medium">
                 Please select an estimated time before proceeding.
               </p>
             )}
@@ -199,22 +199,22 @@ export function StageConfirmDialog({
 
         {checkpoint.notice && (
           <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 mt-4">
-            <span className="text-amber-400 text-[13px]">⏱</span>
-            <p className="text-[12px] text-amber-400/90 font-medium">{checkpoint.notice}</p>
+            <span className="text-amber-400 text-s">⏱</span>
+            <p className="text-s text-amber-400/90 font-medium">{checkpoint.notice}</p>
           </div>
         )}
 
         <div className="flex items-center justify-end gap-3 mt-6">
           <button
             onClick={onCancel}
-            className="px-4 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="px-4 py-2 rounded-lg text-s font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirm}
             disabled={confirming}
-            className={`px-4 py-2 rounded-lg text-[13px] font-medium text-white transition-colors disabled:opacity-50 ${checkpoint.confirmColor}`}
+            className={`px-4 py-2 rounded-lg text-s font-medium text-white transition-colors disabled:opacity-50 ${checkpoint.confirmColor}`}
           >
             {confirming ? "Moving..." : checkpoint.confirmLabel}
           </button>

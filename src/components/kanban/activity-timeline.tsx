@@ -104,7 +104,7 @@ export function ActivityTimeline({ taskId, refreshKey }: Props) {
     return (
       <div className="flex flex-col items-center justify-center text-center py-6 gap-2">
         <History className="w-6 h-6 text-muted-foreground opacity-40" strokeWidth={1.5} />
-        <p className="text-[11px] text-muted-foreground/60">No activity yet</p>
+        <p className="text-xs text-muted-foreground/60">No activity yet</p>
       </div>
     );
   }
@@ -127,7 +127,7 @@ export function ActivityTimeline({ taskId, refreshKey }: Props) {
                 />
               ) : (
                 <div className="w-[18px] h-[18px] rounded-full bg-muted border-2 border-background flex items-center justify-center">
-                  <span className="text-[7px] font-bold text-muted-foreground">
+                  <span className="text-xs font-bold text-muted-foreground">
                     {a.user.name?.charAt(0)?.toUpperCase() ?? "?"}
                   </span>
                 </div>
@@ -136,10 +136,10 @@ export function ActivityTimeline({ taskId, refreshKey }: Props) {
 
             {/* Content */}
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] text-foreground/80 leading-snug">
+              <p className="text-s text-foreground/80 leading-snug">
                 {describeActivity(a)}
               </p>
-              <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+              <p className="text-xs text-muted-foreground/50 mt-0.5">
                 {timeAgo(a.createdAt)}
               </p>
             </div>

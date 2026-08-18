@@ -48,7 +48,7 @@ export function ActivityCard({
 }) {
   const Leading = ActionIcon ?? Icon;
   const actionClass = cn(
-    "flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[12px] font-medium transition-colors",
+    "flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-start text-s font-medium transition-colors",
     theme.button,
   );
   const actionInner = (
@@ -79,17 +79,17 @@ export function ActivityCard({
             <Icon className="size-4" strokeWidth={2} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {category}
             </p>
-            <h3 className="mt-0.5 text-[15px] font-semibold leading-snug text-foreground">
+            <h3 className="mt-0.5 text-s font-semibold leading-snug text-foreground">
               {title}
             </h3>
           </div>
           {status && theme.pill && (
             <span
               className={cn(
-                "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                "shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold",
                 theme.pill,
               )}
             >
@@ -121,7 +121,7 @@ export function ActivityCard({
         {footer}
 
         <div className="flex justify-end">
-          <span className="text-[10px] text-muted-foreground">{formatTime(createdAt)}</span>
+          <span className="text-xs text-muted-foreground">{formatTime(createdAt)}</span>
         </div>
       </div>
     </div>
@@ -140,7 +140,7 @@ export function NizekBotAvatar({ show }: { show: boolean }) {
   return (
     <div className="w-8 shrink-0 self-start">
       <div
-        className="grid h-8 w-8 place-items-center rounded-full bg-emerald-500 text-[10px] font-bold text-white shadow-sm"
+        className="grid h-8 w-8 place-items-center rounded-full bg-emerald-500 text-xs font-bold text-white shadow-sm"
         aria-hidden
       >
         {NIZEK_BOT_INITIALS}
@@ -198,7 +198,7 @@ export function ChatPostAvatar({
         />
       ) : (
         <div
-          className="grid h-8 w-8 place-items-center rounded-full bg-primary/20 text-[10px] font-semibold text-primary"
+          className="grid h-8 w-8 place-items-center rounded-full bg-primary/20 text-xs font-semibold text-primary"
           aria-hidden
         >
           {initials(name)}

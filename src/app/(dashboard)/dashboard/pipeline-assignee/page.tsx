@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, Users, AlertTriangle, Clock, ChevronRight } from "lucide-react";
 import { getLongestInStageByAssignee } from "@/actions/dashboard";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
 
 const STAGE_FILTERS: Record<string, string[]> = {
   product: ["INTERNAL_REVIEW", "CLIENT_REVIEW"],
@@ -37,49 +38,49 @@ export default async function PipelineAssigneePage({
 
   return (
     <div>
-      <div className="sticky top-0 z-10 flex app-top-bar items-center justify-between px-6 pr-14 border-b border-border bg-background shrink-0">
+      <PageHeader className="justify-between">
         <div className="flex items-center gap-3">
           <Link
             href={backHref}
-            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-[13px]"
+            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s"
           >
             <ArrowLeft className="w-4 h-4" />
             Dashboard
           </Link>
           <span className="text-border">|</span>
-          <h1 className="text-sm font-semibold flex items-center gap-2">
+          <h1 className="text-s font-semibold flex items-center gap-2">
             <Users className="w-4 h-4 text-muted-foreground" />
             {tab === "product" ? "PM" : tab === "dev" ? "Dev" : ""} Longest in Stage By Assignee
           </h1>
-          <span className="text-[11px] text-muted-foreground">({data.length} people)</span>
+          <span className="text-xs text-muted-foreground">({data.length} people)</span>
         </div>
         {totalLate > 0 && (
-          <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5">
+          <span className="flex items-center gap-1 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5">
             <AlertTriangle className="w-3 h-3" />
             {totalLate} late tasks
           </span>
         )}
-      </div>
+      </PageHeader>
 
-      <div className="px-6 py-6">
+      <div className="px-app py-6">
         {data.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Users className="w-8 h-8 text-muted-foreground/20 mb-3" strokeWidth={1.5} />
-            <p className="text-[13px] text-muted-foreground">No one has stalled tasks</p>
+            <p className="text-s text-muted-foreground">No one has stalled tasks</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-border bg-card divide-y divide-border">
-            <div className="grid grid-cols-[1fr_100px_100px_24px] gap-4 px-5 py-2.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+          <div className="app-card rounded-xl border border-border bg-card divide-y divide-border">
+            <div className="grid grid-cols-[1fr_auto] @md/card:grid-cols-[1fr_100px_100px_24px] gap-4 px-5 py-2.5 text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">
               <span>Assignee</span>
-              <span className="text-center">Late Tasks</span>
+              <span className="text-center @max-md/card:hidden">Late Tasks</span>
               <span className="text-center">Longest</span>
-              <span />
+              <span className="@max-md/card:hidden" />
             </div>
             {data.map((item) => (
               <Link
                 key={item.assignee.id}
                 href={`/dashboard/pipeline-assignee/${item.assignee.id}${tab ? `?tab=${tab}` : ""}`}
-                className="grid grid-cols-[1fr_100px_100px_24px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
+                className="grid grid-cols-[1fr_auto] @md/card:grid-cols-[1fr_100px_100px_24px] gap-4 px-5 py-3 items-center hover:bg-accent/30 transition-colors group"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   {item.assignee.imageUrl ? (
@@ -90,26 +91,26 @@ export default async function PipelineAssigneePage({
                     />
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0">
-                      <span className="text-[11px] font-semibold text-muted-foreground">
+                      <span className="text-xs font-semibold text-muted-foreground">
                         {(item.assignee.name ?? "?").charAt(0).toUpperCase()}
                       </span>
                     </div>
                   )}
-                  <p className="text-[13px] font-medium truncate group-hover:text-primary transition-colors">{item.assignee.name ?? "Unassigned"}</p>
+                  <p className="text-s font-medium truncate group-hover:text-primary transition-colors">{item.assignee.name ?? "Unassigned"}</p>
+                </div>
+
+                <div className="flex justify-center @max-md/card:hidden">
+                  <span className="text-s font-bold tabular-nums">{item.lateCount}</span>
                 </div>
 
                 <div className="flex justify-center">
-                  <span className="text-[14px] font-bold tabular-nums">{item.lateCount}</span>
-                </div>
-
-                <div className="flex justify-center">
-                  <span className={cn("text-[12px] font-mono font-bold tabular-nums flex items-center gap-1", getDurationColor(item.longestMs))}>
+                  <span className={cn("text-s font-mono font-bold tabular-nums flex items-center gap-1", getDurationColor(item.longestMs))}>
                     <Clock className="w-3 h-3" />
                     {formatDuration(item.longestMs)}
                   </span>
                 </div>
 
-                <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />
+                <ChevronRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors @max-md/card:hidden" />
               </Link>
             ))}
           </div>

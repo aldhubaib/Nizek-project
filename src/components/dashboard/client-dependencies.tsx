@@ -38,7 +38,7 @@ function Tooltip({ children, text }: { children: React.ReactNode; text: string }
   return (
     <div className="relative group/tip">
       {children}
-      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-popover border border-border text-[10px] text-popover-foreground whitespace-nowrap opacity-0 pointer-events-none group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-md bg-popover border border-border text-xs text-popover-foreground whitespace-nowrap opacity-0 pointer-events-none group-hover/tip:opacity-100 transition-opacity z-50 shadow-lg">
         {text}
       </div>
     </div>
@@ -63,11 +63,11 @@ function CompactRow({ item }: { item: ClientDepTask }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[12px] font-medium truncate group-hover:text-primary transition-colors">
-              <span className="text-muted-foreground/50 font-mono mr-1">#{item.task.taskNumber}</span>
+            <p className="text-s font-medium truncate group-hover:text-primary transition-colors">
+              <span className="text-muted-foreground/50 font-mono me-1">#{item.task.taskNumber}</span>
               {item.task.title}
             </p>
-            <p className="text-[10px] text-muted-foreground/50 truncate">{item.task.project.name}</p>
+            <p className="text-xs text-muted-foreground/50 truncate">{item.task.project.name}</p>
           </div>
           {item.note && (
             <Tooltip text={item.note}>
@@ -86,20 +86,20 @@ export function ClientDependencies({ data, tab }: { data: ProjectGroup[]; tab?: 
   const preview = allTasks.slice(0, PREVIEW_COUNT);
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div className="app-card rounded-xl border border-border bg-card overflow-hidden">
       <div className="px-4 py-3.5 border-b border-border">
         <div className="flex items-center justify-between mb-2.5">
-          <h2 className="text-[14px] font-semibold flex items-center gap-2">
+          <h2 className="text-s font-semibold flex items-center gap-2">
             <Clock className="w-4 h-4 text-muted-foreground" />
             {tab === "product" ? "PM" : tab === "dev" ? "Dev" : ""} Waiting on Client
           </h2>
           {totalTasks > 0 && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
+            <span className="flex items-center gap-1 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
               {totalTasks} pending
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 text-[11px] flex-wrap">
+        <div className="flex items-center gap-3 text-xs flex-wrap">
           {data.slice(0, 4).map((g) => (
             <span key={g.project.id} className="text-muted-foreground">
               {g.project.name}: <span className="font-semibold text-foreground">{g.tasks.length}</span>
@@ -117,7 +117,7 @@ export function ClientDependencies({ data, tab }: { data: ProjectGroup[]; tab?: 
       {totalTasks === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <Clock className="w-7 h-7 text-muted-foreground/20 mb-2" strokeWidth={1.5} />
-          <p className="text-[12px] text-muted-foreground">Nothing waiting on client</p>
+          <p className="text-s text-muted-foreground">Nothing waiting on client</p>
         </div>
       ) : (
         <div className="divide-y divide-border/50">
@@ -130,7 +130,7 @@ export function ClientDependencies({ data, tab }: { data: ProjectGroup[]; tab?: 
       {allTasks.length > PREVIEW_COUNT && (
         <Link
           href={`/dashboard/waiting-on-client${tab ? `?tab=${tab}` : ""}`}
-          className="w-full px-4 py-2.5 border-t border-border text-[12px] font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
+          className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
         >
           <ExternalLink className="w-3 h-3" />
           View All ({totalTasks})

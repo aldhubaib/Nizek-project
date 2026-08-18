@@ -181,25 +181,25 @@ export function ProjectSettingsOverlay({
 
   return (
     <div className="fixed inset-0 z-[9999] bg-background flex flex-col">
-      <div className="flex app-top-bar items-center justify-between px-6 border-b border-border shrink-0">
+      <div className="flex app-top-bar items-center justify-between border-b border-border shrink-0">
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-[13px]">
+          <button onClick={onClose} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s">
             <XIcon className="w-4 h-4" />
             Close
           </button>
           <span className="text-border">|</span>
-          <span className="text-[13px] font-semibold">{name || project.name} — Settings</span>
+          <span className="text-s font-semibold">{name || project.name} — Settings</span>
           <span className="text-border">|</span>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setActiveTab("general")}
-              className={cn("px-3 py-1 rounded-md text-[12px] font-medium transition-colors", activeTab === "general" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
+              className={cn("px-3 py-1 rounded-md text-s font-medium transition-colors", activeTab === "general" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
             >
               General
             </button>
             <button
               onClick={() => setActiveTab("archive")}
-              className={cn("px-3 py-1 rounded-md text-[12px] font-medium transition-colors flex items-center gap-1.5", activeTab === "archive" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
+              className={cn("px-3 py-1 rounded-md text-s font-medium transition-colors flex items-center gap-1.5", activeTab === "archive" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
             >
               <Archive className="w-3.5 h-3.5" />
               Archive
@@ -209,10 +209,10 @@ export function ProjectSettingsOverlay({
         {activeTab === "general" && (
           <div className="flex items-center gap-3">
             {saveError && (
-              <span className="text-[12px] text-destructive">{saveError}</span>
+              <span className="text-s text-destructive">{saveError}</span>
             )}
             <Button size="sm" onClick={handleSave} disabled={saving}>
-              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin me-1" /> : null}
               {saved ? "Saved!" : saving ? "Saving..." : "Save Changes"}
             </Button>
           </div>
@@ -223,23 +223,23 @@ export function ProjectSettingsOverlay({
         {activeTab === "archive" ? (
           <ArchiveTab projectId={project.id} isAdmin={isAdmin} />
         ) : (
-        <div className="max-w-2xl mx-auto py-10 px-6 space-y-10">
+        <div className="max-w-2xl mx-auto py-10 px-app space-y-10">
 
           {/* Name */}
           <div className="space-y-2">
-            <Label htmlFor="proj-name" className="text-[13px] font-semibold">Project Name</Label>
+            <Label htmlFor="proj-name" className="text-s font-semibold">Project Name</Label>
             <Input
               id="proj-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Project name"
-              className="text-[13px]"
+              className="text-s"
             />
           </div>
 
           {/* Logo */}
           <div ref={logoPasteRef} className="space-y-3">
-            <Label className="text-[13px] font-semibold">Project Photo</Label>
+            <Label className="text-s font-semibold">Project Photo</Label>
             <div className="flex items-center gap-4">
               {logo ? (
                 <div className="relative group/logo">
@@ -254,40 +254,40 @@ export function ProjectSettingsOverlay({
                 </div>
               ) : (
                 <div className="w-20 h-20 rounded-xl bg-muted border border-dashed border-border flex items-center justify-center">
-                  <span className="text-2xl font-bold text-muted-foreground">{project.name.charAt(0).toUpperCase()}</span>
+                  <span className="text-m font-bold text-muted-foreground">{project.name.charAt(0).toUpperCase()}</span>
                 </div>
               )}
               <div className="space-y-1.5">
                 <label className="cursor-pointer">
                   <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-s font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
                     <Upload className="w-3.5 h-3.5" />
                     {uploading ? "Uploading..." : logo ? "Change" : "Upload"}
                   </span>
                 </label>
-                <p className="text-[10px] text-muted-foreground/50">Square, max 512KB</p>
+                <p className="text-xs text-muted-foreground/50">Square, max 512KB</p>
               </div>
             </div>
           </div>
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="proj-desc" className="text-[13px] font-semibold">Description</Label>
+            <Label htmlFor="proj-desc" className="text-s font-semibold">Description</Label>
             <Textarea
               id="proj-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Brief project description..."
               rows={4}
-              className="text-[13px]"
+              className="text-s"
             />
           </div>
 
           {/* Team */}
           <div className="space-y-2">
-            <Label htmlFor="proj-team" className="text-[13px] font-semibold">Team</Label>
+            <Label htmlFor="proj-team" className="text-s font-semibold">Team</Label>
             {teams.length === 0 ? (
-              <p className="text-[12px] text-muted-foreground">
+              <p className="text-s text-muted-foreground">
                 No teams yet. Create one in{" "}
                 <a href="/dashboard/settings" className="text-primary underline">Settings</a>.
               </p>
@@ -296,7 +296,7 @@ export function ProjectSettingsOverlay({
                 id="proj-team"
                 value={teamId}
                 onChange={(e) => setTeamId(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-s text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="">No team</option>
                 {teams.map((t) => (
@@ -308,12 +308,12 @@ export function ProjectSettingsOverlay({
 
           {/* Default Client Reviewer */}
           <div className="space-y-2">
-            <Label htmlFor="proj-client" className="text-[13px] font-semibold">Default Client Reviewer</Label>
-            <p className="text-[11px] text-muted-foreground">
+            <Label htmlFor="proj-client" className="text-s font-semibold">Default Client Reviewer</Label>
+            <p className="text-xs text-muted-foreground">
               Tasks in Client Review will be auto-assigned to this person.
             </p>
             {clientMembers.length === 0 ? (
-              <p className="text-[12px] text-muted-foreground">
+              <p className="text-s text-muted-foreground">
                 No client members in this project yet.
               </p>
             ) : (
@@ -321,7 +321,7 @@ export function ProjectSettingsOverlay({
                 id="proj-client"
                 value={clientReviewerId}
                 onChange={(e) => setClientReviewerId(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-s text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="">Auto (first client member)</option>
                 {clientMembers.map((c) => (
@@ -335,10 +335,10 @@ export function ProjectSettingsOverlay({
           <div className="space-y-2 rounded-md border border-border/60 bg-surface/40 p-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <Label htmlFor="proj-client-chat" className="text-[13px] font-semibold">
+                <Label htmlFor="proj-client-chat" className="text-s font-semibold">
                   Enable client chat
                 </Label>
-                <p className="mt-1 text-[11px] text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Opens a separate chat room for clients — isolated from internal project chat.
                   Clients on the project join automatically; add staff from your side below.
                 </p>
@@ -383,7 +383,7 @@ export function ProjectSettingsOverlay({
               </button>
             </div>
             {clientChatSaving && (
-              <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 Updating…
               </p>
@@ -395,8 +395,8 @@ export function ProjectSettingsOverlay({
 
           {/* Pipeline Task Limit */}
           <div className="space-y-2">
-            <Label htmlFor="proj-max-tasks" className="text-[13px] font-semibold">Max Tasks in Pipeline</Label>
-            <p className="text-[11px] text-muted-foreground">
+            <Label htmlFor="proj-max-tasks" className="text-s font-semibold">Max Tasks in Pipeline</Label>
+            <p className="text-xs text-muted-foreground">
               The most tasks allowed at once across <strong className="text-foreground">Ready for Dev</strong>, <strong className="text-foreground">In Development</strong>, and <strong className="text-foreground">Internal Review</strong>. New tasks can&apos;t enter until an existing one moves past Internal Review.
             </p>
             <Input
@@ -406,20 +406,20 @@ export function ProjectSettingsOverlay({
               max={50}
               value={maxPipelineTasks}
               onChange={(e) => setMaxPipelineTasks(e.target.value)}
-              className="text-[13px] w-28"
+              className="text-s w-28"
             />
           </div>
 
           {/* Contracts */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-[13px] font-semibold">Contracts</Label>
+              <Label className="text-s font-semibold">Contracts</Label>
               {isAdmin && <AddContractDialog projectId={project.id} contractPrefixes={contractPrefixes} />}
             </div>
             {project.contracts.length === 0 ? (
               <div className="flex flex-col items-center justify-center text-center gap-3 py-8 rounded-lg border border-dashed border-border">
                 <ScrollText className="w-8 h-8 text-muted-foreground opacity-50" strokeWidth={1.5} />
-                <p className="text-[12px] text-muted-foreground">No contracts added yet.</p>
+                <p className="text-s text-muted-foreground">No contracts added yet.</p>
               </div>
             ) : (
               <ContractList contracts={project.contracts} isAdmin={isAdmin} projectId={project.id} contractPrefixes={contractPrefixes} />
@@ -429,32 +429,32 @@ export function ProjectSettingsOverlay({
           {/* Danger Zone */}
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-5 space-y-4">
             <div>
-              <h3 className="text-[13px] font-semibold text-destructive">Danger Zone</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
+              <h3 className="text-s font-semibold text-destructive">Danger Zone</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Permanently delete this project and all its data. This cannot be undone.
               </p>
             </div>
             {!deleteOpen ? (
               <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                <Trash2 className="w-3.5 h-3.5 me-1.5" />
                 Delete Project
               </Button>
             ) : (
               <div className="space-y-3">
-                <p className="text-[12px] text-muted-foreground">
+                <p className="text-s text-muted-foreground">
                   Type <strong className="text-foreground">{project.name}</strong> to confirm:
                 </p>
                 <Input
                   value={confirmText}
                   onChange={(e) => setConfirmText(e.target.value)}
                   placeholder={project.name}
-                  className="text-[13px]"
+                  className="text-s"
                   autoFocus
                 />
-                {deleteError && <p className="text-[12px] text-destructive">{deleteError}</p>}
+                {deleteError && <p className="text-s text-destructive">{deleteError}</p>}
                 <div className="flex gap-2">
                   <Button variant="destructive" size="sm" onClick={handleDelete} disabled={confirmText !== project.name || deleting}>
-                    {deleting ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Trash2 className="w-3 h-3 mr-1" />}
+                    {deleting ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <Trash2 className="w-3 h-3 me-1" />}
                     Delete Forever
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => { setDeleteOpen(false); setConfirmText(""); setDeleteError(""); }}>
@@ -516,7 +516,7 @@ function ContractList({ contracts, isAdmin, projectId, contractPrefixes = [] }: 
             <div className="flex items-center gap-3 min-w-0">
               <ContractBadge contract={contract} />
               {contract.latePayment && (
-                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/20 shrink-0">
+                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/20 shrink-0">
                   <AlertTriangle className="w-3 h-3" />
                   Late Payment
                 </span>
@@ -527,7 +527,7 @@ function ContractList({ contracts, isAdmin, projectId, contractPrefixes = [] }: 
                 <button
                   onClick={() => handleToggleLatePayment(contract.id)}
                   disabled={togglingId === contract.id}
-                  className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                  className={`rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
                     contract.latePayment
                       ? "text-amber-400 hover:bg-amber-500/10"
                       : "text-muted-foreground hover:text-amber-400 hover:bg-amber-500/10"
@@ -657,13 +657,13 @@ function ArchiveTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolea
   }
 
   return (
-    <div className="max-w-3xl mx-auto py-10 px-6">
+    <div className="max-w-3xl mx-auto py-10 px-app">
       <div className="mb-6">
-        <h2 className="text-[15px] font-semibold flex items-center gap-2">
+        <h2 className="text-s font-semibold flex items-center gap-2">
           <Archive className="w-4 h-4 text-muted-foreground" />
           Archived Tasks
         </h2>
-        <p className="text-[12px] text-muted-foreground mt-1">
+        <p className="text-s text-muted-foreground mt-1">
           Deleted tasks are moved here. {isAdmin ? "Admins can restore or permanently delete them." : "Ask an admin to restore or permanently delete them."}
         </p>
       </div>
@@ -671,7 +671,7 @@ function ArchiveTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolea
       {tasks.length === 0 ? (
         <div className="flex flex-col items-center justify-center text-center gap-3 py-16 rounded-lg border border-dashed border-border">
           <Archive className="w-10 h-10 text-muted-foreground opacity-30" strokeWidth={1.5} />
-          <p className="text-[13px] text-muted-foreground">No archived tasks</p>
+          <p className="text-s text-muted-foreground">No archived tasks</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -682,22 +682,22 @@ function ArchiveTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolea
                 key={task.id}
                 className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 group"
               >
-                <span className={cn("text-[12px] font-mono font-bold shrink-0", meta.color)}>
+                <span className={cn("text-s font-mono font-bold shrink-0", meta.color)}>
                   {meta.prefix}-{String(task.taskNumber).padStart(3, "0")}
                 </span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium truncate">{task.title}</p>
+                  <p className="text-s font-medium truncate">{task.title}</p>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {STAGE_LABELS[task.stage] ?? task.stage}
                     </span>
                     {task.priority && (
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         P{task.priority}
                       </span>
                     )}
                     {task.archivedAt && (
-                      <span className="text-[10px] text-muted-foreground/50">
+                      <span className="text-xs text-muted-foreground/50">
                         Archived {new Date(task.archivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </span>
                     )}
@@ -713,16 +713,16 @@ function ArchiveTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolea
                           size="sm"
                           onClick={() => handlePermanentDelete(task.id)}
                           disabled={actionId === task.id}
-                          className="text-[11px] h-7"
+                          className="text-xs h-7"
                         >
-                          {actionId === task.id ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Trash2 className="w-3 h-3 mr-1" />}
+                          {actionId === task.id ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <Trash2 className="w-3 h-3 me-1" />}
                           Confirm
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => setConfirmDeleteId(null)}
-                          className="text-[11px] h-7"
+                          className="text-xs h-7"
                         >
                           Cancel
                         </Button>
@@ -732,7 +732,7 @@ function ArchiveTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolea
                         <button
                           onClick={() => handleRestore(task.id)}
                           disabled={actionId === task.id}
-                          className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+                          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
                           title="Restore task"
                         >
                           {actionId === task.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Undo2 className="w-3 h-3" />}
@@ -740,7 +740,7 @@ function ArchiveTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolea
                         </button>
                         <button
                           onClick={() => setConfirmDeleteId(task.id)}
-                          className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                           title="Delete permanently"
                         >
                           <Trash2 className="w-3 h-3" />

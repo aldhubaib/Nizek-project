@@ -17,6 +17,7 @@ import {
   PageOverflowMenuProvider,
 } from "@/components/page-overflow-menu";
 import { ClientRouteGuard } from "@/components/client-route-guard";
+import { useHideHeaderOnScroll } from "@/hooks/use-hide-header-on-scroll";
 
 const DESKTOP_BREAKPOINT = 1024;
 
@@ -83,6 +84,8 @@ export function DashboardShell({
     if (isDesktop && drawerOpen) setDrawerOpen(false);
   }, [isDesktop, drawerOpen]);
 
+  useHideHeaderOnScroll(true);
+
   const expanded = pinned || hovered;
 
   const headerActions = (
@@ -118,7 +121,7 @@ export function DashboardShell({
 
       {/* Bell + ⋮ overlay the page's own header instead of stacking a second bar. */}
       {!isDesktop && !onInbox && (
-        <div className="fixed top-0 right-0 z-[100] flex app-top-bar items-center gap-1 bg-background px-4">
+        <div className="app-shell-chrome fixed top-0 right-0 z-[100] flex app-top-bar items-center gap-1 bg-transparent pb-5">
           {headerActions}
         </div>
       )}
@@ -154,11 +157,11 @@ export function DashboardShell({
       <main
         className={`flex-1 min-w-0 bg-background relative z-10 ${
           isDesktop && !onTaskPage ? "rounded-l-2xl" : ""
-        } ${bottomNavVisible && !onInbox ? "pb-[calc(4rem+env(safe-area-inset-bottom))]" : ""}`}
+        } ${bottomNavVisible && !onInbox ? "app-has-bottom-nav" : ""}`}
       >
         <ClientRouteGuard enabled={isClient} />
         {isDesktop && !onInbox && (
-          <div className="fixed top-3 right-4 z-[100] flex items-center gap-1">
+          <div className="app-shell-chrome fixed top-3 right-4 z-[100] flex items-center gap-1">
             {headerActions}
           </div>
         )}

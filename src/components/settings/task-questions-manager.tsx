@@ -3,7 +3,8 @@
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, MessageCircleQuestion, List, Type, Sparkles, Wrench, Bug, Paperclip, AlertCircle, Palette } from "lucide-react";
+import { Trash2, MessageCircleQuestion, List, Type, Sparkles, Wrench, Bug, Paperclip, AlertCircle, Palette } from "lucide-react";
+import { AddButton } from "@/components/add-button";
 import { addDefaultQuestion as addTaskQuestion, deleteDefaultQuestion as deleteTaskQuestion, updateDefaultQuestion as updateTaskQuestion } from "@/actions/default-question";
 import {
   Select,
@@ -117,10 +118,10 @@ export function TaskQuestionsManager({ questions, projectId }: Props) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-[13px] font-semibold text-foreground">
+          <h2 className="text-s font-semibold text-foreground">
             Task Questions
           </h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             Questions shown when creating a task, organized by task type.
           </p>
         </div>
@@ -137,13 +138,13 @@ export function TaskQuestionsManager({ questions, projectId }: Props) {
               key={tab.id}
               onClick={() => setActiveType(tab.id)}
               className={cn(
-                "flex items-center gap-2 rounded-lg border px-3.5 py-2 text-[12px] font-medium transition-colors",
+                "flex items-center gap-2 rounded-lg border px-3.5 py-2 text-s font-medium transition-colors",
                 isActive ? tab.activeColor : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
               )}
             >
               <Icon className="w-3.5 h-3.5" strokeWidth={1.5} />
               {tab.label}
-              <span className="text-[10px] opacity-60">{count}</span>
+              <span className="text-xs opacity-60">{count}</span>
             </button>
           );
         })}
@@ -152,10 +153,10 @@ export function TaskQuestionsManager({ questions, projectId }: Props) {
       {filteredQuestions.length === 0 ? (
         <div className="flex flex-col items-center justify-center text-center gap-3 py-8 rounded-lg border border-border bg-card">
           <MessageCircleQuestion className="w-8 h-8 text-muted-foreground opacity-50" strokeWidth={1.5} />
-          <p className="text-[13px] text-muted-foreground">
+          <p className="text-s text-muted-foreground">
             No questions for {TABS.find((t) => t.id === activeType)?.label} tasks yet.
           </p>
-          <p className="text-[11px] text-muted-foreground/60">
+          <p className="text-xs text-muted-foreground/60">
             Add questions below that must be answered when creating this type of task.
           </p>
         </div>
@@ -166,7 +167,7 @@ export function TaskQuestionsManager({ questions, projectId }: Props) {
               key={q.id}
               className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 group hover:border-muted-foreground/20 transition-colors"
             >
-              <span className="text-[11px] text-muted-foreground font-mono w-5 shrink-0">
+              <span className="text-xs text-muted-foreground font-mono w-5 shrink-0">
                 {i + 1}.
               </span>
               {editingId === q.id ? (
@@ -175,7 +176,7 @@ export function TaskQuestionsManager({ questions, projectId }: Props) {
                     <Input
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      className="h-7 text-[13px] flex-1"
+                      className="h-7 text-s flex-1"
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && q.type !== "select") handleUpdate(q.id);
                         if (e.key === "Escape") setEditingId(null);
@@ -194,7 +195,7 @@ export function TaskQuestionsManager({ questions, projectId }: Props) {
                       value={editOptions}
                       onChange={(e) => setEditOptions(e.target.value)}
                       placeholder="Options (comma-separated): iOS, Android, Web..."
-                      className="h-7 text-[12px]"
+                      className="h-7 text-s"
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleUpdate(q.id);
                         if (e.key === "Escape") setEditingId(null);
@@ -210,20 +211,20 @@ export function TaskQuestionsManager({ questions, projectId }: Props) {
                       setEditValue(q.question);
                       setEditOptions(getOptionsList(q).join(", "));
                     }}
-                    className="flex-1 text-left min-w-0"
+                    className="flex-1 text-start min-w-0"
                   >
-                    <span className="text-[13px] text-foreground hover:text-primary transition-colors block truncate">
+                    <span className="text-s text-foreground hover:text-primary transition-colors block truncate">
                       {q.question}
                     </span>
                     {q.type === "select" && (
-                      <span className="text-[10px] text-muted-foreground/60 flex items-center gap-1 mt-0.5">
+                      <span className="text-xs text-muted-foreground/60 flex items-center gap-1 mt-0.5">
                         <List className="w-3 h-3" />
                         {getOptionsList(q).join(", ")}
                       </span>
                     )}
                   </button>
 
-                  <span className="text-[10px] text-muted-foreground/50 font-mono shrink-0">
+                  <span className="text-xs text-muted-foreground/50 font-mono shrink-0">
                     {q.type === "select" ? "dropdown" : q.type === "file" ? "file" : "text"}
                   </span>
 
@@ -246,23 +247,23 @@ export function TaskQuestionsManager({ questions, projectId }: Props) {
             value={newQuestion}
             onChange={(e) => setNewQuestion(e.target.value)}
             placeholder={`Add a question for ${TABS.find((t) => t.id === activeType)?.label} tasks...`}
-            className="h-8 text-[13px] flex-1"
+            className="h-8 text-s flex-1"
           />
           <Select value={newType} onValueChange={(val) => val && setNewType(val as "text" | "select" | "file")}>
-            <SelectTrigger className="w-[110px] h-8 text-[12px]">
+            <SelectTrigger className="w-[110px] h-8 text-s">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="text">
-                <Type className="w-3.5 h-3.5 mr-1" />
+                <Type className="w-3.5 h-3.5 me-1" />
                 Text
               </SelectItem>
               <SelectItem value="select">
-                <List className="w-3.5 h-3.5 mr-1" />
+                <List className="w-3.5 h-3.5 me-1" />
                 Dropdown
               </SelectItem>
               <SelectItem value="file">
-                <Paperclip className="w-3.5 h-3.5 mr-1" />
+                <Paperclip className="w-3.5 h-3.5 me-1" />
                 File
               </SelectItem>
             </SelectContent>
@@ -274,15 +275,17 @@ export function TaskQuestionsManager({ questions, projectId }: Props) {
             value={newOptions}
             onChange={(e) => setNewOptions(e.target.value)}
             placeholder="Options (comma-separated): Client, Admin, Vendor..."
-            className="h-8 text-[12px]"
+            className="h-8 text-s"
           />
         )}
 
         <div className="flex justify-end">
-          <Button type="submit" size="sm" disabled={adding || !newQuestion.trim()}>
-            <Plus className="w-3.5 h-3.5 mr-1" strokeWidth={1.5} />
-            {adding ? "Adding..." : "Add Question"}
-          </Button>
+          <AddButton
+            type="submit"
+            label="Add Question"
+            busy={adding}
+            disabled={adding || !newQuestion.trim()}
+          />
         </div>
       </form>
     </div>

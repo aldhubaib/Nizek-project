@@ -28,12 +28,12 @@ type Assets = Partial<Record<BrandingSlotId, BrandingAssetDTO>>;
 export function AppLogoClient({ assets }: { assets: Assets }) {
   return (
     <div className="max-w-3xl space-y-6">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-s text-muted-foreground">
         Upload a square source to generate every home-screen size, or replace
         individual assets below. Each slot enforces the required format and
         dimensions before it&apos;s accepted.
       </p>
-      <p className="text-[13px] text-muted-foreground rounded-lg border border-border bg-card/60 px-3 py-2.5 leading-relaxed">
+      <p className="text-s text-muted-foreground rounded-lg border border-border bg-card/60 px-3 py-2.5 leading-relaxed">
         Sidebar, login, and the browser tab update within about a minute. On
         Android Chrome, open the installed app, tap ⋮ → Review app update,
         then fully close it on Wi‑Fi. iOS updates the logo inside the app;
@@ -46,7 +46,7 @@ export function AppLogoClient({ assets }: { assets: Assets }) {
         asset={assets.homeScreenSource}
       />
       <div className="space-y-3">
-        <h3 className="text-sm font-medium">Individual assets</h3>
+        <h3 className="text-s font-medium">Individual assets</h3>
         {BRANDING_SLOTS.map((slot) => (
           <SlotRow key={slot.id} slot={slot} asset={assets[slot.id]} />
         ))}
@@ -148,9 +148,9 @@ function SlotRow({
         <SlotPreview slot={slot} asset={asset} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <div className="truncate text-sm font-medium">{slot.title}</div>
+            <div className="truncate text-s font-medium">{slot.title}</div>
             {slot.optional && (
-              <span className="rounded-full border border-border/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <span className="rounded-full border border-border/60 px-1.5 py-0.5 text-xs uppercase tracking-wide text-muted-foreground">
                 Optional
               </span>
             )}
@@ -158,7 +158,7 @@ function SlotRow({
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
             )}
           </div>
-          <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+          <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-s text-muted-foreground">
             <dt>Size</dt>
             <dd>{slot.sizesLabel}</dd>
             <dt>Format</dt>
@@ -174,10 +174,10 @@ function SlotRow({
             )}
           </dl>
           {slot.note && (
-            <p className="mt-1 text-xs text-muted-foreground">{slot.note}</p>
+            <p className="mt-1 text-s text-muted-foreground">{slot.note}</p>
           )}
           {error && (
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-rose-400">
+            <p className="mt-2 flex items-center gap-1.5 text-s text-rose-400">
               <AlertTriangle className="h-3.5 w-3.5" />
               {error}
             </p>

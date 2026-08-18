@@ -25,7 +25,6 @@ import {
   BarChart3,
   GripVertical,
   Trash2,
-  Plus,
   Layers,
   FileSignature,
   PieChart,
@@ -53,6 +52,7 @@ import { PortfolioMenu } from "@/components/equity/portfolio-menu";
 import { PerformanceSection } from "@/components/equity/performance-section";
 import { TeamSection } from "@/components/equity/team-section";
 import { PageHeader } from "@/components/page-header";
+import { AddButton } from "@/components/add-button";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import {
@@ -105,10 +105,10 @@ import {
 // They're a poor fit for figures typed in full — the arrows sit over the text,
 // invite a stray scroll-wheel edit, and nudge by 1 on values in the thousands.
 const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 [&::-webkit-outer-spin-button]:m-0";
+  "w-full h-9 px-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 [&::-webkit-outer-spin-button]:m-0";
 const selectCls =
-  "w-full h-9 px-2 rounded-lg border border-border bg-card text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
-const labelCls = "text-[11px] font-medium text-muted-foreground mb-1 block";
+  "w-full h-9 px-2 rounded-lg border border-border bg-card text-s text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
+const labelCls = "text-xs font-medium text-muted-foreground mb-1 block";
 
 function toDateInput(iso: string | null): string {
   return iso ? iso.slice(0, 10) : "";
@@ -144,9 +144,9 @@ function PercentInput({
         value={value}
         onChange={(e) => onChange(sanitizePct(e.target.value))}
         placeholder={placeholder}
-        className={cn(inputCls, "pr-7", className)}
+        className={cn(inputCls, "pe-7", className)}
       />
-      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[12px] text-muted-foreground pointer-events-none">
+      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-s text-muted-foreground pointer-events-none">
         %
       </span>
     </div>
@@ -191,11 +191,11 @@ export function EquityPortfolioClient({
             className="w-6 h-6 rounded-full object-cover shrink-0"
           />
         ) : (
-          <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center text-[10px] font-semibold text-primary shrink-0">
+          <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
             {portfolio.project.name[0]?.toUpperCase()}
           </div>
         )}
-        <h1 className="text-sm font-semibold text-foreground truncate">
+        <h1 className="text-s font-semibold text-foreground truncate">
           {portfolio.project.name}
         </h1>
         <PortfolioMenu
@@ -204,50 +204,50 @@ export function EquityPortfolioClient({
         />
       </PageHeader>
 
-      <div className="px-6 py-6 max-w-5xl mx-auto">
+      <div className="px-app py-6 max-w-5xl mx-auto">
         {/* Computed summary — derived from the tables below, nothing stored */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          <div className="rounded-xl border border-border bg-card px-3.5 py-3">
-            <p className="text-[10px] text-muted-foreground mb-1">
+          <div className="app-card rounded-xl border border-border bg-card px-3.5 py-3">
+            <p className="text-xs text-muted-foreground mb-1">
               {currentPct !== summary.granted
                 ? "Our equity today"
                 : "Our equity"}
             </p>
-            <p className="text-[18px] font-semibold text-foreground tabular-nums">
+            <p className="text-l font-semibold text-foreground tabular-nums">
               {formatPct(currentPct)}
             </p>
             {/* Only worth saying once a later split has actually moved it. */}
             {currentPct !== summary.granted && (
-              <p className="text-[10px] text-muted-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 {formatPct(summary.granted)} granted
               </p>
             )}
           </div>
-          <div className="rounded-xl border border-border bg-card px-3.5 py-3">
-            <p className="text-[10px] text-muted-foreground mb-1">
+          <div className="app-card rounded-xl border border-border bg-card px-3.5 py-3">
+            <p className="text-xs text-muted-foreground mb-1">
               Vested as of today
             </p>
-            <p className="text-[18px] font-semibold text-primary tabular-nums">
+            <p className="text-l font-semibold text-primary tabular-nums">
               {formatPct(summary.vested)}
             </p>
           </div>
-          <div className="rounded-xl border border-border bg-card px-3.5 py-3">
-            <p className="text-[10px] text-muted-foreground mb-1">Contracts</p>
-            <p className="text-[18px] font-semibold text-foreground tabular-nums">
+          <div className="app-card rounded-xl border border-border bg-card px-3.5 py-3">
+            <p className="text-xs text-muted-foreground mb-1">Contracts</p>
+            <p className="text-l font-semibold text-foreground tabular-nums">
               {portfolio.contracts.length || "—"}
               {signedCount > 0 && (
-                <span className="text-[11px] font-normal text-muted-foreground">
+                <span className="text-xs font-normal text-muted-foreground">
                   {" "}
                   · {signedCount} signed
                 </span>
               )}
             </p>
           </div>
-          <div className="rounded-xl border border-border bg-card px-3.5 py-3">
-            <p className="text-[10px] text-muted-foreground mb-1">
+          <div className="app-card rounded-xl border border-border bg-card px-3.5 py-3">
+            <p className="text-xs text-muted-foreground mb-1">
               Equity entries
             </p>
-            <p className="text-[18px] font-semibold text-foreground tabular-nums">
+            <p className="text-l font-semibold text-foreground tabular-nums">
               {latestSet?.grants.length || "—"}
             </p>
           </div>
@@ -443,16 +443,13 @@ function ContractsTable({ portfolio }: { portfolio: EquityPortfolioDTO }) {
       forceOpen={adding || editingId !== null}
       actions={
         !adding && (
-          <button
+          <AddButton
+            label="Add contract"
             onClick={() => {
               setAdding(true);
               setEditingId(null);
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add contract
-          </button>
+          />
         )
       }
     >
@@ -511,7 +508,7 @@ function ContractsTable({ portfolio }: { portfolio: EquityPortfolioDTO }) {
       )}
 
       {portfolio.contracts.length === 0 && !adding && (
-        <p className="text-[12px] text-muted-foreground py-2">
+        <p className="text-s text-muted-foreground py-2">
           No contracts added yet.
         </p>
       )}
@@ -600,7 +597,7 @@ function ContractRow({
                 href={c.fileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 mt-0.5 px-2 py-1 rounded-md border border-border bg-muted/40 text-[11px] text-foreground no-underline hover:border-muted-foreground/40 transition-colors max-w-full"
+                className="inline-flex items-center gap-1.5 mt-0.5 px-2 py-1 rounded-md border border-border bg-muted/40 text-xs text-foreground no-underline hover:border-muted-foreground/40 transition-colors max-w-full"
               >
                 <Paperclip
                   className="w-3 h-3 shrink-0 text-muted-foreground"
@@ -780,7 +777,7 @@ function ContractForm({
           <label className={labelCls}>End date — calculated</label>
           <div
             className={cn(
-              "flex h-9 items-center rounded-lg border border-dashed border-border bg-muted/30 px-3 text-[13px]",
+              "flex h-9 items-center rounded-lg border border-dashed border-border bg-muted/30 px-3 text-s",
               endDate ? "text-foreground" : "text-muted-foreground"
             )}
           >
@@ -814,7 +811,7 @@ function ContractForm({
                 ongoing && "cursor-not-allowed opacity-50"
               )}
             />
-            <span className="flex h-9 w-[104px] shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 text-[13px] text-muted-foreground">
+            <span className="flex h-9 w-[104px] shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 text-s text-muted-foreground">
               {currency}
             </span>
           </div>
@@ -823,7 +820,7 @@ function ContractForm({
           <label className={labelCls}>Billing status — calculated</label>
           <div
             className={cn(
-              "flex h-9 items-center rounded-lg border border-dashed px-3 text-[13px]",
+              "flex h-9 items-center rounded-lg border border-dashed px-3 text-s",
               status === "NONE" || !draft.monthlyFee
                 ? "border-border bg-muted/30 text-muted-foreground"
                 : status === "ACTUAL"
@@ -852,12 +849,12 @@ function ContractForm({
                 href={draft.fileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[13px] text-foreground truncate no-underline hover:underline"
+                className="text-s text-foreground truncate no-underline hover:underline"
               >
                 {draft.fileName || "Contract file"}
               </a>
               {formatFileSize(draft.fileSize) && (
-                <span className="text-[11px] text-muted-foreground/60 shrink-0">
+                <span className="text-xs text-muted-foreground/60 shrink-0">
                   {formatFileSize(draft.fileSize)}
                 </span>
               )}
@@ -865,7 +862,7 @@ function ContractForm({
                 type="button"
                 onClick={clearFile}
                 disabled={busy}
-                className="ml-auto w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                className="ms-auto w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
                 title="Remove file"
               >
                 <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -876,7 +873,7 @@ function ContractForm({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={busy || uploading}
-              className="flex items-center gap-2 w-full h-9 px-3 rounded-lg border border-dashed border-border bg-card text-[13px] text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 w-full h-9 px-3 rounded-lg border border-dashed border-border bg-card text-s text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
             >
               <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
               {uploading
@@ -907,7 +904,7 @@ function ContractForm({
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="px-3 py-1.5 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors"
+          className="px-3 py-1.5 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
         >
           Cancel
         </button>
@@ -915,7 +912,7 @@ function ContractForm({
           type="button"
           onClick={() => onSubmit(draft)}
           disabled={busy || uploading}
-          className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+          className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-s font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           {busy ? "Saving…" : submitLabel}
         </button>
@@ -1012,7 +1009,7 @@ function GrantsTable({
     if (editing === set.id) {
       return (
         <div key={set.id} className="space-y-1.5">
-          <span className="text-[11px] text-muted-foreground tabular-nums">
+          <span className="text-xs text-muted-foreground tabular-nums">
             {formatSetDate(set.effectiveOn)}
           </span>
           {renderSetForm(set)}
@@ -1146,24 +1143,23 @@ function GrantsTable({
       forceOpen={editing !== null}
       actions={
         editing === null && (
-          <button
+          <AddButton
+            label={latest ? "New split" : "Add equity"}
             onClick={() => setEditing("new")}
             disabled={portfolio.contracts.length === 0}
             title={
               portfolio.contracts.length === 0
                 ? "Add a contract first"
-                : undefined
+                : latest
+                  ? "New split"
+                  : "Add equity"
             }
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50 shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            {latest ? "New split" : "Add equity"}
-          </button>
+          />
         )
       }
     >
       {portfolio.contracts.length === 0 ? (
-        <p className="text-[12px] text-muted-foreground py-2">
+        <p className="text-s text-muted-foreground py-2">
           Add a contract above first — equity is always tied to one.
         </p>
       ) : latest || editing !== null ? (
@@ -1178,7 +1174,7 @@ function GrantsTable({
           {earlier.map((set) => renderSavedSet(set, false))}
         </div>
       ) : (
-        <p className="text-[12px] text-muted-foreground py-2">
+        <p className="text-s text-muted-foreground py-2">
           No equity defined yet.
         </p>
       )}
@@ -1188,11 +1184,11 @@ function GrantsTable({
 
 /** A saved cell — shaped like the field it mirrors, minus the ability to type. */
 const readCellCls =
-  "h-9 px-3 rounded-lg border border-border bg-muted/30 flex items-center text-[13px] text-foreground";
+  "h-9 px-3 rounded-lg border border-border bg-muted/30 flex items-center text-s text-foreground";
 
 // Tracks the form's columns so a saved row lands where it was typed.
 const GRANT_VIEW_GRID =
-  "grid-cols-1 sm:grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_10.5rem]";
+  "grid-cols-1 @md/card:grid-cols-[5.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_10.5rem]";
 
 /**
  * The saved split, laid out exactly as the form that wrote it so the numbers
@@ -1221,7 +1217,7 @@ function GrantsView({
 
   return (
     <div className="rounded-lg border border-border bg-card p-3.5 space-y-3">
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_14rem]">
+      <div className="grid gap-3 @md/card:grid-cols-[minmax(0,1fr)_14rem]">
         <div>
           <label className={labelCls}>Contract</label>
           <div className={readCellCls}>
@@ -1240,7 +1236,7 @@ function GrantsView({
                 <span className="tabular-nums truncate">
                   {currentValuation.toLocaleString("en-US")}
                 </span>
-                <span className="text-[11px] text-muted-foreground shrink-0">
+                <span className="text-xs text-muted-foreground shrink-0">
                   {currency}
                 </span>
               </>
@@ -1250,7 +1246,7 @@ function GrantsView({
       </div>
 
       <div className="space-y-2 pt-6">
-        <div className={cn("hidden sm:grid gap-2 px-0.5", GRANT_VIEW_GRID)}>
+        <div className={cn("@max-md/card:hidden @md/card:grid gap-2 px-0.5", GRANT_VIEW_GRID)}>
           <span className={cn(labelCls, "mb-0")}>Equity %</span>
           <span className={cn(labelCls, "mb-0")}>Type</span>
           <span className={cn(labelCls, "mb-0")}>Name</span>
@@ -1318,19 +1314,19 @@ function GrantsView({
                     >
                       {milestone.startsAtValuation.toLocaleString("en-US")}
                     </span>
-                    <span className="text-[11px] text-muted-foreground shrink-0">
+                    <span className="text-xs text-muted-foreground shrink-0">
                       {currency}
                     </span>
                   </div>
                 ) : (
-                  <span className="hidden sm:block text-[12px] text-muted-foreground/30 text-center">
+                  <span className="hidden sm:block text-s text-muted-foreground/30 text-center">
                     —
                   </span>
                 )}
               </div>
 
               {g.notes && (
-                <p className="text-[11px] text-muted-foreground/70 sm:pl-1 whitespace-pre-wrap">
+                <p className="text-xs text-muted-foreground/70 sm:ps-1 whitespace-pre-wrap">
                   {g.notes}
                 </p>
               )}
@@ -1340,7 +1336,7 @@ function GrantsView({
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-2 border-t border-border pt-3">
-        <p className="text-[11px] text-muted-foreground tabular-nums">
+        <p className="text-xs text-muted-foreground tabular-nums">
           Total{" "}
           <span
             className={cn(
@@ -1352,7 +1348,7 @@ function GrantsView({
           </span>
         </p>
         {currentValuation != null && tranches.length > 0 && (
-          <p className="text-[11px] text-muted-foreground tabular-nums">
+          <p className="text-xs text-muted-foreground tabular-nums">
             At {formatValuation(currentValuation, currency)}:{" "}
             <span className="text-amber-400 font-medium">
               {formatPct(split.diluted)}
@@ -1410,7 +1406,7 @@ function grantRowComplete(row: GrantRowDraft): boolean {
 }
 
 const GRANT_ROW_GRID =
-  "grid-cols-1 sm:grid-cols-[1rem_5.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_10.5rem_1.75rem]";
+  "grid-cols-1 @md/card:grid-cols-[1rem_5.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_10.5rem_1.75rem]";
 
 /** One row of the split, draggable by its handle so the order can be arranged. */
 function SortableGrantRow({
@@ -1510,14 +1506,14 @@ function SortableGrantRow({
             }
             placeholder="Valuation"
             title={`The stake is non-diluted until the company reaches this valuation (${currency})`}
-            className={cn(inputCls, "pr-11 text-[12px]")}
+            className={cn(inputCls, "pe-11 text-s")}
           />
-          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground pointer-events-none">
+          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
             {currency}
           </span>
         </div>
       ) : (
-        <span className="hidden sm:block text-[12px] text-muted-foreground/30 text-center">
+        <span className="hidden sm:block text-s text-muted-foreground/30 text-center">
           —
         </span>
       )}
@@ -1661,7 +1657,7 @@ function GrantBatchForm({
 
   return (
     <div className="rounded-lg border border-primary/30 bg-card p-3.5 space-y-3">
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem_14rem]">
+      <div className="grid gap-3 @md/card:grid-cols-[minmax(0,1fr)_10rem_14rem]">
         <div>
           <label className={labelCls}>Contract</label>
           <select
@@ -1677,7 +1673,7 @@ function GrantBatchForm({
               </option>
             ))}
           </select>
-          <p className="text-[11px] text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Every row below is granted under this contract.
           </p>
         </div>
@@ -1689,7 +1685,7 @@ function GrantBatchForm({
             onChange={(e) => setEffectiveOn(e.target.value)}
             className={inputCls}
           />
-          <p className="text-[11px] text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             When it took effect.
           </p>
         </div>
@@ -1702,20 +1698,20 @@ function GrantBatchForm({
               value={valuation}
               onChange={(e) => setValuation(sanitizeAmount(e.target.value))}
               placeholder="Not valued yet"
-              className={cn(inputCls, "pr-11")}
+              className={cn(inputCls, "pe-11")}
             />
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground pointer-events-none">
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
               {currency}
             </span>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             What the company is worth today.
           </p>
         </div>
       </div>
 
       <div className="space-y-2 pt-6">
-        <div className={cn("hidden sm:grid gap-2 px-0.5", GRANT_ROW_GRID)}>
+        <div className={cn("@max-md/card:hidden @md/card:grid gap-2 px-0.5", GRANT_ROW_GRID)}>
           <span />
           <span className={cn(labelCls, "mb-0")}>Equity %</span>
           <span className={cn(labelCls, "mb-0")}>Type</span>
@@ -1754,18 +1750,14 @@ function GrantBatchForm({
           </SortableContext>
         </DndContext>
 
-        <button
-          type="button"
+        <AddButton
+          label="Add row"
           onClick={() => setRows((rs) => [...rs, emptyGrantRow()])}
-          className="flex items-center gap-1 px-2.5 h-8 rounded-lg border border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
-        >
-          <Plus className="w-3 h-3" />
-          Add row
-        </button>
+        />
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-2 border-t border-border pt-3">
-        <p className="text-[11px] text-muted-foreground tabular-nums">
+        <p className="text-xs text-muted-foreground tabular-nums">
           Total{" "}
           <span
             className={cn(
@@ -1786,7 +1778,7 @@ function GrantBatchForm({
           )}
         </p>
         {missingHint && (
-          <p className="order-last basis-full text-[11px] text-amber-400">
+          <p className="order-last basis-full text-xs text-amber-400">
             {missingHint}
           </p>
         )}
@@ -1795,7 +1787,7 @@ function GrantBatchForm({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="px-3 py-1.5 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors"
+            className="px-3 py-1.5 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
           >
             Cancel
           </button>
@@ -1812,7 +1804,7 @@ function GrantBatchForm({
             }}
             disabled={busy || !valid}
             title={blockedReason}
-            className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+            className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-s font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             {busy ? "Saving…" : submitLabel}
           </button>
@@ -2178,7 +2170,7 @@ function FinancialsTable({
                 setEditingId(null);
               }}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[12px] font-medium transition-colors",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-s font-medium transition-colors",
                 picking
                   ? "border-primary/40 text-foreground bg-primary/10"
                   : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40"
@@ -2188,17 +2180,14 @@ function FinancialsTable({
               Figures
             </button>
             {fields.length > 0 && (
-              <button
+              <AddButton
+                label="Add report"
                 onClick={() => {
                   setAdding(true);
                   setPicking(false);
                   setEditingId(null);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add report
-              </button>
+              />
             )}
           </div>
         )
@@ -2215,7 +2204,7 @@ function FinancialsTable({
       )}
 
       {fields.length === 0 ? (
-        <p className="text-[12px] text-muted-foreground py-2">
+        <p className="text-s text-muted-foreground py-2">
           {financialFields(metrics).length === 0 ? (
             <>
               Nothing to report on yet — define what a period is reported with
@@ -2290,7 +2279,7 @@ function FinancialsTable({
           )}
 
           {reports.length === 0 && !adding && (
-            <p className="text-[12px] text-muted-foreground py-2">
+            <p className="text-s text-muted-foreground py-2">
               No financial reports yet.
             </p>
           )}
@@ -2458,10 +2447,10 @@ function ReportFieldPicker({
   return (
     <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-3 mb-3">
       <div>
-        <h4 className="text-[13px] font-semibold text-foreground">
+        <h4 className="text-s font-semibold text-foreground">
           Figures this project reports
         </h4>
-        <p className="text-[11px] text-muted-foreground mt-0.5">
+        <p className="text-xs text-muted-foreground mt-0.5">
           The fields come from{" "}
           <Link
             href="/dashboard/equity"
@@ -2486,10 +2475,10 @@ function ReportFieldPicker({
               key={metric.id}
               className="flex items-center gap-3 rounded-lg border border-border px-3 h-10"
             >
-              <span className="text-[13px] text-foreground truncate flex-1 min-w-0">
+              <span className="text-s text-foreground truncate flex-1 min-w-0">
                 {metric.name}
                 {formula && (
-                  <span className="text-[11px] text-muted-foreground ml-1.5">
+                  <span className="text-xs text-muted-foreground ms-1.5">
                     calculated
                   </span>
                 )}
@@ -2505,7 +2494,7 @@ function ReportFieldPicker({
                       type="button"
                       onClick={() => setState(metric.id, option)}
                       className={cn(
-                        "px-2.5 h-7 rounded-md text-[11px] font-medium transition-colors",
+                        "px-2.5 h-7 rounded-md text-xs font-medium transition-colors",
                         state === option
                           ? option === "off"
                             ? "bg-muted text-foreground"
@@ -2528,7 +2517,7 @@ function ReportFieldPicker({
       </div>
 
       {starved.length > 0 && (
-        <p className="text-[11px] text-amber-400">
+        <p className="text-xs text-amber-400">
           {starved.map((m) => m.name).join(", ")}{" "}
           {starved.length === 1 ? "needs a figure" : "need figures"} this
           project isn&apos;t asked for, so{" "}
@@ -2537,14 +2526,14 @@ function ReportFieldPicker({
       )}
 
       <div className="flex items-center justify-end gap-2">
-        <span className="text-[11px] text-muted-foreground mr-auto">
+        <span className="text-xs text-muted-foreground me-auto">
           Taking a field off keeps what was already reported for it.
         </span>
         <button
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="px-3 h-9 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors"
+          className="px-3 h-9 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
         >
           Cancel
         </button>
@@ -2558,7 +2547,7 @@ function ReportFieldPicker({
             )
           }
           disabled={busy}
-          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium hover:bg-primary/90 transition-colors disabled:opacity-40"
+          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-s font-medium hover:bg-primary/90 transition-colors disabled:opacity-40"
         >
           {busy ? "Saving…" : "Save fields"}
         </button>
@@ -2631,10 +2620,10 @@ function DerivedField({
   return (
     <div>
       <label className={labelCls}>{label}</label>
-      <div className="flex h-9 items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-3 text-[13px] text-foreground tabular-nums">
+      <div className="flex h-9 items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-3 text-s text-foreground tabular-nums">
         <span className="truncate">{value}</span>
         {previously && (
-          <span className="ml-auto text-[11px] text-muted-foreground truncate">
+          <span className="ms-auto text-xs text-muted-foreground truncate">
             {previously}
           </span>
         )}
@@ -2803,7 +2792,7 @@ function FinancialReportForm({
   // there's room for it, so the lines and their header have to agree on the
   // shape from one place.
   const rowGrid = beforeLabel
-    ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,120px)_auto]"
+    ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] @md/card:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,120px)_auto]"
     : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]";
 
   const blocked = !validYear
@@ -2827,7 +2816,7 @@ function FinancialReportForm({
 
   return (
     <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-4">
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
+      <div className="grid gap-3 @md/card:grid-cols-[minmax(0,1fr)_200px]">
         <div>
           <label className={labelCls}>Reporting period</label>
           <div className="flex items-center gap-2">
@@ -2880,15 +2869,15 @@ function FinancialReportForm({
       </div>
 
       <div className="space-y-2">
-        <div className={cn("hidden sm:grid gap-2 px-0.5", rowGrid)}>
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        <div className={cn("@max-md/card:hidden @md/card:grid gap-2 px-0.5", rowGrid)}>
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
             Field
           </span>
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
             Reported
           </span>
           {beforeLabel && (
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">
               {beforeLabel}
             </span>
           )}
@@ -2904,7 +2893,7 @@ function FinancialReportForm({
               className={cn("grid gap-2 items-center", rowGrid)}
             >
               {locked ? (
-                <div className="flex h-9 items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 text-[13px] text-foreground">
+                <div className="flex h-9 items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 text-s text-foreground">
                   <span className="truncate">{metric?.name}</span>
                   <span
                     className="text-destructive"
@@ -2953,17 +2942,17 @@ function FinancialReportForm({
                     className={cn(
                       inputCls,
                       "disabled:opacity-50",
-                      metric?.type === "PERCENT" && "pr-7",
-                      metric?.unit && metric.type === "NUMBER" && "pr-14"
+                      metric?.type === "PERCENT" && "pe-7",
+                      metric?.unit && metric.type === "NUMBER" && "pe-14"
                     )}
                   />
                   {metric?.type === "PERCENT" && (
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[12px] text-muted-foreground pointer-events-none">
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-s text-muted-foreground pointer-events-none">
                       %
                     </span>
                   )}
                   {metric?.type === "NUMBER" && metric.unit && (
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground pointer-events-none max-w-12 truncate">
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none max-w-12 truncate">
                       {metric.unit}
                     </span>
                   )}
@@ -2971,7 +2960,7 @@ function FinancialReportForm({
               )}
 
               {beforeLabel && (
-                <span className="hidden sm:block text-[12px] text-muted-foreground tabular-nums truncate">
+                <span className="hidden sm:block text-s text-muted-foreground tabular-nums truncate">
                   {metric
                     ? formatMetricValue(metric, before.get(metric.id) ?? {})
                     : "—"}
@@ -3003,19 +2992,15 @@ function FinancialReportForm({
         })}
 
         {pickable.length > 0 && (
-          <button
-            type="button"
+          <AddButton
+            label="Add row"
             onClick={() =>
               setDraft((d) => ({ ...d, rows: [...d.rows, blankFieldRow()] }))
             }
-            className="flex items-center gap-1.5 px-3 h-8 rounded-lg border border-dashed border-border text-[12px] text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add row
-          </button>
+          />
         )}
 
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Amounts in {currency} unless the field says otherwise.{" "}
           {requiredIds.size > 0
             ? "A field marked * has to be filled in — enter 0 if that's the figure."
@@ -3027,7 +3012,7 @@ function FinancialReportForm({
 
       {/* Read rather than entered, so they sit apart from the lines above. */}
       {calculated.length > 0 && (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 @md/card:grid-cols-2">
           {calculated.map((metric) => {
             const worked = evaluateFormula(
               metric.formulaOp,
@@ -3066,7 +3051,7 @@ function FinancialReportForm({
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-[200px_minmax(0,1fr)]">
+      <div className="grid gap-3 @md/card:grid-cols-[200px_minmax(0,1fr)]">
         <div>
           <label className={labelCls}>Do they need help?</label>
           <select
@@ -3114,12 +3099,12 @@ function FinancialReportForm({
                 href={doc.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[13px] text-foreground truncate no-underline hover:underline"
+                className="text-s text-foreground truncate no-underline hover:underline"
               >
                 {doc.filename}
               </a>
               {formatFileSize(doc.fileSize) && (
-                <span className="text-[11px] text-muted-foreground/60 shrink-0">
+                <span className="text-xs text-muted-foreground/60 shrink-0">
                   {formatFileSize(doc.fileSize)}
                 </span>
               )}
@@ -3132,7 +3117,7 @@ function FinancialReportForm({
                   }))
                 }
                 disabled={busy}
-                className="ml-auto w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                className="ms-auto w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
                 title="Remove this document"
               >
                 <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -3143,7 +3128,7 @@ function FinancialReportForm({
             type="button"
             onClick={() => documentInputRef.current?.click()}
             disabled={busy || uploading}
-            className="flex items-center gap-2 w-full h-9 px-3 rounded-lg border border-dashed border-border bg-card text-[13px] text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 w-full h-9 px-3 rounded-lg border border-dashed border-border bg-card text-s text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
           >
             <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
             {uploading
@@ -3163,19 +3148,19 @@ function FinancialReportForm({
 
       <div className="flex items-center justify-end gap-2">
         {blocked ? (
-          <span className="text-[11px] text-muted-foreground mr-auto">
+          <span className="text-xs text-muted-foreground me-auto">
             {blocked}
           </span>
         ) : (
           warning && (
-            <span className="text-[11px] text-amber-400 mr-auto">{warning}</span>
+            <span className="text-xs text-amber-400 me-auto">{warning}</span>
           )
         )}
         <button
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="px-3 h-9 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors"
+          className="px-3 h-9 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
         >
           Cancel
         </button>
@@ -3183,7 +3168,7 @@ function FinancialReportForm({
           type="button"
           onClick={() => onSubmit(draft)}
           disabled={busy || uploading || blocked != null}
-          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium hover:bg-primary/90 transition-colors disabled:opacity-40"
+          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-s font-medium hover:bg-primary/90 transition-colors disabled:opacity-40"
         >
           {busy ? "Saving…" : submitLabel}
         </button>
@@ -3289,14 +3274,11 @@ function TranchesTable({
           placeholder={`Valuation (${currency})`}
           className={cn(inputCls, "flex-1")}
         />
-        <button
+        <AddButton
+          label="Add tranche"
           onClick={handleAdd}
           disabled={busy || !equityPct || !valuation}
-          className="flex items-center gap-1.5 px-3 h-9 rounded-lg border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50 shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add tranche
-        </button>
+        />
       </div>
     </CollapsibleCard>
   );

@@ -6,6 +6,7 @@ import { LazyManagementTab } from "@/components/dashboard/lazy-management-tab";
 import { LazyProductTab } from "@/components/dashboard/lazy-product-tab";
 import { LazyDevTab } from "@/components/dashboard/lazy-dev-tab";
 import { DashboardOverview } from "@/components/dashboard/dashboard-overview";
+import { PageHeader } from "@/components/page-header";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -13,12 +14,12 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <div className="sticky top-0 z-10 flex app-top-bar items-center justify-between px-6 pr-14 border-b border-border bg-background shrink-0">
-        <h1 className="text-sm font-semibold">Dashboard</h1>
-      </div>
+      <PageHeader>
+        <h1 className="text-s font-semibold">Dashboard</h1>
+      </PageHeader>
 
-      <div className="px-6 py-6">
-        <p className="text-[13px] text-muted-foreground mb-6">
+      <div className="px-app py-6">
+        <p className="text-s text-muted-foreground mb-6">
           Welcome back, {user.name || "there"}.
         </p>
         <DashboardTabs

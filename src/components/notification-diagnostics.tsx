@@ -48,9 +48,9 @@ function CheckRow({
         <StatusIcon state={state} />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="text-[12px] font-medium">{label}</div>
+        <div className="text-s font-medium">{label}</div>
         {detail && (
-          <div className="text-[11px] text-muted-foreground">{detail}</div>
+          <div className="text-xs text-muted-foreground">{detail}</div>
         )}
       </div>
     </div>
@@ -123,14 +123,14 @@ export function NotificationDiagnostics() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 p-4 text-left"
+        className="flex w-full items-center gap-3 p-4 text-start"
       >
         <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted/40 text-foreground">
           <Activity className="h-4.5 w-4.5" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold">Notification diagnostics</div>
-          <div className="mt-0.5 text-xs text-muted-foreground">
+          <div className="text-s font-semibold">Notification diagnostics</div>
+          <div className="mt-0.5 text-s text-muted-foreground">
             Check why notifications or sounds might not arrive on this device.
           </div>
         </div>
@@ -233,7 +233,7 @@ export function NotificationDiagnostics() {
               type="button"
               onClick={() => void runTest()}
               disabled={testing}
-              className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+              className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-s font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {testing ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -243,25 +243,25 @@ export function NotificationDiagnostics() {
               Send test notification
             </button>
             {testResult && (
-              <span className="text-[11px] text-muted-foreground">{testResult}</span>
+              <span className="text-xs text-muted-foreground">{testResult}</span>
             )}
           </div>
 
           {server && server.recentDeliveries.length > 0 && (
             <div className="mt-4">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Recent push deliveries
               </div>
               <div className="divide-y divide-border/50 rounded-lg border border-border/60">
                 {server.recentDeliveries.map((d) => (
                   <div key={d.id} className="flex items-center gap-2 px-2.5 py-1.5">
                     <StatusIcon state={d.ok ? "ok" : "fail"} />
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                       {d.endpointHost ?? "unknown endpoint"}
                       {!d.ok && d.statusCode ? ` — HTTP ${d.statusCode}` : ""}
                       {!d.ok && d.error ? ` — ${d.error}` : ""}
                     </span>
-                    <span className="shrink-0 text-[10px] text-muted-foreground/60">
+                    <span className="shrink-0 text-xs text-muted-foreground/60">
                       {formatDistanceToNow(new Date(d.createdAt), { addSuffix: true })}
                     </span>
                   </div>

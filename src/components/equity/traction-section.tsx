@@ -2,8 +2,9 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Flag, ImagePlus, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Flag, ImagePlus, Loader2, Pencil, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AddButton } from "@/components/add-button";
 import { GrowingTextarea } from "@/components/equity/growing-textarea";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
@@ -16,19 +17,19 @@ import {
 type Milestone = EquityPortfolioDTO["milestones"][number];
 
 const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "w-full h-9 px-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 const readCellCls =
-  "min-h-9 px-3 py-2 rounded-lg border border-border bg-muted/30 flex items-center text-[13px] text-foreground";
+  "min-h-9 px-3 py-2 rounded-lg border border-border bg-muted/30 flex items-center text-s text-foreground";
 
 const labelCls =
-  "block text-[11px] font-medium text-muted-foreground uppercase tracking-wide";
+  "block text-xs font-medium text-muted-foreground uppercase tracking-wide";
 
 /**
  * Date, title, the paragraph taking what's left, then the photo and the remove
  * button — both narrow, because most rows won't have a photo at all.
  */
-const GRID = "sm:grid-cols-[10rem_minmax(0,1fr)_minmax(0,2fr)_4.5rem_1.75rem]";
+const GRID = "@md/card:grid-cols-[10rem_minmax(0,1fr)_minmax(0,2fr)_4.5rem_1.75rem]";
 
 type MilestoneDraft = {
   /** Survives reordering and edits, which an index wouldn't. */
@@ -115,7 +116,7 @@ export function TractionSection({
         !editing && (
           <button
             onClick={() => setEditing(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-[12px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors shrink-0"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-s font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors shrink-0"
           >
             <Pencil className="w-3.5 h-3.5" />
             {milestones.length > 0 ? "Edit" : "Fill in"}
@@ -136,12 +137,12 @@ export function TractionSection({
           onCancel={() => setEditing(false)}
         />
       ) : milestones.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground px-3 py-2 rounded-lg border border-dashed border-border">
+        <p className="text-s text-muted-foreground px-3 py-2 rounded-lg border border-dashed border-border">
           No milestones yet.
         </p>
       ) : (
         <div className="space-y-2">
-          <div className={cn("hidden sm:grid gap-2 px-0.5", GRID)}>
+          <div className={cn("@max-md/card:hidden @md/card:grid gap-2 px-0.5", GRID)}>
             <span className={labelCls}>Date</span>
             <span className={labelCls}>Milestone</span>
             <span className={labelCls}>Detail</span>
@@ -340,7 +341,7 @@ function TractionForm({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <div className={cn("hidden sm:grid gap-2 px-0.5", GRID)}>
+        <div className={cn("@max-md/card:hidden @md/card:grid gap-2 px-0.5", GRID)}>
           <span className={labelCls}>Date</span>
           <span className={labelCls}>Milestone</span>
           <span className={labelCls}>Detail</span>
@@ -391,21 +392,17 @@ function TractionForm({
           </div>
         ))}
 
-        <button
-          type="button"
+        <AddButton
+          label="Add a milestone"
           onClick={() => setRows((rs) => [...rs, blankMilestone()])}
-          className="flex items-center gap-1 px-2.5 h-8 rounded-lg border border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors"
-        >
-          <Plus className="w-3 h-3" />
-          Add a milestone
-        </button>
+        />
       </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
         {error ? (
-          <span className="text-[12px] text-destructive mr-auto">{error}</span>
+          <span className="text-s text-destructive me-auto">{error}</span>
         ) : (
-          <span className="text-[12px] text-muted-foreground mr-auto">
+          <span className="text-s text-muted-foreground me-auto">
             A photo is optional; where there is one it sits under the detail in
             the report.
           </span>
@@ -413,7 +410,7 @@ function TractionForm({
         <button
           type="button"
           onClick={onCancel}
-          className="px-3 h-9 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors"
+          className="px-3 h-9 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
         >
           Cancel
         </button>
@@ -421,7 +418,7 @@ function TractionForm({
           type="button"
           onClick={save}
           disabled={busy || uploads > 0}
-          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
+          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-s font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
         >
           {busy ? "Saving…" : uploads > 0 ? "Uploading…" : "Save"}
         </button>

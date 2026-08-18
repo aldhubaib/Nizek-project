@@ -37,7 +37,7 @@ export function LazyDevTab() {
   if (isPending || !data) {
     if (error) {
       return (
-        <div className="col-span-full flex items-center justify-center py-12 text-[13px] text-destructive">
+        <div className="col-span-full flex items-center justify-center py-12 text-s text-destructive">
           {error}
         </div>
       );

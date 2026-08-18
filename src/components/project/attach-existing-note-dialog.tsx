@@ -87,7 +87,7 @@ export function AttachExistingNoteDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex max-h-[80dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
         <DialogHeader className="shrink-0 border-b border-border px-4 py-3">
-          <DialogTitle className="flex items-center gap-2 text-sm">
+          <DialogTitle className="flex items-center gap-2 text-s">
             <Icon className="h-4 w-4 text-primary" />
             {isRoadmap ? "Attach existing roadmap item" : "Attach existing note"}
           </DialogTitle>
@@ -107,7 +107,7 @@ export function AttachExistingNoteDialog({
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : notes.length === 0 ? (
-            <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+            <p className="px-2 py-8 text-center text-s text-muted-foreground">
               {isRoadmap ? "No matching roadmap items" : "No matching notes"}
             </p>
           ) : (
@@ -117,10 +117,10 @@ export function AttachExistingNoteDialog({
                 type="button"
                 disabled={attaching !== null}
                 onClick={() => void attach(n.id)}
-                className="flex w-full flex-col rounded-lg px-2 py-2 text-left hover:bg-accent/60"
+                className="flex w-full flex-col rounded-lg px-2 py-2 text-start hover:bg-accent/60"
               >
-                <span className="truncate text-[13px] font-medium">{n.title}</span>
-                <span className="text-[11px] text-muted-foreground">
+                <span className="truncate text-s font-medium">{n.title}</span>
+                <span className="text-xs text-muted-foreground">
                   {n.author.name ?? "Unknown"}
                   {attaching === n.id ? " · attaching…" : ""}
                 </span>
@@ -129,7 +129,7 @@ export function AttachExistingNoteDialog({
           )}
         </div>
         {error && (
-          <p className="px-4 pb-3 text-[12px] text-destructive">{error}</p>
+          <p className="px-4 pb-3 text-s text-destructive">{error}</p>
         )}
         <div className="border-t border-border px-4 py-3">
           <Button type="button" variant="ghost" size="sm" onClick={onClose}>

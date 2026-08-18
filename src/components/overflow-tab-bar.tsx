@@ -44,7 +44,7 @@ function fitVisibleCount(widths: number[], available: number) {
 }
 
 const pillClassName =
-  "inline-flex h-8 shrink-0 items-center rounded-full px-3.5 text-[13px] font-medium whitespace-nowrap";
+  "inline-flex h-8 shrink-0 appearance-none items-center rounded-full px-3.5 text-s font-medium leading-none whitespace-nowrap";
 
 function Pill({
   item,
@@ -67,7 +67,7 @@ function Pill({
           : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
       )}
     >
-      {tabLabel(item)}
+      <span className="text-s font-medium leading-none">{tabLabel(item)}</span>
     </button>
   );
 }

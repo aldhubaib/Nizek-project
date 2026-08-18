@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Users, UserMinus, Lock, Wrench, Rocket } from "lucide-react";
+import { AddButton } from "@/components/add-button";
+import { Users, UserMinus, Lock, Wrench, Rocket } from "lucide-react";
 import { createProject } from "@/actions/project";
 import { cn } from "@/lib/utils";
 
@@ -44,14 +45,14 @@ export function ContractTypePicker({ value, onChange }: { value: ContractType; o
             type="button"
             onClick={() => onChange(t.id)}
             className={cn(
-              "flex items-start gap-2.5 rounded-lg border p-3 text-left transition-colors",
+              "flex items-start gap-2.5 rounded-lg border p-3 text-start transition-colors",
               isActive ? t.color : "border-border text-muted-foreground hover:border-muted-foreground/40"
             )}
           >
             <Icon className="w-4 h-4 mt-0.5 shrink-0" strokeWidth={1.5} />
             <div className="min-w-0">
-              <div className="text-[13px] font-medium leading-tight">{t.label}</div>
-              <div className="text-[10px] opacity-60 leading-tight mt-0.5">{t.description}</div>
+              <div className="text-s font-medium leading-tight">{t.label}</div>
+              <div className="text-xs opacity-60 leading-tight mt-0.5">{t.description}</div>
             </div>
           </button>
         );
@@ -106,10 +107,7 @@ export function CreateProjectDialog({ teams = [], contractPrefixes = [] }: { tea
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button />}>
-        <Plus className="mr-2 h-4 w-4" />
-        New Project
-      </DialogTrigger>
+      <DialogTrigger render={<AddButton label="New Project" />} />
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create Project</DialogTitle>
@@ -125,7 +123,7 @@ export function CreateProjectDialog({ teams = [], contractPrefixes = [] }: { tea
               Team <span className="text-destructive">*</span>
             </Label>
             {teams.length === 0 ? (
-              <p className="text-[12px] text-muted-foreground">
+              <p className="text-s text-muted-foreground">
                 No teams yet. Create one in{" "}
                 <a href="/dashboard/settings" className="text-primary underline">Settings</a>.
               </p>
@@ -135,7 +133,7 @@ export function CreateProjectDialog({ teams = [], contractPrefixes = [] }: { tea
                 value={teamId}
                 onChange={(e) => setTeamId(e.target.value)}
                 required
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-s text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="">Select a team...</option>
                 {teams.map((t) => (
@@ -156,12 +154,12 @@ export function CreateProjectDialog({ teams = [], contractPrefixes = [] }: { tea
           </div>
 
           <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-4">
-            <p className="text-sm font-medium">Initial Contract</p>
+            <p className="text-s font-medium">Initial Contract</p>
 
             <div className="space-y-2">
               <Label>Contract Code</Label>
               {contractPrefixes.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   No prefixes defined. Add them in{" "}
                   <a href="/dashboard/settings" className="text-primary underline">Settings</a>.
                 </p>
@@ -170,7 +168,7 @@ export function CreateProjectDialog({ teams = [], contractPrefixes = [] }: { tea
                   <select
                     value={prefixId}
                     onChange={(e) => setPrefixId(e.target.value)}
-                    className="rounded-l-md rounded-r-none border border-r-0 border-border bg-muted/50 px-3 py-2 text-[13px] text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-ring shrink-0"
+                    className="rounded-l-md rounded-r-none border border-e-0 border-border bg-muted/50 px-3 py-2 text-s text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-ring shrink-0"
                   >
                     <option value="">Prefix</option>
                     {contractPrefixes.map((p) => (
@@ -182,12 +180,12 @@ export function CreateProjectDialog({ teams = [], contractPrefixes = [] }: { tea
                     onChange={(e) => setContractNumber(e.target.value)}
                     placeholder="001"
                     disabled={!prefixId}
-                    className="rounded-l-none text-[13px] font-mono"
+                    className="rounded-l-none text-s font-mono"
                   />
                 </div>
               )}
               {prefixId && contractNumber && (
-                <p className="text-[10px] text-muted-foreground font-mono">
+                <p className="text-xs text-muted-foreground font-mono">
                   Code: {contractPrefixes.find((p) => p.id === prefixId)?.prefix}-{contractNumber}
                 </p>
               )}

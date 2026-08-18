@@ -2,8 +2,9 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlus, Loader2, Package, Trash2 } from "lucide-react";
+import { Package, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AddButton } from "@/components/add-button";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
@@ -97,7 +98,7 @@ export function ProductSection({
       ) : (
         <div className="space-y-4">
           {text ? (
-            <p className="text-[13px] text-foreground whitespace-pre-wrap px-3 py-2 rounded-lg border border-border bg-muted/30">
+            <p className="text-s text-foreground whitespace-pre-wrap px-3 py-2 rounded-lg border border-border bg-muted/30">
               {text}
             </p>
           ) : (
@@ -107,7 +108,7 @@ export function ProductSection({
           {photos.length > 0 && (
             <PhotoGallery
               photos={photos}
-              className="grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
+              className="grid-cols-2 @md/card:grid-cols-3 @lg/card:grid-cols-4"
               defaultColumns={4}
             />
           )}
@@ -226,10 +227,10 @@ function ProductForm({
 
       <div ref={pasteRef} className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
             Photos
           </span>
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {uploading
               ? `Uploading ${uploading.done} of ${uploading.total}…`
               : `${photos.length} ${photos.length === 1 ? "photo" : "photos"}`}
@@ -237,7 +238,7 @@ function ProductForm({
         </div>
 
         {photos.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 @md/card:grid-cols-3 @lg/card:grid-cols-4 gap-3">
             {photos.map((photo, i) => (
               <div key={photo.key} className="space-y-1.5">
                 <div className="relative group">
@@ -274,7 +275,7 @@ function ProductForm({
                         disabled={step.off}
                         aria-label={step.label}
                         className={cn(
-                          "w-6 h-6 grid place-items-center rounded-md bg-background/85 text-[11px] text-muted-foreground transition-colors",
+                          "w-6 h-6 grid place-items-center rounded-md bg-background/85 text-xs text-muted-foreground transition-colors",
                           step.off
                             ? "opacity-30"
                             : "hover:text-foreground hover:bg-background",
@@ -298,7 +299,7 @@ function ProductForm({
                     )
                   }
                   placeholder="Caption (optional)"
-                  className={cn(inputCls, "h-8 text-[12px]")}
+                  className={cn(inputCls, "h-8 text-s")}
                 />
               </div>
             ))}
@@ -313,19 +314,12 @@ function ProductForm({
           hidden
           onChange={(e) => addFiles(e.target.files)}
         />
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
+        <AddButton
+          label="Add photos"
+          busy={uploading != null}
           disabled={uploading != null}
-          className="flex items-center gap-1.5 px-2.5 h-8 rounded-lg border border-dashed border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-40"
-        >
-          {uploading ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <ImagePlus className="w-3.5 h-3.5" />
-          )}
-          Add photos
-        </button>
+          onClick={() => fileRef.current?.click()}
+        />
       </div>
 
       <FormButtons busy={busy || uploading != null} onCancel={onCancel} onSave={save} />

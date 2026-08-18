@@ -12,6 +12,7 @@ import {
   enablePush,
   disablePush,
 } from "@/lib/push-client";
+import { PageHeader } from "@/components/page-header";
 import {
   isNotificationSoundEnabled,
   setNotificationSoundEnabled,
@@ -147,8 +148,8 @@ export function AccountClient({
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-lg flex-col gap-4 p-4 sm:p-6">
-      <div className="flex items-center gap-3">
+    <div>
+      <PageHeader>
         <Link
           href="/dashboard"
           className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
@@ -156,19 +157,20 @@ export function AccountClient({
         >
           <ArrowLeft className="h-4 w-4" />
         </Link>
-        <h1 className="text-lg font-semibold">Account</h1>
-      </div>
+        <h1 className="text-s font-semibold">Account</h1>
+      </PageHeader>
+      <div className="mx-auto flex w-full max-w-lg flex-col gap-4 px-app py-4 sm:py-6">
 
       {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-s text-destructive">
           {error}
         </div>
       )}
 
       {/* Profile */}
       <section className="rounded-2xl border border-border/60 bg-card p-5">
-        <div className="text-sm font-semibold">Profile</div>
-        <div className="mt-0.5 text-xs text-muted-foreground">
+        <div className="text-s font-semibold">Profile</div>
+        <div className="mt-0.5 text-s text-muted-foreground">
           This is how others will see you.
         </div>
 
@@ -182,7 +184,7 @@ export function AccountClient({
                 className="h-20 w-20 rounded-full object-cover"
               />
             ) : (
-              <div className="grid h-20 w-20 place-items-center rounded-full bg-primary/80 text-2xl font-semibold text-primary-foreground">
+              <div className="grid h-20 w-20 place-items-center rounded-full bg-primary/80 text-m font-semibold text-primary-foreground">
                 {initials}
               </div>
             )}
@@ -212,7 +214,7 @@ export function AccountClient({
           </div>
 
           <div className="w-full max-w-xs">
-            <div className="mb-1.5 text-center text-xs font-medium text-muted-foreground">
+            <div className="mb-1.5 text-center text-s font-medium text-muted-foreground">
               Name
             </div>
             <Input
@@ -236,8 +238,8 @@ export function AccountClient({
           <Bell className="h-4.5 w-4.5" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold">Notifications</div>
-          <div className="mt-0.5 text-xs text-muted-foreground">
+          <div className="text-s font-semibold">Notifications</div>
+          <div className="mt-0.5 text-s text-muted-foreground">
             {pushAvailable
               ? "Get alerts for new messages, mentions, and updates."
               : "Not supported in this browser. On iPhone, install the app to your home screen first."}
@@ -257,8 +259,8 @@ export function AccountClient({
           <Volume2 className="h-4.5 w-4.5" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold">Notification sound</div>
-          <div className="mt-0.5 text-xs text-muted-foreground">
+          <div className="text-s font-semibold">Notification sound</div>
+          <div className="mt-0.5 text-s text-muted-foreground">
             Play a sound when a new notification arrives while the app is open.
           </div>
         </div>
@@ -274,6 +276,7 @@ export function AccountClient({
 
       {/* Troubleshooting: device/server health checks + test notification */}
       <NotificationDiagnostics />
+      </div>
     </div>
   );
 }

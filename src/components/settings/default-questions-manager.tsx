@@ -20,7 +20,8 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, MessageCircleQuestion, List, Type, Sparkles, Wrench, Bug, Paperclip, GripVertical, Link, UserRound, AlertCircle, Palette } from "lucide-react";
+import { AddButton } from "@/components/add-button";
+import { Trash2, MessageCircleQuestion, List, Type, Sparkles, Wrench, Bug, Paperclip, GripVertical, Link, UserRound, AlertCircle, Palette } from "lucide-react";
 import { addDefaultQuestion, deleteDefaultQuestion, updateDefaultQuestion, reorderDefaultQuestions } from "@/actions/default-question";
 import {
   Select,
@@ -64,7 +65,7 @@ function SelectModeToggle({ value, onChange }: { value: boolean; onChange: (v: b
         type="button"
         onClick={() => onChange(false)}
         className={cn(
-          "rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
+          "rounded px-2 py-0.5 text-xs font-medium transition-colors",
           !value ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
         )}
       >
@@ -74,7 +75,7 @@ function SelectModeToggle({ value, onChange }: { value: boolean; onChange: (v: b
         type="button"
         onClick={() => onChange(true)}
         className={cn(
-          "rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
+          "rounded px-2 py-0.5 text-xs font-medium transition-colors",
           value ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
         )}
       >
@@ -153,7 +154,7 @@ function SortableQuestionItem({
       >
         <GripVertical className="w-3.5 h-3.5" strokeWidth={1.5} />
       </button>
-      <span className="text-[11px] text-muted-foreground font-mono w-5 shrink-0">
+      <span className="text-xs text-muted-foreground font-mono w-5 shrink-0">
         {index + 1}.
       </span>
       {editingId === q.id ? (
@@ -162,7 +163,7 @@ function SortableQuestionItem({
             <Input
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
-              className="h-7 text-[13px] flex-1"
+              className="h-7 text-s flex-1"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && q.type !== "select") onUpdate(q.id);
                 if (e.key === "Escape") setEditingId(null);
@@ -178,7 +179,7 @@ function SortableQuestionItem({
                 value={editOptions}
                 onChange={(e) => setEditOptions(e.target.value)}
                 placeholder="Options (comma-separated): iOS, Android, Web..."
-                className="h-7 text-[12px]"
+                className="h-7 text-s"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") onUpdate(q.id);
                   if (e.key === "Escape") setEditingId(null);
@@ -195,7 +196,7 @@ function SortableQuestionItem({
                 onChange={(e) => setEditMandatory(e.target.checked)}
                 className="rounded border-border accent-destructive w-3.5 h-3.5"
               />
-              <span className="text-[11px] text-muted-foreground">Mandatory</span>
+              <span className="text-xs text-muted-foreground">Mandatory</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
@@ -204,7 +205,7 @@ function SortableQuestionItem({
                 onChange={(e) => setEditRequired(e.target.checked)}
                 className="rounded border-border accent-amber-500 w-3.5 h-3.5"
               />
-              <span className="text-[11px] text-muted-foreground">Required before transition</span>
+              <span className="text-xs text-muted-foreground">Required before transition</span>
             </label>
           </div>
         </div>
@@ -219,25 +220,25 @@ function SortableQuestionItem({
               setEditMandatory(q.mandatory);
               setEditRequired(q.required);
             }}
-            className="flex-1 text-left min-w-0"
+            className="flex-1 text-start min-w-0"
           >
-            <span className="text-[13px] text-foreground hover:text-primary transition-colors block truncate">
+            <span className="text-s text-foreground hover:text-primary transition-colors block truncate">
               {q.question}
             </span>
             {q.type === "select" && (
-              <span className="text-[10px] text-muted-foreground/60 flex items-center gap-1 mt-0.5">
+              <span className="text-xs text-muted-foreground/60 flex items-center gap-1 mt-0.5">
                 <List className="w-3 h-3" />
                 {getOptionsList(q).join(", ")}
               </span>
             )}
           </button>
-          <span className="text-[10px] text-muted-foreground/50 font-mono shrink-0">
+          <span className="text-xs text-muted-foreground/50 font-mono shrink-0">
                     {q.type === "select" ? (q.multiple ? "dropdown · multi" : "dropdown") : q.type === "file" ? "file" : q.type === "link" ? "link" : q.type === "client" ? "client" : "text"}
           </span>
           <button
             onClick={() => onToggleField(q.id, "mandatory", !q.mandatory)}
             className={cn(
-              "text-[10px] font-medium rounded px-1.5 py-0.5 border transition-colors shrink-0",
+              "text-xs font-medium rounded px-1.5 py-0.5 border transition-colors shrink-0",
               q.mandatory
                 ? "bg-destructive/10 border-destructive/30 text-destructive"
                 : "bg-muted border-border text-muted-foreground/50 hover:border-muted-foreground/40 hover:text-muted-foreground"
@@ -249,7 +250,7 @@ function SortableQuestionItem({
           <button
             onClick={() => onToggleField(q.id, "required", !q.required)}
             className={cn(
-              "text-[10px] font-medium rounded px-1.5 py-0.5 border transition-colors shrink-0",
+              "text-xs font-medium rounded px-1.5 py-0.5 border transition-colors shrink-0",
               q.required
                 ? "bg-amber-500/10 border-amber-500/30 text-amber-500"
                 : "bg-muted border-border text-muted-foreground/50 hover:border-muted-foreground/40 hover:text-muted-foreground"
@@ -391,10 +392,10 @@ export function DefaultQuestionsManager({ questions }: Props) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-[13px] font-semibold text-foreground">
+          <h2 className="text-s font-semibold text-foreground">
             Task Questions
           </h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <p className="text-xs text-muted-foreground mt-0.5">
             These questions apply to all projects. Changes here affect every project immediately.
           </p>
         </div>
@@ -410,13 +411,13 @@ export function DefaultQuestionsManager({ questions }: Props) {
               key={tab.id}
               onClick={() => setActiveType(tab.id)}
               className={cn(
-                "flex items-center gap-2 rounded-lg border px-3.5 py-2 text-[12px] font-medium transition-colors",
+                "flex items-center gap-2 rounded-lg border px-3.5 py-2 text-s font-medium transition-colors",
                 isActive ? tab.activeColor : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
               )}
             >
               <Icon className="w-3.5 h-3.5" strokeWidth={1.5} />
               {tab.label}
-              <span className="text-[10px] opacity-60">{count}</span>
+              <span className="text-xs opacity-60">{count}</span>
             </button>
           );
         })}
@@ -425,10 +426,10 @@ export function DefaultQuestionsManager({ questions }: Props) {
       {filteredQuestions.length === 0 ? (
         <div className="flex flex-col items-center justify-center text-center gap-3 py-8 rounded-lg border border-border bg-card">
           <MessageCircleQuestion className="w-8 h-8 text-muted-foreground opacity-50" strokeWidth={1.5} />
-          <p className="text-[13px] text-muted-foreground">
+          <p className="text-s text-muted-foreground">
             No questions for {TABS.find((t) => t.id === activeType)?.label} tasks yet.
           </p>
-          <p className="text-[11px] text-muted-foreground/60">
+          <p className="text-xs text-muted-foreground/60">
             Add questions below — they apply to all projects.
           </p>
         </div>
@@ -478,31 +479,31 @@ export function DefaultQuestionsManager({ questions }: Props) {
             value={newQuestion}
             onChange={(e) => setNewQuestion(e.target.value)}
             placeholder={`Add a question for ${TABS.find((t) => t.id === activeType)?.label} tasks...`}
-            className="h-8 text-[13px] flex-1"
+            className="h-8 text-s flex-1"
           />
           <Select value={newType} onValueChange={(val) => val && setNewType(val as "text" | "select" | "file" | "link" | "client")}>
-            <SelectTrigger className="w-[110px] h-8 text-[12px]">
+            <SelectTrigger className="w-[110px] h-8 text-s">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="text">
-                <Type className="w-3.5 h-3.5 mr-1" />
+                <Type className="w-3.5 h-3.5 me-1" />
                 Text
               </SelectItem>
               <SelectItem value="select">
-                <List className="w-3.5 h-3.5 mr-1" />
+                <List className="w-3.5 h-3.5 me-1" />
                 Dropdown
               </SelectItem>
               <SelectItem value="file">
-                <Paperclip className="w-3.5 h-3.5 mr-1" />
+                <Paperclip className="w-3.5 h-3.5 me-1" />
                 File
               </SelectItem>
               <SelectItem value="link">
-                <Link className="w-3.5 h-3.5 mr-1" />
+                <Link className="w-3.5 h-3.5 me-1" />
                 Link
               </SelectItem>
               <SelectItem value="client">
-                <UserRound className="w-3.5 h-3.5 mr-1" />
+                <UserRound className="w-3.5 h-3.5 me-1" />
                 Client
               </SelectItem>
             </SelectContent>
@@ -515,7 +516,7 @@ export function DefaultQuestionsManager({ questions }: Props) {
               value={newOptions}
               onChange={(e) => setNewOptions(e.target.value)}
               placeholder="Options (comma-separated): Client, Admin, Vendor..."
-              className="h-8 text-[12px]"
+              className="h-8 text-s"
             />
             <SelectModeToggle value={newMultiple} onChange={setNewMultiple} />
           </div>
@@ -530,7 +531,7 @@ export function DefaultQuestionsManager({ questions }: Props) {
                 onChange={(e) => setNewMandatory(e.target.checked)}
                 className="rounded border-border accent-destructive w-3.5 h-3.5"
               />
-              <span className="text-[12px] text-muted-foreground">Mandatory</span>
+              <span className="text-s text-muted-foreground">Mandatory</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
@@ -539,13 +540,15 @@ export function DefaultQuestionsManager({ questions }: Props) {
                 onChange={(e) => setNewRequired(e.target.checked)}
                 className="rounded border-border accent-amber-500 w-3.5 h-3.5"
               />
-              <span className="text-[12px] text-muted-foreground">Required before transition</span>
+              <span className="text-s text-muted-foreground">Required before transition</span>
             </label>
           </div>
-          <Button type="submit" size="sm" disabled={adding || !newQuestion.trim()}>
-            <Plus className="w-3.5 h-3.5 mr-1" strokeWidth={1.5} />
-            {adding ? "Adding..." : "Add Question"}
-          </Button>
+          <AddButton
+            type="submit"
+            label="Add Question"
+            busy={adding}
+            disabled={adding || !newQuestion.trim()}
+          />
         </div>
       </form>
     </div>

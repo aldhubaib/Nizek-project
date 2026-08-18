@@ -25,13 +25,13 @@ export function LazyIncompleteDeadlines({ teamFilter }: { teamFilter?: string[] 
   if (isPending || !data) {
     if (error) {
       return (
-        <div className="flex min-h-[260px] items-center justify-center rounded-xl border border-border bg-card p-6 text-[13px] text-destructive">
+        <div className="app-card flex min-h-[260px] items-center justify-center rounded-xl border border-border bg-card p-6 text-s text-destructive">
           {error}
         </div>
       );
     }
     return (
-      <div className="flex min-h-[260px] items-center justify-center rounded-xl border border-border bg-card">
+      <div className="app-card flex min-h-[260px] items-center justify-center rounded-xl border border-border bg-card">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );

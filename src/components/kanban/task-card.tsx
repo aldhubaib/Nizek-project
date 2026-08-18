@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Sparkles, Wrench, Bug, Clock, Timer, Undo2, AlertCircle, Palette, Gauge, Hourglass } from "lucide-react";
+import { Sparkles, Wrench, Bug, Clock, Timer, Undo2, AlertCircle, Palette, Gauge, Hourglass, CircleSlash } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -103,8 +103,8 @@ function TimeBadge({
               "font-sans normal-nums whitespace-normal",
             )}
           >
-            <span className="block text-[11px] font-semibold text-foreground mb-0.5">{label}</span>
-            <span className="block text-[10px] leading-relaxed text-muted-foreground">{explanation}</span>
+            <span className="block text-xs font-semibold text-foreground mb-0.5">{label}</span>
+            <span className="block text-xs leading-relaxed text-muted-foreground">{explanation}</span>
           </span>
         </>
       )}
@@ -114,7 +114,7 @@ function TimeBadge({
 
 function UserAvatar({ name, imageUrl, size = 5 }: { name: string | null; imageUrl: string | null; size?: number }) {
   const initials = name?.split(" ").map((n) => n[0]).join("") ?? "?";
-  const sizeClass = size === 5 ? "w-5 h-5 text-[9px]" : "w-4 h-4 text-[8px]";
+  const sizeClass = size === 5 ? "w-5 h-5 text-xs" : "w-4 h-4 text-xs";
 
   if (imageUrl) {
     const px = size === 5 ? 20 : 16;
@@ -211,7 +211,7 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
       {...listeners}
       onClick={openDetails}
       className={cn(
-        "group relative rounded-lg border border-border bg-card p-3 transition-colors hover:border-muted-foreground/20",
+        "group relative flex flex-col gap-card rounded-lg border border-border bg-card p-card transition-colors hover:border-muted-foreground/20",
         isDragging && "opacity-50",
         isOverlay && "rotate-2 shadow-xl border-primary/50",
         disabled && "opacity-70",
@@ -219,44 +219,49 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
         disabled || locked ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"
       )}
     >
-      <div className="min-w-0">
-        <span className="text-[10px] font-mono text-muted-foreground/60">
+      <span className="min-w-0 text-xs font-mono text-muted-foreground/60">
           {task.taskType === "BUG" ? "B" : task.taskType === "REPORTED_BUG" ? "RB" : task.taskType === "ENHANCEMENT" ? "E" : task.taskType === "DESIGN" ? "D" : "F"}-{String(task.taskNumber).padStart(3, "0")}
         </span>
-        <p className="text-[13px] font-medium leading-snug text-foreground">
+        <p className="text-s font-medium leading-snug text-foreground">
           {task.title}
         </p>
 
-        <div className="mt-3 flex items-center gap-1.5">
+        <div className="flex items-center gap-s">
           <span
             className={cn(
-              "inline-flex items-center justify-center rounded-full border w-5 h-5",
+              "inline-flex size-5 shrink-0 items-center justify-center rounded-full border",
               typeConfig.bg,
               typeConfig.color
             )}
             title={typeConfig.tooltip}
           >
-            <TypeIcon className="w-3 h-3" strokeWidth={1.5} />
+            <TypeIcon className="size-3" strokeWidth={1.5} />
           </span>
           {priorityStyle ? (
             <span
               className={cn(
-                "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tabular-nums",
+                "app-badge inline-flex size-5 shrink-0 items-center justify-center rounded-full border px-px",
                 priorityStyle.bg,
                 priorityStyle.color
               )}
+              title={`Priority ${task.priority}`}
             >
-              P{task.priority}
+              <span className="text-fit font-semibold leading-none tabular-nums">
+                P{task.priority}
+              </span>
             </span>
           ) : (
-            <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground/50">
-              No priority
+            <span
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground/50"
+              title="No priority"
+            >
+              <CircleSlash className="size-3" strokeWidth={1.75} />
             </span>
           )}
 
           {(task.internalDeclines ?? 0) > 0 && (
             <span
-              className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 tabular-nums"
+              className="inline-flex items-center gap-xs rounded-full border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-xs font-semibold text-amber-400 tabular-nums"
               title={`Internal review declined ${task.internalDeclines} time${task.internalDeclines === 1 ? "" : "s"}`}
             >
               <Undo2 className="w-2.5 h-2.5" />
@@ -265,7 +270,7 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
           )}
           {(task.clientDeclines ?? 0) > 0 && (
             <span
-              className="inline-flex items-center gap-0.5 rounded-full border border-destructive/20 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold text-destructive tabular-nums"
+              className="inline-flex items-center gap-xs rounded-full border border-destructive/20 bg-destructive/10 px-1.5 py-0.5 text-xs font-semibold text-destructive tabular-nums"
               title={`Client review declined ${task.clientDeclines} time${task.clientDeclines === 1 ? "" : "s"}`}
             >
               <Undo2 className="w-2.5 h-2.5" />
@@ -275,7 +280,7 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
           {task.estimateAccuracy && ACCURACY_CONFIG[task.estimateAccuracy] && (
             <span
               className={cn(
-                "inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold",
+                "inline-flex items-center gap-xs rounded-full border px-1.5 py-0.5 text-xs font-semibold",
                 ACCURACY_CONFIG[task.estimateAccuracy].bg,
                 ACCURACY_CONFIG[task.estimateAccuracy].color
               )}
@@ -286,7 +291,7 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
             </span>
           )}
 
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ms-auto flex items-center gap-xs">
             {canSelfAssign && onSelfAssign ? (
               <button
                 type="button"
@@ -310,7 +315,7 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
         </div>
 
         {(estimateTime || totalTime || stageTime) && (
-          <div className="mt-2 flex items-center gap-3 text-[10px] font-mono tabular-nums text-muted-foreground/60">
+          <div className="flex items-center gap-s text-xs font-mono tabular-nums text-muted-foreground/60">
             {estimateTime && (
               <TimeBadge
                 icon={Hourglass}
@@ -341,7 +346,6 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
             )}
           </div>
         )}
-      </div>
     </div>
   );
 });

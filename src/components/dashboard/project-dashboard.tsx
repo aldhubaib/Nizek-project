@@ -131,7 +131,7 @@ export function ProjectDashboard({ projectId, userRole, userId, tasks: kanbanTas
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="flex items-center gap-2 text-muted-foreground text-sm">
+        <div className="flex items-center gap-2 text-muted-foreground text-s">
           <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           Loading dashboard...
         </div>
@@ -276,12 +276,12 @@ function StatCard({
   color: string;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
+    <div className="app-card rounded-lg border border-border bg-card p-4">
       <div className="flex items-center justify-between mb-2">
         <span className={cn("opacity-70", color)}>{icon}</span>
       </div>
-      <p className="text-2xl font-bold tracking-tight">{value}</p>
-      <p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
+      <p className="text-l font-bold tracking-tight">{value}</p>
+      <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
     </div>
   );
 }
@@ -293,14 +293,14 @@ function ContractCard({
 }) {
   if (!contract) {
     return (
-      <div className="rounded-lg border border-border bg-card p-4">
+      <div className="app-card rounded-lg border border-border bg-card p-4">
         <div className="flex items-center justify-between mb-2">
           <span className="opacity-70 text-zinc-400">
             <CalendarClock className="w-4 h-4" />
           </span>
         </div>
-        <p className="text-sm font-medium text-muted-foreground">No active contract</p>
-        <p className="text-[11px] text-muted-foreground/60 mt-0.5">Contract Countdown</p>
+        <p className="text-s font-medium text-muted-foreground">No active contract</p>
+        <p className="text-xs text-muted-foreground/60 mt-0.5">Contract Countdown</p>
       </div>
     );
   }
@@ -311,7 +311,7 @@ function ContractCard({
   return (
     <div
       className={cn(
-        "rounded-lg border p-4",
+        "app-card rounded-lg border p-4",
         urgent
           ? "border-rose-500/30 bg-rose-500/5"
           : warning
@@ -331,14 +331,14 @@ function ContractCard({
       </div>
       <p
         className={cn(
-          "text-2xl font-bold tracking-tight",
+          "text-l font-bold tracking-tight",
           urgent ? "text-rose-400" : warning ? "text-amber-400" : ""
         )}
       >
         {contract.daysLeft}
-        <span className="text-sm font-normal ml-1 text-muted-foreground">days</span>
+        <span className="text-s font-normal ms-1 text-muted-foreground">days</span>
       </p>
-      <p className="text-[11px] text-muted-foreground mt-0.5">
+      <p className="text-xs text-muted-foreground mt-0.5">
         {contract.label ?? "Contract"} ends{" "}
         {contract.endDate ? new Date(contract.endDate).toLocaleDateString("en-US", {
           month: "short",
@@ -363,13 +363,13 @@ function Widget({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
+    <div className="app-card rounded-lg border border-border bg-card overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">{icon}</span>
-          <h3 className="text-[13px] font-semibold">{title}</h3>
+          <h3 className="text-s font-semibold">{title}</h3>
           {badge !== undefined && badge > 0 && (
-            <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+            <span className="ms-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-xs font-bold text-primary-foreground">
               {badge}
             </span>
           )}
@@ -377,7 +377,7 @@ function Widget({
         {action && (
           <button
             onClick={action.onClick}
-            className="text-[11px] text-primary hover:underline"
+            className="text-xs text-primary hover:underline"
           >
             {action.label}
           </button>
@@ -474,7 +474,7 @@ function StagePipeline({
             x={center}
             y={center - 6}
             textAnchor="middle"
-            className="fill-foreground text-[22px] font-bold"
+            className="fill-foreground text-l font-bold"
           >
             {centerLabel.value}
           </text>
@@ -482,7 +482,7 @@ function StagePipeline({
             x={center}
             y={center + 12}
             textAnchor="middle"
-            className="fill-muted-foreground text-[10px]"
+            className="fill-muted-foreground text-xs"
           >
             {centerLabel.label}
           </text>
@@ -508,12 +508,12 @@ function StagePipeline({
                 style={{ backgroundColor: STAGE_HEX[stage] }}
               />
               <div className="flex-1 min-w-0">
-                <span className="text-[11px] text-muted-foreground truncate block">
+                <span className="text-xs text-muted-foreground truncate block">
                   {STAGE_LABELS[stage]}
                 </span>
               </div>
-              <span className="text-[12px] font-semibold tabular-nums">{count}</span>
-              <span className="text-[10px] text-muted-foreground/60 w-7 text-right tabular-nums">
+              <span className="text-s font-semibold tabular-nums">{count}</span>
+              <span className="text-xs text-muted-foreground/60 w-7 text-end tabular-nums">
                 {pct}%
               </span>
             </div>
@@ -554,7 +554,7 @@ function MentionsList({
             <div className="mt-1.5 w-2 h-2 rounded-full bg-primary shrink-0" />
           )}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 text-[12px]">
+            <div className="flex items-center gap-1.5 text-s">
               {m.commentedBy.imageUrl ? (
                 <img
                   src={m.commentedBy.imageUrl}
@@ -562,7 +562,7 @@ function MentionsList({
                   className="w-4 h-4 rounded-full"
                 />
               ) : (
-                <div className="w-4 h-4 rounded-full bg-muted flex items-center justify-center text-[8px] font-bold">
+                <div className="w-4 h-4 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
                   {(m.commentedBy.name ?? "?")[0]}
                 </div>
               )}
@@ -572,10 +572,10 @@ function MentionsList({
                 #{m.taskNumber} {m.taskTitle}
               </span>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
               {m.comment}
             </p>
-            <span className="text-[10px] text-muted-foreground/60 mt-1 block">
+            <span className="text-xs text-muted-foreground/60 mt-1 block">
               {timeAgo(m.commentedAt)}
             </span>
           </div>
@@ -630,12 +630,12 @@ function MyTasksList({ tasks, onNavigateToTask }: { tasks: DashboardData["myTask
           <div key={stage}>
             <div className="flex items-center gap-2 mb-1.5">
               <div className={cn("w-2 h-2 rounded-full", STAGE_COLORS[stage])} />
-              <span className="text-[11px] font-medium text-muted-foreground">
+              <span className="text-xs font-medium text-muted-foreground">
                 {STAGE_LABELS[stage]}
               </span>
-              <span className="text-[10px] text-muted-foreground/60">{items.length}</span>
+              <span className="text-xs text-muted-foreground/60">{items.length}</span>
             </div>
-            <div className="space-y-1 ml-4">
+            <div className="space-y-1 ms-4">
               {items.map((t) => (
                 <TaskRow key={t.id} task={t} onClick={() => onNavigateToTask?.(t.id)} />
               ))}
@@ -656,12 +656,12 @@ function TaskRow({
 }) {
   const Icon = TYPE_ICON[task.taskType] ?? Circle;
   return (
-    <div className="flex items-center gap-2 py-1 text-[12px] cursor-pointer rounded-md px-1 -mx-1 hover:bg-muted/50 transition-colors" onClick={onClick}>
+    <div className="flex items-center gap-2 py-1 text-s cursor-pointer rounded-md px-1 -mx-1 hover:bg-muted/50 transition-colors" onClick={onClick}>
       <Icon className={cn("w-3.5 h-3.5 shrink-0", TYPE_COLOR[task.taskType] ?? "text-muted-foreground")} />
       <span className="text-muted-foreground font-mono">#{task.taskNumber}</span>
       <span className="truncate flex-1">{task.title}</span>
       {task.priority !== null && (
-        <span className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded bg-muted text-[10px] font-bold">
+        <span className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded bg-muted text-xs font-bold">
           P{task.priority}
         </span>
       )}
@@ -691,16 +691,16 @@ function StallingList({ tasks, onNavigateToTask }: { tasks: DashboardData["stall
           >
             <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 text-[12px]">
+              <div className="flex items-center gap-2 text-s">
                 <span className="text-muted-foreground font-mono">#{t.taskNumber}</span>
                 <span className="truncate font-medium">{t.title}</span>
               </div>
-              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
-                <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", STAGE_COLORS[t.stage], "bg-opacity-20 text-foreground")}>
+              <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                <span className={cn("px-1.5 py-0.5 rounded text-xs font-medium", STAGE_COLORS[t.stage], "bg-opacity-20 text-foreground")}>
                   {STAGE_LABELS[t.stage]}
                 </span>
                 <span>
-                  <Clock className="w-3 h-3 inline mr-0.5" />
+                  <Clock className="w-3 h-3 inline me-0.5" />
                   {formatDuration(t.timeInStage)} in stage
                 </span>
                 <span className="text-amber-400 font-medium">
@@ -739,14 +739,14 @@ function TeamWorkload({
               className="w-6 h-6 rounded-full shrink-0"
             />
           ) : (
-            <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold shrink-0">
+            <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold shrink-0">
               {(member.name ?? "?")[0]}
             </div>
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[12px] font-medium truncate">{member.name}</span>
-              <span className="text-[11px] text-muted-foreground">{member.count} tasks</span>
+              <span className="text-s font-medium truncate">{member.name}</span>
+              <span className="text-xs text-muted-foreground">{member.count} tasks</span>
             </div>
             <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
               <div
@@ -783,21 +783,21 @@ function ClientReqsList({ reqs, onNavigateToTask }: { reqs: DashboardData["clien
           >
             <FileText className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 text-[12px]">
+              <div className="flex items-center gap-2 text-s">
                 <span className="text-muted-foreground font-mono">#{r.taskNumber}</span>
                 <span className="truncate font-medium">{r.title}</span>
               </div>
               {r.note && (
-                <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                   {r.note}
                 </p>
               )}
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[10px] text-muted-foreground/60">
+                <span className="text-xs text-muted-foreground/60">
                   {STAGE_LABELS[r.stage]}
                 </span>
                 {r.priority !== null && (
-                  <span className="text-[10px] font-bold text-muted-foreground">P{r.priority}</span>
+                  <span className="text-xs font-bold text-muted-foreground">P{r.priority}</span>
                 )}
               </div>
             </div>
@@ -844,17 +844,17 @@ function ActivityList({ activity, onNavigateToTask }: { activity: DashboardData[
               className="w-5 h-5 rounded-full shrink-0 mt-0.5"
             />
           ) : (
-            <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[8px] font-bold shrink-0 mt-0.5">
+            <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
               {(item.user.name ?? "?")[0]}
             </div>
           )}
-          <div className="flex-1 min-w-0 text-[12px]">
+          <div className="flex-1 min-w-0 text-s">
             <span className="font-medium">{item.user.name}</span>{" "}
             <span className="text-muted-foreground">{describeAction(item)}</span>{" "}
             <span className="font-medium">
               #{item.task.taskNumber} {item.task.title}
             </span>
-            <span className="block text-[10px] text-muted-foreground/60 mt-0.5">
+            <span className="block text-xs text-muted-foreground/60 mt-0.5">
               {timeAgo(item.createdAt)}
             </span>
           </div>
@@ -882,13 +882,13 @@ function RejectionsList({
       <div className="flex items-center gap-4 px-2.5 pb-2 mb-1 border-b border-border/50">
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-amber-500" />
-          <span className="text-[11px] text-muted-foreground">Internal</span>
-          <span className="text-[13px] font-bold text-amber-400">{rejections.totalInternal}</span>
+          <span className="text-xs text-muted-foreground">Internal</span>
+          <span className="text-s font-bold text-amber-400">{rejections.totalInternal}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-destructive" />
-          <span className="text-[11px] text-muted-foreground">Client</span>
-          <span className="text-[13px] font-bold text-destructive">{rejections.totalClient}</span>
+          <span className="text-xs text-muted-foreground">Client</span>
+          <span className="text-s font-bold text-destructive">{rejections.totalClient}</span>
         </div>
       </div>
       {rejections.tasks.map((r) => {
@@ -902,24 +902,24 @@ function RejectionsList({
           >
             <Icon className={cn("w-4 h-4 shrink-0", TYPE_COLOR[r.task.taskType] ?? "text-muted-foreground")} />
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 text-[12px]">
+              <div className="flex items-center gap-2 text-s">
                 <span className="text-muted-foreground font-mono">#{r.task.taskNumber}</span>
                 <span className="truncate font-medium">{r.task.title}</span>
               </div>
               <div className="flex items-center gap-3 mt-1">
                 {r.internal.count > 0 && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-400">
                     <Undo2 className="w-2.5 h-2.5" />
                     {r.internal.count} internal
                   </span>
                 )}
                 {r.client.count > 0 && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-destructive">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-destructive">
                     <ShieldX className="w-2.5 h-2.5" />
                     {r.client.count} client
                   </span>
                 )}
-                <span className="text-[10px] text-muted-foreground/60 ml-auto">
+                <span className="text-xs text-muted-foreground/60 ms-auto">
                   {total} total
                 </span>
               </div>
@@ -935,7 +935,7 @@ function EmptyState({ icon, message }: { icon: React.ReactNode; message: string 
   return (
     <div className="flex flex-col items-center justify-center py-8 text-center">
       <span className="text-muted-foreground/30 mb-2">{icon}</span>
-      <p className="text-[12px] text-muted-foreground">{message}</p>
+      <p className="text-s text-muted-foreground">{message}</p>
     </div>
   );
 }

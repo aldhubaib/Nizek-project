@@ -40,17 +40,17 @@ export default async function EquityPreviewPage({
         >
           <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
         </Link>
-        <h1 className="text-sm font-semibold text-foreground truncate">
+        <h1 className="text-s font-semibold text-foreground truncate">
           {portfolio.project.name}
         </h1>
-        <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
           Pitch preview
         </span>
         {/* No actions menu here: the preview is for reading, and everything
             the menu does — including delete — belongs on the portfolio page. */}
       </PageHeader>
 
-      <div className="px-6 py-6 max-w-6xl mx-auto">
+      <div className="px-app py-6 max-w-6xl mx-auto">
         <PortfolioPitch portfolio={portfolio} fields={fields} />
       </div>
     </div>

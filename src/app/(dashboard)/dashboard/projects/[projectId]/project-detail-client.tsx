@@ -27,6 +27,7 @@ import Link from "next/link";
 import { Users, KeyRound, Settings, Loader2, ArrowLeft } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
 
 const PROJECT_TAB_CLASS =
   "flex-none gap-1 px-2 group-data-horizontal/tabs:after:bottom-0";
@@ -337,7 +338,7 @@ export function ProjectDetailClient({
             <DropdownMenuItem onClick={() => setActiveTab("team")}>
               <Users className="h-4 w-4" />
               <span className="flex-1">Team</span>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {members.length + (teamData?.invitations.length ?? 0)}
               </span>
             </DropdownMenuItem>
@@ -347,7 +348,7 @@ export function ProjectDetailClient({
               <KeyRound className="h-4 w-4" />
               <span className="flex-1">Vault</span>
               {vaultCredentials && (
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {vaultCredentials.length}
                 </span>
               )}
@@ -364,9 +365,12 @@ export function ProjectDetailClient({
       <Tabs
         value={activeTab}
         onValueChange={(val) => setActiveTab(val as string)}
-        className="w-full min-w-0 gap-0"
+        className={cn(
+          "w-full min-w-0 gap-0",
+          activeTab === "board" && !noteFullscreen && "lg:h-dvh lg:overflow-hidden",
+        )}
       >
-      <div className="relative sticky top-0 z-10 flex app-top-bar w-full min-w-0 items-center border-b border-border bg-background px-4 pr-24 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-2">
+      <PageHeader hasMenu className="relative w-full min-w-0 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-2">
         <div className="relative z-10 flex min-w-0 items-center gap-2.5">
           {noteFullscreen ? (
             <button
@@ -396,16 +400,16 @@ export function ProjectDetailClient({
             />
           ) : (
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/15">
-              <span className="text-[11px] font-bold text-primary">
+              <span className="text-xs font-bold text-primary">
                 {project.name.charAt(0).toUpperCase()}
               </span>
             </div>
           )}
-          <h1 className="max-w-[5.5rem] truncate text-sm font-semibold sm:max-w-[9rem] lg:max-w-none">
+          <h1 className="max-w-[5.5rem] truncate text-s font-semibold sm:max-w-[9rem] lg:max-w-none">
             {project.name}
           </h1>
           {!isActive && (
-            <span className="inline-flex items-center rounded-full border border-destructive/20 bg-destructive/15 px-2 py-0.5 text-[10px] font-semibold text-destructive">
+            <span className="inline-flex items-center rounded-full border border-destructive/20 bg-destructive/15 px-2 py-0.5 text-xs font-semibold text-destructive">
               Expired
             </span>
           )}
@@ -434,10 +438,19 @@ export function ProjectDetailClient({
           </TabsList>
         </div>
         <div aria-hidden className="hidden min-w-0 lg:block" />
-      </div>
+      </PageHeader>
 
-      <div className={cn("min-w-0", noteFullscreen ? "px-0 py-0" : "px-6 py-4")}>
-          <TabsContent value="board">
+      <div
+        className={cn(
+          "min-w-0",
+          noteFullscreen
+            ? "px-0 py-0"
+            : activeTab === "board"
+              ? "flex flex-col px-app pt-4 pb-4 lg:min-h-0 lg:flex-1 lg:pb-0"
+              : "px-app py-4",
+        )}
+      >
+          <TabsContent value="board" className="flex min-h-0 flex-1 flex-col">
             <KanbanBoard
               initialTasks={tasks as unknown as KanbanTask[]}
               projectId={project.id}
@@ -512,7 +525,7 @@ export function ProjectDetailClient({
             ) : (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-[13px] font-semibold">Team Members</h2>
+                  <h2 className="text-s font-semibold">Team Members</h2>
                   {canManageTeam && (
                     <InviteMemberDialog
                       projectId={project.id}

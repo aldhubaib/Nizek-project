@@ -428,7 +428,7 @@ function splitTableRows(
     return [
       own,
       ...s.parts.map((p, i) => [
-        <span key={i} className="block pl-4 text-muted-foreground">
+        <span key={i} className="block ps-4 text-muted-foreground">
           {stageCaption(p, currency)}
         </span>,
         <span key={i} className="text-muted-foreground/80">
@@ -458,7 +458,7 @@ function Section({
     // otherwise cover what you jumped to.
     <section
       id={id}
-      className="scroll-mt-24 rounded-2xl border border-border bg-card/40 p-6 sm:p-7"
+      className="app-card scroll-mt-24 rounded-2xl border border-border bg-card/40 p-6 sm:p-7"
     >
       <div className="flex items-center gap-2 min-w-0 mb-7">
         <span
@@ -467,7 +467,7 @@ function Section({
         >
           <Icon className="w-3.5 h-3.5" strokeWidth={1.75} />
         </span>
-        <h2 className="text-[16px] font-semibold text-foreground truncate">
+        <h2 className="text-m font-semibold text-foreground truncate">
           {title}
         </h2>
       </div>
@@ -488,7 +488,7 @@ function Field({
 }) {
   return (
     <div>
-      <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.1em] text-muted-foreground mb-3.5">
+      <p className="flex items-center gap-1.5 text-xs uppercase tracking-[0.1em] text-muted-foreground mb-3.5">
         <Icon className="w-3.5 h-3.5" strokeWidth={1.5} />
         {title}
       </p>
@@ -509,7 +509,7 @@ function Panel({
       className={cn(
         // A shade lighter than the section box it sits in, so nested cards read
         // as tiles inside a panel rather than boxes inside boxes.
-        "rounded-xl border border-border/60 bg-muted/20 p-5 transition-colors hover:border-muted-foreground/30",
+        "app-card rounded-xl border border-border/60 bg-muted/20 p-5 transition-colors hover:border-muted-foreground/30",
         className,
       )}
     >
@@ -530,17 +530,17 @@ function HeadlineStat({
   sub?: string;
 }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-4 transition-colors hover:border-muted-foreground/30">
+    <div className="app-card rounded-xl border border-border/60 bg-muted/20 px-4 py-4 transition-colors hover:border-muted-foreground/30">
       <div className="flex items-center gap-1.5 mb-2.5">
         <Icon className="w-3.5 h-3.5" strokeWidth={1.5} style={{ color: ACCENT }} />
-        <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+        <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">
           {label}
         </p>
       </div>
-      <p className="text-[19px] font-semibold text-foreground tabular-nums leading-none">
+      <p className="text-l font-semibold text-foreground tabular-nums leading-none">
         {value}
       </p>
-      {sub && <p className="text-[10px] text-muted-foreground mt-2">{sub}</p>}
+      {sub && <p className="text-xs text-muted-foreground mt-2">{sub}</p>}
     </div>
   );
 }
@@ -564,13 +564,13 @@ function MetricCard({ series, index }: { series: MetricSeries; index: number }) 
   return (
     <Panel>
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[11px] text-muted-foreground truncate">
+        <p className="text-xs text-muted-foreground truncate">
           {metric.name}
         </p>
         {change != null && change !== 0 && (
           <span
             className={cn(
-              "flex items-center gap-0.5 text-[10px] font-medium tabular-nums shrink-0",
+              "flex items-center gap-0.5 text-xs font-medium tabular-nums shrink-0",
               up && "text-emerald-400",
               down && "text-rose-400",
             )}
@@ -585,7 +585,7 @@ function MetricCard({ series, index }: { series: MetricSeries; index: number }) 
         )}
       </div>
 
-      <p className="text-[22px] font-semibold text-foreground tabular-nums leading-none mt-3">
+      <p className="text-l font-semibold text-foreground tabular-nums leading-none mt-3">
         {latest}
       </p>
 
@@ -594,7 +594,7 @@ function MetricCard({ series, index }: { series: MetricSeries; index: number }) 
           <MetricSpark points={points} color={color} format={format} />
         </div>
       ) : (
-        <p className="text-[10px] text-muted-foreground/70 mt-3.5">
+        <p className="text-xs text-muted-foreground/70 mt-3.5">
           {isDateMetric(metric.type)
             ? "Milestone"
             : "One reading so far — record it again to see the trend"}
@@ -629,7 +629,7 @@ function TeamPhoto({
           loading="lazy"
         />
       ) : (
-        <div className="w-full h-full grid place-items-center bg-primary/10 text-[40px] font-semibold text-primary">
+        <div className="w-full h-full grid place-items-center bg-primary/10 text-m font-semibold text-primary">
           {name.trim()[0]?.toUpperCase() ?? "?"}
         </div>
       )}
@@ -685,7 +685,7 @@ function TeamMemberPanel({
       href={linkedinUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground no-underline mt-4 transition-colors"
+      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground no-underline mt-4 transition-colors"
     >
       <ExternalLink className="w-3 h-3" strokeWidth={1.5} />
       LinkedIn
@@ -695,9 +695,9 @@ function TeamMemberPanel({
   return (
     <Panel className="text-center">
       <TeamPhoto name={name} photoUrl={photoUrl} />
-      <p className="text-[13px] font-semibold text-foreground">{name}</p>
+      <p className="text-s font-semibold text-foreground">{name}</p>
       {title && (
-        <p className="text-[11px] mt-1.5" style={{ color: ACCENT }}>
+        <p className="text-xs mt-1.5" style={{ color: ACCENT }}>
           {title}
         </p>
       )}
@@ -706,7 +706,7 @@ function TeamMemberPanel({
           ref={bioRef}
           onClick={clamped ? () => setOpen(true) : undefined}
           className={cn(
-            "text-[11px] text-muted-foreground mt-3.5 whitespace-pre-wrap line-clamp-3",
+            "text-xs text-muted-foreground mt-3.5 whitespace-pre-wrap line-clamp-3",
             clamped && "cursor-pointer",
           )}
         >
@@ -718,7 +718,7 @@ function TeamMemberPanel({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="block mx-auto text-[11px] font-medium text-foreground/70 hover:text-foreground mt-2 transition-colors"
+          className="block mx-auto text-xs font-medium text-foreground/70 hover:text-foreground mt-2 transition-colors"
         >
           Read more
         </button>
@@ -735,18 +735,18 @@ function TeamMemberPanel({
               aria-modal="true"
               aria-label={name}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border border-border/60 bg-background p-6 text-left"
+              className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border border-border/60 bg-background p-6 text-start"
             >
               <div className="flex items-start gap-4">
                 <div className="w-20 shrink-0">
                   <TeamPhoto name={name} photoUrl={photoUrl} />
                 </div>
                 <div className="min-w-0 flex-1 pt-1">
-                  <p className="text-[15px] font-semibold text-foreground">
+                  <p className="text-s font-semibold text-foreground">
                     {name}
                   </p>
                   {title && (
-                    <p className="text-[12px] mt-1" style={{ color: ACCENT }}>
+                    <p className="text-s mt-1" style={{ color: ACCENT }}>
                       {title}
                     </p>
                   )}
@@ -760,7 +760,7 @@ function TeamMemberPanel({
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <p className="text-[12.5px] leading-relaxed text-muted-foreground whitespace-pre-wrap mt-4">
+              <p className="text-s leading-relaxed text-muted-foreground whitespace-pre-wrap mt-4">
                 {bio}
               </p>
               {linkedin}
@@ -780,7 +780,7 @@ function TeamMemberPanel({
 function NoData({ children = "No data" }: { children?: React.ReactNode }) {
   return (
     <Panel className="border-dashed">
-      <p className="text-[12px] text-muted-foreground">{children}</p>
+      <p className="text-s text-muted-foreground">{children}</p>
     </Panel>
   );
 }
@@ -788,7 +788,7 @@ function NoData({ children = "No data" }: { children?: React.ReactNode }) {
 function Prose({ text }: { text: string }) {
   return (
     <Panel>
-      <p className="text-[13px] leading-relaxed text-foreground/90 whitespace-pre-wrap">
+      <p className="text-s leading-relaxed text-foreground/90 whitespace-pre-wrap">
         {text}
       </p>
     </Panel>
@@ -822,13 +822,13 @@ function Adoption({
 
   if (!split) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6">
+      <div className="grid grid-cols-1 @md/card:grid-cols-2 gap-x-4 gap-y-6">
         {channels.map((c) => (
           <Panel key={c.id}>
-            <p className="text-[13px] font-semibold text-foreground">
+            <p className="text-s font-semibold text-foreground">
               {c.heading}
             </p>
-            <p className="text-[12px] text-muted-foreground mt-2.5 whitespace-pre-wrap">
+            <p className="text-s text-muted-foreground mt-2.5 whitespace-pre-wrap">
               {c.body}
             </p>
           </Panel>
@@ -1044,7 +1044,7 @@ export function PortfolioPitch({
             <Field icon={Rocket} title="Launch">
               {portfolio.liveDate ? (
                 <Panel>
-                  <p className="text-[13px] text-foreground">
+                  <p className="text-s text-foreground">
                     {formatLiveStatus(portfolio.liveDate)}
                   </p>
                 </Panel>
@@ -1089,7 +1089,7 @@ export function PortfolioPitch({
               {productPhotos.length > 0 && (
                 <PhotoGallery
                   photos={productPhotos}
-                  className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+                  className="grid-cols-1 @md/card:grid-cols-2 @lg/card:grid-cols-3"
                   defaultColumns={3}
                 />
               )}
@@ -1138,16 +1138,16 @@ export function PortfolioPitch({
           {businessModel.length === 0 ? (
             <NoData />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6">
+            <div className="grid grid-cols-1 @md/card:grid-cols-2 gap-x-4 gap-y-6">
               {businessModel.map((b, i) => (
                 <Panel key={b.id}>
                   <p
-                    className="text-[18px] font-bold tabular-nums"
+                    className="text-l font-bold tabular-nums"
                     style={{ color: seriesColor(i) }}
                   >
                     {formatMarketAmount(b)}
                   </p>
-                  <p className="text-[12px] text-foreground/90 mt-1.5">
+                  <p className="text-s text-foreground/90 mt-1.5">
                     {b.heading}
                   </p>
                 </Panel>
@@ -1239,12 +1239,12 @@ export function PortfolioPitch({
           ) : (
             <>
               {teamHistory > 0 && (
-                <p className="text-[11px] text-muted-foreground mb-3">
+                <p className="text-xs text-muted-foreground mb-3">
                   {teamHistory} earlier{" "}
                   {teamHistory === 1 ? "lineup is" : "lineups are"} on record.
                 </p>
               )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-6">
+              <div className="grid grid-cols-1 @md/card:grid-cols-2 @lg/card:grid-cols-3 gap-x-4 gap-y-6">
                 {team.members.map((m) => (
                   <TeamMemberPanel
                     key={m.id}
@@ -1341,7 +1341,7 @@ export function PortfolioPitch({
                   <TrendChart points={trend} />
                 </ChartFrame>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-6">
+                <div className="grid grid-cols-2 @md/card:grid-cols-4 gap-x-4 gap-y-6">
                   <HeadlineStat
                     icon={PieChart}
                     label="Our stake"
@@ -1441,7 +1441,7 @@ export function PortfolioPitch({
               Every claim above has its paperwork here. */}
           {documented.length > 0 && (
             <Panel className="mt-4">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
                 Reported documents
               </p>
               <div className="space-y-2.5">
@@ -1450,7 +1450,7 @@ export function PortfolioPitch({
                     key={period.id}
                     className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-4"
                   >
-                    <span className="text-[12px] font-medium text-foreground/80 tabular-nums w-20 shrink-0">
+                    <span className="text-s font-medium text-foreground/80 tabular-nums w-20 shrink-0">
                       {period.label}
                     </span>
                     <span className="flex flex-wrap gap-x-4 gap-y-1 min-w-0">
@@ -1460,7 +1460,7 @@ export function PortfolioPitch({
                           href={doc.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-[13px] text-foreground/90 no-underline hover:underline min-w-0"
+                          className="inline-flex items-center gap-1.5 text-s text-foreground/90 no-underline hover:underline min-w-0"
                         >
                           <Paperclip
                             className="w-3.5 h-3.5 shrink-0 text-muted-foreground"
@@ -1468,7 +1468,7 @@ export function PortfolioPitch({
                           />
                           <span className="truncate">{doc.filename}</span>
                           {formatFileSize(doc.fileSize) && (
-                            <span className="text-[11px] text-muted-foreground/60 shrink-0">
+                            <span className="text-xs text-muted-foreground/60 shrink-0">
                               {formatFileSize(doc.fileSize)}
                             </span>
                           )}
@@ -1512,7 +1512,7 @@ export function PortfolioPitch({
                 ]),
               }}
             >
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-6">
+              <div className="grid grid-cols-1 @md/card:grid-cols-2 @lg/card:grid-cols-3 gap-x-4 gap-y-6">
                 {metrics.map((series, i) => (
                   <MetricCard key={series.metric.id} series={series} index={i} />
                 ))}
@@ -1564,19 +1564,19 @@ function Hero({
             className="w-12 h-12 rounded-xl object-cover shrink-0"
           />
         ) : (
-          <div className="w-12 h-12 rounded-xl bg-primary/15 grid place-items-center text-[18px] font-semibold text-primary shrink-0">
+          <div className="w-12 h-12 rounded-xl bg-primary/15 grid place-items-center text-m font-semibold text-primary shrink-0">
             {portfolio.project.name[0]?.toUpperCase()}
           </div>
         )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-[24px] font-bold tracking-tight text-foreground">
+            <h1 className="text-m font-bold tracking-tight text-foreground">
               {portfolio.project.name}
             </h1>
             {portfolio.liveDate && (
               <span
                 className={cn(
-                  "px-2 py-0.5 rounded-full text-[10px] font-semibold",
+                  "px-2 py-0.5 rounded-full text-xs font-semibold",
                   live === "LIVE"
                     ? "bg-emerald-500/15 text-emerald-400"
                     : "bg-amber-500/15 text-amber-400",
@@ -1588,13 +1588,13 @@ function Hero({
           </div>
           {/* The description itself lives under Opportunity, where it's edited,
               rather than being repeated a box above it. */}
-          <p className="text-[11px] text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Equity portfolio · reported in {currency}
           </p>
         </div>
       </div>
 
-      <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-5 mt-8">
+      <div className="relative grid grid-cols-2 @md/card:grid-cols-4 gap-x-4 gap-y-5 mt-8">
         <HeadlineStat
           icon={PieChart}
           label={held !== granted ? "Equity today" : "Our equity"}
@@ -1720,16 +1720,16 @@ function SectionRail({
                   onClick={() => jump(s.id)}
                   aria-current={on ? "true" : undefined}
                   className={cn(
-                    "w-full flex items-center gap-2 pl-2 pr-2 py-1.5 rounded-md text-left border-l-2 transition-colors",
+                    "w-full flex items-center gap-2 ps-2 pe-2 py-1.5 rounded-md text-start border-s-2 transition-colors",
                     on
-                      ? "border-l-current bg-muted/50 text-foreground"
+                      ? "border-s-current bg-muted/50 text-foreground"
                       : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30",
                   )}
                   style={on ? { color: ACCENT } : undefined}
                 >
                   <span
                     className={cn(
-                      "text-[12px] truncate",
+                      "text-s truncate",
                       on && "font-medium text-foreground",
                     )}
                   >
@@ -1750,7 +1750,7 @@ function SectionRail({
               type="button"
               onClick={() => jump(s.id)}
               className={cn(
-                "px-2.5 h-7 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors shrink-0",
+                "px-2.5 h-7 rounded-full text-xs font-medium whitespace-nowrap transition-colors shrink-0",
                 active === s.id
                   ? "bg-foreground text-background"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted",

@@ -63,7 +63,7 @@ function LaunchBadge({ liveDate }: { liveDate: string | null }) {
   return (
     <span
       className={cn(
-        "px-2 py-0.5 rounded-full text-[10px] font-medium",
+        "px-2 py-0.5 rounded-full text-xs font-medium",
         status === "LIVE"
           ? "bg-emerald-500/10 text-emerald-400"
           : status === "SCHEDULED"
@@ -137,24 +137,24 @@ export function OpportunitySection({
         <div className="space-y-5">
           <div>
             <div className="flex items-center gap-2 mb-1.5">
-              <h3 className="text-[12px] font-semibold text-foreground">Launch</h3>
+              <h3 className="text-s font-semibold text-foreground">Launch</h3>
               <LaunchBadge liveDate={liveDate} />
             </div>
-            <p className="text-[13px] text-foreground px-3 py-2 rounded-lg border border-border bg-muted/30">
+            <p className="text-s text-foreground px-3 py-2 rounded-lg border border-border bg-muted/30">
               {formatLiveStatus(liveDate)}
             </p>
           </div>
 
           <div>
-            <h3 className="text-[12px] font-semibold text-foreground">
+            <h3 className="text-s font-semibold text-foreground">
               Description
             </h3>
-            <p className="text-[11px] text-muted-foreground mb-1.5">
+            <p className="text-xs text-muted-foreground mb-1.5">
               Shared with the project — editing it here updates the project page
               too.
             </p>
             {description ? (
-              <p className="text-[13px] text-foreground whitespace-pre-wrap px-3 py-2 rounded-lg border border-border bg-muted/30">
+              <p className="text-s text-foreground whitespace-pre-wrap px-3 py-2 rounded-lg border border-border bg-muted/30">
                 {description}
               </p>
             ) : (
@@ -164,10 +164,10 @@ export function OpportunitySection({
 
           {PROSE.map(({ key, title, description: hint }) => (
             <div key={key}>
-              <h3 className="text-[12px] font-semibold text-foreground">{title}</h3>
-              <p className="text-[11px] text-muted-foreground mb-1.5">{hint}</p>
+              <h3 className="text-s font-semibold text-foreground">{title}</h3>
+              <p className="text-xs text-muted-foreground mb-1.5">{hint}</p>
               {opportunity?.[key] ? (
-                <p className="text-[13px] text-foreground whitespace-pre-wrap px-3 py-2 rounded-lg border border-border bg-muted/30">
+                <p className="text-s text-foreground whitespace-pre-wrap px-3 py-2 rounded-lg border border-border bg-muted/30">
                   {opportunity[key]}
                 </p>
               ) : (
@@ -177,10 +177,10 @@ export function OpportunitySection({
           ))}
 
           <div>
-            <h3 className="text-[12px] font-semibold text-foreground">
+            <h3 className="text-s font-semibold text-foreground">
               {ADVANTAGE.title}
             </h3>
-            <p className="text-[11px] text-muted-foreground mb-1.5">
+            <p className="text-xs text-muted-foreground mb-1.5">
               {ADVANTAGE.description}
             </p>
             <PitchRowsView spec={ADVANTAGE} rows={advantages} />
@@ -259,10 +259,10 @@ function OpportunityForm({
     <div className="space-y-5">
       <div>
         <div className="flex items-center gap-2">
-          <h3 className="text-[12px] font-semibold text-foreground">Launch</h3>
+          <h3 className="text-s font-semibold text-foreground">Launch</h3>
           <LaunchBadge liveDate={liveDate || null} />
         </div>
-        <p className="text-[11px] text-muted-foreground mb-1.5">
+        <p className="text-xs text-muted-foreground mb-1.5">
           The status follows the date, so there&apos;s nothing else to update
           when it goes live.
         </p>
@@ -275,8 +275,8 @@ function OpportunityForm({
       </div>
 
       <div>
-        <h3 className="text-[12px] font-semibold text-foreground">Description</h3>
-        <p className="text-[11px] text-muted-foreground mb-1.5">
+        <h3 className="text-s font-semibold text-foreground">Description</h3>
+        <p className="text-xs text-muted-foreground mb-1.5">
           Shared with the project — editing it here updates the project page too.
         </p>
         <GrowingTextarea
@@ -289,8 +289,8 @@ function OpportunityForm({
 
       {PROSE.map((p) => (
         <div key={p.key}>
-          <h3 className="text-[12px] font-semibold text-foreground">{p.title}</h3>
-          <p className="text-[11px] text-muted-foreground mb-1.5">
+          <h3 className="text-s font-semibold text-foreground">{p.title}</h3>
+          <p className="text-xs text-muted-foreground mb-1.5">
             {p.description}
           </p>
           <GrowingTextarea
@@ -303,10 +303,10 @@ function OpportunityForm({
       ))}
 
       <div>
-        <h3 className="text-[12px] font-semibold text-foreground">
+        <h3 className="text-s font-semibold text-foreground">
           {ADVANTAGE.title}
         </h3>
-        <p className="text-[11px] text-muted-foreground mb-1.5">
+        <p className="text-xs text-muted-foreground mb-1.5">
           {ADVANTAGE.description}
         </p>
         <PitchRowsEditor spec={ADVANTAGE} rows={rows} setRows={setRows} />

@@ -8,6 +8,7 @@ import { ArrowLeft, Sparkles, Wrench, Bug, AlertCircle, Palette, Loader2 } from 
 import { createTask } from "@/actions/task";
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
 
 type TaskType = "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
 
@@ -90,7 +91,7 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
 
   return (
     <div>
-      <div className="sticky top-0 z-10 flex app-top-bar items-center gap-3 px-6 pr-14 border-b border-border bg-background shrink-0">
+      <PageHeader>
         <button
           onClick={() => router.back()}
           className="text-muted-foreground hover:text-foreground transition-colors"
@@ -98,22 +99,22 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
           <ArrowLeft className="w-4 h-4" />
         </button>
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[11px] text-muted-foreground font-mono truncate">
+          <span className="text-xs text-muted-foreground font-mono truncate">
             {projectName}
           </span>
-          <span className="text-[11px] text-muted-foreground/40">/</span>
-          <h1 className="text-sm font-semibold">New Task</h1>
+          <span className="text-xs text-muted-foreground/40">/</span>
+          <h1 className="text-s font-semibold">New Task</h1>
         </div>
-      </div>
+      </PageHeader>
 
-      <form onSubmit={handleSubmit} className="max-w-2xl mx-auto px-6 py-8">
+      <form onSubmit={handleSubmit} className="max-w-2xl mx-auto px-app py-8">
         <div className="space-y-6">
           {/* Task Type */}
           <div className="space-y-2">
-            <label className="text-[13px] font-semibold text-foreground">
+            <label className="text-s font-semibold text-foreground">
               Type
               {activeContractType === "MAINTENANCE" && (
-                <span className="ml-2 text-[10px] font-normal text-amber-400 bg-amber-500/10 rounded-full px-2 py-0.5">
+                <span className="ms-2 text-xs font-normal text-amber-400 bg-amber-500/10 rounded-full px-2 py-0.5">
                   Maintenance contract — bugs only
                 </span>
               )}
@@ -128,7 +129,7 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
                     type="button"
                     onClick={() => handleTypeChange(t.id)}
                     className={cn(
-                      "flex items-center gap-2 rounded-lg border px-4 py-2.5 text-[13px] font-medium transition-colors",
+                      "flex items-center gap-2 rounded-lg border px-4 py-2.5 text-s font-medium transition-colors",
                       isActive ? t.activeColor : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
                     )}
                   >
@@ -142,7 +143,7 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
 
           {/* Task title */}
           <div className="space-y-2">
-            <label className="text-[13px] font-semibold text-foreground">
+            <label className="text-s font-semibold text-foreground">
               {TASK_TYPES.find((t) => t.id === taskType)?.label} Name
             </label>
             <Input
@@ -155,14 +156,14 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
                   : taskType === "DESIGN" ? "What needs to be designed?"
                   : "What needs to be done?"
               }
-              className="h-10 text-sm"
+              className="h-10 text-s"
               autoFocus
             />
           </div>
 
           {/* Priority */}
           <div className="space-y-2">
-            <label className="text-[13px] font-semibold text-foreground">
+            <label className="text-s font-semibold text-foreground">
               Priority
             </label>
             <div className="flex gap-1.5">
@@ -172,7 +173,7 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
                   type="button"
                   onClick={() => setPriority(priority === n ? null : n)}
                   className={cn(
-                    "h-9 w-9 rounded-md border text-[13px] font-medium transition-colors",
+                    "h-9 w-9 rounded-md border text-s font-medium transition-colors",
                     priority === n
                       ? n >= 9
                         ? "bg-destructive/20 border-destructive/40 text-destructive"
@@ -186,7 +187,7 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
                 </button>
               ))}
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {priority === null ? "No priority selected" : `1 = lowest, 10 = highest`}
             </p>
           </div>
@@ -195,10 +196,10 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
           {filteredQuestions.length > 0 && (
             <>
               <div className="border-t border-border pt-6">
-                <h2 className="text-[13px] font-semibold text-foreground mb-1">
+                <h2 className="text-s font-semibold text-foreground mb-1">
                   {TASK_TYPES.find((t) => t.id === taskType)?.label} Questions
                 </h2>
-                <p className="text-[11px] text-muted-foreground mb-5">
+                <p className="text-xs text-muted-foreground mb-5">
                   Help the team understand context by answering these questions.
                 </p>
               </div>
@@ -222,12 +223,12 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
 
           {mandatoryErrors.length > 0 && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
-              <p className="text-[12px] font-medium text-destructive mb-1">
+              <p className="text-s font-medium text-destructive mb-1">
                 Please fill in these mandatory fields:
               </p>
               <ul className="space-y-0.5">
                 {mandatoryErrors.map((q, i) => (
-                  <li key={i} className="text-[11px] text-destructive/80">• {q}</li>
+                  <li key={i} className="text-xs text-destructive/80">• {q}</li>
                 ))}
               </ul>
             </div>
@@ -236,7 +237,7 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
           {/* Actions */}
           <div className="flex items-center gap-3 pt-4 border-t border-border">
             <Button type="submit" disabled={saving || !title.trim()}>
-              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />}
+              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin me-1.5" />}
               {saving ? "Creating..." : "Create Task"}
             </Button>
             <Button

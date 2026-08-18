@@ -36,7 +36,7 @@ export function ProjectList({ projects }: Props) {
     return (
       <div className="flex flex-col items-center justify-center text-center gap-3 py-12">
         <FolderKanban className="w-10 h-10 text-muted-foreground opacity-50" />
-        <p className="text-[13px] text-muted-foreground">
+        <p className="text-s text-muted-foreground">
           No projects yet. Create your first one.
         </p>
       </div>
@@ -69,18 +69,18 @@ export function ProjectList({ projects }: Props) {
                   />
                 ) : (
                   <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-                    <span className="text-[13px] font-bold text-primary">
+                    <span className="text-s font-bold text-primary">
                       {project.name.charAt(0).toUpperCase()}
                     </span>
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-[13px] font-semibold text-foreground truncate">
+                    <h3 className="text-s font-semibold text-foreground truncate">
                       {project.name}
                     </h3>
                     <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0 ml-2 ${
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold shrink-0 ms-2 ${
                         isActive
                           ? "bg-success/15 text-success border border-success/20"
                           : "bg-destructive/15 text-destructive border border-destructive/20"
@@ -90,15 +90,15 @@ export function ProjectList({ projects }: Props) {
                     </span>
                   </div>
                   {project.description && (
-                    <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">
+                    <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
                       {project.description}
                     </p>
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 {contractType && CONTRACT_TYPE_LABELS[contractType] && (
-                  <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium border ${CONTRACT_TYPE_LABELS[contractType].color}`}>
+                  <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium border ${CONTRACT_TYPE_LABELS[contractType].color}`}>
                     {CONTRACT_TYPE_LABELS[contractType].label}
                   </span>
                 )}

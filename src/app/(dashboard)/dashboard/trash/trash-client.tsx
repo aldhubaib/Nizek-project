@@ -53,7 +53,7 @@ export function TrashClient({
           className="w-4 h-4 text-muted-foreground shrink-0"
           strokeWidth={1.5}
         />
-        <h1 className="text-sm font-semibold text-foreground flex-1 truncate">
+        <h1 className="text-s font-semibold text-foreground flex-1 truncate">
           Trash
         </h1>
         {isAdmin && items.length > 0 && (
@@ -71,8 +71,8 @@ export function TrashClient({
         )}
       </PageHeader>
 
-      <div className="px-6 py-6 max-w-5xl mx-auto">
-        <p className="text-[12px] text-muted-foreground mb-4">
+      <div className="px-app py-6 max-w-5xl mx-auto">
+        <p className="text-s text-muted-foreground mb-4">
           Deleted things wait here instead of going straight out. Restoring one
           puts it back exactly as it was. Vault credentials only appear here for
           admins — even if someone else deleted them.
@@ -82,13 +82,13 @@ export function TrashClient({
         </p>
 
         {error && (
-          <p className="text-[12px] text-destructive mb-3">{error}</p>
+          <p className="text-s text-destructive mb-3">{error}</p>
         )}
 
         {items.length === 0 ? (
           <div className="rounded-xl border border-border bg-card/50 px-5 py-10 text-center">
-            <p className="text-[13px] text-foreground">The trash is empty</p>
-            <p className="text-[12px] text-muted-foreground mt-1">
+            <p className="text-s text-foreground">The trash is empty</p>
+            <p className="text-s text-muted-foreground mt-1">
               Nothing has been deleted, or it&apos;s already been cleared out.
             </p>
           </div>
@@ -104,19 +104,19 @@ export function TrashClient({
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[13px] font-medium text-foreground">
+                      <span className="text-s font-medium text-foreground">
                         {item.label}
                       </span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-border text-muted-foreground">
+                      <span className="text-xs px-1.5 py-0.5 rounded-full border border-border text-muted-foreground">
                         {item.noun}
                       </span>
                     </div>
                     {item.sublabel && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {item.sublabel}
                       </p>
                     )}
-                    <p className="text-[11px] text-muted-foreground/60 mt-0.5">
+                    <p className="text-xs text-muted-foreground/60 mt-0.5">
                       Deleted by {item.deletedBy.name || item.deletedBy.email} on{" "}
                       {when.toLocaleDateString("en-GB")} at{" "}
                       {when.toLocaleTimeString([], {
@@ -219,7 +219,7 @@ function EmptyTrashDialog({
             along with everything inside them. There is no way back from this.
           </DialogDescription>
         </DialogHeader>
-        {error && <p className="text-[12px] text-destructive">{error}</p>}
+        {error && <p className="text-s text-destructive">{error}</p>}
         <DialogFooter>
           <Button
             variant="outline"

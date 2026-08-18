@@ -35,6 +35,7 @@ import type { BrandingAssetDTO } from "@/actions/branding";
 import type { LoginPhotoDTO } from "@/actions/login-photos";
 import type { NotificationSoundDTO } from "@/actions/notification-sound-settings";
 import type { BrandingSlotId } from "@/lib/branding-slots";
+import { PageHeader } from "@/components/page-header";
 
 type TabId =
   | "teams"
@@ -195,11 +196,14 @@ export function AdminPageClient({
   // Settings hub — grouped tiles, shown when no section is selected.
   if (!active) {
     return (
-      <div className="mx-auto max-w-2xl space-y-8 px-6 py-8">
-        <h1 className="text-lg font-semibold">Settings</h1>
+      <div>
+        <PageHeader>
+          <h1 className="text-s font-semibold">Settings</h1>
+        </PageHeader>
+        <div className="mx-auto max-w-2xl space-y-8 px-app py-8">
         {SECTIONS.map((section) => (
           <section key={section.group} className="space-y-3">
-            <div className="px-1 text-tiny font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            <div className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               {section.group}
             </div>
             <div className="space-y-3">
@@ -209,6 +213,7 @@ export function AdminPageClient({
             </div>
           </section>
         ))}
+        </div>
       </div>
     );
   }
@@ -216,22 +221,22 @@ export function AdminPageClient({
   // Detail view — the selected section's manager with a back link to the hub.
   return (
     <div>
-      <div className="sticky top-0 z-10 flex app-top-bar items-center gap-3 px-6 pr-14 border-b border-border bg-background shrink-0">
+      <PageHeader>
         <Link
           href="/dashboard/admin"
-          className="flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="flex items-center gap-1.5 text-s font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="w-3.5 h-3.5" strokeWidth={1.5} />
           Settings
         </Link>
         <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
-        <span className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+        <span className="flex items-center gap-1.5 text-s font-medium text-foreground">
           <active.icon className="w-3.5 h-3.5" strokeWidth={1.5} />
           {active.label}
         </span>
-      </div>
+      </PageHeader>
 
-      <div className="px-6 py-6 max-w-3xl">
+      <div className="px-app py-6 max-w-3xl">
         {active.id === "teams" && (
           <TeamsManager teams={teams} pendingInvites={pendingInvites} />
         )}
@@ -288,7 +293,7 @@ function Tile({ item }: { item: SettingsItem }) {
       </div>
       <div className="min-w-0 flex-1">
         <div className="font-medium">{item.label}</div>
-        <div className="text-xs text-muted-foreground">{item.desc}</div>
+        <div className="text-s text-muted-foreground">{item.desc}</div>
       </div>
       <ChevronRight className="h-4 w-4 text-muted-foreground" />
     </Link>

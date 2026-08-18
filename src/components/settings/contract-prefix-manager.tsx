@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Trash2, Loader2, X, Check, FileText } from "lucide-react";
+import { Pencil, Trash2, Loader2, X, Check, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AddButton } from "@/components/add-button";
 import {
   createContractPrefix,
   updateContractPrefix,
@@ -78,16 +79,16 @@ export function ContractPrefixManager({ prefixes }: { prefixes: ContractPrefixIt
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-[13px] font-semibold">Contract Prefixes</h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
+          <h2 className="text-s font-semibold">Contract Prefixes</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
             Define prefixes for contract codes (e.g. R for Retainer, L for Lump Sum). Contracts are auto-numbered as R-001, R-002, etc.
           </p>
         </div>
         {!creating && (
-          <Button size="sm" onClick={() => { setCreating(true); setError(""); }}>
-            <Plus className="w-3.5 h-3.5 mr-1" />
-            New Prefix
-          </Button>
+          <AddButton
+            label="New Prefix"
+            onClick={() => { setCreating(true); setError(""); }}
+          />
         )}
       </div>
 
@@ -97,7 +98,7 @@ export function ContractPrefixManager({ prefixes }: { prefixes: ContractPrefixIt
             value={newPrefix}
             onChange={(e) => setNewPrefix(e.target.value.toUpperCase())}
             placeholder="Prefix (e.g. R)"
-            className="text-[13px] h-8 w-24 font-mono uppercase"
+            className="text-s h-8 w-24 font-mono uppercase"
             autoFocus
             maxLength={5}
             onKeyDown={(e) => {
@@ -108,7 +109,7 @@ export function ContractPrefixManager({ prefixes }: { prefixes: ContractPrefixIt
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Name (e.g. Retainer)"
-            className="text-[13px] h-8 flex-1"
+            className="text-s h-8 flex-1"
             onKeyDown={(e) => {
               if (e.key === "Enter") handleCreate();
               if (e.key === "Escape") { setCreating(false); setNewPrefix(""); setNewName(""); }
@@ -123,13 +124,13 @@ export function ContractPrefixManager({ prefixes }: { prefixes: ContractPrefixIt
         </div>
       )}
 
-      {error && <p className="text-[12px] text-destructive">{error}</p>}
-      {deleteError && <p className="text-[12px] text-destructive">{deleteError}</p>}
+      {error && <p className="text-s text-destructive">{error}</p>}
+      {deleteError && <p className="text-s text-destructive">{deleteError}</p>}
 
       {prefixes.length === 0 && !creating ? (
         <div className="text-center py-8">
           <FileText className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-          <p className="text-[12px] text-muted-foreground">No contract prefixes yet. Create your first prefix.</p>
+          <p className="text-s text-muted-foreground">No contract prefixes yet. Create your first prefix.</p>
         </div>
       ) : (
         <div className="space-y-1">
@@ -143,7 +144,7 @@ export function ContractPrefixManager({ prefixes }: { prefixes: ContractPrefixIt
                   <Input
                     value={editPrefix}
                     onChange={(e) => setEditPrefix(e.target.value.toUpperCase())}
-                    className="text-[13px] h-8 w-24 font-mono uppercase"
+                    className="text-s h-8 w-24 font-mono uppercase"
                     autoFocus
                     maxLength={5}
                     onKeyDown={(e) => {
@@ -154,7 +155,7 @@ export function ContractPrefixManager({ prefixes }: { prefixes: ContractPrefixIt
                   <Input
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="text-[13px] h-8 flex-1"
+                    className="text-s h-8 flex-1"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handleUpdate(p.id);
                       if (e.key === "Escape") setEditingId(null);
@@ -170,11 +171,11 @@ export function ContractPrefixManager({ prefixes }: { prefixes: ContractPrefixIt
               ) : (
                 <>
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="inline-flex items-center justify-center rounded-md border border-border bg-muted px-2 py-0.5 text-[12px] font-mono font-semibold text-foreground">
+                    <span className="inline-flex items-center justify-center rounded-md border border-border bg-muted px-2 py-0.5 text-s font-mono font-semibold text-foreground">
                       {p.prefix}
                     </span>
-                    <span className="text-[13px] font-medium truncate">{p.name}</span>
-                    <span className="text-[10px] text-muted-foreground font-mono">
+                    <span className="text-s font-medium truncate">{p.name}</span>
+                    <span className="text-xs text-muted-foreground font-mono">
                       {p._count.contracts} contract{p._count.contracts !== 1 ? "s" : ""}
                     </span>
                   </div>

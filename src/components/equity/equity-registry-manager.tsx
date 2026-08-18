@@ -6,13 +6,13 @@ import {
   ExternalLink,
   Loader2,
   Pencil,
-  Plus,
   Trash2,
   Upload,
   Users,
   Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AddButton } from "@/components/add-button";
 import { uploadFileToR2 } from "@/lib/upload";
 import { GrowingTextarea } from "@/components/equity/growing-textarea";
 import { HolderAvatar } from "@/components/equity/holder-avatar";
@@ -28,10 +28,10 @@ import {
 } from "@/actions/equity";
 
 const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
+  "w-full h-9 px-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40";
 
 const labelCls =
-  "block text-[11px] font-medium text-muted-foreground mb-1 uppercase tracking-wide";
+  "block text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide";
 
 type ListItem = {
   id: string;
@@ -109,12 +109,12 @@ function RegistryList({
     <div className="rounded-xl border border-border bg-card/50 p-4">
       <div className="flex items-center gap-2 mb-1">
         {icon}
-        <h2 className="text-[13px] font-semibold text-foreground">{title}</h2>
-        <span className="text-[11px] text-muted-foreground/60 tabular-nums">
+        <h2 className="text-s font-semibold text-foreground">{title}</h2>
+        <span className="text-xs text-muted-foreground/60 tabular-nums">
           {items.length}
         </span>
       </div>
-      <p className="text-[11px] text-muted-foreground mb-3">{description}</p>
+      <p className="text-xs text-muted-foreground mb-3">{description}</p>
 
       <div className="flex items-center gap-2 mb-3">
         <input
@@ -125,19 +125,15 @@ function RegistryList({
           placeholder={placeholder}
           className={cn(inputCls, "flex-1 min-w-0")}
         />
-        <button
-          type="button"
+        <AddButton
+          label="Add"
           onClick={add}
           disabled={busy || !draft.trim()}
-          className="flex items-center gap-1.5 px-3 h-9 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add
-        </button>
+        />
       </div>
 
       {items.length === 0 ? (
-        <p className="text-[12px] text-muted-foreground py-1">{emptyLabel}</p>
+        <p className="text-s text-muted-foreground py-1">{emptyLabel}</p>
       ) : (
         <div className="space-y-1">
           {items.map((item) =>
@@ -158,14 +154,14 @@ function RegistryList({
                   type="button"
                   onClick={() => rename(item.id)}
                   disabled={busy || !editValue.trim()}
-                  className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium disabled:opacity-40 transition-colors shrink-0"
+                  className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-s font-medium disabled:opacity-40 transition-colors shrink-0"
                 >
                   Save
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditingId(null)}
-                  className="px-3 h-9 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors shrink-0"
+                  className="px-3 h-9 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors shrink-0"
                 >
                   Cancel
                 </button>
@@ -175,15 +171,15 @@ function RegistryList({
                 key={item.id}
                 className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-1.5"
               >
-                <span className="flex-1 min-w-0 truncate text-[13px] text-foreground">
+                <span className="flex-1 min-w-0 truncate text-s text-foreground">
                   {item.name}
                   {item.marker && (
-                    <span className="ml-1.5 text-[10px] text-primary">
+                    <span className="ms-1.5 text-xs text-primary">
                       {item.marker}
                     </span>
                   )}
                 </span>
-                <span className="text-[10px] text-muted-foreground/70 tabular-nums shrink-0">
+                <span className="text-xs text-muted-foreground/70 tabular-nums shrink-0">
                   {item.usage}
                 </span>
                 <button
@@ -289,7 +285,7 @@ function HolderEditor({
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
-              className="flex items-center gap-1 px-1.5 h-6 rounded-md border border-border text-[10px] text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-40"
+              className="flex items-center gap-1 px-1.5 h-6 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-40"
             >
               {uploading ? (
                 <Loader2 className="w-2.5 h-2.5 animate-spin" />
@@ -311,7 +307,7 @@ function HolderEditor({
           </div>
         </div>
 
-        <div className="flex-1 min-w-0 grid gap-2 sm:grid-cols-2">
+        <div className="flex-1 min-w-0 grid gap-2 @md/card:grid-cols-2">
           <div>
             <label className={labelCls}>Name</label>
             <input
@@ -341,7 +337,7 @@ function HolderEditor({
           value={bio}
           onChange={setBio}
           placeholder="Who they are and what they bring to the table."
-          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
         />
       </div>
 
@@ -349,7 +345,7 @@ function HolderEditor({
         <button
           type="button"
           onClick={onCancel}
-          className="px-3 h-9 rounded-lg text-[12px] text-muted-foreground hover:bg-muted transition-colors"
+          className="px-3 h-9 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
         >
           Cancel
         </button>
@@ -357,7 +353,7 @@ function HolderEditor({
           type="button"
           onClick={() => onSave({ name: name.trim(), photoUrl, bio, linkedinUrl })}
           disabled={busy || uploading || !name.trim()}
-          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
+          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-s font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors"
         >
           Save
         </button>
@@ -401,12 +397,12 @@ function HolderList({ holders }: { holders: EquityHolderDTO[] }) {
     <div className="rounded-xl border border-border bg-card/50 p-4">
       <div className="flex items-center gap-2 mb-1">
         <Users className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-        <h2 className="text-[13px] font-semibold text-foreground">Names</h2>
-        <span className="text-[11px] text-muted-foreground/60 tabular-nums">
+        <h2 className="text-s font-semibold text-foreground">Names</h2>
+        <span className="text-xs text-muted-foreground/60 tabular-nums">
           {holders.length}
         </span>
       </div>
-      <p className="text-[11px] text-muted-foreground mb-3">
+      <p className="text-xs text-muted-foreground mb-3">
         Everyone who can hold equity — us, founders, funds, option pools. Shared
         across every startup, so a fund on two cap tables is one name in both.
         Add a photo, a bio and a LinkedIn so a cap table reads as people.
@@ -421,19 +417,15 @@ function HolderList({ holders }: { holders: EquityHolderDTO[] }) {
           placeholder="e.g. Nizek"
           className={cn(inputCls, "flex-1 min-w-0")}
         />
-        <button
-          type="button"
+        <AddButton
+          label="Add"
           onClick={add}
           disabled={busy || !draft.trim()}
-          className="flex items-center gap-1.5 px-3 h-9 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium disabled:opacity-40 hover:bg-primary/90 transition-colors shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add
-        </button>
+        />
       </div>
 
       {holders.length === 0 ? (
-        <p className="text-[12px] text-muted-foreground py-1">No names yet.</p>
+        <p className="text-s text-muted-foreground py-1">No names yet.</p>
       ) : (
         <div className="space-y-1">
           {holders.map((holder) =>
@@ -458,11 +450,11 @@ function HolderList({ holders }: { holders: EquityHolderDTO[] }) {
                 <HolderAvatar name={holder.name} photoUrl={holder.photoUrl} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="truncate text-[13px] text-foreground">
+                    <span className="truncate text-s text-foreground">
                       {holder.name}
                     </span>
                     {holder.isUs && (
-                      <span className="text-[10px] text-primary">us</span>
+                      <span className="text-xs text-primary">us</span>
                     )}
                     {holder.linkedinUrl && (
                       <a
@@ -470,7 +462,7 @@ function HolderList({ holders }: { holders: EquityHolderDTO[] }) {
                         target="_blank"
                         rel="noopener noreferrer"
                         title={holder.linkedinUrl}
-                        className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                        className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
                         aria-label={`${holder.name} on LinkedIn`}
                       >
                         LinkedIn
@@ -479,12 +471,12 @@ function HolderList({ holders }: { holders: EquityHolderDTO[] }) {
                     )}
                   </div>
                   {holder.bio && (
-                    <p className="text-[11px] text-muted-foreground truncate">
+                    <p className="text-xs text-muted-foreground truncate">
                       {holder.bio}
                     </p>
                   )}
                 </div>
-                <span className="text-[10px] text-muted-foreground/70 tabular-nums shrink-0">
+                <span className="text-xs text-muted-foreground/70 tabular-nums shrink-0">
                   {usageLabel([
                     { label: "entry", n: holder.grantCount },
                     { label: "team", n: holder.teamCount },

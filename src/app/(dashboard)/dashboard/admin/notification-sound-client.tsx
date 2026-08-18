@@ -71,7 +71,7 @@ export function NotificationSoundClient({ sound }: { sound: NotificationSoundDTO
 
   return (
     <div className="max-w-2xl space-y-5">
-      <p className="text-sm text-muted-foreground">
+      <p className="text-s text-muted-foreground">
         Upload a custom sound that plays for everyone when they receive a
         notification while the app is open. If none is set, a default chime is
         used. Keep it short (a second or two) and under 3&nbsp;MB. Supported:
@@ -79,7 +79,7 @@ export function NotificationSoundClient({ sound }: { sound: NotificationSoundDTO
       </p>
 
       {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-s text-destructive">
           {error}
         </div>
       )}
@@ -90,8 +90,8 @@ export function NotificationSoundClient({ sound }: { sound: NotificationSoundDTO
             <Volume2 className="h-4.5 w-4.5" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium">{sound.name}</div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
+            <div className="truncate text-s font-medium">{sound.name}</div>
+            <div className="mt-0.5 text-s text-muted-foreground">
               {formatSize(sound.size)} · current notification sound
             </div>
           </div>
@@ -129,7 +129,7 @@ export function NotificationSoundClient({ sound }: { sound: NotificationSoundDTO
           type="button"
           onClick={onPick}
           disabled={busy}
-          className="grid w-full place-items-center rounded-xl border border-dashed border-border/60 bg-surface p-8 text-sm text-muted-foreground transition-colors hover:border-border disabled:opacity-60"
+          className="grid w-full place-items-center rounded-xl border border-dashed border-border/60 bg-surface p-8 text-s text-muted-foreground transition-colors hover:border-border disabled:opacity-60"
         >
           <div className="flex flex-col items-center gap-2">
             {busy ? (

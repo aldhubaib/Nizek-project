@@ -78,19 +78,19 @@ export function SetupPhotoClient({
           <img src={mark} alt="Nizek" className="mx-auto h-11 w-11 rounded-xl" />
         ) : (
           <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15">
-            <span className="text-base font-bold text-primary">N</span>
+            <span className="text-m font-bold text-primary">N</span>
           </div>
         )}
 
-        <h1 className="mt-6 text-xl font-semibold tracking-tight text-foreground">
+        <h1 className="mt-6 text-s font-semibold tracking-tight text-foreground">
           Add your photo
         </h1>
-        <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
+        <p className="mt-2 text-s leading-relaxed text-muted-foreground">
           Upload a profile photo so your teammates can recognize you. You can&apos;t continue without one.
         </p>
 
         {error && (
-          <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-s text-destructive">
             {error}
           </div>
         )}
@@ -140,11 +140,11 @@ export function SetupPhotoClient({
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+            className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-primary px-4 text-s font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {uploading ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="me-2 h-4 w-4 animate-spin" />
                 Uploading…
               </>
             ) : (
@@ -156,7 +156,7 @@ export function SetupPhotoClient({
         <SignOutButton>
           <button
             type="button"
-            className="mt-8 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+            className="mt-8 text-s text-muted-foreground transition-colors hover:text-foreground"
           >
             Sign out
           </button>

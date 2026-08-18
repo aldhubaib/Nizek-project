@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus } from "lucide-react";
+import { AddButton } from "@/components/add-button";
 import { addContract } from "@/actions/project";
 import { ContractTypePicker, type ContractType } from "@/components/project/create-project-dialog";
 
@@ -64,12 +64,7 @@ export function AddContractDialog({ projectId, contractPrefixes = [] }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setError(null); }}>
-      <DialogTrigger
-        render={<Button variant="outline" size="sm" />}
-      >
-        <Plus className="mr-1.5 h-3.5 w-3.5" />
-        Add Contract
-      </DialogTrigger>
+      <DialogTrigger render={<AddButton label="Add Contract" />} />
       <DialogContent className="sm:max-w-md z-[10000]">
         <DialogHeader>
           <DialogTitle>Add Contract</DialogTitle>
@@ -82,7 +77,7 @@ export function AddContractDialog({ projectId, contractPrefixes = [] }: Props) {
                 <select
                   value={prefixId}
                   onChange={(e) => setPrefixId(e.target.value)}
-                  className="rounded-l-md rounded-r-none border border-r-0 border-border bg-muted/50 px-3 py-2 text-[13px] text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-ring shrink-0"
+                  className="rounded-l-md rounded-r-none border border-e-0 border-border bg-muted/50 px-3 py-2 text-s text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-ring shrink-0"
                 >
                   <option value="">Prefix</option>
                   {contractPrefixes.map((p) => (
@@ -94,11 +89,11 @@ export function AddContractDialog({ projectId, contractPrefixes = [] }: Props) {
                   onChange={(e) => setContractNumber(e.target.value)}
                   placeholder="001"
                   disabled={!prefixId}
-                  className="rounded-l-none text-[13px] font-mono"
+                  className="rounded-l-none text-s font-mono"
                 />
               </div>
               {prefixId && contractNumber && (
-                <p className="text-[10px] text-muted-foreground font-mono">
+                <p className="text-xs text-muted-foreground font-mono">
                   Code: {contractPrefixes.find((p) => p.id === prefixId)?.prefix}-{contractNumber}
                 </p>
               )}
@@ -124,7 +119,7 @@ export function AddContractDialog({ projectId, contractPrefixes = [] }: Props) {
           </div>
           {error && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
-              <p className="text-[12px] text-destructive">{error}</p>
+              <p className="text-s text-destructive">{error}</p>
             </div>
           )}
           <div className="flex justify-end gap-2">

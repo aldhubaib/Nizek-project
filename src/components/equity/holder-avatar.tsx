@@ -12,10 +12,10 @@ export function HolderAvatar({
 }) {
   const cls =
     size === 14
-      ? "w-14 h-14 text-[18px]"
+      ? "w-14 h-14 text-m"
       : size === 6
-        ? "w-6 h-6 text-[10px]"
-        : "w-8 h-8 text-[12px]";
+        ? "w-6 h-6 text-xs"
+        : "w-8 h-8 text-s";
 
   if (photoUrl) {
     return (

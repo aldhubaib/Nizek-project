@@ -197,7 +197,7 @@ export function NotificationBell({ currentUserId }: Props) {
       >
         <Bell className="w-4 h-4" />
         {count > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-primary text-[9px] font-bold text-primary-foreground flex items-center justify-center px-1">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-primary text-xs font-bold text-primary-foreground flex items-center justify-center px-1">
             {count > 99 ? "99+" : count}
           </span>
         )}
@@ -207,9 +207,9 @@ export function NotificationBell({ currentUserId }: Props) {
         <div className="absolute right-0 top-10 z-[999] w-[380px] max-h-[480px] rounded-xl border border-border bg-card shadow-2xl flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
-              <span className="text-[13px] font-semibold">Notifications</span>
+              <span className="text-s font-semibold">Notifications</span>
               {count > 0 && (
-                <span className="text-[10px] font-semibold text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-px">
+                <span className="text-xs font-semibold text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-px">
                   {count}
                 </span>
               )}
@@ -218,7 +218,7 @@ export function NotificationBell({ currentUserId }: Props) {
               <button
                 onClick={handleMarkAllRead}
                 disabled={isPending || count === 0}
-                className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
                 title="Mark all read"
               >
                 <CheckCheck className="w-3 h-3" />
@@ -247,7 +247,7 @@ export function NotificationBell({ currentUserId }: Props) {
                   className="w-6 h-6 text-muted-foreground/20 mb-2"
                   strokeWidth={1.5}
                 />
-                <p className="text-[12px] text-muted-foreground">All caught up</p>
+                <p className="text-s text-muted-foreground">All caught up</p>
               </div>
             ) : (
               <div className="divide-y divide-border/50">
@@ -265,17 +265,17 @@ export function NotificationBell({ currentUserId }: Props) {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="truncate text-[12px] font-medium">
+                          <span className="truncate text-s font-medium">
                             {n.title}
                           </span>
-                          <span className="ml-auto shrink-0 text-[9px] text-muted-foreground/60">
+                          <span className="ms-auto shrink-0 text-xs text-muted-foreground/60">
                             {formatDistanceToNow(new Date(n.createdAt), {
                               addSuffix: true,
                             })}
                           </span>
                         </div>
                         {n.body && (
-                          <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                             {n.body}
                           </p>
                         )}
@@ -300,7 +300,7 @@ export function NotificationBell({ currentUserId }: Props) {
                       key={n.id}
                       type="button"
                       onClick={() => handleClick(n)}
-                      className="w-full text-left"
+                      className="w-full text-start"
                     >
                       {inner}
                     </button>

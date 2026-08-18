@@ -405,7 +405,7 @@ export function NoteAnnotatedContent({
         : { top: 72, right: 24, width: 320 };
 
   return (
-    <div ref={wrapRef} className="relative pr-10 sm:pr-12">
+    <div ref={wrapRef} className="relative pe-10 sm:pe-12">
       <EditorContent editor={editor} />
 
       {icons.map((icon) =>
@@ -462,7 +462,7 @@ export function NoteAnnotatedContent({
                 <Check className="h-2.5 w-2.5" strokeWidth={3} />
               </span>
             ) : icon.count > 0 ? (
-              <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-amber-400 px-1 text-[9px] font-bold leading-4 text-background">
+              <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-amber-400 px-1 text-xs font-bold leading-4 text-background">
                 {icon.count}
               </span>
             ) : null}
@@ -517,7 +517,7 @@ export function NoteAnnotatedContent({
               setCommenting(true);
               setDraft("");
             }}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-foreground hover:bg-accent"
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-s font-medium text-foreground hover:bg-accent"
           >
             <MessageSquare className="h-3.5 w-3.5 text-amber-400" />
             Comment
@@ -531,7 +531,7 @@ export function NoteAnnotatedContent({
                 setSelection(null);
                 onCreateTask(quote);
               }}
-              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-foreground hover:bg-accent"
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-s font-medium text-foreground hover:bg-accent"
             >
               <CheckSquare className="h-3.5 w-3.5 text-primary" />
               Create task
@@ -544,7 +544,7 @@ export function NoteAnnotatedContent({
         ? createPortal(
             <div
               data-note-comment-ui
-              className="fixed inset-x-0 top-0 z-[300] flex app-top-bar items-center gap-0.5 border-b border-border bg-background px-1"
+              className="fixed inset-x-0 top-0 z-[300] flex app-top-bar items-center gap-0.5 border-b border-border px-1"
             >
               <button
                 type="button"
@@ -556,11 +556,11 @@ export function NoteAnnotatedContent({
               >
                 <ArrowLeft className="h-5 w-5" />
               </button>
-              <span className="min-w-0 flex-1 truncate px-1 text-sm font-semibold">
+              <span className="min-w-0 flex-1 truncate px-1 text-s font-semibold">
                 {commenting ? "Comment" : selection.text}
               </span>
               {!commenting && (
-                <div className="ml-auto flex items-center">
+                <div className="ms-auto flex items-center">
                   <button
                     type="button"
                     aria-label="Comment"
@@ -692,7 +692,7 @@ function CommentComposer({
 }) {
   return (
     <>
-      <p className="mb-2 line-clamp-2 border-l-2 border-amber-400/70 pl-2 text-[11px] italic text-muted-foreground">
+      <p className="mb-2 line-clamp-2 border-s-2 border-amber-400/70 ps-2 text-xs italic text-muted-foreground">
         {quote}
       </p>
       <div className="relative">
@@ -721,7 +721,7 @@ function CommentComposer({
           rows={compact ? 3 : 4}
           className={cn(
             "w-full resize-none rounded-md border border-border bg-background px-2.5 py-2 outline-none focus:border-primary/40",
-            compact ? "text-[13px]" : "text-[16px]",
+            compact ? "text-s" : "text-m",
           )}
         />
         {mentionOpen && mentionResults.length > 0 && (
@@ -736,8 +736,8 @@ function CommentComposer({
                 key={m.id}
                 type="button"
                 className={cn(
-                  "block w-full px-2.5 text-left hover:bg-accent",
-                  compact ? "py-1.5 text-[12px]" : "py-2.5 text-[13px]",
+                  "block w-full px-2.5 text-start hover:bg-accent",
+                  compact ? "py-1.5 text-s" : "py-2.5 text-s",
                 )}
                 onMouseDown={(e) => {
                   e.preventDefault();
@@ -752,7 +752,7 @@ function CommentComposer({
           </div>
         )}
       </div>
-      {error && <p className="mt-1.5 text-[11px] text-destructive">{error}</p>}
+      {error && <p className="mt-1.5 text-xs text-destructive">{error}</p>}
       <div className="mt-2 flex justify-end gap-2">
         {showCancel && (
           <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
@@ -761,9 +761,9 @@ function CommentComposer({
         )}
         <Button type="button" size="sm" onClick={onSubmit} disabled={submitting || !draft.trim()}>
           {submitting ? (
-            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            <Loader2 className="me-1 h-3.5 w-3.5 animate-spin" />
           ) : (
-            <Send className="mr-1 h-3.5 w-3.5" />
+            <Send className="me-1 h-3.5 w-3.5" />
           )}
           Comment
         </Button>

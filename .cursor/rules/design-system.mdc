@@ -1,0 +1,136 @@
+---
+description: Layout and type — logical properties, container queries, named text tokens
+globs: src/**/*.{tsx,css}
+alwaysApply: true
+---
+
+# Design system (layout + type)
+
+PWA chrome and iOS insets (island, home indicator, bottom nav) live in `pwa-headers.mdc`. Read that before changing height, headers, or nav. This rule is layout and typography.
+
+## Split of jobs
+
+| Layer | What | How |
+|---|---|---|
+| Shell | sidebar vs bottom nav, page gutter, header, bell | Viewport `1024` / `lg:` / `DESKTOP_BREAKPOINT`. Never `@container`. |
+| Widgets | card internals, tables vs stacked rows, KPI | Named `@container/card` (`app-card` or `@container/card`) |
+| Type | UI copy | Named `rem` tokens. No new `text-[Npx]`. Never `cqi` on body. |
+| KPI | hero / stat numbers | `text-l` = `clamp()` + **`cqi`** inside a card. Never `cqw`. |
+| Badge | glyph in a fixed circle | `text-fit` inside `.app-badge`. Never on body copy. |
+| Inputs | fields | 16px floor on coarse pointers in `globals.css`. No `cqi` on fields. |
+
+## Type tokens (shirt sizes)
+
+Same names as spacing: `xs` / `s` / `m` / `l`. Layout follows the card. Type does not, except `text-l` and `text-fit`.
+
+| Token | Size | How | Use |
+|---|---|---|---|
+| `xs` | 10px | rem | badges, meta, table headers |
+| `s` | 13px | rem | page titles, pills, column names, rows, buttons |
+| `m` | 16px | rem | overlay / document headings |
+| `l` | 20–28px | `clamp()` + `cqi` | KPI only, inside `@container/card` |
+
+`text-fit` fills `.app-badge` (`P2` in a circle). Not a shirt size.
+
+`text-sm` (14px) is shadcn + chat only — not `text-s`. Do not use `text-sm` in app chrome. Leave `text-xs` / `text-sm` on shadcn primitives. Auth / print may use `text-3xl`. Tiptap `prose-h1` and chat emoji sizes are content, not chrome.
+
+Do not add `text-xxs`, `text-ui`, `text-title`, `text-stat`, `text-micro`, `text-tiny`, `text-lg`, `text-xl`, `text-2xl`, or `text-4xl`.
+
+```tsx
+// ✅
+<p className="text-s text-muted-foreground">2 open items</p>
+<h1 className="text-s font-semibold">Inbox</h1>
+<div className="text-l">24</div>
+<span className="app-badge size-5"><span className="text-fit">P2</span></span>
+
+// ❌
+<p className="text-[13px]">2 open items</p>
+<p className="text-tiny">meta</p>
+<p className="text-fit">2 open items</p>
+<p className="text-[2cqi]">body copy</p>
+<h2 className="text-s @md/card:text-sm">Title</h2>
+<input className="text-l" />
+```
+
+## Cards
+
+Parent gets `container-type: inline-size` via `app-card` or `@container/card`. Descendants query **that** box.
+
+```tsx
+// ✅
+<article className="app-card rounded-xl border …">
+  <h2 className="text-s font-medium">Title</h2>
+  <div className="@max-md/card:hidden">wide columns</div>
+</article>
+
+// ❌ inner layout keyed off the window when the card can sit in 1 or 2 columns
+<div className="grid grid-cols-[1fr_90px_130px] lg:grid-cols-4">
+```
+
+- `@md/card:` = container ≥ 28rem (448px), not viewport `md`
+- Keep `lg:` when it means “the window has a sidebar” (inbox split, shell)
+- Do not use `container-type: size` on auto-height cards
+
+## Spacing tokens (5 + card)
+
+Fixed rem. Not fluid. Not `cqi`. Same idea as type: the box changes shape; gaps stay tokens.
+
+| Token | Size | Use |
+|---|---|---|
+| `xs` | 4px | icon clusters |
+| `s` | 8px | chips in a row |
+| `m` | 12px | default stack |
+| `l` | 16px | dashboard panels |
+| `xl` | 24px | section breaks |
+
+`card` is an alias of `m`. Cards use that so one change updates every card.
+
+```tsx
+// ✅
+<article className="app-card p-card flex flex-col gap-card">
+  <h2 className="text-s font-medium">Title</h2>
+  <p className="text-s text-muted-foreground">2 open items</p>
+  <div className="flex items-center gap-s">…</div>
+</article>
+
+// ❌
+<article className="p-3">
+  <p className="mt-3">…</p>
+</article>
+```
+
+Classes: `p-card`, `gap-card`, `p-m`, `gap-s`, `mt-l`. Do not add new `p-3` / `gap-1.5` in cards.
+
+## Spacing (logical vs physical)
+
+Logical for design. Physical only for device chrome.
+
+```tsx
+// ✅
+<div className="ms-auto ps-3 text-start border-s" />
+
+// ✅ page edge (already in .px-app / .app-top-bar)
+padding-inline: var(--app-gutter);
+padding-left: calc(var(--app-gutter) + env(safe-area-inset-left, 0px));
+padding-right: calc(var(--app-gutter) + env(safe-area-inset-right, 0px));
+
+// ❌ safe-area on inline-start (wrong in RTL — notch stays on the glass left)
+padding-inline-start: env(safe-area-inset-left);
+
+// ❌ new page margin inside a card
+<div className="px-5 lg:px-8">  // if this is the screen edge, use px-app
+```
+
+**Stay physical:** `env(safe-area-inset-left/right)`, shell drawer `left-0`, bell `right-0`, chat bubble sent/received side, overlays pinned to the screen (`inset-x-0`).
+
+## Page gutter
+
+`--app-gutter` is 20px below 1024px and 1.5rem on desktop, plus safe-area. Bodies: `px-app`. Headers: `.app-top-bar`. Cards do not add a second screen gutter.
+
+## Do not
+
+- Move `--app-gutter`, bottom nav, or `DESKTOP_BREAKPOINT` onto a container query
+- Scale body/labels with `cqw` / unbounded `cqi`
+- Step card titles with `@md/card:text-sm` — titles stay `text-s`
+- Add `text-[11px]` (or any new arbitrary px type) in app code
+- Add new `p-3` / `gap-1.5` on cards — use `p-card` / `gap-card` / `gap-s`

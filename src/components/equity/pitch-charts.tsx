@@ -155,12 +155,12 @@ export function ChartLegend({
                 className="w-2.5 h-2.5 rounded-full shrink-0"
                 style={{ background: e.color }}
               />
-              <span className="text-[12px] text-foreground text-left">
+              <span className="text-s text-foreground text-start">
                 {e.label}
                 {e.sub && <span className="text-muted-foreground"> · {e.sub}</span>}
               </span>
               {e.value && (
-                <span className="text-[12px] font-medium text-foreground tabular-nums">
+                <span className="text-s font-medium text-foreground tabular-nums">
                   {e.value}
                 </span>
               )}
@@ -332,10 +332,10 @@ export function DonutChart({
         <EChart option={option} height={368} onReady={onReady} />
         <div className="absolute inset-0 grid place-items-center text-center px-16 pointer-events-none">
           <div>
-            <p className="text-[34px] font-semibold text-foreground tabular-nums leading-none">
+            <p className="text-l font-semibold text-foreground tabular-nums leading-none">
               {shown ? `${shown.value}%` : centerLabel}
             </p>
-            <p className="text-[13px] text-muted-foreground mt-2.5 truncate">
+            <p className="text-s text-muted-foreground mt-2.5 truncate">
               {shown ? shown.label : "of the company"}
             </p>
           </div>
@@ -627,12 +627,12 @@ export function MarketRings({ tiers }: { tiers: MarketTier[] }) {
               }}
             >
               {ring.tier && (
-                <p className="text-[9px] uppercase tracking-wider text-muted-foreground truncate">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground truncate">
                   {ring.tier}
                 </p>
               )}
               <p
-                className="text-[12px] font-medium tabular-nums leading-tight"
+                className="text-s font-medium tabular-nums leading-tight"
                 style={{ color: FOREGROUND }}
               >
                 {ring.display}
