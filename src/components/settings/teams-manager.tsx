@@ -230,7 +230,7 @@ export function TeamsManager({ teams, pendingInvites = [] }: { teams: Team[]; pe
                       </span>
                       {adminCount > 0 && (
                         <span className="flex items-center gap-0.5">
-                          <Crown className="w-3 h-3 text-amber-400" />
+                          <Crown className="w-3 h-3 text-orange" />
                           {adminCount}
                         </span>
                       )}
@@ -313,7 +313,7 @@ export function TeamsManager({ teams, pendingInvites = [] }: { teams: Team[]; pe
                                     onClick={() => handleToggleRole(team.id, m.user.id, m.role)}
                                     className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold border transition-colors ${
                                       m.role === "ADMIN"
-                                        ? "bg-amber-500/15 text-amber-400 border-amber-500/20 hover:bg-amber-500/25"
+                                        ? "bg-orange/15 text-orange border-orange/20 hover:bg-orange/25"
                                         : "bg-muted text-muted-foreground border-border hover:bg-accent"
                                     }`}
                                   >
@@ -406,7 +406,7 @@ export function TeamsManager({ teams, pendingInvites = [] }: { teams: Team[]; pe
                       if (filtered.length === 0) return null;
                       return (
                         <div className="pt-2 mt-2 border-t border-border/50">
-                          <div className="flex items-center gap-1.5 mb-2">
+                          <div className="flex items-center gap-xs mb-2">
                             <Clock className="w-3 h-3 text-muted-foreground/50" />
                             <span className="text-xs font-medium text-muted-foreground/70">
                               Pending Platform Invites ({filtered.length})
@@ -423,7 +423,7 @@ export function TeamsManager({ teams, pendingInvites = [] }: { teams: Team[]; pe
                                     <p className="text-s text-muted-foreground truncate">{inv.email}</p>
                                   </div>
                                 </div>
-                                <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-semibold shrink-0">
+                                <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange/15 text-orange border border-orange/20 font-semibold shrink-0">
                                   {inv.systemRole.replace("_", " ")}
                                 </span>
                               </div>

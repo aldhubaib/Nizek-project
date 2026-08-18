@@ -19,7 +19,7 @@ export function RoadmapWarningDialog({
       <div className="absolute inset-0 bg-black/60" onClick={onDismiss} />
       <div className="relative bg-card border border-border rounded-xl shadow-2xl max-w-lg w-full mx-4 p-5">
         <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-surface/60 p-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-amber-500/15 text-amber-500">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-orange/15 text-orange">
             <ShieldAlert className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1 space-y-1">
@@ -31,9 +31,9 @@ export function RoadmapWarningDialog({
         </div>
 
         {notice ? (
-          <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 mt-4">
-            <span className="text-amber-400 text-s">⏱</span>
-            <p className="text-s text-amber-400/90 font-medium">{notice}</p>
+          <div className="flex items-center gap-2 rounded-lg border border-orange/30 bg-orange/10 px-3 py-2 mt-4">
+            <span className="text-orange text-s">⏱</span>
+            <p className="text-s text-orange/90 font-medium">{notice}</p>
           </div>
         ) : null}
 
@@ -41,7 +41,7 @@ export function RoadmapWarningDialog({
           <button
             type="button"
             onClick={onDismiss}
-            className="px-4 py-2 rounded-lg text-s font-medium text-white transition-colors bg-blue-600 hover:bg-blue-700"
+            className="px-4 py-2 rounded-lg text-s font-medium text-white transition-colors bg-primary hover:bg-primary/90"
           >
             OK
           </button>
@@ -72,7 +72,7 @@ export function RoadmapCommitDialog({
       <div className="absolute inset-0 bg-black/60" onClick={onCancel} />
       <div className="relative bg-card border border-border rounded-xl shadow-2xl max-w-lg w-full mx-4 p-5">
         <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-surface/60 p-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-amber-500/15 text-amber-500">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-orange/15 text-orange">
             <ShieldAlert className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1 space-y-1">
@@ -87,16 +87,16 @@ export function RoadmapCommitDialog({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 mt-4">
-          <span className="text-amber-400 text-s">⏱</span>
-          <p className="text-s text-amber-400/90 font-medium">
+        <div className="flex items-center gap-2 rounded-lg border border-orange/30 bg-orange/10 px-3 py-2 mt-4">
+          <span className="text-orange text-s">⏱</span>
+          <p className="text-s text-orange/90 font-medium">
             Starting date will be set to {startDateLabel}. You can adjust it afterwards.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 mt-2">
-          <span className="text-amber-400 text-s">⏱</span>
-          <p className="text-s text-amber-400/90 font-medium">
+        <div className="flex items-center gap-2 rounded-lg border border-orange/30 bg-orange/10 px-3 py-2 mt-2">
+          <span className="text-orange text-s">⏱</span>
+          <p className="text-s text-orange/90 font-medium">
             Due date will be set to {dueDateLabel}. You can adjust it afterwards.
           </p>
         </div>
@@ -113,7 +113,7 @@ export function RoadmapCommitDialog({
             type="button"
             onClick={onConfirm}
             disabled={confirming}
-            className="px-4 py-2 rounded-lg text-s font-medium text-white transition-colors disabled:opacity-50 bg-blue-600 hover:bg-blue-700"
+            className="px-4 py-2 rounded-lg text-s font-medium text-white transition-colors disabled:opacity-50 bg-primary hover:bg-primary/90"
           >
             {confirming ? "Moving..." : "Confirm"}
           </button>

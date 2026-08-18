@@ -32,34 +32,34 @@ interface Props {
 }
 
 const STAGE_META: Record<string, { label: string; color: string; dot: string }> = {
-  NEW_REQUEST:       { label: "New Request",       color: "bg-zinc-500",    dot: "bg-zinc-500" },
+  NEW_REQUEST:       { label: "New Request",       color: "bg-muted-foreground",    dot: "bg-muted-foreground" },
   SPEC_READY:        { label: "Spec Ready",        color: "bg-violet-400",  dot: "bg-violet-400" },
-  NEEDS_INPUT:       { label: "Needs Input",       color: "bg-rose-500",    dot: "bg-rose-500" },
-  READY_FOR_DEV:     { label: "Ready for Dev",     color: "bg-blue-500",    dot: "bg-blue-500" },
+  NEEDS_INPUT:       { label: "Needs Input",       color: "bg-destructive",    dot: "bg-destructive" },
+  READY_FOR_DEV:     { label: "Ready for Dev",     color: "bg-primary",    dot: "bg-primary" },
   IN_DEVELOPMENT:    { label: "In Development",    color: "bg-sky-500",     dot: "bg-sky-500" },
-  INTERNAL_REVIEW:   { label: "Internal Review",   color: "bg-amber-500",   dot: "bg-amber-500" },
+  INTERNAL_REVIEW:   { label: "Internal Review",   color: "bg-orange",   dot: "bg-orange" },
   CLIENT_REVIEW:     { label: "Client Review",     color: "bg-orange-500",  dot: "bg-orange-500" },
   READY_FOR_RELEASE: { label: "Ready for Release", color: "bg-teal-500",    dot: "bg-teal-500" },
-  DONE:              { label: "Done",              color: "bg-emerald-500", dot: "bg-emerald-500" },
+  DONE:              { label: "Done",              color: "bg-success", dot: "bg-success" },
 };
 
 const STAGE_PILL: Record<string, string> = {
-  NEW_REQUEST: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
+  NEW_REQUEST: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
   SPEC_READY: "bg-violet-400/10 text-violet-400 border-violet-400/20",
-  NEEDS_INPUT: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+  NEEDS_INPUT: "bg-destructive/10 text-destructive border-destructive/20",
   CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  READY_FOR_DEV: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  READY_FOR_DEV: "bg-primary/10 text-primary border-primary/20",
   IN_DEVELOPMENT: "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  INTERNAL_REVIEW: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  INTERNAL_REVIEW: "bg-orange/10 text-orange border-orange/20",
   CLIENT_REVIEW: "bg-orange-500/10 text-orange-400 border-orange-500/20",
   READY_FOR_RELEASE: "bg-teal-500/10 text-teal-400 border-teal-500/20",
-  DONE: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  DONE: "bg-success/10 text-success border-success/20",
 };
 
 const TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string }> = {
-  FEATURE: { icon: Sparkles, color: "text-blue-400" },
+  FEATURE: { icon: Sparkles, color: "text-primary" },
   ENHANCEMENT: { icon: Zap, color: "text-cyan-400" },
-  BUG: { icon: Bug, color: "text-red-400" },
+  BUG: { icon: Bug, color: "text-destructive" },
   REPORTED_BUG: { icon: AlertCircle, color: "text-orange-400" },
   DESIGN: { icon: Palette, color: "text-purple-400" },
 };
@@ -74,7 +74,7 @@ function formatTimeInStage(date: string) {
 
 function getPriorityStyle(priority: number | null) {
   if (priority == null) return null;
-  if (priority >= 9) return "text-red-400";
+  if (priority >= 9) return "text-destructive";
   if (priority >= 7) return "text-orange-400";
   if (priority >= 4) return "text-primary";
   return "text-muted-foreground";
@@ -140,7 +140,7 @@ export function StageFunnel({ data }: Props) {
               <button
                 onClick={handleViewDetails}
                 disabled={loading}
-                className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border border-border text-primary hover:bg-primary/10 hover:border-primary/40 transition-colors disabled:opacity-50"
+                className="flex items-center gap-xs text-xs font-medium px-2.5 py-1 rounded-md border border-border text-primary hover:bg-primary/10 hover:border-primary/40 transition-colors disabled:opacity-50"
               >
                 {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <List className="w-3 h-3" />}
                 View Details
@@ -150,7 +150,7 @@ export function StageFunnel({ data }: Props) {
               <button
                 onClick={() => setFilterOpen((v) => !v)}
                 className={cn(
-                  "flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border transition-colors",
+                  "flex items-center gap-xs text-xs font-medium px-2.5 py-1 rounded-md border transition-colors",
                   selectedProjects.length > 0
                     ? "border-primary/40 bg-primary/10 text-primary"
                     : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40"
@@ -205,7 +205,7 @@ export function StageFunnel({ data }: Props) {
         </div>
 
         {selectedProjects.length > 0 && (
-          <div className="flex items-center gap-1.5 px-4 py-2 border-b border-border/50 bg-muted/30 flex-wrap">
+          <div className="flex items-center gap-xs px-4 py-2 border-b border-border/50 bg-muted/30 flex-wrap">
             {selectedProjects.map((pid) => {
               const proj = data.projects.find((p) => p.id === pid);
               return (
@@ -254,7 +254,7 @@ export function StageFunnel({ data }: Props) {
           <span className="text-xs text-muted-foreground">
             {total > 0 && (
               <>
-                <span className="font-semibold text-emerald-400">{counts[counts.length - 1]}</span>
+                <span className="font-semibold text-success">{counts[counts.length - 1]}</span>
                 <span className="text-muted-foreground/60"> / {total} done</span>
                 <span className="text-muted-foreground/40 ms-1.5">
                   ({total > 0 ? Math.round((counts[counts.length - 1] / total) * 100) : 0}%)
@@ -351,7 +351,7 @@ function TaskRow({ task }: { task: FunnelTask }) {
         <TypeIcon className={cn("w-3 h-3", typeConf.color)} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-xs">
           <span className="text-xs font-mono text-muted-foreground/60">{prefix}-{String(task.taskNumber).padStart(3, "0")}</span>
           <span className="text-s font-medium text-foreground truncate">{task.title}</span>
         </div>

@@ -170,7 +170,7 @@ export function ContractPrefixManager({ prefixes }: { prefixes: ContractPrefixIt
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex items-center gap-s min-w-0">
                     <span className="inline-flex items-center justify-center rounded-md border border-border bg-muted px-2 py-0.5 text-s font-mono font-semibold text-foreground">
                       {p.prefix}
                     </span>

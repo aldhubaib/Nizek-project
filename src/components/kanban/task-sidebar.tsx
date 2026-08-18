@@ -34,8 +34,8 @@ import { cn } from "@/lib/utils";
 const ACCURACY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   WAY_OVER:  { label: "Way Over",  color: "text-destructive",  bg: "bg-destructive/20 border-destructive/40" },
   OVER:      { label: "Over",      color: "text-orange-400",   bg: "bg-orange-500/20 border-orange-500/40" },
-  ON_TRACK:  { label: "On Track",  color: "text-emerald-400",  bg: "bg-emerald-500/20 border-emerald-500/40" },
-  UNDER:     { label: "Under",     color: "text-blue-400",     bg: "bg-blue-500/20 border-blue-500/40" },
+  ON_TRACK:  { label: "On Track",  color: "text-success",  bg: "bg-success/20 border-success/40" },
+  UNDER:     { label: "Under",     color: "text-primary",     bg: "bg-primary/20 border-primary/40" },
   WAY_UNDER: { label: "Way Under", color: "text-violet-400",   bg: "bg-violet-500/20 border-violet-500/40" },
 };
 
@@ -50,7 +50,7 @@ function formatEstimate(minutes: number): string {
 const TASK_TYPE_META: Record<string, { prefix: string; label: string; color: string }> = {
   FEATURE: { prefix: "F", label: "Business Case", color: "text-primary" },
   ENHANCEMENT: { prefix: "E", label: "Enhancement", color: "text-violet-400" },
-  BUG: { prefix: "B", label: "Internal Bug", color: "text-amber-400" },
+  BUG: { prefix: "B", label: "Internal Bug", color: "text-orange" },
   REPORTED_BUG: { prefix: "RB", label: "Reported Bug", color: "text-destructive" },
   DESIGN: { prefix: "D", label: "Design", color: "text-cyan-400" },
 };
@@ -67,14 +67,14 @@ interface TaskAnswerWithQuestion {
 }
 
 const STAGES: { id: Stage; label: string; color: string }[] = [
-  { id: "NEW_REQUEST", label: "New Request", color: "bg-zinc-500" },
+  { id: "NEW_REQUEST", label: "New Request", color: "bg-muted-foreground" },
   { id: "CLARIFICATION", label: "Clarification", color: "bg-violet-500" },
-  { id: "READY_FOR_DEV", label: "Ready for Dev", color: "bg-blue-500" },
+  { id: "READY_FOR_DEV", label: "Ready for Dev", color: "bg-primary" },
   { id: "IN_DEVELOPMENT", label: "In Development", color: "bg-sky-500" },
-  { id: "INTERNAL_REVIEW", label: "Internal Review", color: "bg-amber-500" },
+  { id: "INTERNAL_REVIEW", label: "Internal Review", color: "bg-orange" },
   { id: "CLIENT_REVIEW", label: "Client Review", color: "bg-orange-500" },
   { id: "READY_FOR_RELEASE", label: "Ready for Release", color: "bg-teal-500" },
-  { id: "DONE", label: "Done", color: "bg-emerald-500" },
+  { id: "DONE", label: "Done", color: "bg-success" },
 ];
 
 function formatDuration(from: Date, to: Date): string {
@@ -884,14 +884,14 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
                 <span className="text-s text-muted-foreground/50">No priority</span>
               )
             ) : (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-xs">
                 <button
                   type="button"
                   onClick={() => handlePrioritySave(null)}
                   className={cn(
                     "h-7 rounded-md border px-2 text-s font-medium transition-colors",
                     priorityValue == null
-                      ? "bg-amber-500/20 border-amber-500/40 text-amber-400"
+                      ? "bg-orange/20 border-orange/40 text-orange"
                       : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
                   )}
                 >
@@ -970,7 +970,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
                                   <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
                                 )}
                                 {saveState === "saved" && (
-                                  <Check className="w-3 h-3 text-emerald-400" />
+                                  <Check className="w-3 h-3 text-success" />
                                 )}
                                 {hasAnswer && !isEditing && (
                                   <button
@@ -1064,7 +1064,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
               {startedAt && stageLogs.length > 0 ? (
                 <>
                   <div className="flex items-center justify-between">
-                    <span className="text-s text-muted-foreground flex items-center gap-1.5">
+                    <span className="text-s text-muted-foreground flex items-center gap-xs">
                       <Clock className="w-3.5 h-3.5" />
                       Total time
                     </span>
@@ -1081,8 +1081,8 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
                         const stageInfo = STAGES.find((s) => s.id === log.stage);
                         return (
                           <div key={i} className="flex items-center justify-between">
-                            <span className="text-s text-muted-foreground flex items-center gap-1.5">
-                              <span className={cn("w-2 h-2 rounded-full", stageInfo?.color ?? "bg-zinc-500")} />
+                            <span className="text-s text-muted-foreground flex items-center gap-xs">
+                              <span className={cn("w-2 h-2 rounded-full", stageInfo?.color ?? "bg-muted-foreground")} />
                               {stageInfo?.label ?? log.stage}
                               {!log.exitedAt && <span className="text-xs text-primary ms-1">(current)</span>}
                             </span>
@@ -1366,7 +1366,7 @@ function TaskNoteEditor({
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
           <div className="mb-6">
-            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${taskTypeMeta.color} bg-muted/50 border-border`}>
+            <span className={`inline-flex items-center gap-xs rounded-full border px-3 py-1 text-xs font-semibold ${taskTypeMeta.color} bg-muted/50 border-border`}>
               {taskTypeMeta.label} Note
             </span>
           </div>

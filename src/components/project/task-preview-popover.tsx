@@ -26,25 +26,25 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 const STAGE_BADGE: Record<string, string> = {
-  NEW_REQUEST: "bg-zinc-500/10 text-zinc-300 border-zinc-500/30",
+  NEW_REQUEST: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/30",
   CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/30",
-  READY_FOR_DEV: "bg-blue-500/10 text-blue-400 border-blue-500/30",
+  READY_FOR_DEV: "bg-primary/10 text-primary border-primary/30",
   IN_DEVELOPMENT: "bg-sky-500/10 text-sky-400 border-sky-500/30",
-  INTERNAL_REVIEW: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+  INTERNAL_REVIEW: "bg-orange/10 text-orange border-orange/30",
   CLIENT_REVIEW: "bg-orange-500/10 text-orange-400 border-orange-500/30",
   READY_FOR_RELEASE: "bg-teal-500/10 text-teal-400 border-teal-500/30",
-  DONE: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
+  DONE: "bg-success/10 text-success border-success/30",
 };
 
 const STAGE_DOT: Record<string, string> = {
-  NEW_REQUEST: "bg-zinc-400",
+  NEW_REQUEST: "bg-muted-foreground",
   CLARIFICATION: "bg-violet-400",
-  READY_FOR_DEV: "bg-blue-400",
+  READY_FOR_DEV: "bg-primary",
   IN_DEVELOPMENT: "bg-sky-400",
-  INTERNAL_REVIEW: "bg-amber-400",
+  INTERNAL_REVIEW: "bg-orange",
   CLIENT_REVIEW: "bg-orange-400",
   READY_FOR_RELEASE: "bg-teal-400",
-  DONE: "bg-emerald-400",
+  DONE: "bg-success",
 };
 
 export function TaskPreviewPopover({
@@ -107,7 +107,7 @@ export function TaskPreviewPopover({
   return (
     <div className="flex w-[min(calc(100vw-2rem),320px)] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl">
       <div className="flex items-start gap-2 border-b border-border px-3 py-2.5">
-        <div className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-emerald-400">
+        <div className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-success/15 text-success">
           <CheckSquare className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0 flex-1">
@@ -142,7 +142,7 @@ export function TaskPreviewPopover({
                 {stageLabel && preview?.stage && (
                   <span
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium",
+                      "inline-flex items-center gap-xs rounded-full border px-2 py-0.5 text-xs font-medium",
                       STAGE_BADGE[preview.stage] ?? "bg-muted text-muted-foreground border-border",
                     )}
                   >
@@ -183,7 +183,7 @@ export function TaskPreviewPopover({
       <div className="border-t border-border p-3">
         <Link
           href={href}
-          className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2.5 text-s font-medium text-emerald-400 transition-colors hover:bg-emerald-500/10"
+          className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/5 px-3 py-2.5 text-s font-medium text-success transition-colors hover:bg-success/10"
         >
           <span className="min-w-0 flex-1 truncate text-foreground">
             Open original task

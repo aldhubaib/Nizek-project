@@ -19,7 +19,7 @@ interface QuestionWithType extends TaskQuestion {
 const TASK_TYPES: { id: TaskType; label: string; icon: typeof Sparkles; color: string; activeColor: string }[] = [
   { id: "FEATURE", label: "Business Case", icon: Sparkles, color: "text-muted-foreground", activeColor: "bg-primary/15 border-primary/40 text-primary" },
   { id: "ENHANCEMENT", label: "Enhancement", icon: Wrench, color: "text-muted-foreground", activeColor: "bg-violet-500/15 border-violet-500/40 text-violet-400" },
-  { id: "BUG", label: "Internal Bug", icon: Bug, color: "text-muted-foreground", activeColor: "bg-amber-500/15 border-amber-500/40 text-amber-400" },
+  { id: "BUG", label: "Internal Bug", icon: Bug, color: "text-muted-foreground", activeColor: "bg-orange/15 border-orange/40 text-orange" },
   { id: "DESIGN", label: "Design", icon: Palette, color: "text-muted-foreground", activeColor: "bg-cyan-500/15 border-cyan-500/40 text-cyan-400" },
 ];
 
@@ -114,7 +114,7 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
             <label className="text-s font-semibold text-foreground">
               Type
               {activeContractType === "MAINTENANCE" && (
-                <span className="ms-2 text-xs font-normal text-amber-400 bg-amber-500/10 rounded-full px-2 py-0.5">
+                <span className="ms-2 text-xs font-normal text-orange bg-orange/10 rounded-full px-2 py-0.5">
                   Maintenance contract — bugs only
                 </span>
               )}
@@ -166,7 +166,7 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
             <label className="text-s font-semibold text-foreground">
               Priority
             </label>
-            <div className="flex gap-1.5">
+            <div className="flex gap-xs">
               {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
                 <button
                   key={n}

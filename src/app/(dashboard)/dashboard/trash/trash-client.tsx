@@ -126,7 +126,7 @@ export function TrashClient({
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-xs shrink-0">
                     <Button
                       variant="outline"
                       size="sm"

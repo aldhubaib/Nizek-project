@@ -97,7 +97,7 @@ export function LazyManagementTab() {
     <>
       {/* Team filter — applies to every module below. Click to toggle;
           multiple teams can be active at once, "All" clears the selection. */}
-      <div className="lg:col-span-2 flex items-center gap-1.5 flex-wrap">
+      <div className="lg:col-span-2 flex items-center gap-xs flex-wrap">
         <Users className="w-3.5 h-3.5 text-muted-foreground/60 me-1" strokeWidth={1.5} />
         <button
           onClick={() => setTeamFilter([])}

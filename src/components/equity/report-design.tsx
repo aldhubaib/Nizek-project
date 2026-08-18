@@ -43,7 +43,7 @@ import type { ReportVariant } from "@/app/equity-report/report-variant";
 
 export const ACCENT = "#ff3366";
 
-export const cardCls = "rounded-xl border border-white/10 bg-white/[0.04]";
+export const cardCls = "rounded-xl border border-border bg-white/[0.04]";
 export const thCls =
   "py-1.5 pe-4 text-start text-xs font-normal text-white/40 whitespace-nowrap";
 export const tdCls = "py-1.5 pe-4 text-xs text-white align-top";
@@ -101,7 +101,7 @@ export function Stat({
   value: string;
 }) {
   return (
-    <div className={cn(cardCls, "flex items-center gap-2.5 px-3 py-2.5")}>
+    <div className={cn(cardCls, "flex items-center gap-s px-3 py-2.5")}>
       <Icon className="w-5 h-5 shrink-0" strokeWidth={1.5} />
       <div className="min-w-0">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/40">
@@ -141,7 +141,7 @@ export function PortfolioSummary({
   return (
     <div className={cn(cardCls, "px-3.5 py-3 mt-5 break-inside-avoid")}>
       <SectionLabel>Portfolio summary</SectionLabel>
-      <div className="grid grid-cols-4 gap-2.5" style={{ color: ACCENT }}>
+      <div className="grid grid-cols-4 gap-s" style={{ color: ACCENT }}>
         <Stat
           icon={Building2}
           label="Portfolio companies"
@@ -189,7 +189,7 @@ export function PortfolioSummary({
       {/* A total drawn from a subset of the portfolio understates it, so the
           coverage is stated rather than left for the reader to infer. */}
       {summary.valuedCompanies < summary.companies && (
-        <div className="flex items-center gap-1.5 mt-2">
+        <div className="flex items-center gap-xs mt-2">
           <Info
             className="w-3 h-3 shrink-0"
             strokeWidth={1.5}
@@ -222,7 +222,7 @@ export function AllProjectsTable({
       <SectionLabel>All projects</SectionLabel>
       <table className="w-full border-collapse">
         <thead>
-          <tr className="border-b border-white/15">
+          <tr className="border-b border-border">
             <th className={thCls}>Project</th>
             <th className={thCls}>Type</th>
             <th className={thCls}>Equity</th>
@@ -237,7 +237,7 @@ export function AllProjectsTable({
             const latest = currentSet(p.sets);
             const current = latest?.valuation ?? null;
             return (
-              <tr key={p.id} className="border-b border-white/[0.07]">
+              <tr key={p.id} className="border-b border-border">
                 <td className={tdCls}>{p.project.name}</td>
                 <td className={tdCls}>{structureLabel(latest?.grants ?? [])}</td>
                 <td className={tdCls}>{formatPct(held)}</td>
@@ -294,7 +294,7 @@ export function PortfolioSection({
     <section
       className={cn(
         "break-inside-avoid",
-        divider && "mt-10 pt-8 border-t border-white/15",
+        divider && "mt-xl pt-xl border-t border-border",
       )}
     >
       {/* Spaced off the stat cards below unconditionally, so projects with a
@@ -302,7 +302,7 @@ export function PortfolioSection({
       <div className="mb-10">
         {/* Centred against the title rather than sat on its baseline, so the
             pill reads as a tag on the heading instead of a dropped word. */}
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-s flex-wrap">
           <h2 className="text-3xl font-bold text-white tracking-tight">
             {portfolio.project.name}
           </h2>
@@ -311,8 +311,8 @@ export function PortfolioSection({
               className={cn(
                 "px-1.5 py-0.5 rounded text-xs font-semibold whitespace-nowrap",
                 liveStatus(portfolio.liveDate) === "LIVE"
-                  ? "bg-emerald-500/15 text-emerald-400"
-                  : "bg-amber-500/15 text-amber-400",
+                  ? "bg-success/15 text-success"
+                  : "bg-orange/15 text-orange",
               )}
             >
               {formatLiveStatus(portfolio.liveDate)}
@@ -328,7 +328,7 @@ export function PortfolioSection({
         )}
       </div>
 
-      <div className="grid grid-cols-4 gap-2.5 mb-8" style={{ color: ACCENT }}>
+      <div className="grid grid-cols-4 gap-s mb-8" style={{ color: ACCENT }}>
         <Stat
           icon={PieChart}
           label={diluted ? "Equity today" : "Total equity"}
@@ -361,7 +361,7 @@ export function PortfolioSection({
       ) : (
         <table className="w-full border-collapse mb-8">
           <thead>
-            <tr className="border-b border-white/15">
+            <tr className="border-b border-border">
               <th className={thCls}>Contract</th>
               <th className={thCls}>Type</th>
               {showContractStatus && <th className={thCls}>Status</th>}
@@ -371,7 +371,7 @@ export function PortfolioSection({
           </thead>
           <tbody>
             {portfolio.contracts.map((c, i) => (
-              <tr key={c.id} className="border-b border-white/[0.07]">
+              <tr key={c.id} className="border-b border-border">
                 <td className={tdCls}>{c.title || `Contract ${i + 1}`}</td>
                 <td className={tdCls}>
                   {structureLabel(
@@ -426,7 +426,7 @@ export function PortfolioSection({
               {g.tranches.length > 0 && (
                 <table className="w-full border-collapse mt-2">
                   <thead>
-                    <tr className="border-b border-white/[0.07]">
+                    <tr className="border-b border-border">
                       <th className={thCls}>Tranche</th>
                       <th className={thCls}>Dilutes at</th>
                       <th className={thCls}>Status</th>
@@ -463,7 +463,7 @@ export function PortfolioSection({
       )}
 
       {current != null && heldWorth != null && (
-        <div className="flex items-center gap-1.5 mt-2">
+        <div className="flex items-center gap-xs mt-2">
           <Info
             className="w-3 h-3 shrink-0"
             strokeWidth={1.5}

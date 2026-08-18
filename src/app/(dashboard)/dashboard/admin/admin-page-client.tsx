@@ -224,13 +224,13 @@ export function AdminPageClient({
       <PageHeader>
         <Link
           href="/dashboard/admin"
-          className="flex items-center gap-1.5 text-s font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="flex items-center gap-xs text-s font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="w-3.5 h-3.5" strokeWidth={1.5} />
           Settings
         </Link>
         <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
-        <span className="flex items-center gap-1.5 text-s font-medium text-foreground">
+        <span className="flex items-center gap-xs text-s font-medium text-foreground">
           <active.icon className="w-3.5 h-3.5" strokeWidth={1.5} />
           {active.label}
         </span>

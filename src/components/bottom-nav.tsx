@@ -149,7 +149,7 @@ export function BottomNav({
               key={item.name}
               href={item.href}
               className={cn(
-                "flex flex-1 flex-col items-center justify-center gap-1 no-underline transition-colors",
+                "flex flex-1 flex-col items-center justify-center gap-xs no-underline transition-colors",
                 active
                   ? "text-foreground"
                   : "text-muted-foreground hover:text-foreground",
@@ -180,7 +180,7 @@ export function BottomNav({
         <button
           type="button"
           onClick={onOpenMenu}
-          className="flex flex-1 flex-col items-center justify-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+          className="flex flex-1 flex-col items-center justify-center gap-xs text-muted-foreground transition-colors hover:text-foreground"
         >
           <Menu className="h-5 w-5" strokeWidth={1.5} />
           <span className="text-xs leading-none">Menu</span>

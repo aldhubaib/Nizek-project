@@ -539,7 +539,7 @@ function MessageMeta({
     >
       {important && (
         <Star
-          className="h-3 w-3 fill-amber-400 text-amber-400"
+          className="h-3 w-3 fill-orange text-orange"
           aria-label="Important"
         />
       )}
@@ -828,7 +828,7 @@ const MessageRow = memo(function MessageRow({
             )}
           </div>
         )}
-        <div className={cn("relative flex max-w-[70%] flex-col gap-1.5", mine && "items-end")}>
+        <div className={cn("relative flex max-w-[70%] flex-col gap-xs", mine && "items-end")}>
           {selected && (
             <div
               className={cn(
@@ -862,7 +862,7 @@ const MessageRow = memo(function MessageRow({
             <div className="group relative">
               <div
                 className={cn(
-                  "flex max-w-full flex-col gap-1.5 text-sm leading-relaxed",
+                  "flex max-w-full flex-col gap-xs text-sm leading-relaxed",
                   notice
                     ? "min-w-64 rounded-xl border border-border/60 bg-surface-2/80 p-2.5 text-foreground"
                     : "rounded-2xl px-3.5 py-2",
@@ -1012,7 +1012,7 @@ const MessageRow = memo(function MessageRow({
           {imageAtts.length > 0 && (
             <div
               className={cn(
-                "flex max-w-full flex-wrap gap-1.5",
+                "flex max-w-full flex-wrap gap-xs",
                 mine ? "justify-end" : "justify-start",
               )}
             >
@@ -1032,7 +1032,7 @@ const MessageRow = memo(function MessageRow({
             </div>
           )}
           {fileAtts.length > 0 && (
-            <div className="flex max-w-full flex-col gap-1.5">
+            <div className="flex max-w-full flex-col gap-xs">
               {fileAtts.map((a) => (
                 <AttachmentBubble
                   key={a.id}
@@ -2481,7 +2481,7 @@ export function ThreadChat({
               <Star
                 className={cn(
                   "h-5 w-5",
-                  selectedMessage.important && "fill-amber-400 text-amber-400",
+                  selectedMessage.important && "fill-orange text-orange",
                 )}
               />
             </button>
@@ -2571,13 +2571,13 @@ export function ThreadChat({
               <span
                 className={cn(
                   "inline-flex items-center gap-1 text-xs",
-                  peersOnline ? "text-emerald-500" : "text-muted-foreground",
+                  peersOnline ? "text-success" : "text-muted-foreground",
                 )}
               >
                 <span
                   className={cn(
                     "h-1.5 w-1.5 rounded-full",
-                    peersOnline ? "bg-emerald-500" : "bg-muted-foreground/50",
+                    peersOnline ? "bg-success" : "bg-muted-foreground/50",
                   )}
                 />
                 {peersOnline ? "Online" : "Offline"}
@@ -2640,7 +2640,7 @@ export function ThreadChat({
       {/* Messages */}
       <div className="relative min-h-0 flex-1">
         <div ref={scrollerRef} className="app-scroll-under-tall h-full overflow-y-auto px-app pb-4 lg:px-8">
-          <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-1.5">
+          <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-xs">
             <div ref={topSentinelRef} className="h-px w-full" aria-hidden />
             {hasMore && (
               <div className="flex justify-center pb-2">
@@ -2747,7 +2747,7 @@ export function ThreadChat({
           <button
             type="button"
             onClick={scrollToBottom}
-            className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-s font-medium text-primary-foreground shadow-lg"
+            className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-xs rounded-full bg-primary px-3 py-1.5 text-s font-medium text-primary-foreground shadow-lg"
           >
             ↓ New messages{newBelow > 1 ? ` (${newBelow})` : ""}
           </button>
@@ -2856,7 +2856,7 @@ export function ThreadChat({
                         </span>
                         <span className="min-w-0 flex-1 truncate">{task.title}</span>
                         {task.statusName && (
-                          <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-surface/60 px-2 py-0.5 text-xs text-muted-foreground">
+                          <span className="flex shrink-0 items-center gap-xs rounded-full border border-border/60 bg-surface/60 px-2 py-0.5 text-xs text-muted-foreground">
                             <span
                               className="h-1.5 w-1.5 rounded-full"
                               style={{ background: task.statusColor ?? "var(--muted-foreground)" }}
@@ -2951,7 +2951,7 @@ export function ThreadChat({
             <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-surface/40 p-2 sm:gap-3">
               {holdRecording ? (
                 <>
-                  <div className="flex shrink-0 items-center gap-1.5 text-sm">
+                  <div className="flex shrink-0 items-center gap-xs text-sm">
                     <span
                       className={cn(
                         "h-2 w-2 rounded-full bg-destructive",
@@ -2991,7 +2991,7 @@ export function ThreadChat({
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
-                  <div className="flex shrink-0 items-center gap-1.5 text-sm">
+                  <div className="flex shrink-0 items-center gap-xs text-sm">
                     <span
                       className={cn(
                         "h-2 w-2 rounded-full bg-destructive",
@@ -3420,8 +3420,8 @@ export function ThreadChat({
                       onClick={() => jumpToMessage(m.id)}
                       className="flex w-full flex-col gap-1 border-b border-border/40 px-4 py-3 text-left hover:bg-surface/60"
                     >
-                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                      <span className="flex items-center gap-xs text-xs text-muted-foreground">
+                        <Star className="h-3 w-3 fill-orange text-orange" />
                         {new Date(m.createdAt).toLocaleDateString([], {
                           day: "2-digit",
                           month: "2-digit",
@@ -3513,7 +3513,7 @@ function OutboxBubble({
     <div className="flex justify-end gap-2">
       <div className="flex max-w-[70%] flex-col items-end gap-1">
         {entry.files.length > 0 && (
-          <div className="flex max-w-full flex-col gap-1.5">
+          <div className="flex max-w-full flex-col gap-xs">
             {entry.files.map((f) => {
               const pct = f.status === "done" ? 100 : f.progress;
               const isImage = Boolean(
@@ -3546,7 +3546,7 @@ function OutboxBubble({
               return (
                 <div
                   key={f.key}
-                  className="flex items-center gap-2.5 rounded-xl border border-primary-foreground/20 bg-primary/80 px-3 py-2 text-sm text-primary-foreground"
+                  className="flex items-center gap-s rounded-xl border border-primary-foreground/20 bg-primary/80 px-3 py-2 text-sm text-primary-foreground"
                 >
                   {entry.status === "uploading" && !failed ? (
                     <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
@@ -3657,7 +3657,7 @@ function ActionsMenuContent({
           <Star
             className={cn(
               "h-4 w-4",
-              important && "fill-amber-400 text-amber-400",
+              important && "fill-orange text-orange",
             )}
           />
           <span className="flex-1">

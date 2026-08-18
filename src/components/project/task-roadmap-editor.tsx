@@ -69,7 +69,7 @@ export function TaskRoadmapEditor({
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
           <div className="mb-6">
-            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${taskTypeMeta.color} bg-muted/50 border-border`}>
+            <span className={`inline-flex items-center gap-xs rounded-full border px-3 py-1 text-xs font-semibold ${taskTypeMeta.color} bg-muted/50 border-border`}>
               {taskTypeMeta.label} Roadmap
             </span>
           </div>

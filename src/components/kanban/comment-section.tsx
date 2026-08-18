@@ -296,7 +296,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
       }
 
       result.push(
-        <span key={`m-${match.index}`} className={isMention ? "text-blue-400 font-medium" : "text-foreground/80"}>
+        <span key={`m-${match.index}`} className={isMention ? "text-primary font-medium" : "text-foreground/80"}>
           {matchText}
         </span>
       );
@@ -351,7 +351,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
 
       <div className="space-y-3 max-h-[300px] overflow-y-auto">
         {comments.map((c) => (
-          <div key={c.id} className="group flex gap-2.5">
+          <div key={c.id} className="group flex gap-s">
             {c.user.imageUrl ? (
               <img
                 src={c.user.imageUrl}
@@ -387,7 +387,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
               </p>
 
               {c.attachments && c.attachments.length > 0 && (
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                <div className="mt-1.5 flex flex-wrap gap-xs">
                   {c.attachments.map((a) =>
                     isImageType(a.mimeType) ? (
                       <button
@@ -410,7 +410,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
                         href={a.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1.5 hover:border-primary/50 hover:bg-muted/50 transition-colors"
+                        className="flex items-center gap-xs rounded-md border border-border bg-muted/30 px-2 py-1.5 hover:border-primary/50 hover:bg-muted/50 transition-colors"
                       >
                         <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                         <span className="text-xs text-foreground/70 truncate max-w-[120px]">
@@ -463,7 +463,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
 
         {/* Pending files preview */}
         {pendingFiles.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
+          <div className="flex flex-wrap gap-xs mb-2">
             {pendingFiles.map((pf, i) => (
               <div key={i} className="relative group/pending">
                 {pf.preview ? (
@@ -571,7 +571,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="absolute -bottom-3 right-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card border border-border text-xs text-foreground/70 hover:bg-muted transition-colors shadow-lg"
+                className="absolute -bottom-3 right-0 flex items-center gap-xs px-3 py-1.5 rounded-full bg-card border border-border text-xs text-foreground/70 hover:bg-muted transition-colors shadow-lg"
               >
                 <Download className="w-3 h-3" />
                 Open original

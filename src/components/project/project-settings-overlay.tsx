@@ -183,7 +183,7 @@ export function ProjectSettingsOverlay({
     <div className="fixed inset-0 z-[9999] bg-background flex flex-col">
       <div className="flex app-top-bar items-center justify-between border-b border-border shrink-0">
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s">
+          <button onClick={onClose} className="flex items-center gap-xs text-muted-foreground hover:text-foreground transition-colors text-s">
             <XIcon className="w-4 h-4" />
             Close
           </button>
@@ -199,7 +199,7 @@ export function ProjectSettingsOverlay({
             </button>
             <button
               onClick={() => setActiveTab("archive")}
-              className={cn("px-3 py-1 rounded-md text-s font-medium transition-colors flex items-center gap-1.5", activeTab === "archive" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
+              className={cn("px-3 py-1 rounded-md text-s font-medium transition-colors flex items-center gap-xs", activeTab === "archive" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
             >
               <Archive className="w-3.5 h-3.5" />
               Archive
@@ -260,7 +260,7 @@ export function ProjectSettingsOverlay({
               <div className="space-y-1.5">
                 <label className="cursor-pointer">
                   <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-s font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+                  <span className="inline-flex items-center gap-xs px-3 py-1.5 rounded-md border border-border text-s font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
                     <Upload className="w-3.5 h-3.5" />
                     {uploading ? "Uploading..." : logo ? "Change" : "Upload"}
                   </span>
@@ -383,7 +383,7 @@ export function ProjectSettingsOverlay({
               </button>
             </div>
             {clientChatSaving && (
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <p className="flex items-center gap-xs text-xs text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 Updating…
               </p>
@@ -510,13 +510,13 @@ function ContractList({ contracts, isAdmin, projectId, contractPrefixes = [] }: 
           <div
             key={contract.id}
             className={`rounded-lg border bg-card p-4 flex items-center justify-between gap-3 ${
-              contract.latePayment ? "border-amber-500/30 bg-amber-500/5" : "border-border"
+              contract.latePayment ? "border-orange/30 bg-orange/5" : "border-border"
             }`}
           >
             <div className="flex items-center gap-3 min-w-0">
               <ContractBadge contract={contract} />
               {contract.latePayment && (
-                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/20 shrink-0">
+                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold bg-orange/15 text-orange border border-orange/20 shrink-0">
                   <AlertTriangle className="w-3 h-3" />
                   Late Payment
                 </span>
@@ -529,8 +529,8 @@ function ContractList({ contracts, isAdmin, projectId, contractPrefixes = [] }: 
                   disabled={togglingId === contract.id}
                   className={`rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
                     contract.latePayment
-                      ? "text-amber-400 hover:bg-amber-500/10"
-                      : "text-muted-foreground hover:text-amber-400 hover:bg-amber-500/10"
+                      ? "text-orange hover:bg-orange/10"
+                      : "text-muted-foreground hover:text-orange hover:bg-orange/10"
                   }`}
                   title={contract.latePayment ? "Remove late payment flag" : "Mark as late payment"}
                 >
@@ -580,7 +580,7 @@ function ContractList({ contracts, isAdmin, projectId, contractPrefixes = [] }: 
 const TASK_TYPE_META: Record<string, { prefix: string; color: string }> = {
   FEATURE: { prefix: "F", color: "text-primary" },
   ENHANCEMENT: { prefix: "E", color: "text-violet-400" },
-  BUG: { prefix: "B", color: "text-amber-400" },
+  BUG: { prefix: "B", color: "text-orange" },
   REPORTED_BUG: { prefix: "RB", color: "text-destructive" },
   DESIGN: { prefix: "D", color: "text-cyan-400" },
 };
@@ -650,7 +650,7 @@ function ArchiveTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolea
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex items-center justify-center py-xl">
         <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
       </div>
     );

@@ -37,8 +37,8 @@ import { updateAppBadge } from "@/lib/app-badge";
 const ACCURACY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   WAY_OVER:  { label: "Way Over",  color: "text-destructive",  bg: "bg-destructive/20 border-destructive/40" },
   OVER:      { label: "Over",      color: "text-orange-400",   bg: "bg-orange-500/20 border-orange-500/40" },
-  ON_TRACK:  { label: "On Track",  color: "text-emerald-400",  bg: "bg-emerald-500/20 border-emerald-500/40" },
-  UNDER:     { label: "Under",     color: "text-blue-400",     bg: "bg-blue-500/20 border-blue-500/40" },
+  ON_TRACK:  { label: "On Track",  color: "text-success",  bg: "bg-success/20 border-success/40" },
+  UNDER:     { label: "Under",     color: "text-primary",     bg: "bg-primary/20 border-primary/40" },
   WAY_UNDER: { label: "Way Under", color: "text-violet-400",   bg: "bg-violet-500/20 border-violet-500/40" },
 };
 
@@ -66,7 +66,7 @@ function formatDuration(from: Date, to: Date): string {
 const TASK_TYPE_META: Record<string, { prefix: string; label: string; color: string }> = {
   FEATURE: { prefix: "F", label: "Business Case", color: "text-primary" },
   ENHANCEMENT: { prefix: "E", label: "Enhancement", color: "text-violet-400" },
-  BUG: { prefix: "B", label: "Internal Bug", color: "text-amber-400" },
+  BUG: { prefix: "B", label: "Internal Bug", color: "text-orange" },
   REPORTED_BUG: { prefix: "RB", label: "Reported Bug", color: "text-destructive" },
   DESIGN: { prefix: "D", label: "Design", color: "text-cyan-400" },
 };
@@ -74,14 +74,14 @@ const TASK_TYPE_META: Record<string, { prefix: string; label: string; color: str
 type Stage = "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "READY_FOR_RELEASE" | "DONE";
 
 const STAGES: { id: Stage; label: string; color: string }[] = [
-  { id: "NEW_REQUEST", label: "New Request", color: "bg-zinc-500" },
+  { id: "NEW_REQUEST", label: "New Request", color: "bg-muted-foreground" },
   { id: "CLARIFICATION", label: "Clarification", color: "bg-violet-500" },
-  { id: "READY_FOR_DEV", label: "Ready for Dev", color: "bg-blue-500" },
+  { id: "READY_FOR_DEV", label: "Ready for Dev", color: "bg-primary" },
   { id: "IN_DEVELOPMENT", label: "In Development", color: "bg-sky-500" },
-  { id: "INTERNAL_REVIEW", label: "Internal Review", color: "bg-amber-500" },
+  { id: "INTERNAL_REVIEW", label: "Internal Review", color: "bg-orange" },
   { id: "CLIENT_REVIEW", label: "Client Review", color: "bg-orange-500" },
   { id: "READY_FOR_RELEASE", label: "Ready for Release", color: "bg-teal-500" },
-  { id: "DONE", label: "Done", color: "bg-emerald-500" },
+  { id: "DONE", label: "Done", color: "bg-success" },
 ];
 
 interface QuestionWithType extends TaskQuestion {
@@ -493,7 +493,7 @@ export function TaskDetailPage({
         <button
           onClick={() => setShowHistory(true)}
           title="Task history"
-          className="ms-auto flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          className="ms-auto flex items-center gap-xs rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
         >
           <History className="w-3.5 h-3.5" />
           History
@@ -628,7 +628,7 @@ export function TaskDetailPage({
                       <MessageSquare
                         className={cn(
                           "h-3.5 w-3.5 shrink-0",
-                          t.understood ? "text-muted-foreground/50" : "text-amber-400",
+                          t.understood ? "text-muted-foreground/50" : "text-orange",
                         )}
                       />
                       <span className={cn("min-w-0 flex-1 truncate italic", t.understood && "opacity-60")}>
@@ -639,7 +639,7 @@ export function TaskDetailPage({
                           <Check className="h-3 w-3" strokeWidth={3} />
                         </span>
                       ) : (
-                        <span className="grid min-w-5 shrink-0 place-items-center rounded-full bg-amber-400 px-1 text-xs font-bold leading-5 text-background">
+                        <span className="grid min-w-5 shrink-0 place-items-center rounded-full bg-orange px-1 text-xs font-bold leading-5 text-background">
                           {t.comments.length}
                         </span>
                       )}
@@ -667,10 +667,10 @@ export function TaskDetailPage({
           <div className="grid grid-cols-2 gap-5">
             <div>
               <label className="text-s font-semibold text-foreground mb-2 block">Type</label>
-              <span className={cn("inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-s font-medium", taskTypeMeta.color,
+              <span className={cn("inline-flex items-center gap-xs rounded-lg border px-3 py-1.5 text-s font-medium", taskTypeMeta.color,
                 taskTypeMeta.color === "text-primary" ? "bg-primary/15 border-primary/20"
                 : taskTypeMeta.color === "text-violet-400" ? "bg-violet-500/15 border-violet-500/20"
-                : taskTypeMeta.color === "text-amber-400" ? "bg-amber-500/15 border-amber-500/20"
+                : taskTypeMeta.color === "text-orange" ? "bg-orange/15 border-orange/20"
                 : taskTypeMeta.color === "text-destructive" ? "bg-destructive/15 border-destructive/20"
                 : "bg-cyan-500/15 border-cyan-500/20"
               )}>{taskTypeMeta.label}</span>
@@ -720,10 +720,10 @@ export function TaskDetailPage({
                 )}>P{priorityValue}</span>
               ) : <span className="text-s text-muted-foreground/50">No priority</span>
             ) : (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-xs">
                 <button type="button" onClick={() => handlePrioritySave(null)}
                   className={cn("h-8 rounded-md border px-3 text-s font-medium transition-colors",
-                    priorityValue == null ? "bg-amber-500/20 border-amber-500/40 text-amber-400" : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
+                    priorityValue == null ? "bg-orange/20 border-orange/40 text-orange" : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
                   )}>None</button>
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
                   <button key={n} type="button" onClick={() => handlePrioritySave(n)}
@@ -750,7 +750,7 @@ export function TaskDetailPage({
                 <button
                   onClick={() => setShowAdminStages(!showAdminStages)}
                   disabled={movingStage}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-primary/15 border-primary/20 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-xs rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-primary/15 border-primary/20 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50"
                 >
                   {movingStage ? (
                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -785,7 +785,7 @@ export function TaskDetailPage({
                 )}
               </div>
             ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-primary/15 border-primary/20 text-primary">
+              <span className="inline-flex items-center gap-xs rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-primary/15 border-primary/20 text-primary">
                 <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
                 {STAGES[currentStageIndex]?.label}
               </span>
@@ -796,7 +796,7 @@ export function TaskDetailPage({
                 <button
                   onClick={handleMoveToNext}
                   disabled={movingStage}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-muted border-border text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-xs rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-muted border-border text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30 transition-colors disabled:opacity-50"
                 >
                   {movingStage ? (
                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -815,7 +815,7 @@ export function TaskDetailPage({
               <button
                 onClick={handleSkipClientReview}
                 disabled={movingStage}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400/80 hover:text-amber-400 transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-xs text-xs font-medium text-orange/80 hover:text-orange transition-colors disabled:opacity-50"
               >
                 <ChevronRight className="w-3 h-3" />
                 Skip Client Review → Ready for Release
@@ -827,7 +827,7 @@ export function TaskDetailPage({
               {!showDecline ? (
                 <button
                   onClick={() => setShowDecline(true)}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-destructive/70 hover:text-destructive transition-colors"
+                  className="inline-flex items-center gap-xs text-xs font-medium text-destructive/70 hover:text-destructive transition-colors"
                 >
                   <Undo2 className="w-3 h-3" />
                   Decline &amp; return to {declineTargetLabel}
@@ -930,7 +930,7 @@ export function TaskDetailPage({
                       {!isPostClarification && (
                         <div className="absolute top-0 right-0 flex items-center gap-1">
                           {saveState === "saving" && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
-                          {saveState === "saved" && <Check className="w-3 h-3 text-emerald-400" />}
+                          {saveState === "saved" && <Check className="w-3 h-3 text-success" />}
                           {hasAnswer && !isEditing && (
                             <button
                               onClick={() => setEditingAnswers((prev) => ({ ...prev, [q.id]: true }))}
@@ -967,7 +967,7 @@ export function TaskDetailPage({
               {startedAt && stageLogs.length > 0 ? (
                 <>
                   <div className="flex items-center justify-between">
-                    <span className="text-s text-muted-foreground flex items-center gap-1.5">
+                    <span className="text-s text-muted-foreground flex items-center gap-xs">
                       <Clock className="w-3.5 h-3.5" /> Total time
                     </span>
                     <span className="text-s font-semibold font-mono tabular-nums">
@@ -983,8 +983,8 @@ export function TaskDetailPage({
                         const stageInfo = STAGES.find((s) => s.id === log.stage);
                         return (
                           <div key={i} className="flex items-center justify-between">
-                            <span className="text-s text-muted-foreground flex items-center gap-1.5">
-                              <span className={cn("w-2 h-2 rounded-full", stageInfo?.color ?? "bg-zinc-500")} />
+                            <span className="text-s text-muted-foreground flex items-center gap-xs">
+                              <span className={cn("w-2 h-2 rounded-full", stageInfo?.color ?? "bg-muted-foreground")} />
                               {stageInfo?.label ?? log.stage}
                               {!log.exitedAt && <span className="text-xs text-primary ms-1">(current)</span>}
                             </span>
@@ -1251,7 +1251,7 @@ function TaskNoteEditor({
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
           <div className="mb-6">
-            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${taskTypeMeta.color} bg-muted/50 border-border`}>
+            <span className={`inline-flex items-center gap-xs rounded-full border px-3 py-1 text-xs font-semibold ${taskTypeMeta.color} bg-muted/50 border-border`}>
               {taskTypeMeta.label} Note
             </span>
           </div>

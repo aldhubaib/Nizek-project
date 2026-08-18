@@ -144,7 +144,7 @@ export function VaultFolderToolbar({
               type="button"
               onClick={() => onFilterChange(pill.id)}
               className={cn(
-                "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-s font-medium whitespace-nowrap transition-colors",
+                "inline-flex h-8 shrink-0 items-center gap-xs rounded-full px-3.5 text-s font-medium whitespace-nowrap transition-colors",
                 filter === pill.id
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
@@ -201,8 +201,8 @@ export function VaultFolderToolbar({
                   onClick={() => onFilterChange(folder.id)}
                   className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-start transition-colors hover:bg-accent/40"
                 >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15">
-                    <Folder className="h-4 w-4 text-amber-500" />
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange/15">
+                    <Folder className="h-4 w-4 text-orange" />
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-s font-semibold">
@@ -266,7 +266,7 @@ export function VaultFolderToolbar({
               />
             </div>
             {!editing && suggestions.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-xs">
                 {suggestions.map((suggestion) => (
                   <button
                     key={suggestion}

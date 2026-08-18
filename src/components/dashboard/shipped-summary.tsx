@@ -23,9 +23,9 @@ interface ShippedData {
 }
 
 const TYPE_CONFIG: Record<string, { icon: typeof Sparkles; color: string; bg: string; label: string }> = {
-  FEATURE: { icon: Sparkles, color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", label: "Business Cases" },
+  FEATURE: { icon: Sparkles, color: "text-primary", bg: "bg-primary/10 border-primary/20", label: "Business Cases" },
   ENHANCEMENT: { icon: Zap, color: "text-cyan-400", bg: "bg-cyan-500/10 border-cyan-500/20", label: "Enhancements" },
-  BUG: { icon: Bug, color: "text-red-400", bg: "bg-red-500/10 border-red-500/20", label: "Bugs Fixed" },
+  BUG: { icon: Bug, color: "text-destructive", bg: "bg-destructive/10 border-destructive/20", label: "Bugs Fixed" },
   REPORTED_BUG: { icon: AlertCircle, color: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20", label: "Reported Bugs" },
   DESIGN: { icon: Palette, color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20", label: "Designs" },
 };
@@ -50,7 +50,7 @@ export function ShippedSummary({ data }: { data: ShippedData }) {
               <Package className="w-4 h-4 text-muted-foreground" />
               Shipped
             </h2>
-            <span className="flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-0.5">
+            <span className="flex items-center gap-1 text-xs font-bold text-success bg-success/10 border border-success/20 rounded-full px-2.5 py-0.5">
               <CheckCircle2 className="w-3 h-3" />
               {data.total} done
             </span>
@@ -108,7 +108,7 @@ export function ShippedSummary({ data }: { data: ShippedData }) {
         {data.recentShipped.length > 0 && (
           <button
             onClick={() => setShowAll(true)}
-            className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
+            className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-xs"
           >
             <ExternalLink className="w-3 h-3" />
             View Recent ({data.recentShipped.length})
@@ -121,7 +121,7 @@ export function ShippedSummary({ data }: { data: ShippedData }) {
         <div className="fixed inset-0 z-[9999] bg-background/95 backdrop-blur-sm flex flex-col">
           <div className="flex app-top-bar items-center justify-between border-b border-border shrink-0">
             <div className="flex items-center gap-3">
-              <button onClick={() => setShowAll(false)} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s">
+              <button onClick={() => setShowAll(false)} className="flex items-center gap-xs text-muted-foreground hover:text-foreground transition-colors text-s">
                 <X className="w-4 h-4" />
                 Close
               </button>
@@ -132,7 +132,7 @@ export function ShippedSummary({ data }: { data: ShippedData }) {
                 <span className="text-xs font-normal text-muted-foreground">({data.total} total)</span>
               </h2>
             </div>
-            <span className="flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-0.5">
+            <span className="flex items-center gap-1 text-xs font-bold text-success bg-success/10 border border-success/20 rounded-full px-2.5 py-0.5">
               <CheckCircle2 className="w-3 h-3" />
               {data.total} done
             </span>

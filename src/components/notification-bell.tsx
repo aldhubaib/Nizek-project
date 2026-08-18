@@ -256,7 +256,7 @@ export function NotificationBell({ currentUserId }: Props) {
                   const inner = (
                     <div
                       className={cn(
-                        "flex items-start gap-2.5 px-4 py-3 transition-colors hover:bg-accent/20 group",
+                        "flex items-start gap-s px-4 py-3 transition-colors hover:bg-accent/20 group",
                         !n.read && "bg-primary/[0.06]",
                       )}
                     >

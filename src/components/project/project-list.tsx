@@ -23,7 +23,7 @@ interface Project {
 const CONTRACT_TYPE_LABELS: Record<string, { label: string; color: string }> = {
   FULL_TEAM: { label: "Full Team", color: "text-primary bg-primary/10 border-primary/20" },
   PART_TEAM: { label: "Part Team", color: "text-violet-400 bg-violet-500/10 border-violet-500/20" },
-  FIXED: { label: "Fixed", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+  FIXED: { label: "Fixed", color: "text-orange bg-orange/10 border-orange/20" },
   MAINTENANCE: { label: "Maintenance", color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" },
 };
 

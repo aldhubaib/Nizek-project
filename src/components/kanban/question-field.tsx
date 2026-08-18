@@ -340,7 +340,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
           <span className={cn(
             "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
             cv.needed === true
-              ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+              ? "border-orange/30 bg-orange/10 text-orange"
               : "border-primary/30 bg-primary/10 text-primary"
           )}>
             {cv.needed ? "Yes" : "No"}
@@ -349,7 +349,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
             <p className="text-s text-foreground/80 whitespace-pre-wrap">{cv.note}</p>
           )}
           {cv.needed === true && (
-            <span className={cn("text-xs", cv.completed ? "text-emerald-400" : "text-muted-foreground/60")}>
+            <span className={cn("text-xs", cv.completed ? "text-success" : "text-muted-foreground/60")}>
               {cv.completed
                 ? `Received from client${formatReceivedAt(cv.completedAt) ? ` · ${formatReceivedAt(cv.completedAt)}` : ""}`
                 : "Waiting on client"}
@@ -394,7 +394,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
     if (question.type === "link") {
       if (!value) return <p className="text-s text-muted-foreground/50">—</p>;
       return (
-        <a href={value} target="_blank" rel="noopener noreferrer" className="text-s text-blue-400 hover:underline break-all">
+        <a href={value} target="_blank" rel="noopener noreferrer" className="text-s text-primary hover:underline break-all">
           {value}
         </a>
       );
@@ -403,7 +403,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
       const values = parseMultiValue(value);
       if (values.length === 0) return <p className="text-s text-muted-foreground/50">—</p>;
       return (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-xs">
           {values.map((v) => (
             <span key={v} className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-s text-foreground/80">
               {v}
@@ -438,7 +438,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
                 className={cn(
                   "flex-1 rounded-lg border px-3 py-2 text-s font-medium transition-colors",
                   cv.needed === true
-                    ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
+                    ? "border-orange/40 bg-orange/10 text-orange"
                     : "border-border text-muted-foreground hover:border-muted-foreground/40"
                 )}
               >
@@ -478,13 +478,13 @@ export function QuestionField({ question, index, value, onChange, compact, reado
                   className={cn(
                     "flex items-center gap-2 rounded-lg border px-3 py-2 text-s font-medium transition-colors w-full",
                     cv.completed
-                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                      ? "border-success/40 bg-success/10 text-success"
                       : "border-border text-muted-foreground hover:border-muted-foreground/40"
                   )}
                 >
                   <div className={cn(
                     "w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0",
-                    cv.completed ? "bg-emerald-500 border-emerald-500" : "border-muted-foreground/40"
+                    cv.completed ? "bg-success border-success" : "border-muted-foreground/40"
                   )}>
                     {cv.completed && <Check className="w-3 h-3 text-white" strokeWidth={2.5} />}
                   </div>
@@ -570,7 +570,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
                   )}
                   <div className="flex-1 min-w-0 py-1.5">
                     <p className="text-s font-medium truncate">{entry.name}</p>
-                    <p className="text-xs text-emerald-400 flex items-center gap-1">
+                    <p className="text-xs text-success flex items-center gap-1">
                       <Check className="w-2.5 h-2.5" strokeWidth={2.5} />
                       Uploaded
                     </p>
@@ -625,7 +625,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
         </div>
       ) : question.type === "select" && parsedOptions.length > 0 ? (
         question.multiple ? (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-xs">
             {parsedOptions.map((opt) => {
               const selected = selectedValues.includes(opt);
               return (

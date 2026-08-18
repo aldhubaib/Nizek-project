@@ -24,17 +24,17 @@ const GROUPS: { key: GroupKey; label: string; stages: string; bar: string; dot: 
     key: "development",
     label: "Development",
     stages: "Ready for Dev · In Development",
-    bar: "bg-blue-400",
-    dot: "bg-blue-400",
-    text: "text-blue-400",
+    bar: "bg-primary",
+    dot: "bg-primary",
+    text: "text-primary",
   },
   {
     key: "review",
     label: "Review",
     stages: "Internal Review · Client Review · Ready for Release",
-    bar: "bg-amber-400",
-    dot: "bg-amber-400",
-    text: "text-amber-400",
+    bar: "bg-orange",
+    dot: "bg-orange",
+    text: "text-orange",
   },
 ];
 
@@ -60,7 +60,7 @@ export function ProjectStageChart({
     <div className={cn("app-card relative rounded-xl border border-border bg-card p-4", className ?? "mt-4")}>
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-4">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-s">
           <span className="w-8 h-8 rounded-lg bg-muted/60 border border-border flex items-center justify-center shrink-0">
             <BarChart3 className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
           </span>
@@ -95,8 +95,8 @@ export function ProjectStageChart({
           <p className="text-xs leading-relaxed text-muted-foreground">
             One bar per project you&apos;re on, showing where its open tasks sit across three
             groups: <strong className="text-violet-400">Clarification</strong>,{" "}
-            <strong className="text-blue-400">Development</strong> (Ready for Dev + In
-            Development) and <strong className="text-amber-400">Review</strong> (Internal
+            <strong className="text-primary">Development</strong> (Ready for Dev + In
+            Development) and <strong className="text-orange">Review</strong> (Internal
             Review + Client Review + Ready for Release).
           </p>
           <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
@@ -149,7 +149,7 @@ export function ProjectStageChart({
       {/* Legend */}
       <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border/60">
         {GROUPS.map(({ key, label, dot }) => (
-          <span key={key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span key={key} className="flex items-center gap-xs text-xs text-muted-foreground">
             <span className={cn("w-2 h-2 rounded-sm", dot)} />
             {label}
           </span>
@@ -167,7 +167,7 @@ export function ProjectStageChart({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-6 pt-5 pb-4">
-              <h2 className="text-m font-semibold flex items-center gap-2.5">
+              <h2 className="text-m font-semibold flex items-center gap-s">
                 <span className="w-7 h-7 rounded-full bg-muted border border-border text-xs font-bold text-muted-foreground flex items-center justify-center">
                   {selected.project.name.trim().slice(0, 1).toUpperCase()}
                 </span>
@@ -251,7 +251,7 @@ export function ProjectStageChart({
                         ) : (
                           <span
                             title={task.assignee.name ?? undefined}
-                            className="w-6 h-6 rounded-full shrink-0 bg-blue-500/20 text-blue-300 text-xs font-bold flex items-center justify-center"
+                            className="w-6 h-6 rounded-full shrink-0 bg-primary/20 text-primary text-xs font-bold flex items-center justify-center"
                           >
                             {initials(task.assignee.name)}
                           </span>

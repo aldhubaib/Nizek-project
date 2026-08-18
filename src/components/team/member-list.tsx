@@ -173,8 +173,8 @@ export function MemberList({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              <div className="w-10 h-10 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-orange" />
               </div>
               <div>
                 <h3 className="text-s font-semibold text-foreground">Transfer Tasks Required</h3>
@@ -247,7 +247,7 @@ export function MemberList({
               className="rounded-lg bg-card border border-border p-4 hover:border-muted-foreground/20 transition-colors"
             >
               <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex items-center gap-s min-w-0">
                   {member.user.imageUrl ? (
                     <img
                       src={member.user.imageUrl}
@@ -290,7 +290,7 @@ export function MemberList({
                 >
                   <SelectTrigger className="h-7 w-full text-xs rounded-full border-border">
                     <SelectValue placeholder="Assign role">
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-xs">
                         <Shield className="w-3 h-3 text-muted-foreground" strokeWidth={1.5} />
                         {roleName}
                       </span>
@@ -299,7 +299,7 @@ export function MemberList({
                   <SelectContent>
                     {roles.map((r) => (
                       <SelectItem key={r.id} value={r.id}>
-                        <span className="flex items-center gap-1.5">
+                        <span className="flex items-center gap-xs">
                           <Shield className="w-3 h-3 text-muted-foreground" strokeWidth={1.5} />
                           {r.name}
                         </span>
@@ -354,7 +354,7 @@ export function MemberList({
                   className="rounded-lg bg-card border border-dashed border-border p-4"
                 >
                   <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex items-center gap-s min-w-0">
                       <div className="w-9 h-9 rounded-full bg-muted/50 flex items-center justify-center text-muted-foreground shrink-0">
                         <Mail className="w-4 h-4" strokeWidth={1.5} />
                       </div>
@@ -362,13 +362,13 @@ export function MemberList({
                         <p className="text-s font-medium text-muted-foreground truncate">
                           {inv.email}
                         </p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
+                        <div className="flex items-center gap-xs mt-0.5">
                           {expired ? (
                             <span className="inline-flex items-center gap-1 rounded-full bg-destructive/15 text-destructive border border-destructive/20 px-1.5 py-0.5 text-xs font-semibold">
                               Expired
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 text-xs font-semibold">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-orange/15 text-orange border border-orange/20 px-1.5 py-0.5 text-xs font-semibold">
                               <Clock className="w-2.5 h-2.5" />
                               Waiting
                             </span>
@@ -430,7 +430,7 @@ function InviteToggle({ checked, onChange, icon, label }: {
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className="flex items-center gap-1.5 group/toggle"
+      className="flex items-center gap-xs group/toggle"
     >
       <div className={`w-6 h-3.5 rounded-full transition-colors relative ${checked ? "bg-primary/70" : "bg-muted"}`}>
         <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full transition-all ${checked ? "left-3 bg-white" : "left-0.5 bg-muted-foreground/40"}`} />

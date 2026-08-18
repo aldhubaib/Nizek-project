@@ -16,7 +16,7 @@ type StageDistribution = Awaited<ReturnType<typeof getProjectStageDistribution>>
 
 const STAGE_STYLE: Record<string, { label: string; text: string; dot: string }> = {
   CLARIFICATION: { label: "Clarification", text: "text-violet-400", dot: "bg-violet-400" },
-  READY_FOR_DEV: { label: "Ready for Dev", text: "text-blue-400", dot: "bg-blue-400" },
+  READY_FOR_DEV: { label: "Ready for Dev", text: "text-primary", dot: "bg-primary" },
 };
 
 function waitingLabel(enteredAt: Date | string | null): string {
@@ -332,7 +332,7 @@ export function DashboardOverview() {
                             ) : (
                               <span
                                 title={task.assignee.name ?? undefined}
-                                className="w-7 h-7 rounded-full shrink-0 bg-blue-500/20 text-blue-300 text-xs font-bold flex items-center justify-center"
+                                className="w-7 h-7 rounded-full shrink-0 bg-primary/20 text-primary text-xs font-bold flex items-center justify-center"
                               >
                                 {initials(task.assignee.name)}
                               </span>
@@ -365,7 +365,7 @@ export function DashboardOverview() {
           >
             <div className="flex items-center justify-between px-6 pt-5 pb-4">
               <h2 className="text-m font-semibold flex items-center gap-2">
-                <Crown className="w-4 h-4 text-amber-400" strokeWidth={1.5} />
+                <Crown className="w-4 h-4 text-orange" strokeWidth={1.5} />
                 My supervision · {supervised.length}
                 <span className="text-muted-foreground font-medium">project{supervised.length === 1 ? "" : "s"}</span>
               </h2>
@@ -389,7 +389,7 @@ export function DashboardOverview() {
                   href={`/dashboard/projects/${project.id}`}
                   className="app-card flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-accent/30"
                 >
-                  <span className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-s font-bold flex items-center justify-center shrink-0">
+                  <span className="w-8 h-8 rounded-lg bg-orange/10 border border-orange/20 text-orange text-s font-bold flex items-center justify-center shrink-0">
                     {project.name.slice(0, 1).toUpperCase()}
                   </span>
                   <p className="flex-1 min-w-0 text-s font-medium truncate">{project.name}</p>

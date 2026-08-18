@@ -28,7 +28,7 @@ export default async function TaskDetailPage({ params, searchParams }: Props) {
 
   if (!task || task.projectId !== projectId) {
     return (
-      <div className="flex items-center justify-center min-h-[calc(100vh-48px)]">
+      <div className="flex flex-1 items-center justify-center">
         <p className="text-s text-muted-foreground">Task not found.</p>
       </div>
     );

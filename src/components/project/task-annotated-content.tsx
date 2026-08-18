@@ -233,8 +233,8 @@ export function TaskAnnotatedContent({
             icon.understood
               ? "border-border bg-popover text-muted-foreground/50 hover:text-muted-foreground"
               : openThreadId === icon.threadId
-                ? "border-amber-400/60 bg-amber-500/20 text-amber-300"
-                : "border-border bg-popover text-amber-400 hover:border-amber-400/50 hover:bg-amber-500/10",
+                ? "border-orange/60 bg-orange/20 text-orange"
+                : "border-border bg-popover text-orange hover:border-orange/50 hover:bg-orange/10",
           )}
           style={{ top: icon.top }}
         >
@@ -244,7 +244,7 @@ export function TaskAnnotatedContent({
               <Check className="h-2.5 w-2.5" strokeWidth={3} />
             </span>
           ) : icon.count > 0 ? (
-            <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-amber-400 px-1 text-xs font-bold leading-4 text-background">
+            <span className="absolute -right-1 -top-1 grid min-w-4 place-items-center rounded-full bg-orange px-1 text-xs font-bold leading-4 text-background">
               {icon.count}
             </span>
           ) : null}
@@ -278,9 +278,9 @@ export function TaskAnnotatedContent({
               setCommenting(true);
               setDraft("");
             }}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-s font-medium text-foreground hover:bg-accent"
+            className="inline-flex items-center gap-xs rounded-md px-2.5 py-1.5 text-s font-medium text-foreground hover:bg-accent"
           >
-            <MessageSquare className="h-3.5 w-3.5 text-amber-400" />
+            <MessageSquare className="h-3.5 w-3.5 text-orange" />
             Comment
           </button>
         </div>
@@ -291,7 +291,7 @@ export function TaskAnnotatedContent({
           className="absolute z-30 w-[min(100%,340px)] -translate-x-1/2 rounded-xl border border-border bg-popover p-3 shadow-xl"
           style={{ top: Math.max(0, selection.top), left: selection.left }}
         >
-          <p className="mb-2 line-clamp-2 border-s-2 border-amber-400/70 ps-2 text-xs italic text-muted-foreground">
+          <p className="mb-2 line-clamp-2 border-s-2 border-orange/70 ps-2 text-xs italic text-muted-foreground">
             {selection.text}
           </p>
           <div className="relative">

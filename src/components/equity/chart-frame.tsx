@@ -93,7 +93,7 @@ export function ChartFrame({
       {showData ? (
         <div>
           {past.length > 0 && (
-            <div className="flex items-center gap-1.5 overflow-x-auto mb-4">
+            <div className="flex items-center gap-xs overflow-x-auto mb-4">
               <VersionTab
                 on={version === -1}
                 onClick={() => setVersion(-1)}
@@ -167,12 +167,12 @@ export function ChartFrame({
         children
       )}
 
-      <div className="flex items-center gap-3 mt-10 pt-6 border-t border-border/60">
+      <div className="flex items-center gap-m mt-xl pt-xl border-t border-border/60">
         <button
           type="button"
           onClick={() => setShowData((v) => !v)}
           aria-pressed={showData}
-          className="flex items-center gap-2.5 ps-3 pe-2.5 h-9 rounded-xl border border-border bg-card/40 text-s font-semibold text-foreground hover:border-muted-foreground/40 hover:bg-muted/40 transition-colors shrink-0"
+          className="flex items-center gap-s ps-3 pe-2.5 h-9 rounded-xl border border-border bg-card/40 text-s font-semibold text-foreground hover:border-muted-foreground/40 hover:bg-muted/40 transition-colors shrink-0"
         >
           {showData ? (
             <BarChart3

@@ -90,7 +90,7 @@ export function ErrorDisplay({ error, reset, context }: ErrorDisplayProps) {
             </div>
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors shrink-0"
+              className="flex items-center gap-xs text-xs font-medium text-primary hover:text-primary/80 transition-colors shrink-0"
             >
               {copied ? (
                 <>
@@ -145,7 +145,7 @@ export function ErrorDisplay({ error, reset, context }: ErrorDisplayProps) {
           {reset && (
             <button
               onClick={reset}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground text-s font-medium px-4 py-2 hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-xs rounded-lg bg-primary text-primary-foreground text-s font-medium px-4 py-2 hover:opacity-90 transition-opacity"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               Try Again
@@ -153,7 +153,7 @@ export function ErrorDisplay({ error, reset, context }: ErrorDisplayProps) {
           )}
           <button
             onClick={handleCopy}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card text-s font-medium text-foreground px-4 py-2 hover:bg-card/80 transition-colors"
+            className="inline-flex items-center gap-xs rounded-lg border border-border bg-card text-s font-medium text-foreground px-4 py-2 hover:bg-card/80 transition-colors"
           >
             <Copy className="w-3.5 h-3.5" />
             {copied ? "Copied!" : "Copy Full Report"}

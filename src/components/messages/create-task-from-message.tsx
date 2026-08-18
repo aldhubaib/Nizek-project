@@ -49,7 +49,7 @@ const TASK_TYPES: {
     id: "BUG",
     label: "Internal Bug",
     icon: Bug,
-    activeColor: "bg-amber-500/15 border-amber-500/40 text-amber-400",
+    activeColor: "bg-orange/15 border-orange/40 text-orange",
   },
   {
     id: "DESIGN",
@@ -235,7 +235,7 @@ export function CreateTaskFromMessageDialog({
               <div className="space-y-2">
                 <label className="text-s font-semibold">Type</label>
                 {payload.activeContractType === "MAINTENANCE" && (
-                  <span className="ms-2 text-xs text-amber-400">
+                  <span className="ms-2 text-xs text-orange">
                     Maintenance — bugs only
                   </span>
                 )}
@@ -252,7 +252,7 @@ export function CreateTaskFromMessageDialog({
                           setAnswers({});
                         }}
                         className={cn(
-                          "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-s font-medium transition-colors",
+                          "flex items-center gap-xs rounded-lg border px-3 py-2 text-s font-medium transition-colors",
                           isActive
                             ? t.activeColor
                             : "border-border text-muted-foreground hover:text-foreground",
@@ -279,7 +279,7 @@ export function CreateTaskFromMessageDialog({
 
               <div className="space-y-2">
                 <label className="text-s font-semibold">Priority</label>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-xs">
                   {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
                     <button
                       key={n}

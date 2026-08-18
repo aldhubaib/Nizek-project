@@ -259,9 +259,9 @@ function HistoryDialog({
 }
 
 const ACTION_TONE: Record<string, string> = {
-  created: "text-emerald-400 bg-emerald-500/15 border-emerald-500/30",
+  created: "text-success bg-success/15 border-success/30",
   updated: "text-sky-400 bg-sky-500/15 border-sky-500/30",
-  deleted: "text-rose-400 bg-rose-500/15 border-rose-500/30",
+  deleted: "text-destructive bg-destructive/15 border-destructive/30",
   restored: "text-violet-400 bg-violet-500/15 border-violet-500/30",
 };
 

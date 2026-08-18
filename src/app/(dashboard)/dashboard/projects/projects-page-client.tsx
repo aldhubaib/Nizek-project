@@ -99,27 +99,20 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
   const hasFilters = teamFilter !== "all" || contractFilter !== "all";
 
   return (
-    <div>
+    <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader className="justify-between">
         <h1 className="text-s font-semibold">Projects</h1>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground font-mono">
-            {filtered.length === projects.length
-              ? `${projects.length} project${projects.length !== 1 ? "s" : ""}`
-              : `${filtered.length} of ${projects.length}`}
-          </span>
-          <CreateProjectDialog teams={teams} contractPrefixes={contractPrefixes} />
-        </div>
+        <CreateProjectDialog teams={teams} contractPrefixes={contractPrefixes} />
       </PageHeader>
 
       {/* Filters */}
       {projects.length > 0 && (
-        <div className="px-app pt-4 pb-1 flex items-center gap-3 flex-wrap">
+        <div className="px-app pt-l pb-xs flex items-center gap-m flex-wrap">
           <Filter className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-xs">
             <span className="text-xs text-muted-foreground/60 font-medium">Team</span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-xs">
               <FilterChip
                 active={teamFilter === "all"}
                 onClick={() => setTeamFilter("all")}
@@ -145,9 +138,9 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
 
           <span className="text-border">|</span>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-xs">
             <span className="text-xs text-muted-foreground/60 font-medium">Contract</span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-xs">
               <FilterChip
                 active={contractFilter === "all"}
                 onClick={() => setContractFilter("all")}
@@ -177,7 +170,7 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
       )}
 
       {projects.length === 0 ? (
-        <div className="flex flex-col items-center justify-center text-center gap-3 min-h-[calc(100vh-120px)]">
+        <div className="flex flex-1 flex-col items-center justify-center text-center gap-m">
           <FolderKanban className="w-10 h-10 text-muted-foreground opacity-50" strokeWidth={1.5} />
           <p className="text-s text-muted-foreground">
             No projects yet. Create your first project.
@@ -185,7 +178,7 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
           <CreateProjectDialog teams={teams} contractPrefixes={contractPrefixes} />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center text-center gap-3 py-20">
+        <div className="flex flex-col items-center justify-center text-center gap-m py-xl">
           <Filter className="w-8 h-8 text-muted-foreground opacity-30" strokeWidth={1.5} />
           <p className="text-s text-muted-foreground">No projects match the current filters</p>
           <button
@@ -196,9 +189,9 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
           </button>
         </div>
       ) : (
-        <div className="px-app py-4">
+        <div className="px-app py-l">
           {activeProjects.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-card">
               {activeProjects.map((project) => (
                 <ProjectCard key={project.id} project={project} teams={teams} contractPrefixes={contractPrefixes} />
               ))}
@@ -212,8 +205,8 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
           )}
 
           {archivedProjects.length > 0 && (
-            <div className={activeProjects.length > 0 ? "mt-10" : ""}>
-              <div className="flex items-center gap-2 mb-4">
+            <div className={activeProjects.length > 0 ? "mt-xl pt-xl" : ""}>
+              <div className="flex items-center gap-s mb-l">
                 <Archive className="w-4 h-4 text-muted-foreground/50" strokeWidth={1.5} />
                 <h2 className="text-s font-semibold text-muted-foreground uppercase tracking-wider">
                   Archive
@@ -222,7 +215,7 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
                   {archivedProjects.length}
                 </span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 opacity-60">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-card opacity-60">
                 {archivedProjects.map((project) => (
                   <ProjectCard key={project.id} project={project} teams={teams} contractPrefixes={contractPrefixes} />
                 ))}
@@ -240,7 +233,7 @@ function FilterChip({ active, onClick, label }: { active: boolean; onClick: () =
     <button
       onClick={onClick}
       className={cn(
-        "px-2.5 py-1 rounded-full text-xs font-medium transition-colors border",
+        "px-s py-xs rounded-full text-xs font-medium transition-colors border",
         active
           ? "bg-primary/15 text-primary border-primary/30"
           : "bg-transparent text-muted-foreground border-border hover:border-muted-foreground/40 hover:text-foreground"

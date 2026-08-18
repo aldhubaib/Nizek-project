@@ -480,7 +480,7 @@ export function VaultCredentialsPanel({
                         </span>
                       )}
                       {c.folderName && (
-                        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                        <span className="rounded-full bg-orange/15 px-2 py-0.5 text-xs font-medium text-orange dark:text-orange">
                           {c.folderName}
                         </span>
                       )}
@@ -800,7 +800,7 @@ function HistoryRow({ entry }: { entry: VaultActivityDTO }) {
             : "Updated";
 
   return (
-    <div className="flex gap-2.5">
+    <div className="flex gap-s">
       <Avatar className="mt-0.5 h-6 w-6 shrink-0">
         <AvatarImage src={entry.user.imageUrl ?? undefined} />
         <AvatarFallback className="text-xs">

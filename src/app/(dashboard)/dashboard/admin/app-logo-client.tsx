@@ -155,7 +155,7 @@ function SlotRow({
               </span>
             )}
             {asset && !error && (
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-success" />
             )}
           </div>
           <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-s text-muted-foreground">
@@ -177,7 +177,7 @@ function SlotRow({
             <p className="mt-1 text-s text-muted-foreground">{slot.note}</p>
           )}
           {error && (
-            <p className="mt-2 flex items-center gap-1.5 text-s text-rose-400">
+            <p className="mt-2 flex items-center gap-xs text-s text-destructive">
               <AlertTriangle className="h-3.5 w-3.5" />
               {error}
             </p>

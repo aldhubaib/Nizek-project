@@ -9,22 +9,22 @@ function statusFor(daysUntil: number) {
   if (daysUntil < 0) {
     return {
       label: `${Math.abs(daysUntil)}d overdue`,
-      color: "text-red-400",
-      bg: "bg-red-500/10 border-red-500/20",
+      color: "text-destructive",
+      bg: "bg-destructive/10 border-destructive/20",
     };
   }
   if (daysUntil === 0) {
     return {
       label: "Due today",
-      color: "text-amber-400",
-      bg: "bg-amber-500/10 border-amber-500/20",
+      color: "text-orange",
+      bg: "bg-orange/10 border-orange/20",
     };
   }
   if (daysUntil <= 10) {
     return {
       label: `${daysUntil}d left`,
-      color: "text-amber-400",
-      bg: "bg-amber-500/10 border-amber-500/20",
+      color: "text-orange",
+      bg: "bg-orange/10 border-orange/20",
     };
   }
   return {
@@ -44,7 +44,7 @@ export default async function DeadlinesPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/dashboard"
-            className="flex items-center gap-1.5 text-s text-muted-foreground transition-colors hover:text-foreground"
+            className="flex items-center gap-xs text-s text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
             Dashboard
@@ -57,7 +57,7 @@ export default async function DeadlinesPage() {
           <span className="text-xs text-muted-foreground">({data.length})</span>
         </div>
         {overdueCount > 0 && (
-          <span className="flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-0.5 text-xs font-semibold text-red-400">
+          <span className="flex items-center gap-1 rounded-full border border-destructive/20 bg-destructive/10 px-2.5 py-0.5 text-xs font-semibold text-destructive">
             <AlertTriangle className="h-3 w-3" />
             {overdueCount} overdue
           </span>

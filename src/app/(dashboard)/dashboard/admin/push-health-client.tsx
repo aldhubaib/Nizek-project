@@ -16,7 +16,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "go
     <div className="rounded-xl border border-border/60 bg-surface p-4">
       <div
         className={`text-l font-semibold tabular-nums ${
-          tone === "good" ? "text-emerald-500" : tone === "bad" ? "text-destructive" : ""
+          tone === "good" ? "text-success" : tone === "bad" ? "text-destructive" : ""
         }`}
       >
         {value}
@@ -79,7 +79,7 @@ export function PushHealthClient() {
         </div>
       )}
       {!data.centrifugoConfigured && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-s text-amber-600">
+        <div className="flex items-start gap-2 rounded-lg border border-orange/40 bg-orange/10 px-3 py-2.5 text-s text-orange">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           Centrifugo is not configured — realtime bells and in-app sounds are
           disabled; clients fall back to polling.
@@ -92,7 +92,7 @@ export function PushHealthClient() {
           type="button"
           onClick={load}
           disabled={loading}
-          className="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+          className="flex h-7 items-center gap-xs rounded-lg border border-border/60 px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
         >
           <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
           Refresh
@@ -160,7 +160,7 @@ export function PushHealthClient() {
         </div>
         {data.usersWithoutPush.length === 0 ? (
           <div className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-3 text-s text-muted-foreground">
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+            <CheckCircle2 className="h-3.5 w-3.5 text-success" />
             Everyone has at least one device registered for push.
           </div>
         ) : (

@@ -445,11 +445,11 @@ function HolderList({ holders }: { holders: EquityHolderDTO[] }) {
             ) : (
               <div
                 key={holder.id}
-                className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2"
+                className="flex items-center gap-s rounded-lg border border-border bg-card px-3 py-2"
               >
                 <HolderAvatar name={holder.name} photoUrl={holder.photoUrl} />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-xs">
                     <span className="truncate text-s text-foreground">
                       {holder.name}
                     </span>

@@ -52,26 +52,26 @@ type NoteType = "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "FE
 
 const NOTE_TYPE_CONFIG: Record<NoteType, { label: string; color: string; bgColor: string; icon: typeof FileText }> = {
   MEETING_NOTE: { label: "Meeting Note", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: FileText },
-  DECISION: { label: "Decision", color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/20", icon: Gavel },
+  DECISION: { label: "Decision", color: "text-orange", bgColor: "bg-orange/10 border-orange/20", icon: Gavel },
   CLARIFICATION: { label: "Clarification", color: "text-sky-400", bgColor: "bg-sky-500/10 border-sky-500/20", icon: MessageCircleQuestion },
-  DEADLINE: { label: "Roadmap", color: "text-rose-400", bgColor: "bg-rose-500/10 border-rose-500/20", icon: CalendarClock },
+  DEADLINE: { label: "Roadmap", color: "text-destructive", bgColor: "bg-destructive/10 border-destructive/20", icon: CalendarClock },
   FEATURE: { label: "Business Case", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: Sparkles },
   ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bgColor: "bg-violet-500/10 border-violet-500/20", icon: Wrench },
-  BUG: { label: "Bug", color: "text-amber-400", bgColor: "bg-amber-500/10 border-amber-500/20", icon: Bug },
+  BUG: { label: "Bug", color: "text-orange", bgColor: "bg-orange/10 border-orange/20", icon: Bug },
   REPORTED_BUG: { label: "Reported Bug", color: "text-destructive", bgColor: "bg-destructive/10 border-destructive/20", icon: AlertCircle },
   DESIGN: { label: "Design", color: "text-cyan-400", bgColor: "bg-cyan-500/10 border-cyan-500/20", icon: Palette },
 };
 
 function getDeadlineStatus(dueDate: Date | string, completedAt: Date | string | null) {
-  if (completedAt) return { label: "Completed", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" };
+  if (completedAt) return { label: "Completed", color: "text-success", bg: "bg-success/10 border-success/20" };
   const now = new Date();
   const due = new Date(dueDate);
   const diffMs = due.getTime() - now.getTime();
   const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  if (days < 0) return { label: `${Math.abs(days)}d overdue`, color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" };
-  if (days === 0) return { label: "Due today", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" };
-  if (days === 1) return { label: "Due tomorrow", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" };
-  if (days <= 7) return { label: `${days}d left`, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" };
+  if (days < 0) return { label: `${Math.abs(days)}d overdue`, color: "text-destructive", bg: "bg-destructive/10 border-destructive/20" };
+  if (days === 0) return { label: "Due today", color: "text-orange", bg: "bg-orange/10 border-orange/20" };
+  if (days === 1) return { label: "Due tomorrow", color: "text-orange", bg: "bg-orange/10 border-orange/20" };
+  if (days <= 7) return { label: `${days}d left`, color: "text-orange", bg: "bg-orange/10 border-orange/20" };
   return { label: `${days}d left`, color: "text-muted-foreground", bg: "bg-muted border-border" };
 }
 
@@ -527,7 +527,7 @@ export function MeetingNotesTab({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2.5 sm:[grid-template-columns:repeat(auto-fill,minmax(15.75rem,1fr))]">
+        <div className="grid grid-cols-2 gap-s sm:[grid-template-columns:repeat(auto-fill,minmax(15.75rem,1fr))]">
           {filtered.map((note) => {
             const cfg = NOTE_TYPE_CONFIG[(note.noteType as NoteType)] ?? NOTE_TYPE_CONFIG.MEETING_NOTE;
             const Icon = cfg?.icon ?? FileText;
@@ -584,7 +584,7 @@ export function MeetingNotesTab({
                       title={note.completedAt ? "Mark incomplete" : "Mark complete"}
                     >
                       {note.completedAt ? (
-                        <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                        <CheckCircle2 className="h-5 w-5 text-success" />
                       ) : (
                         <Circle className="h-5 w-5 text-muted-foreground/40 hover:text-primary transition-colors" />
                       )}
@@ -631,8 +631,8 @@ export function MeetingNotesTab({
                       icon={CheckSquare}
                       openLabel={`${tasksOpenCount} open ${tasksOpenCount === 1 ? "task" : "tasks"}`}
                       doneLabel={`${tasksDoneCount} ${tasksDoneCount === 1 ? "task" : "tasks"} done`}
-                      iconClass="text-emerald-400"
-                      badgeClass="bg-emerald-400"
+                      iconClass="text-success"
+                      badgeClass="bg-success"
                     />
                     <NoteCardStatusIcon
                       openCount={commentsOpenCount}
@@ -640,8 +640,8 @@ export function MeetingNotesTab({
                       icon={MessageSquare}
                       openLabel={`${commentsOpenCount} open ${commentsOpenCount === 1 ? "comment" : "comments"}`}
                       doneLabel={`${commentsDoneCount} ${commentsDoneCount === 1 ? "comment" : "comments"} understood`}
-                      iconClass="text-amber-400"
-                      badgeClass="bg-amber-400"
+                      iconClass="text-orange"
+                      badgeClass="bg-orange"
                     />
                     <Avatar
                       size="sm"
@@ -1102,7 +1102,7 @@ export function NoteFullScreenDetail({
                     <DropdownMenuItem
                       onClick={handleToggleComplete}
                       disabled={togglingComplete}
-                      className={cn(completedAt && "text-emerald-400 focus:text-emerald-400")}
+                      className={cn(completedAt && "text-success focus:text-success")}
                     >
                       {completedAt ? (
                         <CheckCircle2 className="h-4 w-4" />
@@ -1277,7 +1277,7 @@ export function NoteFullScreenDetail({
             {/* Created by + timestamps + linked task */}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-6 text-s text-muted-foreground/70">
               <span
-                className="inline-flex items-center gap-1.5"
+                className="inline-flex items-center gap-xs"
                 title={note.author.name ?? "Unknown"}
               >
                 <Avatar size="sm">
@@ -1325,7 +1325,7 @@ export function NoteFullScreenDetail({
                           <CheckSquare
                             className={cn(
                               "h-3.5 w-3.5 shrink-0",
-                              done ? "text-muted-foreground/50" : "text-emerald-400",
+                              done ? "text-muted-foreground/50" : "text-success",
                             )}
                           />
                           <span
@@ -1385,7 +1385,7 @@ export function NoteFullScreenDetail({
                         <MessageSquare
                           className={cn(
                             "h-3.5 w-3.5 shrink-0",
-                            t.understood ? "text-muted-foreground/50" : "text-amber-400",
+                            t.understood ? "text-muted-foreground/50" : "text-orange",
                           )}
                         />
                         <span className={cn("min-w-0 flex-1 truncate italic", t.understood && "opacity-60")}>
@@ -1396,7 +1396,7 @@ export function NoteFullScreenDetail({
                             <Check className="h-3 w-3" strokeWidth={3} />
                           </span>
                         ) : (
-                          <span className="grid min-w-5 shrink-0 place-items-center rounded-full bg-amber-400 px-1 text-xs font-bold leading-5 text-background">
+                          <span className="grid min-w-5 shrink-0 place-items-center rounded-full bg-orange px-1 text-xs font-bold leading-5 text-background">
                             {t.comments.length}
                           </span>
                         )}

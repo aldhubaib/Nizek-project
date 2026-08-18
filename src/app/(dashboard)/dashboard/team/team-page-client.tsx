@@ -319,7 +319,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
             <span>{members.length} member{members.length !== 1 ? "s" : ""}</span>
           </div>
           {totalPending > 0 && (
-            <div className="flex items-center gap-2 text-s text-amber-400">
+            <div className="flex items-center gap-2 text-s text-orange">
               <Mail className="w-4 h-4" />
               <span>{totalPending} pending</span>
             </div>
@@ -507,8 +507,8 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[80vh] overflow-y-auto">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              <div className="w-10 h-10 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-orange" />
               </div>
               <div>
                 <h3 className="text-s font-semibold text-foreground">Transfer Tasks Before Blocking</h3>
@@ -588,7 +588,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
 
       {/* Team filter */}
       {allTeams.length > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap -mt-2">
+        <div className="flex items-center gap-xs flex-wrap -mt-2">
           <button
             type="button"
             onClick={() => setTeamFilter("all")}
@@ -664,7 +664,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                       e.preventDefault();
                       handleEmailSave();
                     }}
-                    className="flex items-center gap-1.5 mt-1"
+                    className="flex items-center gap-xs mt-1"
                   >
                     <input
                       type="email"
@@ -724,7 +724,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                   </div>
                 )}
                 {member.projects.length > 0 && (
-                  <div className="flex items-center gap-1.5 mt-1">
+                  <div className="flex items-center gap-xs mt-1">
                     <FolderKanban className="w-3 h-3 text-muted-foreground/50" />
                     <div className="flex flex-wrap gap-1">
                       {member.projects.map((p) =>
@@ -786,7 +786,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                       className={cn(
                         "w-7 h-7 rounded-md flex items-center justify-center transition-colors disabled:opacity-50",
                         member.blocked
-                          ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
+                          ? "bg-success/15 text-success hover:bg-success/25"
                           : "bg-destructive/10 text-destructive hover:bg-destructive/20"
                       )}
                     >
@@ -810,8 +810,8 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
           <div className="space-y-1">
             {filteredTeamInvites.map((inv) => (
               <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors">
-                <div className="w-8 h-8 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
-                  <Mail className="w-3.5 h-3.5 text-amber-400" />
+                <div className="w-8 h-8 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
+                  <Mail className="w-3.5 h-3.5 text-orange" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <span className="text-s font-medium text-foreground truncate block">{inv.email}</span>
@@ -843,8 +843,8 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
             ))}
             {filteredInvitations.map((inv) => (
               <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors">
-                <div className="w-8 h-8 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
-                  <Mail className="w-3.5 h-3.5 text-amber-400" />
+                <div className="w-8 h-8 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
+                  <Mail className="w-3.5 h-3.5 text-orange" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <span className="text-s font-medium text-foreground truncate block">{inv.email}</span>
@@ -981,7 +981,7 @@ function ProjectRoleChip({
                 onClick={() => handlePick(r.id)}
                 disabled={saving}
                 className={cn(
-                  "w-full flex items-center gap-1.5 px-2.5 py-1.5 text-start text-xs transition-colors",
+                  "w-full flex items-center gap-xs px-2.5 py-1.5 text-start text-xs transition-colors",
                   r.id === project.roleId
                     ? "text-foreground font-medium"
                     : "text-muted-foreground hover:text-foreground hover:bg-card",
@@ -1004,7 +1004,7 @@ function ProjectRoleChip({
                 }
               }}
               disabled={saving}
-              className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-start text-xs text-destructive hover:bg-destructive/10 transition-colors"
+              className="w-full flex items-center gap-xs px-2.5 py-1.5 text-start text-xs text-destructive hover:bg-destructive/10 transition-colors"
             >
               <Trash2 className="w-3 h-3 shrink-0" strokeWidth={1.5} />
               Remove from project
@@ -1017,8 +1017,8 @@ function ProjectRoleChip({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              <div className="w-10 h-10 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-orange" />
               </div>
               <div>
                 <h3 className="text-s font-semibold text-foreground">Transfer Tasks Required</h3>

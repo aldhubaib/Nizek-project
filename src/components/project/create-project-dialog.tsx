@@ -28,9 +28,9 @@ export type ContractType = "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE" |
 export const CONTRACT_TYPES: { id: ContractType; label: string; icon: typeof Users; description: string; color: string }[] = [
   { id: "FULL_TEAM", label: "Full Team", icon: Users, description: "Dedicated team, ongoing work", color: "bg-primary/15 border-primary/40 text-primary" },
   { id: "PART_TEAM", label: "Part Team", icon: UserMinus, description: "Shared resources, part-time", color: "bg-violet-500/15 border-violet-500/40 text-violet-400" },
-  { id: "FIXED", label: "Fixed", icon: Lock, description: "Fixed scope and timeline", color: "bg-amber-500/15 border-amber-500/40 text-amber-400" },
+  { id: "FIXED", label: "Fixed", icon: Lock, description: "Fixed scope and timeline", color: "bg-orange/15 border-orange/40 text-orange" },
   { id: "MAINTENANCE", label: "Maintenance", icon: Wrench, description: "Bug fixes and upkeep", color: "bg-cyan-500/15 border-cyan-500/40 text-cyan-400" },
-  { id: "STARTUP", label: "Startup", icon: Rocket, description: "Startup engagement", color: "bg-rose-500/15 border-rose-500/40 text-rose-400" },
+  { id: "STARTUP", label: "Startup", icon: Rocket, description: "Startup engagement", color: "bg-destructive/15 border-destructive/40 text-destructive" },
 ];
 
 export function ContractTypePicker({ value, onChange }: { value: ContractType; onChange: (v: ContractType) => void }) {
@@ -45,7 +45,7 @@ export function ContractTypePicker({ value, onChange }: { value: ContractType; o
             type="button"
             onClick={() => onChange(t.id)}
             className={cn(
-              "flex items-start gap-2.5 rounded-lg border p-3 text-start transition-colors",
+              "flex items-start gap-s rounded-lg border p-3 text-start transition-colors",
               isActive ? t.color : "border-border text-muted-foreground hover:border-muted-foreground/40"
             )}
           >

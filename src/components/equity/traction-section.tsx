@@ -116,7 +116,7 @@ export function TractionSection({
         !editing && (
           <button
             onClick={() => setEditing(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-s font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors shrink-0"
+            className="flex items-center gap-xs px-3 py-1.5 rounded-lg border border-border text-s font-medium text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors shrink-0"
           >
             <Pencil className="w-3.5 h-3.5" />
             {milestones.length > 0 ? "Edit" : "Fill in"}

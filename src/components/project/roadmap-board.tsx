@@ -64,14 +64,14 @@ function noteBodyPreview(html: string): string {
 }
 
 function getDeadlineStatus(dueDate: Date | string, completedAt: Date | string | null) {
-  if (completedAt) return { label: "Completed", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" };
+  if (completedAt) return { label: "Completed", color: "text-success", bg: "bg-success/10 border-success/20" };
   const now = new Date();
   const due = new Date(dueDate);
   const days = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  if (days < 0) return { label: `${Math.abs(days)}d overdue`, color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" };
-  if (days === 0) return { label: "Due today", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" };
-  if (days === 1) return { label: "Due tomorrow", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" };
-  if (days <= 7) return { label: `${days}d left`, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" };
+  if (days < 0) return { label: `${Math.abs(days)}d overdue`, color: "text-destructive", bg: "bg-destructive/10 border-destructive/20" };
+  if (days === 0) return { label: "Due today", color: "text-orange", bg: "bg-orange/10 border-orange/20" };
+  if (days === 1) return { label: "Due tomorrow", color: "text-orange", bg: "bg-orange/10 border-orange/20" };
+  if (days <= 7) return { label: `${days}d left`, color: "text-orange", bg: "bg-orange/10 border-orange/20" };
   return { label: `${days}d left`, color: "text-muted-foreground", bg: "bg-muted border-border" };
 }
 
@@ -252,7 +252,7 @@ export function RoadmapBoard({
       onDragEnd={handleDragEnd}
       onDragCancel={() => setActiveId(null)}
     >
-      <div className="flex w-full min-w-0 flex-col gap-4 pb-4 lg:h-[calc(100dvh-8rem)] lg:flex-row lg:gap-3 lg:overflow-x-auto">
+      <div className="flex w-full min-w-0 flex-col gap-l pb-l lg:min-h-0 lg:flex-1 lg:flex-row lg:gap-m lg:overflow-x-auto">
         {ROADMAP_COLUMNS.map((column) => (
           <RoadmapColumn
             key={column.id}
@@ -344,7 +344,7 @@ function RoadmapColumn({
           />
         )}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-2 pb-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-s overflow-y-auto px-2 pb-3">
         {notes.map((note) => (
           <RoadmapCard
             key={note.id}
@@ -437,7 +437,7 @@ function RoadmapCard({
             title={note.completedAt ? "Mark incomplete" : "Mark complete"}
           >
             {note.completedAt ? (
-              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+              <CheckCircle2 className="h-5 w-5 text-success" />
             ) : (
               <Circle className="h-5 w-5 text-muted-foreground/40 hover:text-primary transition-colors" />
             )}
@@ -475,8 +475,8 @@ function RoadmapCard({
             icon={CheckSquare}
             openLabel={`${tasksOpenCount} open ${tasksOpenCount === 1 ? "task" : "tasks"}`}
             doneLabel={`${tasksDoneCount} ${tasksDoneCount === 1 ? "task" : "tasks"} done`}
-            iconClass="text-emerald-400"
-            badgeClass="bg-emerald-400"
+            iconClass="text-success"
+            badgeClass="bg-success"
           />
           <NoteCardStatusIcon
             openCount={commentsOpenCount}
@@ -484,8 +484,8 @@ function RoadmapCard({
             icon={MessageSquare}
             openLabel={`${commentsOpenCount} open ${commentsOpenCount === 1 ? "comment" : "comments"}`}
             doneLabel={`${commentsDoneCount} ${commentsDoneCount === 1 ? "comment" : "comments"} understood`}
-            iconClass="text-amber-400"
-            badgeClass="bg-amber-400"
+            iconClass="text-orange"
+            badgeClass="bg-orange"
           />
           <Avatar
             size="sm"

@@ -53,7 +53,7 @@ function StatCard({
     sky: { chip: "bg-sky-500/15 text-sky-400", value: "text-sky-400" },
     violet: { chip: "bg-violet-500/15 text-violet-400", value: "text-violet-400" },
     bad: { chip: "bg-destructive/15 text-destructive", value: "text-destructive" },
-    good: { chip: "bg-emerald-500/15 text-emerald-400", value: "text-emerald-400" },
+    good: { chip: "bg-success/15 text-success", value: "text-success" },
   }[tone];
 
   return (
@@ -89,7 +89,7 @@ function ChannelPill({
       className={cn(
         "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap",
         on
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+          ? "border-success/30 bg-success/10 text-success"
           : "border-border bg-card text-muted-foreground/70",
       )}
     >
@@ -110,13 +110,13 @@ function StatusPill({ m }: { m: MemberNotificationStatus }) {
   }
   if (m.lastNotification.read) {
     return (
-      <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400 whitespace-nowrap">
+      <span className="inline-flex items-center rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-xs font-medium text-success whitespace-nowrap">
         Opened
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400 whitespace-nowrap">
+    <span className="inline-flex items-center rounded-full border border-orange/30 bg-orange/10 px-2 py-0.5 text-xs font-medium text-orange whitespace-nowrap">
       Not Opened
     </span>
   );
@@ -148,8 +148,8 @@ function TestButton({
         className={cn(
           "inline-flex h-7 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium whitespace-nowrap",
           state.pushed
-            ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
-            : "border-amber-500/30 bg-amber-500/15 text-amber-400",
+            ? "border-success/30 bg-success/15 text-success"
+            : "border-orange/30 bg-orange/15 text-orange",
         )}
       >
         <CheckCheck className="h-3 w-3" />
@@ -362,7 +362,7 @@ function MembersView() {
           type="button"
           onClick={load}
           disabled={loading}
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground disabled:opacity-50"
+          className="flex h-8 shrink-0 items-center gap-xs rounded-lg border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground disabled:opacity-50"
         >
           <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
           Refresh
@@ -435,7 +435,7 @@ function MembersView() {
         <button
           type="button"
           onClick={() => exportCsv(filtered)}
-          className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
+          className="flex h-8 items-center gap-xs rounded-lg border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-muted-foreground/40 hover:text-foreground"
         >
           <Download className="h-3 w-3" />
           Export
@@ -480,17 +480,17 @@ function MembersView() {
                         </div>
                       )}
                       <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-xs">
                           <span className="truncate text-s font-medium text-foreground">
                             {m.name || m.email}
                           </span>
                           {enabled ? (
-                            <BellRing className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                            <BellRing className="h-3.5 w-3.5 shrink-0 text-success" />
                           ) : (
                             <BellOff className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
                           )}
                           {m.unreadCount > 0 && (
-                            <span className="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400">
+                            <span className="shrink-0 rounded-full border border-orange/30 bg-orange/15 px-1.5 py-0.5 text-xs font-medium text-orange">
                               {m.unreadCount} unread
                             </span>
                           )}
@@ -515,7 +515,7 @@ function MembersView() {
                           {m.lastNotification.title}
                         </div>
                         {m.lastNotification.read ? (
-                          <div className="flex items-center gap-1 text-xs text-emerald-400">
+                          <div className="flex items-center gap-1 text-xs text-success">
                             <CheckCheck className="h-3 w-3" />
                             Opened
                             {m.lastNotification.readAt
@@ -524,7 +524,7 @@ function MembersView() {
                           </div>
                         ) : (
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-                            <span className="inline-flex items-center gap-1 text-amber-400">
+                            <span className="inline-flex items-center gap-1 text-orange">
                               <Circle className="h-2 w-2 fill-current" />
                               Not opened yet
                             </span>
@@ -555,7 +555,7 @@ function MembersView() {
                   </td>
 
                   <td className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-xs">
                       <ChannelPill
                         icon={Globe}
                         label="Website"

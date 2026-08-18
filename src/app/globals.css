@@ -45,6 +45,7 @@
   --color-orange: var(--orange);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-warning: var(--orange);
   --text-xs: 0.625rem;
   --text-s: 0.8125rem;
   --text-m: 1rem;
@@ -115,42 +116,6 @@
   --app-bottom-inset: env(safe-area-inset-bottom, 0px);
 }
 
-.dark {
-  --background: #0e0e10;
-  --foreground: hsl(0 0% 93%);
-  --card: hsl(0 0% 4%);
-  --card-foreground: hsl(0 0% 93%);
-  --popover: hsl(0 0% 4%);
-  --popover-foreground: hsl(0 0% 93%);
-  --primary: hsl(217 72% 56%);
-  --primary-foreground: hsl(0 0% 100%);
-  --secondary: hsl(0 0% 10%);
-  --secondary-foreground: hsl(0 0% 93%);
-  --muted: hsl(0 0% 10%);
-  --muted-foreground: hsl(0 0% 45%);
-  --accent: hsl(0 0% 10%);
-  --accent-foreground: hsl(0 0% 93%);
-  --surface: hsl(0 0% 8%);
-  --surface-2: hsl(0 0% 12%);
-  --destructive: hsl(0 72% 51%);
-  --border: hsl(228 8% 9%);
-  --input: hsl(228 8% 14%);
-  --ring: hsl(217 72% 56%);
-  --chart-1: hsl(217 72% 56%);
-  --chart-2: hsl(258 60% 59%);
-  --chart-3: hsl(142 50% 45%);
-  --chart-4: hsl(25 90% 55%);
-  --chart-5: hsl(0 72% 51%);
-  --sidebar: hsl(0 0% 4%);
-  --sidebar-foreground: hsl(0 0% 45%);
-  --sidebar-primary: hsl(258 60% 59%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(0 0% 10%);
-  --sidebar-accent-foreground: hsl(0 0% 93%);
-  --sidebar-border: hsl(0 0% 12%);
-  --sidebar-ring: hsl(258 60% 59%);
-}
-
 /* 20px on phones. Chrome device mode reports safe-area left/right as 0, so
    20px looks correct there; iOS Safari with viewport-fit:cover does not. */
 @media (max-width: 1023px) {
@@ -190,11 +155,11 @@
       background: transparent;
     }
     ::-webkit-scrollbar-thumb {
-      background: hsl(228 8% 9%);
+      background: var(--border);
       border-radius: 3px;
     }
     ::-webkit-scrollbar-thumb:hover {
-      background: hsl(0 0% 20%);
+      background: var(--surface-2);
     }
   }
 
@@ -295,8 +260,17 @@
 }
 
 .text-fit {
-  font-size: min(0.5rem, 38cqi);
+  font-size: var(--text-fit);
   line-height: 1;
+}
+
+/* 44px minimum tap zone on touch devices. The visible element stays its
+   authored size; the hit area grows via min-width / min-height. */
+@media (pointer: coarse) {
+  .app-touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* Room for the fixed bell / ⋮ overlay on page title bars.
@@ -353,17 +327,15 @@ header.app-top-bar.app-top-bar-menu {
   z-index: -1;
 }
 
-/* iPhone home indicator. Simulator Safari is not standalone, and env() is
-   sometimes 0 there even with viewport-fit: cover. */
-@supports (-webkit-touch-callout: none) {
-  :root,
-  html {
-    --app-bottom-inset: max(env(safe-area-inset-bottom, 0px), 34px);
-  }
-}
-
+/* iOS WebKit: standalone PWA gets floor values for insets that env() sometimes
+   under-reports. The 34px bottom floor only applies in standalone so plain
+   Safari tabs don't get phantom bottom padding. */
 @supports (-webkit-touch-callout: none) {
   @media (display-mode: standalone) {
+    :root,
+    html {
+      --app-bottom-inset: max(env(safe-area-inset-bottom, 0px), 34px);
+    }
     .app-top-bar {
       --app-bar-height: calc(3rem + max(env(safe-area-inset-top, 0px), 47px));
       padding-top: calc(0.75rem + max(env(safe-area-inset-top, 0px), 47px));
@@ -386,6 +358,9 @@ header.app-top-bar.app-top-bar-menu {
     .app-top-bar-tall::before {
       top: max(env(safe-area-inset-top, 0px), 47px);
     }
+    .app-scroll-under-tall {
+      padding-top: calc(3.5rem + max(env(safe-area-inset-top, 0px), 47px));
+    }
   }
 }
 
@@ -407,14 +382,6 @@ html.app-chrome-away .app-top-bar-tall:not(.sticky):not(.fixed):not(.absolute) {
 
 .app-scroll-under-tall {
   padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
-}
-
-@supports (-webkit-touch-callout: none) {
-  @media (display-mode: standalone) {
-    .app-scroll-under-tall {
-      padding-top: calc(3.5rem + max(env(safe-area-inset-top, 0px), 47px));
-    }
-  }
 }
 
 /* Tiptap editor heading styles */
@@ -440,13 +407,13 @@ html.app-chrome-away .app-top-bar-tall:not(.sticky):not(.fixed):not(.absolute) {
   margin-bottom: 0.5rem;
 }
 .ProseMirror blockquote {
-  border-inline-start: 3px solid hsl(0 0% 25%);
+  border-inline-start: 3px solid var(--surface-2);
   padding-inline-start: 1rem;
-  color: hsl(0 0% 60%);
+  color: var(--muted-foreground);
   margin: 1rem 0;
 }
 .ProseMirror hr {
-  border-color: hsl(0 0% 15%);
+  border-color: var(--border);
   margin: 1.5rem 0;
 }
 .ProseMirror img {
@@ -456,13 +423,13 @@ html.app-chrome-away .app-top-bar-tall:not(.sticky):not(.fixed):not(.absolute) {
   margin: 1rem 0;
 }
 .ProseMirror code {
-  background: hsl(0 0% 12%);
+  background: var(--surface-2);
   border-radius: 0.25rem;
   padding: 0.15rem 0.4rem;
   font-size: 0.875em;
 }
 .ProseMirror pre {
-  background: hsl(0 0% 8%);
+  background: var(--surface);
   border-radius: 0.5rem;
   padding: 1rem;
   overflow-x: auto;
@@ -478,7 +445,7 @@ html.app-chrome-away .app-top-bar-tall:not(.sticky):not(.fixed):not(.absolute) {
   margin: 0.5rem 0;
 }
 .ProseMirror p.is-editor-empty:first-child::before {
-  color: hsl(0 0% 30%);
+  color: var(--muted-foreground);
   content: attr(data-placeholder);
   float: inline-start;
   height: 0;
@@ -507,16 +474,16 @@ mark.note-annotation {
   cursor: pointer;
 }
 mark.note-annotation-comment {
-  background: rgb(251 191 36 / 0.28);
+  background: color-mix(in srgb, var(--orange) 28%, transparent);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
-  border-bottom: 2px solid rgb(251 191 36 / 0.75);
+  border-bottom: 2px solid color-mix(in srgb, var(--orange) 75%, transparent);
 }
 mark.note-annotation-task {
-  background: rgb(74 222 128 / 0.22);
+  background: color-mix(in srgb, var(--success) 22%, transparent);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
-  border-bottom: 2px solid rgb(74 222 128 / 0.75);
+  border-bottom: 2px solid color-mix(in srgb, var(--success) 75%, transparent);
 }
 
 .note-people-inline {

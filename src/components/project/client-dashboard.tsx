@@ -31,10 +31,10 @@ interface Props {
 }
 
 const STAGE_CONFIG = [
-  { key: "TODO" as const, label: "To Do", icon: ListTodo, color: "text-zinc-400" },
-  { key: "IN_PROGRESS" as const, label: "In Progress", icon: Clock, color: "text-blue-400" },
-  { key: "REVIEW" as const, label: "Review", icon: AlertCircle, color: "text-amber-400" },
-  { key: "DONE" as const, label: "Done", icon: CheckCircle2, color: "text-emerald-400" },
+  { key: "TODO" as const, label: "To Do", icon: ListTodo, color: "text-muted-foreground" },
+  { key: "IN_PROGRESS" as const, label: "In Progress", icon: Clock, color: "text-primary" },
+  { key: "REVIEW" as const, label: "Review", icon: AlertCircle, color: "text-orange" },
+  { key: "DONE" as const, label: "Done", icon: CheckCircle2, color: "text-success" },
 ];
 
 export function ClientDashboard({ projects }: Props) {
@@ -63,8 +63,8 @@ export function ClientDashboard({ projects }: Props) {
                   variant="outline"
                   className={
                     project.isActive
-                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-                      : "border-red-500/40 bg-red-500/10 text-red-400"
+                      ? "border-success/40 bg-success/10 text-success"
+                      : "border-destructive/40 bg-destructive/10 text-destructive"
                   }
                 >
                   {project.isActive ? "Active" : "Expired"}

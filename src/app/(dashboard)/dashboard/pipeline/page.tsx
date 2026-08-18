@@ -25,7 +25,7 @@ export default async function PipelinePage({
       <PageHeader>
         <Link
           href={backHref}
-          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s"
+          className="flex items-center gap-xs text-muted-foreground hover:text-foreground transition-colors text-s"
         >
           <ArrowLeft className="w-4 h-4" />
           Dashboard

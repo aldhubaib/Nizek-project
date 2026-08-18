@@ -56,7 +56,7 @@ export function DashboardTabs({ dashboard, management, product, dev }: Props) {
               key={tab.id}
               onClick={() => setActive(tab.id)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-s font-medium transition-colors",
+                "flex items-center gap-xs px-3 py-1.5 rounded-md text-s font-medium transition-colors",
                 active === tab.id
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"

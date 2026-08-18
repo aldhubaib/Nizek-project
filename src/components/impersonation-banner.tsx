@@ -21,16 +21,16 @@ export function ImpersonationBanner({ targetName }: { targetName: string }) {
   }
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[10000] flex items-center gap-3 rounded-full border border-amber-500/40 bg-amber-500/15 px-4 py-2 shadow-xl backdrop-blur-md">
-      <Eye className="w-4 h-4 text-amber-400 shrink-0" />
-      <span className="text-s text-amber-100 whitespace-nowrap">
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[10000] flex items-center gap-3 rounded-full border border-orange/40 bg-orange/15 px-4 py-2 shadow-xl backdrop-blur-md">
+      <Eye className="w-4 h-4 text-orange shrink-0" />
+      <span className="text-s text-foreground whitespace-nowrap">
         Viewing as <strong className="font-semibold">{targetName}</strong>
       </span>
       <button
         type="button"
         onClick={handleExit}
         disabled={leaving}
-        className="flex items-center gap-1 rounded-full bg-amber-500/25 hover:bg-amber-500/40 px-2.5 py-1 text-xs font-semibold text-amber-100 transition-colors disabled:opacity-50 whitespace-nowrap"
+        className="flex items-center gap-1 rounded-full bg-orange/25 hover:bg-orange/40 px-2.5 py-1 text-xs font-semibold text-foreground transition-colors disabled:opacity-50 whitespace-nowrap"
       >
         <LogOut className="w-3 h-3" />
         {leaving ? "Exiting…" : "Exit"}

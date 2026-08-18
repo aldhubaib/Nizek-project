@@ -91,7 +91,7 @@ export function DashboardShell({
   const headerActions = (
     <>
       <NotificationBell currentUserId={currentUserId} />
-      <div id={PAGE_HEADER_ACTIONS_SLOT} className="flex items-center gap-1" />
+      <div id={PAGE_HEADER_ACTIONS_SLOT} className="flex items-center gap-xs" />
       <PageOverflowMenu />
     </>
   );
@@ -121,7 +121,7 @@ export function DashboardShell({
 
       {/* Bell + ⋮ overlay the page's own header instead of stacking a second bar. */}
       {!isDesktop && !onInbox && (
-        <div className="app-shell-chrome fixed top-0 right-0 z-[100] flex app-top-bar items-center gap-1 bg-transparent pb-5">
+        <div className="app-shell-chrome fixed top-0 right-0 z-[100] flex app-top-bar items-center gap-xs bg-transparent pb-5">
           {headerActions}
         </div>
       )}
@@ -138,7 +138,7 @@ export function DashboardShell({
       {/* Mobile drawer */}
       {!isDesktop && (
         <div
-          className={`fixed top-0 left-0 w-[260px] h-screen bg-sidebar border-r border-sidebar-border z-[600] transition-transform duration-200 ease-out ${
+          className={`fixed top-0 left-0 w-[220px] h-screen bg-sidebar border-r border-sidebar-border z-[600] transition-transform duration-200 ease-out ${
             drawerOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
@@ -161,7 +161,7 @@ export function DashboardShell({
       >
         <ClientRouteGuard enabled={isClient} />
         {isDesktop && !onInbox && (
-          <div className="app-shell-chrome fixed top-3 right-4 z-[100] flex items-center gap-1">
+          <div className="app-shell-chrome fixed top-3 right-l z-[100] flex items-center gap-xs">
             {headerActions}
           </div>
         )}

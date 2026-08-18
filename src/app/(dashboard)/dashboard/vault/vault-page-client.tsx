@@ -93,13 +93,13 @@ export function VaultPageClient({
           <button
             type="button"
             onClick={backToFolders}
-            className="inline-flex items-center gap-1.5 text-s font-medium text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex items-center gap-xs text-s font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             All projects
           </button>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-s">
             <ProjectGlyph name={openFolder.name} logoUrl={openFolder.logoUrl} />
             <div className="min-w-0">
               <h2 className="truncate text-s font-semibold">

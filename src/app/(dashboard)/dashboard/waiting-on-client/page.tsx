@@ -5,9 +5,9 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 
 const TASK_TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string; label: string }> = {
-  FEATURE: { icon: Sparkles, color: "text-blue-400 bg-blue-500/10 border-blue-500/20", label: "Business Case" },
+  FEATURE: { icon: Sparkles, color: "text-primary bg-primary/10 border-primary/20", label: "Business Case" },
   ENHANCEMENT: { icon: Zap, color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20", label: "Enhancement" },
-  BUG: { icon: Bug, color: "text-red-400 bg-red-500/10 border-red-500/20", label: "Bug" },
+  BUG: { icon: Bug, color: "text-destructive bg-destructive/10 border-destructive/20", label: "Bug" },
   REPORTED_BUG: { icon: AlertCircle, color: "text-orange-400 bg-orange-500/10 border-orange-500/20", label: "Reported Bug" },
   DESIGN: { icon: Palette, color: "text-purple-400 bg-purple-500/10 border-purple-500/20", label: "Design" },
 };
@@ -41,7 +41,7 @@ export default async function WaitingOnClientPage({
         <div className="flex items-center gap-3">
           <Link
             href={backHref}
-            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s"
+            className="flex items-center gap-xs text-muted-foreground hover:text-foreground transition-colors text-s"
           >
             <ArrowLeft className="w-4 h-4" />
             Dashboard
@@ -56,7 +56,7 @@ export default async function WaitingOnClientPage({
           </span>
         </div>
         {totalTasks > 0 && (
-          <span className="flex items-center gap-1 text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5">
+          <span className="flex items-center gap-1 text-xs font-bold text-orange bg-orange/10 border border-orange/20 rounded-full px-2.5 py-0.5">
             {totalTasks} pending
           </span>
         )}
@@ -112,7 +112,7 @@ export default async function WaitingOnClientPage({
                       <p className="text-xs text-muted-foreground/60 truncate italic flex items-center gap-1 @max-md/card:hidden">
                         {item.note ? (
                           <>
-                            <StickyNote className="w-3 h-3 text-amber-400/60 shrink-0" />
+                            <StickyNote className="w-3 h-3 text-orange/60 shrink-0" />
                             {item.note}
                           </>
                         ) : "—"}

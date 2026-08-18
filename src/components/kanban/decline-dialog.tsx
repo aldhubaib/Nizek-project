@@ -126,7 +126,7 @@ export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm
                   Decline a task
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-s">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/60 py-0.5 ps-0.5 pe-2.5 text-muted-foreground">
+                  <span className="inline-flex items-center gap-xs rounded-full bg-muted/60 py-0.5 ps-0.5 pe-2.5 text-muted-foreground">
                     <Avatar className="size-5">
                       {meAvatar && <AvatarImage src={meAvatar} alt={me} />}
                       <AvatarFallback className="bg-muted text-xs font-semibold text-muted-foreground">
@@ -137,7 +137,7 @@ export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm
                   </span>
                   <ArrowRight className="h-4 w-4 text-muted-foreground" />
                   {mentionName ? (
-                    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-primary/15 py-0.5 ps-0.5 pe-2.5 font-medium text-primary">
+                    <span className="inline-flex min-w-0 max-w-full items-center gap-xs rounded-full bg-primary/15 py-0.5 ps-0.5 pe-2.5 font-medium text-primary">
                       <Avatar className="size-5">
                         {mentionAvatar && <AvatarImage src={mentionAvatar} alt={mentionName} />}
                         <AvatarFallback className="bg-primary text-xs font-bold text-primary-foreground">
@@ -147,7 +147,7 @@ export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm
                       <span className="truncate">{mentionName}</span>
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/60 px-2.5 py-1 text-muted-foreground">
+                    <span className="inline-flex items-center gap-xs rounded-full bg-muted/60 px-2.5 py-1 text-muted-foreground">
                       <User className="h-3.5 w-3.5" />
                       Unassigned
                     </span>
@@ -178,7 +178,7 @@ export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm
 
             {/* Pending files */}
             {pendingFiles.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-3">
+              <div className="flex flex-wrap gap-xs mt-3">
                 {pendingFiles.map((pf, i) => (
                   <div key={i} className="relative group/pending">
                     {pf.preview ? (

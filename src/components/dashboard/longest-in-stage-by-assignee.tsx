@@ -20,8 +20,8 @@ function formatDuration(ms: number) {
 
 function getDurationColor(ms: number) {
   const days = ms / (1000 * 60 * 60 * 24);
-  if (days >= 7) return "text-red-400";
-  if (days >= 5) return "text-amber-400";
+  if (days >= 7) return "text-destructive";
+  if (days >= 5) return "text-orange";
   return "text-yellow-400";
 }
 
@@ -54,7 +54,7 @@ function AssigneeRow({ item, tab }: { item: AssigneeData; tab?: string }) {
           Longest: <span className={cn("font-mono font-semibold", color)}>{formatDuration(item.longestMs)}</span>
         </p>
       </div>
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex items-center gap-xs shrink-0">
         <span className="text-l font-bold tabular-nums text-foreground">
           {item.lateCount}
         </span>
@@ -79,7 +79,7 @@ export function LongestInStageByAssignee({ data, tab, thresholdDays = 2 }: { dat
             {tab === "product" ? "PM" : tab === "dev" ? "Dev" : ""} Longest in Stage By Assignee
           </h2>
           {totalLate > 0 && (
-            <span className="flex items-center gap-1 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
+            <span className="flex items-center gap-1 text-xs font-semibold text-orange bg-orange/10 border border-orange/20 rounded-full px-2 py-0.5">
               <AlertTriangle className="w-3 h-3" />
               {totalLate} late
             </span>
@@ -113,7 +113,7 @@ export function LongestInStageByAssignee({ data, tab, thresholdDays = 2 }: { dat
 
       <Link
         href={`/dashboard/pipeline-assignee${tab ? `?tab=${tab}` : ""}`}
-        className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5 mt-auto"
+        className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-xs mt-auto"
       >
         <ExternalLink className="w-3 h-3" />
         View All ({data.length})

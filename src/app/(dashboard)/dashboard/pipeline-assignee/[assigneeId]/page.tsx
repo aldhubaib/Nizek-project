@@ -36,13 +36,13 @@ export default async function AssigneeDetailPage({
       <PageHeader>
         <Link
           href={backHref}
-          className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s"
+          className="flex items-center gap-xs text-muted-foreground hover:text-foreground transition-colors text-s"
         >
           <ArrowLeft className="w-4 h-4" />
           Back
         </Link>
         <span className="text-border">|</span>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-s">
           {assignee?.imageUrl ? (
             <img
               src={assignee.imageUrl}

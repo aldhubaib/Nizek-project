@@ -104,8 +104,8 @@ export function AuditClient({ access, reports }: Props) {
                       className={cn(
                         "grid h-9 w-9 shrink-0 place-items-center rounded-lg border",
                         submitted
-                          ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                          : "border-amber-500/20 bg-amber-500/10 text-amber-400",
+                          ? "border-success/20 bg-success/10 text-success"
+                          : "border-orange/20 bg-orange/10 text-orange",
                       )}
                     >
                       {submitted ? (
@@ -132,10 +132,10 @@ export function AuditClient({ access, reports }: Props) {
                         {r.decidedItems}/{r.totalItems} reviewed
                       </span>
                       {r.blamedItems > 0 && (
-                        <span className="text-red-400">{r.blamedItems} blamed</span>
+                        <span className="text-destructive">{r.blamedItems} blamed</span>
                       )}
                       {r.excusedItems > 0 && (
-                        <span className="text-emerald-400">
+                        <span className="text-success">
                           {r.excusedItems} excused
                         </span>
                       )}
@@ -145,8 +145,8 @@ export function AuditClient({ access, reports }: Props) {
                       className={cn(
                         "inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
                         submitted
-                          ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                          : "border-amber-500/20 bg-amber-500/10 text-amber-400",
+                          ? "border-success/20 bg-success/10 text-success"
+                          : "border-orange/20 bg-orange/10 text-orange",
                       )}
                     >
                       {submitted ? "Submitted" : "Draft"}
@@ -203,7 +203,7 @@ export function AuditClient({ access, reports }: Props) {
             })}
           </div>
 
-          {error && <p className="text-s text-red-400">{error}</p>}
+          {error && <p className="text-s text-destructive">{error}</p>}
 
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => setCreateOpen(false)}>

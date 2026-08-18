@@ -37,7 +37,7 @@ export function NoteSlideOver({
           className,
         )}
       >
-        <header className="flex app-top-bar shrink-0 items-center gap-1.5 border-b border-border px-2 sm:px-3">
+        <header className="flex app-top-bar shrink-0 items-center gap-xs border-b border-border px-2 sm:px-3">
           <button
             type="button"
             onClick={onClose}

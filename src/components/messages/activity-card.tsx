@@ -69,7 +69,7 @@ export function ActivityCard({
       <div className={cn("h-0.5 w-full bg-current opacity-60", theme.accent)} />
 
       <div className="space-y-3 p-3.5">
-        <div className="flex items-start gap-2.5">
+        <div className="flex items-start gap-s">
           <div
             className={cn(
               "grid size-9 shrink-0 place-items-center rounded-full",
@@ -140,7 +140,7 @@ export function NizekBotAvatar({ show }: { show: boolean }) {
   return (
     <div className="w-8 shrink-0 self-start">
       <div
-        className="grid h-8 w-8 place-items-center rounded-full bg-emerald-500 text-xs font-bold text-white shadow-sm"
+        className="grid h-8 w-8 place-items-center rounded-full bg-success text-xs font-bold text-white shadow-sm"
         aria-hidden
       >
         {NIZEK_BOT_INITIALS}

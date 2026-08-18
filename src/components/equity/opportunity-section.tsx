@@ -65,9 +65,9 @@ function LaunchBadge({ liveDate }: { liveDate: string | null }) {
       className={cn(
         "px-2 py-0.5 rounded-full text-xs font-medium",
         status === "LIVE"
-          ? "bg-emerald-500/10 text-emerald-400"
+          ? "bg-success/10 text-success"
           : status === "SCHEDULED"
-            ? "bg-amber-500/10 text-amber-400"
+            ? "bg-orange/10 text-orange"
             : "bg-muted text-muted-foreground",
       )}
     >

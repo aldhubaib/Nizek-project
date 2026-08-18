@@ -71,7 +71,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
         // within itself instead of burying the stages below it; a fixed-width
         // full-height rail column from the desktop breakpoint up.
         "flex w-full max-h-[70dvh] shrink-0 flex-col rounded-lg border border-border/50 bg-muted/30 transition-colors lg:h-full lg:max-h-none lg:w-[312px] lg:min-w-[312px]",
-        isOver && !disabled && isValidDropTarget && "border-emerald-500/60 bg-emerald-500/5",
+        isOver && !disabled && isValidDropTarget && "border-success/60 bg-success/5",
         isOver && !disabled && isDragging && !isValidDropTarget && "border-destructive/50 bg-destructive/5"
       )}
     >
@@ -100,7 +100,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
             <>
               {upNextTasks.length > 0 && (
                 <div className="mb-2">
-                  <div className="flex items-center gap-1.5 px-1 py-1.5 mb-1.5">
+                  <div className="flex items-center gap-xs px-1 py-1.5 mb-1.5">
                     <Zap className="w-3 h-3 text-cyan-400" strokeWidth={2} />
                     <span className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">
                       Up Next
@@ -128,12 +128,12 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
                   {upNextTasks.length > 0 && (
                     <div className="border-t border-border/50 my-2" />
                   )}
-                  <div className="flex items-center gap-1.5 px-1 py-1.5 mb-1.5">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-500" strokeWidth={2} />
-                    <span className="text-xs font-semibold text-emerald-500 uppercase tracking-wider">
+                  <div className="flex items-center gap-xs px-1 py-1.5 mb-1.5">
+                    <CheckCircle2 className="w-3 h-3 text-success" strokeWidth={2} />
+                    <span className="text-xs font-semibold text-success uppercase tracking-wider">
                       Ready
                     </span>
-                    <span className="text-xs text-emerald-500/60">{readyTasks.length}</span>
+                    <span className="text-xs text-success/60">{readyTasks.length}</span>
                   </div>
                   <div className="space-y-2">
                     {readyTasks.map((task) => (
@@ -156,12 +156,12 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
                   {(upNextTasks.length > 0 || readyTasks.length > 0) && (
                     <div className="border-t border-border/50 my-2" />
                   )}
-                  <div className="flex items-center gap-1.5 px-1 py-1.5 mb-1.5">
-                    <AlertCircle className="w-3 h-3 text-amber-500" strokeWidth={2} />
-                    <span className="text-xs font-semibold text-amber-500 uppercase tracking-wider">
+                  <div className="flex items-center gap-xs px-1 py-1.5 mb-1.5">
+                    <AlertCircle className="w-3 h-3 text-orange" strokeWidth={2} />
+                    <span className="text-xs font-semibold text-orange uppercase tracking-wider">
                       Needs Input
                     </span>
-                    <span className="text-xs text-amber-500/60">{needsInputTasks.length}</span>
+                    <span className="text-xs text-orange/60">{needsInputTasks.length}</span>
                   </div>
                   <div className="space-y-2">
                     {needsInputTasks.map((task) => (

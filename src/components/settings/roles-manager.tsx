@@ -318,7 +318,7 @@ export function RolesManager({ roles }: Props) {
                         <Shield className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
                         <span className="text-s font-medium">{role.name}</span>
                         {role.isTeamLead && (
-                          <span className="text-xs bg-amber-500/15 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1">
+                          <span className="text-xs bg-orange/15 text-orange border border-orange/30 px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1">
                             <Crown className="w-2.5 h-2.5" strokeWidth={2} />
                             Team Lead
                           </span>
@@ -354,7 +354,7 @@ export function RolesManager({ roles }: Props) {
                     </div>
 
                     {/* Permission badges */}
-                    <div className="flex flex-wrap gap-1.5 mb-2">
+                    <div className="flex flex-wrap gap-xs mb-2">
                       <PermBadge label="Delete" enabled={role.canDeleteTask} />
                       <PermBadge label="Decline" enabled={role.canDeclineTask} />
                     </div>
@@ -384,17 +384,17 @@ function RoleStageSummary({ parsed }: { parsed: StagePerms; canMoveTask?: boolea
   return (
     <div className="space-y-1 mt-2">
       {hasCreate && (
-        <div className="flex items-center gap-1.5 text-xs">
+        <div className="flex items-center gap-xs text-xs">
           <span className="text-muted-foreground shrink-0 w-12">Create:</span>
           <div className="flex flex-wrap gap-1">
             {parsed.createStages.map((s) => (
-              <span key={s} className="bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded">{stageLabel(s)}</span>
+              <span key={s} className="bg-primary/10 text-primary px-1.5 py-0.5 rounded">{stageLabel(s)}</span>
             ))}
           </div>
         </div>
       )}
       {hasModify && (
-        <div className="flex items-center gap-1.5 text-xs">
+        <div className="flex items-center gap-xs text-xs">
           <span className="text-muted-foreground shrink-0 w-12">Modify:</span>
           <div className="flex flex-wrap gap-1">
             {parsed.modifyStages.map((s) => (
@@ -404,7 +404,7 @@ function RoleStageSummary({ parsed }: { parsed: StagePerms; canMoveTask?: boolea
         </div>
       )}
       {hasTransitions && (
-        <div className="flex items-center gap-1.5 text-xs">
+        <div className="flex items-center gap-xs text-xs">
           <span className="text-muted-foreground shrink-0 w-12">Move:</span>
           <div className="flex flex-wrap gap-1">
             {Object.entries(parsed.transitions).map(([from, targets]) =>
@@ -417,7 +417,7 @@ function RoleStageSummary({ parsed }: { parsed: StagePerms; canMoveTask?: boolea
                     key={`${from}-${to}`}
                     className={cn(
                       "px-1.5 py-0.5 rounded",
-                      isForward ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
+                      isForward ? "bg-success/10 text-success" : "bg-orange/10 text-orange"
                     )}
                   >
                     {stageLabel(from)} {isForward ? "→" : "←"} {stageLabel(to)}
@@ -533,10 +533,10 @@ function StagePermissionsTable({
 
 function StageCheckbox({ enabled, onClick, color }: { enabled: boolean; onClick: () => void; color: string }) {
   const colorMap: Record<string, { bg: string; border: string; text: string }> = {
-    blue: { bg: "bg-blue-500/15", border: "border-blue-500/40", text: "text-blue-400" },
+    blue: { bg: "bg-primary/15", border: "border-primary/40", text: "text-primary" },
     purple: { bg: "bg-purple-500/15", border: "border-purple-500/40", text: "text-purple-400" },
-    emerald: { bg: "bg-emerald-500/15", border: "border-emerald-500/40", text: "text-emerald-400" },
-    amber: { bg: "bg-amber-500/15", border: "border-amber-500/40", text: "text-amber-400" },
+    emerald: { bg: "bg-success/15", border: "border-success/40", text: "text-success" },
+    amber: { bg: "bg-orange/15", border: "border-orange/40", text: "text-orange" },
   };
   const c = colorMap[color] ?? colorMap.blue;
 
@@ -568,7 +568,7 @@ function PermToggle({
       type="button"
       onClick={() => onChange(!checked)}
       className={cn(
-        "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
+        "flex items-center gap-xs rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
         checked
           ? "bg-primary/15 border-primary/40 text-primary"
           : "border-border text-muted-foreground hover:border-muted-foreground/40"
@@ -593,7 +593,7 @@ function PermBadge({ label, enabled }: { label: string; enabled: boolean }) {
       className={cn(
         "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border",
         enabled
-          ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+          ? "bg-success/15 text-success border-success/30"
           : "bg-muted text-muted-foreground/50 border-border line-through"
       )}
     >

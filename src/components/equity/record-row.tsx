@@ -107,8 +107,8 @@ export function RecordBadge({
       className={cn(
         "text-xs px-1.5 py-0.5 rounded-full border font-medium whitespace-nowrap shrink-0",
         tone === "good" &&
-          "text-emerald-400 bg-emerald-500/15 border-emerald-500/30",
-        tone === "warn" && "text-amber-400 bg-amber-500/15 border-amber-500/30",
+          "text-success bg-success/15 border-success/30",
+        tone === "warn" && "text-orange bg-orange/15 border-orange/30",
         tone === "info" && "text-sky-400 bg-sky-500/15 border-sky-500/30",
         tone === "note" &&
           "text-violet-400 bg-violet-500/15 border-violet-500/30",
@@ -158,8 +158,8 @@ export function RecordDetail({
       <dd
         className={cn(
           "text-s tabular-nums",
-          tone === "positive" && "text-emerald-400",
-          tone === "negative" && "text-rose-400",
+          tone === "positive" && "text-success",
+          tone === "negative" && "text-destructive",
           !tone && "text-foreground",
         )}
       >

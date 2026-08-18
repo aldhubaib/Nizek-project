@@ -597,7 +597,7 @@ function ContractRow({
                 href={c.fileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 mt-0.5 px-2 py-1 rounded-md border border-border bg-muted/40 text-xs text-foreground no-underline hover:border-muted-foreground/40 transition-colors max-w-full"
+                className="inline-flex items-center gap-xs mt-0.5 px-2 py-1 rounded-md border border-border bg-muted/40 text-xs text-foreground no-underline hover:border-muted-foreground/40 transition-colors max-w-full"
               >
                 <Paperclip
                   className="w-3 h-3 shrink-0 text-muted-foreground"
@@ -727,7 +727,7 @@ function ContractForm({
             className={cn(
               selectCls,
               draft.signed &&
-                "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                "bg-success/15 border-success/30 text-success"
             )}
           >
             <option value="no">Not signed</option>
@@ -824,7 +824,7 @@ function ContractForm({
               status === "NONE" || !draft.monthlyFee
                 ? "border-border bg-muted/30 text-muted-foreground"
                 : status === "ACTUAL"
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                ? "border-success/30 bg-success/10 text-success"
                 : "border-sky-500/30 bg-sky-500/10 text-sky-400"
             )}
           >
@@ -1309,7 +1309,7 @@ function GrantsView({
                       className={cn(
                         "tabular-nums truncate",
                         currentValuation != null &&
-                          (diluted ? "text-amber-400" : "text-emerald-400")
+                          (diluted ? "text-orange" : "text-success")
                       )}
                     >
                       {milestone.startsAtValuation.toLocaleString("en-US")}
@@ -1341,7 +1341,7 @@ function GrantsView({
           <span
             className={cn(
               "font-medium",
-              Math.abs(total - 100) < 0.001 ? "text-primary" : "text-amber-400"
+              Math.abs(total - 100) < 0.001 ? "text-primary" : "text-orange"
             )}
           >
             {formatPct(total)}
@@ -1350,11 +1350,11 @@ function GrantsView({
         {currentValuation != null && tranches.length > 0 && (
           <p className="text-xs text-muted-foreground tabular-nums">
             At {formatValuation(currentValuation, currency)}:{" "}
-            <span className="text-amber-400 font-medium">
+            <span className="text-orange font-medium">
               {formatPct(split.diluted)}
             </span>{" "}
             diluted ·{" "}
-            <span className="text-emerald-400 font-medium">
+            <span className="text-success font-medium">
               {formatPct(split.nonDiluted)}
             </span>{" "}
             still non-diluted
@@ -1762,13 +1762,13 @@ function GrantBatchForm({
           <span
             className={cn(
               "font-medium",
-              balanced ? "text-primary" : "text-amber-400"
+              balanced ? "text-primary" : "text-orange"
             )}
           >
             {formatPct(total)}
           </span>
           {!balanced && (
-            <span className="text-amber-400">
+            <span className="text-orange">
               {" "}
               —{" "}
               {remaining > 0
@@ -1778,7 +1778,7 @@ function GrantBatchForm({
           )}
         </p>
         {missingHint && (
-          <p className="order-last basis-full text-xs text-amber-400">
+          <p className="order-last basis-full text-xs text-orange">
             {missingHint}
           </p>
         )}
@@ -2170,7 +2170,7 @@ function FinancialsTable({
                 setEditingId(null);
               }}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-s font-medium transition-colors",
+                "flex items-center gap-xs px-3 py-1.5 rounded-lg border text-s font-medium transition-colors",
                 picking
                   ? "border-primary/40 text-foreground bg-primary/10"
                   : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40"
@@ -2381,7 +2381,7 @@ function FinancialReportRow({
                     href={doc.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-foreground no-underline hover:underline"
+                    className="inline-flex items-center gap-xs text-foreground no-underline hover:underline"
                   >
                     <Paperclip
                       className="w-3 h-3 text-muted-foreground"
@@ -2517,7 +2517,7 @@ function ReportFieldPicker({
       </div>
 
       {starved.length > 0 && (
-        <p className="text-xs text-amber-400">
+        <p className="text-xs text-orange">
           {starved.map((m) => m.name).join(", ")}{" "}
           {starved.length === 1 ? "needs a figure" : "need figures"} this
           project isn&apos;t asked for, so{" "}
@@ -2859,7 +2859,7 @@ function FinancialReportForm({
             className={cn(
               selectCls,
               draft.audited &&
-                "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                "bg-success/15 border-success/30 text-success"
             )}
           >
             <option value="no">Not audited</option>
@@ -2893,7 +2893,7 @@ function FinancialReportForm({
               className={cn("grid gap-2 items-center", rowGrid)}
             >
               {locked ? (
-                <div className="flex h-9 items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 text-s text-foreground">
+                <div className="flex h-9 items-center gap-xs rounded-lg border border-border bg-muted/30 px-3 text-s text-foreground">
                   <span className="truncate">{metric?.name}</span>
                   <span
                     className="text-destructive"
@@ -3060,7 +3060,7 @@ function FinancialReportForm({
             className={cn(
               selectCls,
               draft.needsHelp &&
-                "bg-amber-500/15 border-amber-500/30 text-amber-400"
+                "bg-orange/15 border-orange/30 text-orange"
             )}
           >
             <option value="no">No</option>
@@ -3153,7 +3153,7 @@ function FinancialReportForm({
           </span>
         ) : (
           warning && (
-            <span className="text-xs text-amber-400 me-auto">{warning}</span>
+            <span className="text-xs text-orange me-auto">{warning}</span>
           )
         )}
         <button

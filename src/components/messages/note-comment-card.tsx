@@ -7,11 +7,11 @@ import { ActivityCard } from "@/components/messages/activity-card";
 import { NoteCommentReplyDialog } from "@/components/messages/note-comment-reply-dialog";
 
 const COMMENT_THEME = {
-  accent: "text-amber-400",
-  border: "border-amber-500/35",
-  ring: "ring-amber-500/20",
-  iconWrap: "bg-amber-500/10 text-amber-400",
-  button: "border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-amber-400",
+  accent: "text-orange",
+  border: "border-orange/35",
+  ring: "ring-orange/20",
+  iconWrap: "bg-orange/10 text-orange",
+  button: "border-orange/30 bg-orange/5 hover:bg-orange/10 text-orange",
 };
 
 export function NoteCommentCard({
@@ -35,7 +35,7 @@ export function NoteCommentCard({
         createdAt={createdAt}
       >
         {payload.quoteText ? (
-          <blockquote className="border-s-2 border-amber-400/60 ps-3 text-s italic text-muted-foreground">
+          <blockquote className="border-s-2 border-orange/60 ps-3 text-s italic text-muted-foreground">
             {payload.quoteText}
           </blockquote>
         ) : null}

@@ -26,9 +26,9 @@ interface RejectedTask {
 }
 
 const TASK_TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string; label: string }> = {
-  FEATURE: { icon: Sparkles, color: "text-blue-400 bg-blue-500/10 border-blue-500/20", label: "Business Case" },
+  FEATURE: { icon: Sparkles, color: "text-primary bg-primary/10 border-primary/20", label: "Business Case" },
   ENHANCEMENT: { icon: Zap, color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20", label: "Enhancement" },
-  BUG: { icon: Bug, color: "text-red-400 bg-red-500/10 border-red-500/20", label: "Bug" },
+  BUG: { icon: Bug, color: "text-destructive bg-destructive/10 border-destructive/20", label: "Bug" },
   REPORTED_BUG: { icon: AlertCircle, color: "text-orange-400 bg-orange-500/10 border-orange-500/20", label: "Reported Bug" },
   DESIGN: { icon: Palette, color: "text-purple-400 bg-purple-500/10 border-purple-500/20", label: "Design" },
 };
@@ -56,8 +56,8 @@ function Tooltip({ children, text }: { children: React.ReactNode; text: string }
 }
 
 function getCountColor(count: number) {
-  if (count >= 5) return "text-red-400 bg-red-500/10 border-red-500/20";
-  if (count >= 3) return "text-amber-400 bg-amber-500/10 border-amber-500/20";
+  if (count >= 5) return "text-destructive bg-destructive/10 border-destructive/20";
+  if (count >= 3) return "text-orange bg-orange/10 border-orange/20";
   return "text-yellow-400 bg-yellow-500/10 border-yellow-500/20";
 }
 
@@ -93,10 +93,10 @@ function CompactRow({ item, maxCount }: { item: RejectedTask; maxCount: number }
             </p>
             <p className="text-xs text-muted-foreground/50 truncate">{item.task.project.name}</p>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-xs shrink-0">
             {item.internalCount > 0 && (
               <Tooltip text={`${item.internalCount} internal rejection${item.internalCount !== 1 ? "s" : ""}`}>
-                <span className="flex items-center gap-0.5 text-xs font-bold text-amber-400">
+                <span className="flex items-center gap-0.5 text-xs font-bold text-orange">
                   <Users className="w-3 h-3" />
                   {item.internalCount}
                 </span>
@@ -104,7 +104,7 @@ function CompactRow({ item, maxCount }: { item: RejectedTask; maxCount: number }
             )}
             {item.clientCount > 0 && (
               <Tooltip text={`${item.clientCount} client rejection${item.clientCount !== 1 ? "s" : ""}`}>
-                <span className="flex items-center gap-0.5 text-xs font-bold text-red-400">
+                <span className="flex items-center gap-0.5 text-xs font-bold text-destructive">
                   <UserX className="w-3 h-3" />
                   {item.clientCount}
                 </span>
@@ -116,7 +116,7 @@ function CompactRow({ item, maxCount }: { item: RejectedTask; maxCount: number }
           </div>
         </div>
         <div className="mt-1 h-1.5 rounded-full bg-muted/50 overflow-hidden">
-          <div className="h-full rounded-full bg-red-500 transition-all" style={{ width: `${barW}%` }} />
+          <div className="h-full rounded-full bg-destructive transition-all" style={{ width: `${barW}%` }} />
         </div>
       </div>
     </Link>
@@ -152,14 +152,14 @@ function FullRow({ item }: { item: RejectedTask }) {
       <span className="text-xs text-muted-foreground truncate @max-md/card:hidden">{STAGE_LABELS[item.task.stage] ?? item.task.stage}</span>
 
       <div className="flex justify-center @max-md/card:hidden">
-        <span className="flex items-center gap-0.5 text-s font-bold text-amber-400">
+        <span className="flex items-center gap-0.5 text-s font-bold text-orange">
           <Users className="w-3 h-3" />
           {item.internalCount}
         </span>
       </div>
 
       <div className="flex justify-center @max-md/card:hidden">
-        <span className="flex items-center gap-0.5 text-s font-bold text-red-400">
+        <span className="flex items-center gap-0.5 text-s font-bold text-destructive">
           <UserX className="w-3 h-3" />
           {item.clientCount}
         </span>
@@ -199,7 +199,7 @@ export function MostRejected({ data }: { data: RejectedTask[] }) {
               Most Rejected
             </h2>
             {highReject > 0 && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-2 py-0.5">
+              <span className="flex items-center gap-1 text-xs font-semibold text-destructive bg-destructive/10 border border-destructive/20 rounded-full px-2 py-0.5">
                 <AlertTriangle className="w-3 h-3" />
                 {highReject} high
               </span>
@@ -207,14 +207,14 @@ export function MostRejected({ data }: { data: RejectedTask[] }) {
           </div>
           <div className="flex items-center gap-3 text-xs">
             {totalInternal > 0 && (
-              <div className="flex items-center gap-1.5">
-                <Users className="w-3 h-3 text-amber-400" />
+              <div className="flex items-center gap-xs">
+                <Users className="w-3 h-3 text-orange" />
                 <span className="text-muted-foreground">{totalInternal} internal</span>
               </div>
             )}
             {totalClient > 0 && (
-              <div className="flex items-center gap-1.5">
-                <UserX className="w-3 h-3 text-red-400" />
+              <div className="flex items-center gap-xs">
+                <UserX className="w-3 h-3 text-destructive" />
                 <span className="text-muted-foreground">{totalClient} client</span>
               </div>
             )}
@@ -240,7 +240,7 @@ export function MostRejected({ data }: { data: RejectedTask[] }) {
         {data.length > PREVIEW_COUNT && (
           <button
             onClick={() => setShowAll(true)}
-            className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
+            className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-xs"
           >
             <ExternalLink className="w-3 h-3" />
             View All ({data.length})
@@ -252,7 +252,7 @@ export function MostRejected({ data }: { data: RejectedTask[] }) {
         <div className="fixed inset-0 z-[9999] bg-background/95 backdrop-blur-sm flex flex-col">
           <div className="flex app-top-bar items-center justify-between border-b border-border shrink-0">
             <div className="flex items-center gap-3">
-              <button onClick={() => setShowAll(false)} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s">
+              <button onClick={() => setShowAll(false)} className="flex items-center gap-xs text-muted-foreground hover:text-foreground transition-colors text-s">
                 <X className="w-4 h-4" />
                 Close
               </button>

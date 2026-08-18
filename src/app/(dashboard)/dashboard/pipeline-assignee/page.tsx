@@ -19,8 +19,8 @@ function formatDuration(ms: number) {
 
 function getDurationColor(ms: number) {
   const days = ms / (1000 * 60 * 60 * 24);
-  if (days >= 7) return "text-red-400";
-  if (days >= 5) return "text-amber-400";
+  if (days >= 7) return "text-destructive";
+  if (days >= 5) return "text-orange";
   return "text-yellow-400";
 }
 
@@ -42,7 +42,7 @@ export default async function PipelineAssigneePage({
         <div className="flex items-center gap-3">
           <Link
             href={backHref}
-            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s"
+            className="flex items-center gap-xs text-muted-foreground hover:text-foreground transition-colors text-s"
           >
             <ArrowLeft className="w-4 h-4" />
             Dashboard
@@ -55,7 +55,7 @@ export default async function PipelineAssigneePage({
           <span className="text-xs text-muted-foreground">({data.length} people)</span>
         </div>
         {totalLate > 0 && (
-          <span className="flex items-center gap-1 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5">
+          <span className="flex items-center gap-1 text-xs font-semibold text-orange bg-orange/10 border border-orange/20 rounded-full px-2.5 py-0.5">
             <AlertTriangle className="w-3 h-3" />
             {totalLate} late tasks
           </span>

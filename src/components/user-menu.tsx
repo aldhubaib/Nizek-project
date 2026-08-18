@@ -65,7 +65,7 @@ export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
       <DropdownMenu>
         <DropdownMenuTrigger
           className={cn(
-            "flex w-full items-center gap-2.5 rounded-lg p-1 text-start outline-none transition-colors hover:bg-card/60",
+            "flex w-full items-center gap-s rounded-lg p-1 text-start outline-none transition-colors hover:bg-card/60",
             collapsed && "justify-center",
           )}
         >
@@ -84,7 +84,7 @@ export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
           )}
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="start" className="w-56">
-          <div className="flex items-center gap-2.5 px-1.5 py-1.5">
+          <div className="flex items-center gap-s px-1.5 py-1.5">
             {avatar("h-8 w-8")}
             <div className="min-w-0">
               <div className="truncate text-s font-medium text-foreground">
@@ -99,7 +99,7 @@ export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
           </div>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            className="gap-2.5"
+            className="gap-s"
             onClick={() => router.push("/dashboard/account")}
           >
             <UserCog className="h-4 w-4" />
@@ -108,7 +108,7 @@ export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
-            className="gap-2.5"
+            className="gap-s"
             onClick={() => setSignOutOpen(true)}
           >
             <LogOut className="h-4 w-4" />

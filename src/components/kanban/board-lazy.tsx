@@ -11,7 +11,7 @@ export const KanbanBoard = dynamic<BoardProps>(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-full items-center justify-center py-20 text-s text-muted-foreground">
+      <div className="flex h-full items-center justify-center py-xl text-s text-muted-foreground">
         Loading board…
       </div>
     ),

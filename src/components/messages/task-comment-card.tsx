@@ -19,11 +19,11 @@ export function TaskCommentCard({
   const taskUrl = taskCommentUrl(payload.projectId, payload.taskId, payload.threadId);
 
   return (
-    <div className="w-full overflow-hidden rounded-xl border border-amber-500/35 bg-card/95 shadow-sm ring-1 ring-inset ring-amber-500/20">
-      <div className="h-0.5 w-full bg-amber-400/70" />
+    <div className="w-full overflow-hidden rounded-xl border border-orange/35 bg-card/95 shadow-sm ring-1 ring-inset ring-orange/20">
+      <div className="h-0.5 w-full bg-orange/70" />
       <div className="space-y-3 p-3.5">
-        <div className="flex items-start gap-2.5">
-          <div className="grid size-9 shrink-0 place-items-center rounded-full bg-amber-500/10 text-amber-400">
+        <div className="flex items-start gap-s">
+          <div className="grid size-9 shrink-0 place-items-center rounded-full bg-orange/10 text-orange">
             <MessageSquareText className="size-4" strokeWidth={2} />
           </div>
           <div className="min-w-0 flex-1">
@@ -37,7 +37,7 @@ export function TaskCommentCard({
         </div>
 
         {payload.quoteText && (
-          <blockquote className="border-s-2 border-amber-400/60 ps-3 text-s italic text-muted-foreground">
+          <blockquote className="border-s-2 border-orange/60 ps-3 text-s italic text-muted-foreground">
             {payload.quoteText}
           </blockquote>
         )}
@@ -48,7 +48,7 @@ export function TaskCommentCard({
 
         <Link
           href={taskUrl}
-          className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-s font-medium text-amber-400 transition-colors hover:bg-amber-500/10"
+          className="flex items-center gap-2 rounded-lg border border-orange/30 bg-orange/5 px-3 py-2.5 text-s font-medium text-orange transition-colors hover:bg-orange/10"
         >
           <span className="min-w-0 flex-1 truncate text-foreground">
             Open task · reply on the highlight

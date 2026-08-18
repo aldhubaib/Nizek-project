@@ -53,7 +53,7 @@ interface Props {
 const TABS: { id: TaskType; label: string; icon: typeof Sparkles; color: string; activeColor: string }[] = [
   { id: "FEATURE", label: "Business Case", icon: Sparkles, color: "text-muted-foreground", activeColor: "bg-primary/15 border-primary/40 text-primary" },
   { id: "ENHANCEMENT", label: "Enhancement", icon: Wrench, color: "text-muted-foreground", activeColor: "bg-violet-500/15 border-violet-500/40 text-violet-400" },
-  { id: "BUG", label: "Internal Bug", icon: Bug, color: "text-muted-foreground", activeColor: "bg-amber-500/15 border-amber-500/40 text-amber-400" },
+  { id: "BUG", label: "Internal Bug", icon: Bug, color: "text-muted-foreground", activeColor: "bg-orange/15 border-orange/40 text-orange" },
   { id: "REPORTED_BUG", label: "Reported Bug", icon: AlertCircle, color: "text-muted-foreground", activeColor: "bg-destructive/15 border-destructive/40 text-destructive" },
   { id: "DESIGN", label: "Design", icon: Palette, color: "text-muted-foreground", activeColor: "bg-cyan-500/15 border-cyan-500/40 text-cyan-400" },
 ];
@@ -203,7 +203,7 @@ function SortableQuestionItem({
                 type="checkbox"
                 checked={editRequired ?? false}
                 onChange={(e) => setEditRequired(e.target.checked)}
-                className="rounded border-border accent-amber-500 w-3.5 h-3.5"
+                className="rounded border-border accent-orange w-3.5 h-3.5"
               />
               <span className="text-xs text-muted-foreground">Required before transition</span>
             </label>
@@ -252,7 +252,7 @@ function SortableQuestionItem({
             className={cn(
               "text-xs font-medium rounded px-1.5 py-0.5 border transition-colors shrink-0",
               q.required
-                ? "bg-amber-500/10 border-amber-500/30 text-amber-500"
+                ? "bg-orange/10 border-orange/30 text-orange"
                 : "bg-muted border-border text-muted-foreground/50 hover:border-muted-foreground/40 hover:text-muted-foreground"
             )}
             title={q.required ? "Required before transition — click to remove" : "Click to require before stage transition"}
@@ -538,7 +538,7 @@ export function DefaultQuestionsManager({ questions }: Props) {
                 type="checkbox"
                 checked={newRequired}
                 onChange={(e) => setNewRequired(e.target.checked)}
-                className="rounded border-border accent-amber-500 w-3.5 h-3.5"
+                className="rounded border-border accent-orange w-3.5 h-3.5"
               />
               <span className="text-s text-muted-foreground">Required before transition</span>
             </label>

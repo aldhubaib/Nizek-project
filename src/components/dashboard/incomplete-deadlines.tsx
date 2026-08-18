@@ -11,22 +11,22 @@ function statusFor(daysUntil: number) {
   if (daysUntil < 0) {
     return {
       label: `${Math.abs(daysUntil)}d overdue`,
-      color: "text-red-400",
-      bg: "bg-red-500/10 border-red-500/20",
+      color: "text-destructive",
+      bg: "bg-destructive/10 border-destructive/20",
     };
   }
   if (daysUntil === 0) {
     return {
       label: "Due today",
-      color: "text-amber-400",
-      bg: "bg-amber-500/10 border-amber-500/20",
+      color: "text-orange",
+      bg: "bg-orange/10 border-orange/20",
     };
   }
   if (daysUntil <= 10) {
     return {
       label: `${daysUntil}d left`,
-      color: "text-amber-400",
-      bg: "bg-amber-500/10 border-amber-500/20",
+      color: "text-orange",
+      bg: "bg-orange/10 border-orange/20",
     };
   }
   return {
@@ -45,7 +45,7 @@ function DeadlineRow({ item }: { item: IncompleteDeadlineRow }) {
       href={href}
       className="flex items-center gap-3 px-4 py-3 hover:bg-accent/20 transition-colors"
     >
-      <div className="grid size-8 shrink-0 place-items-center rounded-full bg-rose-500/10 text-rose-400">
+      <div className="grid size-8 shrink-0 place-items-center rounded-full bg-destructive/10 text-destructive">
         <CalendarClock className="size-4" />
       </div>
       <div className="min-w-0 flex-1">
@@ -78,7 +78,7 @@ export function IncompleteDeadlines({ data }: { data: IncompleteDeadlineRow[] })
             Incomplete Roadmap
           </h2>
           {overdueCount > 0 && (
-            <span className="flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-xs font-semibold text-red-400">
+            <span className="flex items-center gap-1 rounded-full border border-destructive/20 bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">
               <AlertTriangle className="h-3 w-3" />
               {overdueCount} overdue
             </span>
@@ -115,7 +115,7 @@ export function IncompleteDeadlines({ data }: { data: IncompleteDeadlineRow[] })
 
       <Link
         href="/dashboard/deadlines"
-        className="mt-auto flex w-full items-center justify-center gap-1.5 border-t border-border px-4 py-2.5 text-s font-medium text-primary transition-colors hover:bg-accent/30"
+        className="mt-auto flex w-full items-center justify-center gap-xs border-t border-border px-4 py-2.5 text-s font-medium text-primary transition-colors hover:bg-accent/30"
       >
         <ExternalLink className="h-3 w-3" />
         View All ({data.length})

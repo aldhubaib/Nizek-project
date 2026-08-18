@@ -79,7 +79,7 @@ function ParagraphChanges({ changes }: { changes: ParagraphChange[] }) {
           ) : null}
           {change.type === "added" ? (
             <>
-              <Quote className="border-emerald-400/50">{change.after ?? ""}</Quote>
+              <Quote className="border-success/50">{change.after ?? ""}</Quote>
               <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 was added
               </p>
@@ -89,7 +89,7 @@ function ParagraphChanges({ changes }: { changes: ParagraphChange[] }) {
             <>
               <Quote className="border-destructive/50">{change.before ?? ""}</Quote>
               <p className="mt-1 text-xs text-muted-foreground/70">was changed to</p>
-              <Quote className="border-emerald-400/50">{change.after ?? ""}</Quote>
+              <Quote className="border-success/50">{change.after ?? ""}</Quote>
             </>
           ) : null}
         </div>
@@ -120,8 +120,8 @@ function Avatar({ user }: { user: NoteTimelineUser }) {
 function TimelineRow({ entry }: { entry: NoteTimelineEvent }) {
   const icon =
     entry.kind === "reminder" ? (
-      <div className="w-[18px] h-[18px] rounded-full bg-rose-500/15 ring-2 ring-card flex items-center justify-center">
-        <CalendarClock className="w-2.5 h-2.5 text-rose-400" />
+      <div className="w-[18px] h-[18px] rounded-full bg-destructive/15 ring-2 ring-card flex items-center justify-center">
+        <CalendarClock className="w-2.5 h-2.5 text-destructive" />
       </div>
     ) : (
       <Avatar user={entry.user} />
@@ -142,7 +142,7 @@ function TimelineRow({ entry }: { entry: NoteTimelineEvent }) {
                 <p className="mt-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   On this paragraph
                 </p>
-                <Quote className="border-amber-400/60">{entry.quoteText}</Quote>
+                <Quote className="border-orange/60">{entry.quoteText}</Quote>
               </>
             ) : null}
             <p className="mt-1.5 text-s leading-relaxed text-foreground">{entry.comment}</p>
@@ -153,7 +153,7 @@ function TimelineRow({ entry }: { entry: NoteTimelineEvent }) {
             <p className="mt-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               From this paragraph
             </p>
-            <Quote className="border-emerald-400/60">{entry.quoteText}</Quote>
+            <Quote className="border-success/60">{entry.quoteText}</Quote>
           </>
         ) : null}
         <span className="text-xs text-muted-foreground/50 mt-1 block">

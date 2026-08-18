@@ -142,7 +142,7 @@ export function EquityPageClient({
                       </span>
                       {signedCount > 0 && (
                         <span
-                          className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full border font-medium text-emerald-400 bg-emerald-500/15 border-emerald-500/30"
+                          className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full border font-medium text-success bg-success/15 border-success/30"
                           title={`${signedCount} signed contract${signedCount !== 1 ? "s" : ""}`}
                         >
                           <FileSignature className="w-2.5 h-2.5" />
@@ -214,7 +214,7 @@ export function EquityPageClient({
                   onClick={() => handleCreate(proj.id)}
                   disabled={creating !== null}
                   className={cn(
-                    "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-start transition-colors",
+                    "w-full flex items-center gap-s px-2.5 py-2 rounded-lg text-start transition-colors",
                     "hover:bg-card text-s text-foreground disabled:opacity-50",
                     creating === proj.id && "bg-card",
                   )}

@@ -29,29 +29,29 @@ interface Props {
 }
 
 const STAGE_COLORS: Record<string, string> = {
-  NEW_REQUEST: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
+  NEW_REQUEST: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
   CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  READY_FOR_DEV: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  READY_FOR_DEV: "bg-primary/10 text-primary border-primary/20",
   IN_DEVELOPMENT: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
-  INTERNAL_REVIEW: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  INTERNAL_REVIEW: "bg-orange/10 text-orange border-orange/20",
   CLIENT_REVIEW: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-  READY_FOR_RELEASE: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  READY_FOR_RELEASE: "bg-success/10 text-success border-success/20",
 };
 
 const STAGE_DOT: Record<string, string> = {
-  NEW_REQUEST: "bg-zinc-400",
+  NEW_REQUEST: "bg-muted-foreground",
   CLARIFICATION: "bg-violet-400",
-  READY_FOR_DEV: "bg-blue-400",
+  READY_FOR_DEV: "bg-primary",
   IN_DEVELOPMENT: "bg-indigo-400",
-  INTERNAL_REVIEW: "bg-amber-400",
+  INTERNAL_REVIEW: "bg-orange",
   CLIENT_REVIEW: "bg-cyan-400",
-  READY_FOR_RELEASE: "bg-emerald-400",
+  READY_FOR_RELEASE: "bg-success",
 };
 
 const TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string }> = {
-  FEATURE: { icon: Sparkles, color: "text-blue-400" },
+  FEATURE: { icon: Sparkles, color: "text-primary" },
   ENHANCEMENT: { icon: Zap, color: "text-cyan-400" },
-  BUG: { icon: Bug, color: "text-red-400" },
+  BUG: { icon: Bug, color: "text-destructive" },
   REPORTED_BUG: { icon: AlertCircle, color: "text-orange-400" },
   DESIGN: { icon: Palette, color: "text-purple-400" },
 };
@@ -68,7 +68,7 @@ function formatTimeInStage(date: Date | string | null) {
 
 function getPriorityStyle(priority: number | null) {
   if (priority == null) return null;
-  if (priority >= 9) return "text-red-400";
+  if (priority >= 9) return "text-destructive";
   if (priority >= 7) return "text-orange-400";
   if (priority >= 4) return "text-primary";
   return "text-muted-foreground";
@@ -213,7 +213,7 @@ function TaskRow({ task, showProject = false }: { task: Task; showProject?: bool
       </div>
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-xs">
           <span className="text-xs font-mono text-muted-foreground/60">{prefix}-{String(task.taskNumber).padStart(3, "0")}</span>
           <span className="text-s font-medium text-foreground truncate">{task.title}</span>
         </div>

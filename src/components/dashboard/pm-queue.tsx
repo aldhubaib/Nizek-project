@@ -30,9 +30,9 @@ interface Props {
 }
 
 const TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string }> = {
-  FEATURE: { icon: Sparkles, color: "text-blue-400" },
+  FEATURE: { icon: Sparkles, color: "text-primary" },
   ENHANCEMENT: { icon: Zap, color: "text-cyan-400" },
-  BUG: { icon: Bug, color: "text-red-400" },
+  BUG: { icon: Bug, color: "text-destructive" },
   REPORTED_BUG: { icon: AlertCircle, color: "text-orange-400" },
   DESIGN: { icon: Palette, color: "text-purple-400" },
 };
@@ -49,7 +49,7 @@ function formatTimeInStage(date: Date | string | null) {
 
 function getPriorityStyle(priority: number | null) {
   if (priority == null) return null;
-  if (priority >= 9) return "text-red-400";
+  if (priority >= 9) return "text-destructive";
   if (priority >= 7) return "text-orange-400";
   if (priority >= 4) return "text-primary";
   return "text-muted-foreground";
@@ -64,7 +64,7 @@ export function PmQueue({ data }: Props) {
     return (
       <div className="app-card rounded-xl border border-border bg-card overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-          <ClipboardCheck className="w-4 h-4 text-amber-400" />
+          <ClipboardCheck className="w-4 h-4 text-orange" />
           <h2 className="text-s font-semibold text-foreground">PM Review</h2>
         </div>
         <div className="px-4 py-8 text-center">
@@ -91,7 +91,7 @@ export function PmQueue({ data }: Props) {
       <div className="app-card rounded-xl border border-border bg-card overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-2">
-            <ClipboardCheck className="w-4 h-4 text-amber-400" />
+            <ClipboardCheck className="w-4 h-4 text-orange" />
             <h2 className="text-s font-semibold text-foreground">PM Review</h2>
             <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">
               {data.total}
@@ -131,7 +131,7 @@ export function PmQueue({ data }: Props) {
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
               <div className="flex items-center gap-2">
-                <ClipboardCheck className="w-4 h-4 text-amber-400" />
+                <ClipboardCheck className="w-4 h-4 text-orange" />
                 <h2 className="text-s font-semibold text-foreground">PM Review — Internal Review</h2>
                 <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full font-medium">{data.total}</span>
               </div>
@@ -175,11 +175,11 @@ function TaskRow({ task, showProject = false }: { task: Task; showProject?: bool
         <TypeIcon className={cn("w-3 h-3", typeConf.color)} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-xs">
           <span className="text-xs font-mono text-muted-foreground/60">{prefix}-{String(task.taskNumber).padStart(3, "0")}</span>
           <span className="text-s font-medium text-foreground truncate">{task.title}</span>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-xs">
           {showProject && <span className="text-xs text-muted-foreground/50">{task.project.name}</span>}
           {task.assignee && (
             <span className="text-xs text-muted-foreground/50">

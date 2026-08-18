@@ -19,15 +19,15 @@ interface ClientInputTask {
 }
 
 const TASK_TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string; label: string }> = {
-  FEATURE: { icon: Sparkles, color: "text-blue-400 bg-blue-500/10 border-blue-500/20", label: "Business Case" },
+  FEATURE: { icon: Sparkles, color: "text-primary bg-primary/10 border-primary/20", label: "Business Case" },
   ENHANCEMENT: { icon: Zap, color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20", label: "Enhancement" },
-  BUG: { icon: Bug, color: "text-red-400 bg-red-500/10 border-red-500/20", label: "Bug" },
+  BUG: { icon: Bug, color: "text-destructive bg-destructive/10 border-destructive/20", label: "Bug" },
   REPORTED_BUG: { icon: AlertCircle, color: "text-orange-400 bg-orange-500/10 border-orange-500/20", label: "Reported Bug" },
   DESIGN: { icon: Palette, color: "text-purple-400 bg-purple-500/10 border-purple-500/20", label: "Design" },
 };
 
 const STAGE_COLORS: Record<string, string> = {
-  NEW_REQUEST: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
+  NEW_REQUEST: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
   CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/20",
 };
 
@@ -41,8 +41,8 @@ function formatDuration(ms: number) {
 
 function getDurationColor(ms: number) {
   const days = ms / (1000 * 60 * 60 * 24);
-  if (days >= 7) return "text-red-400";
-  if (days >= 5) return "text-amber-400";
+  if (days >= 7) return "text-destructive";
+  if (days >= 5) return "text-orange";
   return "text-yellow-400";
 }
 
@@ -92,7 +92,7 @@ function CompactRow({ task }: { task: ClientInputTask }) {
           </span>
           {task.note && (
             <Tooltip text={task.note}>
-              <StickyNote className="w-2.5 h-2.5 text-amber-400/60 shrink-0 ms-1" />
+              <StickyNote className="w-2.5 h-2.5 text-orange/60 shrink-0 ms-1" />
             </Tooltip>
           )}
         </div>
@@ -115,7 +115,7 @@ export function NeedsClientInput({ data, tab }: { data: ClientInputTask[]; tab?:
             {prefix} Needs Client Input
           </h2>
           {data.length > 0 && (
-            <span className="flex items-center gap-1 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
+            <span className="flex items-center gap-1 text-xs font-semibold text-orange bg-orange/10 border border-orange/20 rounded-full px-2 py-0.5">
               <AlertTriangle className="w-3 h-3" />
               {data.length} waiting
             </span>
@@ -148,7 +148,7 @@ export function NeedsClientInput({ data, tab }: { data: ClientInputTask[]; tab?:
       {data.length > PREVIEW_COUNT && (
         <Link
           href={`/dashboard/needs-client-input${tab ? `?tab=${tab}` : ""}`}
-          className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
+          className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-xs"
         >
           <ExternalLink className="w-3 h-3" />
           View All ({data.length})

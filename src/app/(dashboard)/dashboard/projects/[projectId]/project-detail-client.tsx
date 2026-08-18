@@ -24,7 +24,7 @@ import { listProjectVaultCredentials, type VaultCredentialDTO } from "@/actions/
 import type { TaskQuestion } from "@/components/kanban/question-field";
 import type { KanbanTask } from "@/store/kanban";
 import Link from "next/link";
-import { Users, KeyRound, Settings, Loader2, ArrowLeft } from "lucide-react";
+import { Users, KeyRound, Settings, Loader2, ArrowLeft, Check } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
@@ -228,7 +228,16 @@ export function ProjectDetailClient({
   const [loadingVault, startVaultTransition] = useTransition();
   const [loadingSettings, startSettingsTransition] = useTransition();
   const [noteFullscreen, setNoteFullscreen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const noteBackRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const sync = () => setIsMobile(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   const handleNoteFullscreen = useCallback((open: boolean, goBack?: () => void) => {
     setNoteFullscreen(open);
@@ -332,6 +341,27 @@ export function ProjectDetailClient({
 
   return (
     <div>
+      {isMobile && !noteFullscreen && (
+        <PageOverflowItems id="project-views" order={0}>
+          {projectTabs.map((tab) => {
+            const label =
+              tab.count != null && tab.count > 0
+                ? `${tab.label} ${tab.count}`
+                : tab.label;
+            return (
+              <DropdownMenuItem
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <span className="flex-1">{label}</span>
+                {activeTab === tab.id ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : null}
+              </DropdownMenuItem>
+            );
+          })}
+        </PageOverflowItems>
+      )}
       {!noteFullscreen && (canManageTeam || canAccessVault) && (
         <PageOverflowItems id="project-team-vault" order={50}>
           {canManageTeam && (
@@ -371,7 +401,7 @@ export function ProjectDetailClient({
         )}
       >
       <PageHeader hasMenu className="relative w-full min-w-0 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-2">
-        <div className="relative z-10 flex min-w-0 items-center gap-2.5">
+        <div className="relative z-10 flex min-w-0 items-center gap-s">
           {noteFullscreen ? (
             <button
               type="button"
@@ -405,7 +435,7 @@ export function ProjectDetailClient({
               </span>
             </div>
           )}
-          <h1 className="max-w-[5.5rem] truncate text-s font-semibold sm:max-w-[9rem] lg:max-w-none">
+          <h1 className="min-w-0 truncate text-s font-semibold">
             {project.name}
           </h1>
           {!isActive && (
@@ -416,7 +446,7 @@ export function ProjectDetailClient({
         </div>
         <div
           className={cn(
-            "pointer-events-none absolute inset-0 flex items-center justify-center lg:static lg:pointer-events-auto",
+            "pointer-events-none absolute inset-0 hidden items-center justify-center lg:static lg:flex lg:pointer-events-auto",
             noteFullscreen && "invisible",
           )}
         >
@@ -425,7 +455,6 @@ export function ProjectDetailClient({
               items={projectTabs}
               value={activeTab}
               onChange={setActiveTab}
-              mobileMaxVisible={1}
             />
           </div>
           <TabsList className="hidden">

@@ -50,25 +50,25 @@ const STAGE_LABEL: Record<string, string> = {
 };
 
 const STAGE_DOT: Record<string, string> = {
-  NEW_REQUEST: "bg-zinc-500",
+  NEW_REQUEST: "bg-muted-foreground",
   CLARIFICATION: "bg-violet-500",
-  READY_FOR_DEV: "bg-blue-500",
+  READY_FOR_DEV: "bg-primary",
   IN_DEVELOPMENT: "bg-sky-500",
-  INTERNAL_REVIEW: "bg-amber-500",
+  INTERNAL_REVIEW: "bg-orange",
   CLIENT_REVIEW: "bg-orange-500",
   READY_FOR_RELEASE: "bg-teal-500",
-  DONE: "bg-emerald-500",
+  DONE: "bg-success",
 };
 
 const STAGE_BADGE: Record<string, string> = {
-  NEW_REQUEST: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
+  NEW_REQUEST: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
   CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  READY_FOR_DEV: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  READY_FOR_DEV: "bg-primary/10 text-primary border-primary/20",
   IN_DEVELOPMENT: "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  INTERNAL_REVIEW: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  INTERNAL_REVIEW: "bg-orange/10 text-orange border-orange/20",
   CLIENT_REVIEW: "bg-orange-500/10 text-orange-400 border-orange-500/20",
   READY_FOR_RELEASE: "bg-teal-500/10 text-teal-400 border-teal-500/20",
-  DONE: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  DONE: "bg-success/10 text-success border-success/20",
 };
 
 function stageBadgeClass(stage: string | null): string {
@@ -344,7 +344,7 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-1.5 px-5 py-2.5 border-b border-border shrink-0">
+        <div className="flex items-center gap-xs px-5 py-2.5 border-b border-border shrink-0">
           {FILTERS.map((f) => {
             const Icon = f.icon;
             const active = filter === f.id;
@@ -353,7 +353,7 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
                 key={f.id}
                 onClick={() => selectFilter(f.id)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border",
+                  "inline-flex items-center gap-xs rounded-md px-2.5 py-1 text-xs font-medium transition-colors border",
                   active
                     ? "bg-primary/15 border-primary/30 text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -372,11 +372,11 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
         {/* Stage picker (when filtering by status) */}
         {filter === "status" && stagesPresent.length > 0 && (
           <div className="px-5 py-2.5 border-b border-border shrink-0 space-y-2">
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-xs flex-wrap">
               <button
                 onClick={() => setStatusFilter(null)}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium transition-colors border",
+                  "inline-flex items-center gap-xs rounded-full px-2 py-0.5 text-xs font-medium transition-colors border",
                   statusFilter === null
                     ? "bg-foreground/10 border-foreground/20 text-foreground"
                     : "border-border text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -389,7 +389,7 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
                   key={s}
                   onClick={() => setStatusFilter(s)}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium transition-colors border",
+                    "inline-flex items-center gap-xs rounded-full px-2 py-0.5 text-xs font-medium transition-colors border",
                     statusFilter === s
                       ? "bg-primary/15 border-primary/30 text-primary"
                       : "border-border text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -402,7 +402,7 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
             </div>
             {selectedTotal && (
               <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
-                <span className="text-xs font-medium text-foreground/80 flex items-center gap-1.5">
+                <span className="text-xs font-medium text-foreground/80 flex items-center gap-xs">
                   <span className={cn("w-2 h-2 rounded-full", STAGE_DOT[statusFilter!] ?? "bg-primary")} />
                   Total in {stageLabel(statusFilter)}
                   {statusFilter === currentStage && (
@@ -490,7 +490,7 @@ function ActivityRow({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-s text-foreground/80 leading-snug">{describeActivity(activity)}</p>
-        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+        <div className="flex items-center gap-xs mt-1 flex-wrap">
           <span className="text-xs text-muted-foreground/50 me-0.5">{timeAgo(activity.createdAt)}</span>
           {durationMs !== undefined && durationStage && (
             <>
@@ -527,7 +527,7 @@ function CommentRow({ comment }: { comment: Comment }) {
             {comment.content}
           </p>
           {comment.attachments && comment.attachments.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <div className="mt-1.5 flex flex-wrap gap-xs">
               {comment.attachments.map((a) =>
                 a.mimeType && IMAGE_TYPES.includes(a.mimeType) ? (
                   <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" className="rounded-md overflow-hidden border border-border hover:border-primary/50 transition-colors">
@@ -539,7 +539,7 @@ function CommentRow({ comment }: { comment: Comment }) {
                     href={a.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1.5 hover:border-primary/50 transition-colors"
+                    className="flex items-center gap-xs rounded-md border border-border bg-muted/30 px-2 py-1.5 hover:border-primary/50 transition-colors"
                   >
                     <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                     <span className="text-xs text-foreground/70 truncate max-w-[120px]">{a.filename}</span>

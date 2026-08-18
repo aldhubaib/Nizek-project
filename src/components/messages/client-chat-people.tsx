@@ -28,7 +28,7 @@ function PersonRow({
 }) {
   const label = person.name ?? person.email;
   return (
-    <div className="flex items-center gap-2.5 py-2">
+    <div className="flex items-center gap-s py-2">
       {person.imageUrl ? (
         <Image
           src={person.imageUrl}
@@ -107,7 +107,7 @@ export function ClientChatPeopleManager({
     <div className={cn(!compact && "mt-3 space-y-3 border-t border-border/50 pt-3")}>
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-s font-semibold">
+          <div className="flex items-center gap-xs text-s font-semibold">
             <Users className="h-3.5 w-3.5 text-muted-foreground" />
             People in client chat
           </div>
@@ -207,7 +207,7 @@ export function ClientChatPeopleManager({
                   <button
                     type="button"
                     disabled={pending}
-                    className="flex w-full items-center gap-2.5 py-2.5 text-start transition-colors hover:bg-surface/60 disabled:opacity-60"
+                    className="flex w-full items-center gap-s py-2.5 text-start transition-colors hover:bg-surface/60 disabled:opacity-60"
                     onClick={() => {
                       startTransition(async () => {
                         const res = await addClientChatStaff({

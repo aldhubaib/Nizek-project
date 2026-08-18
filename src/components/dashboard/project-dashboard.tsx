@@ -54,14 +54,14 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 const STAGE_COLORS: Record<string, string> = {
-  NEW_REQUEST: "bg-zinc-500",
-  CLARIFICATION: "bg-amber-500",
-  READY_FOR_DEV: "bg-blue-500",
+  NEW_REQUEST: "bg-muted-foreground",
+  CLARIFICATION: "bg-orange",
+  READY_FOR_DEV: "bg-primary",
   IN_DEVELOPMENT: "bg-violet-500",
   INTERNAL_REVIEW: "bg-orange-500",
   CLIENT_REVIEW: "bg-cyan-500",
-  READY_FOR_RELEASE: "bg-emerald-500",
-  DONE: "bg-green-500",
+  READY_FOR_RELEASE: "bg-success",
+  DONE: "bg-success",
 };
 
 const STAGE_HEX: Record<string, string> = {
@@ -82,7 +82,7 @@ const TYPE_ICON: Record<string, typeof Bug> = {
 };
 
 const TYPE_COLOR: Record<string, string> = {
-  BUG: "text-rose-400",
+  BUG: "text-destructive",
   FEATURE: "text-violet-400",
   ENHANCEMENT: "text-cyan-400",
 };
@@ -130,7 +130,7 @@ export function ProjectDashboard({ projectId, userRole, userId, tasks: kanbanTas
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex items-center justify-center py-xl">
         <div className="flex items-center gap-2 text-muted-foreground text-s">
           <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           Loading dashboard...
@@ -152,7 +152,7 @@ export function ProjectDashboard({ projectId, userRole, userId, tasks: kanbanTas
           label="Total Tasks"
           value={data.stats.totalTasks}
           icon={<ListChecks className="w-4 h-4" />}
-          color="text-blue-400"
+          color="text-primary"
         />
         <StatCard
           label="In Progress"
@@ -164,7 +164,7 @@ export function ProjectDashboard({ projectId, userRole, userId, tasks: kanbanTas
           label="Completed"
           value={data.stats.doneTasks}
           icon={<CheckCircle2 className="w-4 h-4" />}
-          color="text-green-400"
+          color="text-success"
         />
         <ContractCard contract={data.contract} />
       </div>
@@ -295,7 +295,7 @@ function ContractCard({
     return (
       <div className="app-card rounded-lg border border-border bg-card p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="opacity-70 text-zinc-400">
+          <span className="opacity-70 text-muted-foreground">
             <CalendarClock className="w-4 h-4" />
           </span>
         </div>
@@ -313,9 +313,9 @@ function ContractCard({
       className={cn(
         "app-card rounded-lg border p-4",
         urgent
-          ? "border-rose-500/30 bg-rose-500/5"
+          ? "border-destructive/30 bg-destructive/5"
           : warning
-            ? "border-amber-500/30 bg-amber-500/5"
+            ? "border-orange/30 bg-orange/5"
             : "border-border bg-card"
       )}
     >
@@ -323,7 +323,7 @@ function ContractCard({
         <span
           className={cn(
             "opacity-70",
-            urgent ? "text-rose-400" : warning ? "text-amber-400" : "text-green-400"
+            urgent ? "text-destructive" : warning ? "text-orange" : "text-success"
           )}
         >
           <CalendarClock className="w-4 h-4" />
@@ -332,7 +332,7 @@ function ContractCard({
       <p
         className={cn(
           "text-l font-bold tracking-tight",
-          urgent ? "text-rose-400" : warning ? "text-amber-400" : ""
+          urgent ? "text-destructive" : warning ? "text-orange" : ""
         )}
       >
         {contract.daysLeft}
@@ -554,7 +554,7 @@ function MentionsList({
             <div className="mt-1.5 w-2 h-2 rounded-full bg-primary shrink-0" />
           )}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 text-s">
+            <div className="flex items-center gap-xs text-s">
               {m.commentedBy.imageUrl ? (
                 <img
                   src={m.commentedBy.imageUrl}
@@ -689,7 +689,7 @@ function StallingList({ tasks, onNavigateToTask }: { tasks: DashboardData["stall
             className="flex items-center gap-3 p-2.5 rounded-md hover:bg-muted/50 transition-colors cursor-pointer"
             onClick={() => onNavigateToTask?.(t.id)}
           >
-            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <AlertTriangle className="w-4 h-4 text-orange shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 text-s">
                 <span className="text-muted-foreground font-mono">#{t.taskNumber}</span>
@@ -703,7 +703,7 @@ function StallingList({ tasks, onNavigateToTask }: { tasks: DashboardData["stall
                   <Clock className="w-3 h-3 inline me-0.5" />
                   {formatDuration(t.timeInStage)} in stage
                 </span>
-                <span className="text-amber-400 font-medium">
+                <span className="text-orange font-medium">
                   {t.ratio.toFixed(1)}x avg
                 </span>
               </div>
@@ -880,12 +880,12 @@ function RejectionsList({
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-4 px-2.5 pb-2 mb-1 border-b border-border/50">
-        <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-amber-500" />
+        <div className="flex items-center gap-xs">
+          <span className="w-2 h-2 rounded-full bg-orange" />
           <span className="text-xs text-muted-foreground">Internal</span>
-          <span className="text-s font-bold text-amber-400">{rejections.totalInternal}</span>
+          <span className="text-s font-bold text-orange">{rejections.totalInternal}</span>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-xs">
           <span className="w-2 h-2 rounded-full bg-destructive" />
           <span className="text-xs text-muted-foreground">Client</span>
           <span className="text-s font-bold text-destructive">{rejections.totalClient}</span>
@@ -908,7 +908,7 @@ function RejectionsList({
               </div>
               <div className="flex items-center gap-3 mt-1">
                 {r.internal.count > 0 && (
-                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-400">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange">
                     <Undo2 className="w-2.5 h-2.5" />
                     {r.internal.count} internal
                   </span>

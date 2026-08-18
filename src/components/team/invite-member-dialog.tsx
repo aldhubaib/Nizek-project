@@ -178,7 +178,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
             type="button"
             onClick={() => setMode("add")}
             className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-s font-medium transition-colors",
+              "flex-1 flex items-center justify-center gap-xs px-3 py-1.5 rounded-md text-s font-medium transition-colors",
               mode === "add"
                 ? "bg-card text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -191,7 +191,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
             type="button"
             onClick={() => setMode("invite")}
             className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-s font-medium transition-colors",
+              "flex-1 flex items-center justify-center gap-xs px-3 py-1.5 rounded-md text-s font-medium transition-colors",
               mode === "invite"
                 ? "bg-card text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -231,7 +231,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
                         type="button"
                         onClick={() => toggleUser(u.id)}
                         className={cn(
-                          "w-full flex items-center gap-2.5 px-3 py-2 text-start transition-colors",
+                          "w-full flex items-center gap-s px-3 py-2 text-start transition-colors",
                           isSelected ? "bg-primary/10" : "hover:bg-muted/30"
                         )}
                       >
@@ -249,10 +249,10 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-xs">
                             <p className="text-s font-medium text-foreground truncate">{u.name || u.email}</p>
                             {u.pending && (
-                              <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-medium shrink-0">
+                              <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange/15 text-orange border border-orange/30 font-medium shrink-0">
                                 Pending
                               </span>
                             )}
@@ -376,7 +376,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
                 <SelectContent>
                   {roles.map((r) => (
                     <SelectItem key={r.id} value={r.id}>
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-xs">
                         <Shield className="w-3 h-3 text-muted-foreground" strokeWidth={1.5} />
                         {r.name}
                       </span>

@@ -20,9 +20,9 @@ interface UpNextEntry {
 }
 
 const TASK_TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string; label: string }> = {
-  FEATURE: { icon: Sparkles, color: "text-blue-400 bg-blue-500/10 border-blue-500/20", label: "Business Case" },
+  FEATURE: { icon: Sparkles, color: "text-primary bg-primary/10 border-primary/20", label: "Business Case" },
   ENHANCEMENT: { icon: Zap, color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20", label: "Enhancement" },
-  BUG: { icon: Bug, color: "text-red-400 bg-red-500/10 border-red-500/20", label: "Bug" },
+  BUG: { icon: Bug, color: "text-destructive bg-destructive/10 border-destructive/20", label: "Bug" },
   REPORTED_BUG: { icon: AlertCircle, color: "text-orange-400 bg-orange-500/10 border-orange-500/20", label: "Reported Bug" },
   DESIGN: { icon: Palette, color: "text-purple-400 bg-purple-500/10 border-purple-500/20", label: "Design" },
 };
@@ -31,8 +31,8 @@ const fmtTaskNumber = (n: number) => `T-${String(n).padStart(3, "0")}`;
 
 function priorityColor(priority: number | null) {
   if (priority == null) return "text-muted-foreground";
-  if (priority >= 8) return "text-red-400";
-  if (priority >= 5) return "text-amber-400";
+  if (priority >= 8) return "text-destructive";
+  if (priority >= 5) return "text-orange";
   return "text-muted-foreground";
 }
 
@@ -65,7 +65,7 @@ function Row({ entry }: { entry: UpNextEntry }) {
           <span className="text-xs font-semibold text-muted-foreground truncate">
             {entry.project.name}
           </span>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-xs shrink-0">
             {entry.task.priority != null && (
               <span className={cn("text-xs font-bold tabular-nums", priorityColor(entry.task.priority))}>
                 P{entry.task.priority}
@@ -177,7 +177,7 @@ export function UpNextByProject({ data }: { data: UpNextEntry[] }) {
           <button
             type="button"
             onClick={() => setShowAll(true)}
-            className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5 mt-auto"
+            className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-xs mt-auto"
           >
             <ExternalLink className="w-3 h-3" />
             View All ({data.length})
@@ -191,7 +191,7 @@ export function UpNextByProject({ data }: { data: UpNextEntry[] }) {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setShowAll(false)}
-                className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s"
+                className="flex items-center gap-xs text-muted-foreground hover:text-foreground transition-colors text-s"
               >
                 <X className="w-4 h-4" />
                 Close

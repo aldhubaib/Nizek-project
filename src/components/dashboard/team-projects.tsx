@@ -53,12 +53,12 @@ export function TeamProjects({ data }: { data: TeamData[] }) {
           </span>
         </div>
         <div className="flex items-center gap-3 text-xs">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-xs">
             <div className="w-2 h-2 rounded-full bg-primary" />
             <span className="text-muted-foreground">{totalProjects} projects</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+          <div className="flex items-center gap-xs">
+            <div className="w-2 h-2 rounded-full bg-success" />
             <span className="text-muted-foreground">{totalActive} active</span>
           </div>
         </div>
@@ -90,7 +90,7 @@ export function TeamProjects({ data }: { data: TeamData[] }) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="flex items-center gap-xs min-w-0">
                         <span className={cn("text-s font-medium truncate", team.id === "__none__" && "text-muted-foreground italic")}>{team.name}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -98,7 +98,7 @@ export function TeamProjects({ data }: { data: TeamData[] }) {
                           {team.projectCount}
                         </span>
                         {team.activeCount > 0 && (
-                          <span className="text-xs text-emerald-400 font-medium">
+                          <span className="text-xs text-success font-medium">
                             {team.activeCount} active
                           </span>
                         )}
@@ -140,7 +140,7 @@ export function TeamProjects({ data }: { data: TeamData[] }) {
                           <span className="tabular-nums">{project.taskCount} tasks</span>
                           <span className={cn(
                             "w-1.5 h-1.5 rounded-full shrink-0",
-                            project.isActive ? "bg-emerald-500" : "bg-muted-foreground/30"
+                            project.isActive ? "bg-success" : "bg-muted-foreground/30"
                           )} />
                         </div>
                       </Link>

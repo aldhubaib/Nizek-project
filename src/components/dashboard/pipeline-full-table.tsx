@@ -18,25 +18,25 @@ interface PipelineTask {
 }
 
 const STAGE_COLORS: Record<string, string> = {
-  READY_FOR_DEV: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  READY_FOR_DEV: "bg-primary/10 text-primary border-primary/20",
   IN_DEVELOPMENT: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  INTERNAL_REVIEW: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  INTERNAL_REVIEW: "bg-orange/10 text-orange border-orange/20",
   CLIENT_REVIEW: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-  READY_FOR_RELEASE: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  READY_FOR_RELEASE: "bg-success/10 text-success border-success/20",
 };
 
 const TASK_TYPE_COLORS: Record<string, string> = {
-  FEATURE: "text-blue-400",
+  FEATURE: "text-primary",
   ENHANCEMENT: "text-cyan-400",
-  BUG: "text-red-400",
+  BUG: "text-destructive",
   REPORTED_BUG: "text-orange-400",
   DESIGN: "text-purple-400",
 };
 
 const TASK_TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string; label: string }> = {
-  FEATURE: { icon: Sparkles, color: "text-blue-400 bg-blue-500/10 border-blue-500/20", label: "Business Case" },
+  FEATURE: { icon: Sparkles, color: "text-primary bg-primary/10 border-primary/20", label: "Business Case" },
   ENHANCEMENT: { icon: Zap, color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20", label: "Enhancement" },
-  BUG: { icon: Bug, color: "text-red-400 bg-red-500/10 border-red-500/20", label: "Bug" },
+  BUG: { icon: Bug, color: "text-destructive bg-destructive/10 border-destructive/20", label: "Bug" },
   REPORTED_BUG: { icon: AlertCircle, color: "text-orange-400 bg-orange-500/10 border-orange-500/20", label: "Reported Bug" },
   DESIGN: { icon: Palette, color: "text-purple-400 bg-purple-500/10 border-purple-500/20", label: "Design" },
 };
@@ -62,8 +62,8 @@ function formatDuration(ms: number) {
 
 function getDurationColor(ms: number) {
   const days = ms / (1000 * 60 * 60 * 24);
-  if (days >= 7) return "text-red-400";
-  if (days >= 5) return "text-amber-400";
+  if (days >= 7) return "text-destructive";
+  if (days >= 5) return "text-orange";
   return "text-yellow-400";
 }
 
@@ -136,7 +136,7 @@ export function PipelineFullTable({ data }: { data: PipelineTask[] }) {
     <div>
       {overWeek > 0 && (
         <div className="mb-4 flex justify-end">
-          <span className="flex items-center gap-1 text-xs font-semibold text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-2.5 py-0.5">
+          <span className="flex items-center gap-1 text-xs font-semibold text-destructive bg-destructive/10 border border-destructive/20 rounded-full px-2.5 py-0.5">
             <AlertTriangle className="w-3 h-3" />
             {overWeek} over a week
           </span>

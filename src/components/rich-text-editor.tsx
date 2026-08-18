@@ -560,7 +560,7 @@ const AttendancePicker = forwardRef<HTMLDivElement, AttendancePickerProps>(
                   type="button"
                   onClick={() => onToggle(m.id)}
                   className={cn(
-                    "flex w-full items-center gap-2.5 px-2.5 py-2 text-start transition-colors",
+                    "flex w-full items-center gap-s px-2.5 py-2 text-start transition-colors",
                     selected ? "bg-accent" : "hover:bg-accent/50",
                   )}
                 >

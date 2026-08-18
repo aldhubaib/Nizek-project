@@ -28,10 +28,10 @@ interface ContractHealthItem {
 
 function getDaysColor(days: number | null) {
   if (days === null) return { bg: "bg-muted", text: "text-muted-foreground", border: "border-border", bar: "bg-muted" };
-  if (days <= 0) return { bg: "bg-red-500/10", text: "text-red-400", border: "border-red-500/20", bar: "bg-red-500" };
-  if (days < 30) return { bg: "bg-red-500/10", text: "text-red-400", border: "border-red-500/20", bar: "bg-red-500" };
-  if (days < 90) return { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-amber-500/20", bar: "bg-amber-500" };
-  return { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-emerald-500/20", bar: "bg-emerald-500" };
+  if (days <= 0) return { bg: "bg-destructive/10", text: "text-destructive", border: "border-destructive/20", bar: "bg-destructive" };
+  if (days < 30) return { bg: "bg-destructive/10", text: "text-destructive", border: "border-destructive/20", bar: "bg-destructive" };
+  if (days < 90) return { bg: "bg-orange/10", text: "text-orange", border: "border-orange/20", bar: "bg-orange" };
+  return { bg: "bg-success/10", text: "text-success", border: "border-success/20", bar: "bg-success" };
 }
 
 function formatEndDate(iso: string) {
@@ -45,11 +45,11 @@ function getBarWidth(days: number | null, maxDays: number) {
 }
 
 const CONTRACT_TYPE_ICONS: Record<string, { icon: typeof Users; color: string }> = {
-  FULL_TEAM: { icon: Users, color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+  FULL_TEAM: { icon: Users, color: "text-primary bg-primary/10 border-primary/20" },
   PART_TEAM: { icon: UserMinus, color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" },
   FIXED: { icon: Briefcase, color: "text-purple-400 bg-purple-500/10 border-purple-500/20" },
-  MAINTENANCE: { icon: Wrench, color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
-  STARTUP: { icon: Rocket, color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
+  MAINTENANCE: { icon: Wrench, color: "text-orange bg-orange/10 border-orange/20" },
+  STARTUP: { icon: Rocket, color: "text-success bg-success/10 border-success/20" },
 };
 
 function Tooltip({ children, text }: { children: React.ReactNode; text: string }) {
@@ -82,7 +82,7 @@ function CompactRow({ item, maxDays }: { item: ContractHealthItem; maxDays: numb
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
+          <div className="flex items-center gap-xs min-w-0">
             <Tooltip text={CONTRACT_TYPE_LABELS[item.currentType ?? ""] ?? "Unknown"}>
               <div className={cn("w-5 h-5 rounded flex items-center justify-center border shrink-0", typeInfo?.color ?? "text-muted-foreground bg-muted border-border")}>
                 <TypeIcon className="w-3 h-3" />
@@ -90,7 +90,7 @@ function CompactRow({ item, maxDays }: { item: ContractHealthItem; maxDays: numb
             </Tooltip>
             {item.typeTransition && (
               <Tooltip text={`Switching: ${CONTRACT_TYPE_LABELS[item.typeTransition.from]} → ${CONTRACT_TYPE_LABELS[item.typeTransition.to]}`}>
-                <div className="w-5 h-5 rounded flex items-center justify-center border shrink-0 text-amber-400 bg-amber-500/10 border-amber-500/20 animate-pulse">
+                <div className="w-5 h-5 rounded flex items-center justify-center border shrink-0 text-orange bg-orange/10 border-orange/20 animate-pulse">
                   <ArrowRightLeft className="w-3 h-3" />
                 </div>
               </Tooltip>
@@ -134,7 +134,7 @@ function FullRow({ item }: { item: ContractHealthItem }) {
         </Tooltip>
         {item.typeTransition && (
           <Tooltip text={`Switching: ${CONTRACT_TYPE_LABELS[item.typeTransition.from]} → ${CONTRACT_TYPE_LABELS[item.typeTransition.to]}`}>
-            <div className="w-6 h-6 rounded flex items-center justify-center border shrink-0 text-amber-400 bg-amber-500/10 border-amber-500/20">
+            <div className="w-6 h-6 rounded flex items-center justify-center border shrink-0 text-orange bg-orange/10 border-orange/20">
               <ArrowRightLeft className="w-3.5 h-3.5" />
             </div>
           </Tooltip>
@@ -151,12 +151,12 @@ function FullRow({ item }: { item: ContractHealthItem }) {
         </span>
       </div>
 
-      <div className="flex items-center justify-center gap-1.5 min-w-0 @max-md/card:hidden">
+      <div className="flex items-center justify-center gap-xs min-w-0 @max-md/card:hidden">
         {item.typeTransition ? (
           <>
             <span className="text-xs font-medium text-muted-foreground truncate">{CONTRACT_TYPE_LABELS[item.typeTransition.from] ?? item.typeTransition.from}</span>
-            <ArrowRight className="w-3 h-3 text-amber-400 shrink-0" />
-            <span className="text-xs font-semibold text-amber-400 truncate">{CONTRACT_TYPE_LABELS[item.typeTransition.to] ?? item.typeTransition.to}</span>
+            <ArrowRight className="w-3 h-3 text-orange shrink-0" />
+            <span className="text-xs font-semibold text-orange truncate">{CONTRACT_TYPE_LABELS[item.typeTransition.to] ?? item.typeTransition.to}</span>
           </>
         ) : (
           <span className="text-xs font-medium text-muted-foreground">{item.currentType ? (CONTRACT_TYPE_LABELS[item.currentType] ?? item.currentType) : "—"}</span>
@@ -191,7 +191,7 @@ export function ContractsHealth({ data }: { data: ContractHealthItem[] }) {
               Contracts Health
             </h2>
             {urgentCount > 0 && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
+              <span className="flex items-center gap-1 text-xs font-semibold text-orange bg-orange/10 border border-orange/20 rounded-full px-2 py-0.5">
                 <AlertTriangle className="w-3 h-3" />
                 {urgentCount} soon
               </span>
@@ -199,17 +199,17 @@ export function ContractsHealth({ data }: { data: ContractHealthItem[] }) {
           </div>
           {/* Summary bar */}
           <div className="flex items-center gap-3 text-xs">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-emerald-500" />
+            <div className="flex items-center gap-xs">
+              <div className="w-2 h-2 rounded-full bg-success" />
               <span className="text-muted-foreground">{healthyCount} healthy</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-amber-500" />
+            <div className="flex items-center gap-xs">
+              <div className="w-2 h-2 rounded-full bg-orange" />
               <span className="text-muted-foreground">{urgentCount - criticalCount} expiring</span>
             </div>
             {criticalCount > 0 && (
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full bg-red-500" />
+              <div className="flex items-center gap-xs">
+                <div className="w-2 h-2 rounded-full bg-destructive" />
                 <span className="text-muted-foreground">{criticalCount} critical</span>
               </div>
             )}
@@ -234,7 +234,7 @@ export function ContractsHealth({ data }: { data: ContractHealthItem[] }) {
         {data.length > PREVIEW_COUNT && (
           <button
             onClick={() => setShowAll(true)}
-            className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-1.5"
+            className="w-full px-4 py-2.5 border-t border-border text-s font-medium text-primary hover:bg-accent/30 transition-colors flex items-center justify-center gap-xs"
           >
             <ExternalLink className="w-3 h-3" />
             View All ({data.length})
@@ -247,7 +247,7 @@ export function ContractsHealth({ data }: { data: ContractHealthItem[] }) {
         <div className="fixed inset-0 z-[9999] bg-background/95 backdrop-blur-sm flex flex-col">
           <div className="flex app-top-bar items-center justify-between border-b border-border shrink-0">
             <div className="flex items-center gap-3">
-              <button onClick={() => setShowAll(false)} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors text-s">
+              <button onClick={() => setShowAll(false)} className="flex items-center gap-xs text-muted-foreground hover:text-foreground transition-colors text-s">
                 <X className="w-4 h-4" />
                 Close
               </button>
@@ -259,7 +259,7 @@ export function ContractsHealth({ data }: { data: ContractHealthItem[] }) {
               </h2>
             </div>
             {urgentCount > 0 && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5">
+              <span className="flex items-center gap-1 text-xs font-semibold text-orange bg-orange/10 border border-orange/20 rounded-full px-2.5 py-0.5">
                 <AlertTriangle className="w-3 h-3" />
                 {urgentCount} expiring soon
               </span>

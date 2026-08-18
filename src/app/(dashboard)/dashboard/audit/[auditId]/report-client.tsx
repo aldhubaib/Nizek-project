@@ -42,8 +42,8 @@ const FLAG_STYLE: Record<
 > = {
   critical_late: {
     icon: AlertTriangle,
-    color: "text-red-400",
-    chip: "border-red-500/20 bg-red-500/10 text-red-400",
+    color: "text-destructive",
+    chip: "border-destructive/20 bg-destructive/10 text-destructive",
   },
   rejected: {
     icon: XCircle,
@@ -52,13 +52,13 @@ const FLAG_STYLE: Record<
   },
   deadline_overdue: {
     icon: CalendarClock,
-    color: "text-rose-400",
-    chip: "border-rose-500/20 bg-rose-500/10 text-rose-400",
+    color: "text-destructive",
+    chip: "border-destructive/20 bg-destructive/10 text-destructive",
   },
   warn_late: {
     icon: Clock,
-    color: "text-amber-400",
-    chip: "border-amber-500/20 bg-amber-500/10 text-amber-400",
+    color: "text-orange",
+    chip: "border-orange/20 bg-orange/10 text-orange",
   },
   client_input: {
     icon: MessageCircleQuestion,
@@ -92,7 +92,7 @@ export function ReportClient({ report }: { report: AuditReportDTO }) {
         <div className="flex min-w-0 items-center gap-3">
           <Link
             href="/dashboard/audit"
-            className="flex shrink-0 items-center gap-1.5 text-s text-muted-foreground transition-colors hover:text-foreground"
+            className="flex shrink-0 items-center gap-xs text-s text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
             Reports
@@ -111,14 +111,14 @@ export function ReportClient({ report }: { report: AuditReportDTO }) {
             {decided}/{items.length} reviewed
           </span>
           {report.status === "submitted" ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-400">
+            <span className="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2.5 py-0.5 text-xs font-semibold text-success">
               <ShieldCheck className="h-3 w-3" />
               Submitted
             </span>
           ) : report.isOwner ? (
             <Button
               size="sm"
-              className="h-8 gap-1.5"
+              className="h-8 gap-xs"
               disabled={submitting}
               onClick={handleSubmit}
               title={
@@ -135,13 +135,13 @@ export function ReportClient({ report }: { report: AuditReportDTO }) {
       </PageHeader>
 
       {submitError && (
-        <p className="px-app pt-3 text-s text-red-400">{submitError}</p>
+        <p className="px-app pt-3 text-s text-destructive">{submitError}</p>
       )}
 
       <div className="space-y-3 px-app py-6">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <ShieldCheck className="mb-2 h-8 w-8 text-emerald-400/40" />
+            <ShieldCheck className="mb-2 h-8 w-8 text-success/40" />
             <p className="text-s text-muted-foreground">
               Nothing flagged for the selected teams — clean day.
             </p>
@@ -295,7 +295,7 @@ function AuditItemCard({
       {expanded && (
         <div className="border-t border-border/50 px-4 py-4">
           <div className="mb-3 flex items-center justify-between">
-            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="flex items-center gap-xs text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <History className="h-3.5 w-3.5" />
               Ownership history
             </p>
@@ -358,9 +358,9 @@ function AuditItemCard({
                         })
                       }
                       className={cn(
-                        "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-s transition-colors",
+                        "flex items-center gap-xs rounded-full border px-2.5 py-1 text-s transition-colors",
                         isBlamed
-                          ? "border-red-500/40 bg-red-500/15 text-red-400"
+                          ? "border-destructive/40 bg-destructive/15 text-destructive"
                           : "border-border bg-card text-foreground hover:bg-accent/20",
                       )}
                     >
@@ -380,9 +380,9 @@ function AuditItemCard({
                   disabled={saving}
                   onClick={() => applyVerdict("excused")}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-s transition-colors",
+                    "flex items-center gap-xs rounded-full border px-2.5 py-1 text-s transition-colors",
                     item.verdict === "excused"
-                      ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
+                      ? "border-success/40 bg-success/15 text-success"
                       : "border-border bg-card text-foreground hover:bg-accent/20",
                   )}
                 >
@@ -394,7 +394,7 @@ function AuditItemCard({
                   disabled={saving}
                   onClick={() => applyVerdict("skipped")}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-s transition-colors",
+                    "flex items-center gap-xs rounded-full border px-2.5 py-1 text-s transition-colors",
                     item.verdict === "skipped"
                       ? "border-border bg-muted text-foreground"
                       : "border-border bg-card text-muted-foreground hover:bg-accent/20",
@@ -408,7 +408,7 @@ function AuditItemCard({
                     type="button"
                     disabled={saving}
                     onClick={() => applyVerdict("pending")}
-                    className="flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-s text-muted-foreground transition-colors hover:bg-accent/20"
+                    className="flex items-center gap-xs rounded-full border border-border bg-card px-2.5 py-1 text-s text-muted-foreground transition-colors hover:bg-accent/20"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
                     Reset
@@ -422,7 +422,7 @@ function AuditItemCard({
                 placeholder="Optional note (context, agreed follow-up…)"
                 className="min-h-[60px] text-s"
               />
-              {error && <p className="mt-2 text-s text-red-400">{error}</p>}
+              {error && <p className="mt-2 text-s text-destructive">{error}</p>}
             </>
           )}
 
@@ -440,7 +440,7 @@ function AuditItemCard({
 function VerdictBadge({ item }: { item: AuditItemDTO }) {
   if (item.verdict === "blamed") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-xs font-semibold text-red-400">
+      <span className="inline-flex items-center gap-1 rounded-full border border-destructive/20 bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">
         <UserX className="h-3 w-3" />
         {item.blamedUser?.name ?? "Blamed"}
       </span>
@@ -448,7 +448,7 @@ function VerdictBadge({ item }: { item: AuditItemDTO }) {
   }
   if (item.verdict === "excused") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400">
+      <span className="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-xs font-semibold text-success">
         <ShieldCheck className="h-3 w-3" />
         Excused
       </span>

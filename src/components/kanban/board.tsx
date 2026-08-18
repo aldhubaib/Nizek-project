@@ -31,14 +31,14 @@ interface QuestionWithType extends TaskQuestion {
 import type { UserPermissions } from "@/app/(dashboard)/dashboard/projects/[projectId]/project-detail-client";
 
 const STAGES: { id: Stage; label: string; color: string }[] = [
-  { id: "NEW_REQUEST", label: "New Request", color: "bg-zinc-500" },
+  { id: "NEW_REQUEST", label: "New Request", color: "bg-muted-foreground" },
   { id: "CLARIFICATION", label: "Clarification", color: "bg-violet-500" },
-  { id: "READY_FOR_DEV", label: "Ready for Dev", color: "bg-blue-500" },
+  { id: "READY_FOR_DEV", label: "Ready for Dev", color: "bg-primary" },
   { id: "IN_DEVELOPMENT", label: "In Development", color: "bg-sky-500" },
-  { id: "INTERNAL_REVIEW", label: "Internal Review", color: "bg-amber-500" },
+  { id: "INTERNAL_REVIEW", label: "Internal Review", color: "bg-orange" },
   { id: "CLIENT_REVIEW", label: "Client Review", color: "bg-orange-500" },
   { id: "READY_FOR_RELEASE", label: "Ready for Release", color: "bg-teal-500" },
-  { id: "DONE", label: "Done", color: "bg-emerald-500" },
+  { id: "DONE", label: "Done", color: "bg-success" },
 ];
 
 export interface BoardProps {
@@ -60,7 +60,7 @@ const ASSIGN_TO_ME_CHECKPOINT = {
   title: "Taking ownership",
   message: "By confirming, this task will be assigned to you and you take ownership of it.",
   confirmLabel: "Assign to Me",
-  confirmColor: "bg-blue-600 hover:bg-blue-700",
+  confirmColor: "bg-primary hover:bg-primary/90",
   assignToMe: true,
 } as const;
 
@@ -536,8 +536,8 @@ export function KanbanBoard({
   if (!isProjectActive) {
     return (
       <div>
-        <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-          <p className="text-s font-medium text-amber-400">
+        <div className="mb-6 rounded-lg border border-orange/30 bg-orange/10 px-4 py-3">
+          <p className="text-s font-medium text-orange">
             No active contract — this project is read-only. Add a new contract to re-enable editing.
           </p>
         </div>

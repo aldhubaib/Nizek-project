@@ -20,15 +20,15 @@ function getPriorityStyle(priority: number) {
 const ACCURACY_CONFIG: Record<EstimateAccuracy, { label: string; color: string; bg: string }> = {
   WAY_OVER:  { label: "Way Over",  color: "text-destructive",  bg: "bg-destructive/15 border-destructive/20" },
   OVER:      { label: "Over",      color: "text-orange-400",   bg: "bg-orange-500/15 border-orange-500/20" },
-  ON_TRACK:  { label: "On Track",  color: "text-emerald-400",  bg: "bg-emerald-500/15 border-emerald-500/20" },
-  UNDER:     { label: "Under",     color: "text-blue-400",     bg: "bg-blue-500/15 border-blue-500/20" },
+  ON_TRACK:  { label: "On Track",  color: "text-success",  bg: "bg-success/15 border-success/20" },
+  UNDER:     { label: "Under",     color: "text-primary",     bg: "bg-primary/15 border-primary/20" },
   WAY_UNDER: { label: "Way Under", color: "text-violet-400",   bg: "bg-violet-500/15 border-violet-500/20" },
 };
 
 const TYPE_CONFIG: Record<TaskType, { icon: typeof Sparkles; color: string; bg: string; tooltip: string }> = {
   FEATURE: { icon: Sparkles, color: "text-primary", bg: "bg-primary/10 border-primary/20", tooltip: "Business Case" },
   ENHANCEMENT: { icon: Wrench, color: "text-violet-400", bg: "bg-violet-500/10 border-violet-500/20", tooltip: "Enhancement" },
-  BUG: { icon: Bug, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20", tooltip: "Internal Bug" },
+  BUG: { icon: Bug, color: "text-orange", bg: "bg-orange/10 border-orange/20", tooltip: "Internal Bug" },
   REPORTED_BUG: { icon: AlertCircle, color: "text-destructive", bg: "bg-destructive/10 border-destructive/20", tooltip: "Reported Bug (Client)" },
   DESIGN: { icon: Palette, color: "text-cyan-400", bg: "bg-cyan-500/10 border-cyan-500/20", tooltip: "Design" },
 };
@@ -261,7 +261,7 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
 
           {(task.internalDeclines ?? 0) > 0 && (
             <span
-              className="inline-flex items-center gap-xs rounded-full border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-xs font-semibold text-amber-400 tabular-nums"
+              className="inline-flex items-center gap-xs rounded-full border border-orange/20 bg-orange/10 px-1.5 py-0.5 text-xs font-semibold text-orange tabular-nums"
               title={`Internal review declined ${task.internalDeclines} time${task.internalDeclines === 1 ? "" : "s"}`}
             >
               <Undo2 className="w-2.5 h-2.5" />

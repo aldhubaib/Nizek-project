@@ -82,7 +82,7 @@ export default async function EquityReportPage({
           </>
         )}
 
-        <footer className="mt-9 pt-3.5 border-t border-white/10 flex items-center gap-3.5">
+        <footer className="mt-9 pt-3.5 border-t border-border flex items-center gap-m">
           <Wordmark className="text-3xl" />
           <div className="w-px self-stretch bg-white/15" />
           <p className="flex-1 text-xs leading-relaxed text-white/40">

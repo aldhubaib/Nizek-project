@@ -27,9 +27,9 @@ type CheckState = "ok" | "warn" | "fail";
 
 function StatusIcon({ state }: { state: CheckState }) {
   if (state === "ok")
-    return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
+    return <CheckCircle2 className="h-3.5 w-3.5 text-success" />;
   if (state === "warn")
-    return <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />;
+    return <AlertTriangle className="h-3.5 w-3.5 text-orange" />;
   return <XCircle className="h-3.5 w-3.5 text-destructive" />;
 }
 
@@ -233,7 +233,7 @@ export function NotificationDiagnostics() {
               type="button"
               onClick={() => void runTest()}
               disabled={testing}
-              className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-s font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+              className="flex h-8 items-center gap-xs rounded-lg bg-primary px-3 text-s font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {testing ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

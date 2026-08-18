@@ -100,7 +100,7 @@ export function EquityAccessManager() {
                   key={m.id}
                   className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4"
                 >
-                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <div className="flex min-w-0 flex-1 items-center gap-s">
                     <Avatar className="h-7 w-7 shrink-0">
                       <AvatarImage src={m.imageUrl ?? undefined} />
                       <AvatarFallback className="text-xs">

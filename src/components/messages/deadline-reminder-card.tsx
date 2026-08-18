@@ -56,7 +56,7 @@ export function DeadlineReminderCard({
           </div>
         }
       >
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="flex items-center gap-xs text-xs text-muted-foreground">
           <Calendar className="size-3.5 shrink-0 opacity-70" />
           <span>{dueLabel}</span>
         </div>

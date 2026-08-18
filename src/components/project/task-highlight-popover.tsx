@@ -66,8 +66,8 @@ export function TaskHighlightPopover({
   return (
     <div className="flex w-[min(calc(100vw-2rem),320px)] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl">
       <div className="flex items-start gap-2 border-b border-border px-3 py-2.5">
-        <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
-        <p className="min-w-0 flex-1 line-clamp-3 border-s-2 border-amber-400/70 ps-2 text-xs italic leading-snug text-muted-foreground">
+        <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange" />
+        <p className="min-w-0 flex-1 line-clamp-3 border-s-2 border-orange/70 ps-2 text-xs italic leading-snug text-muted-foreground">
           {thread.quoteText}
         </p>
         <div className="flex shrink-0 items-center gap-0.5">

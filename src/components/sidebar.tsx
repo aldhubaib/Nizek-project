@@ -78,9 +78,9 @@ export function Sidebar({
       )}
     >
       {/* Header */}
-      <div className="relative px-3 h-12 flex items-center justify-between shrink-0">
+      <div className="relative px-m h-12 flex items-center justify-between shrink-0">
         {!collapsed ? (
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <div className="flex items-center gap-s min-w-0 flex-1">
             <BrandMark logoUrl={mark} className="h-7 w-7" />
             <span className="font-semibold text-s text-foreground truncate">
               Nizek Project
@@ -120,7 +120,7 @@ export function Sidebar({
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-1.5 px-2 overflow-y-auto">
+      <nav className="flex-1 py-xs px-s overflow-y-auto">
         {navigation
           .filter((item) => {
             if (isClient) return item.href === "/dashboard/messages";
@@ -138,8 +138,8 @@ export function Sidebar({
             <Link
               href={item.href}
               className={cn(
-                "w-full flex items-center gap-2.5 rounded-full text-s font-medium transition-colors mb-0.5 no-underline",
-                collapsed ? "justify-center px-0 py-2" : "px-2.5 py-[7px]",
+                "w-full flex items-center gap-s rounded-full text-s font-medium transition-colors mb-0.5 no-underline",
+                collapsed ? "justify-center px-0 py-s" : "px-s py-xs",
                 active
                   ? "bg-card text-foreground"
                   : "text-muted-foreground hover:bg-card/60 hover:text-muted-foreground"
@@ -165,7 +165,7 @@ export function Sidebar({
       </nav>
 
       {/* User */}
-      <div className={cn("px-2 py-2", collapsed && "px-1.5")}>
+      <div className={cn("px-s py-s", collapsed && "px-xs")}>
         <UserMenu collapsed={collapsed} />
       </div>
     </div>

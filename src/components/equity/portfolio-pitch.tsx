@@ -488,7 +488,7 @@ function Field({
 }) {
   return (
     <div>
-      <p className="flex items-center gap-1.5 text-xs uppercase tracking-[0.1em] text-muted-foreground mb-3.5">
+      <p className="flex items-center gap-xs text-xs uppercase tracking-[0.1em] text-muted-foreground mb-3.5">
         <Icon className="w-3.5 h-3.5" strokeWidth={1.5} />
         {title}
       </p>
@@ -531,7 +531,7 @@ function HeadlineStat({
 }) {
   return (
     <div className="app-card rounded-xl border border-border/60 bg-muted/20 px-4 py-4 transition-colors hover:border-muted-foreground/30">
-      <div className="flex items-center gap-1.5 mb-2.5">
+      <div className="flex items-center gap-xs mb-2.5">
         <Icon className="w-3.5 h-3.5" strokeWidth={1.5} style={{ color: ACCENT }} />
         <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">
           {label}
@@ -571,8 +571,8 @@ function MetricCard({ series, index }: { series: MetricSeries; index: number }) 
           <span
             className={cn(
               "flex items-center gap-0.5 text-xs font-medium tabular-nums shrink-0",
-              up && "text-emerald-400",
-              down && "text-rose-400",
+              up && "text-success",
+              down && "text-destructive",
             )}
           >
             {up ? (
@@ -1460,7 +1460,7 @@ export function PortfolioPitch({
                           href={doc.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-s text-foreground/90 no-underline hover:underline min-w-0"
+                          className="inline-flex items-center gap-xs text-s text-foreground/90 no-underline hover:underline min-w-0"
                         >
                           <Paperclip
                             className="w-3.5 h-3.5 shrink-0 text-muted-foreground"
@@ -1578,8 +1578,8 @@ function Hero({
                 className={cn(
                   "px-2 py-0.5 rounded-full text-xs font-semibold",
                   live === "LIVE"
-                    ? "bg-emerald-500/15 text-emerald-400"
-                    : "bg-amber-500/15 text-amber-400",
+                    ? "bg-success/15 text-success"
+                    : "bg-orange/15 text-orange",
                 )}
               >
                 {formatLiveStatus(portfolio.liveDate)}
@@ -1743,7 +1743,7 @@ function SectionRail({
       </nav>
 
       <nav className="lg:hidden sticky top-12 z-10 -mx-1 mb-6 px-1 py-2 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-        <div className="flex items-center gap-1.5 overflow-x-auto">
+        <div className="flex items-center gap-xs overflow-x-auto">
           {sections.map((s) => (
             <button
               key={s.id}

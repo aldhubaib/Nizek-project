@@ -24,7 +24,7 @@ const CHECKPOINTS: Partial<Record<string, CheckpointConfig>> = {
     message: "By confirming, you acknowledge that you understand the requirements and are taking ownership of this task.",
     notice: "The task timer will start once you confirm.",
     confirmLabel: "I Understand",
-    confirmColor: "bg-blue-600 hover:bg-blue-700",
+    confirmColor: "bg-primary hover:bg-primary/90",
     requiresEstimate: true,
     assignToMe: true,
   },
@@ -32,20 +32,20 @@ const CHECKPOINTS: Partial<Record<string, CheckpointConfig>> = {
     title: "Move to Client Review",
     message: "By moving this to client review, you confirm that you have tested this task and it is working correctly.",
     confirmLabel: "Confirm Tested",
-    confirmColor: "bg-amber-600 hover:bg-amber-700",
+    confirmColor: "bg-orange hover:bg-orange/80",
   },
   "INTERNAL_REVIEW→READY_FOR_RELEASE": {
     title: "Skip Client Review",
     message: "You are skipping the client approval for this task. By confirming, you acknowledge that you will be held responsible for this action and verify the task is tested and ready for release.",
     notice: "This action bypasses the client review process.",
     confirmLabel: "I Accept Responsibility & Skip",
-    confirmColor: "bg-amber-600 hover:bg-amber-700",
+    confirmColor: "bg-orange hover:bg-orange/80",
   },
   "CLIENT_REVIEW→READY_FOR_RELEASE": {
     title: "Move to Ready for Release",
     message: "By moving this to Ready for Release, you confirm that you have reviewed and approved the work.",
     confirmLabel: "Approve",
-    confirmColor: "bg-emerald-600 hover:bg-emerald-700",
+    confirmColor: "bg-success hover:bg-success/80",
   },
 };
 
@@ -108,7 +108,7 @@ export function StageConfirmDialog({
             className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${
               checkpoint.assignToMe
                 ? "bg-primary/15 text-primary"
-                : "bg-amber-500/15 text-amber-500"
+                : "bg-orange/15 text-orange"
             }`}
           >
             {checkpoint.assignToMe ? (
@@ -125,7 +125,7 @@ export function StageConfirmDialog({
               </div>
               <div className="flex min-w-0 flex-wrap items-center gap-2 text-s">
                 {currentAssigneeName ? (
-                  <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-muted/60 py-0.5 ps-0.5 pe-2.5 text-muted-foreground">
+                  <span className="inline-flex min-w-0 max-w-full items-center gap-xs rounded-full bg-muted/60 py-0.5 ps-0.5 pe-2.5 text-muted-foreground">
                     <Avatar className="size-5">
                       {currentAssigneeAvatar && (
                         <AvatarImage src={currentAssigneeAvatar} alt={currentAssigneeName} />
@@ -137,12 +137,12 @@ export function StageConfirmDialog({
                     <span className="truncate">{currentAssigneeName}</span>
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/60 px-2.5 py-1 text-muted-foreground">
+                  <span className="inline-flex items-center gap-xs rounded-full bg-muted/60 px-2.5 py-1 text-muted-foreground">
                     Unassigned
                   </span>
                 )}
                 <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-primary/15 py-0.5 ps-0.5 pe-2.5 font-medium text-primary">
+                <span className="inline-flex min-w-0 max-w-full items-center gap-xs rounded-full bg-primary/15 py-0.5 ps-0.5 pe-2.5 font-medium text-primary">
                   <Avatar className="size-5">
                     {meAvatar && <AvatarImage src={meAvatar} alt={me} />}
                     <AvatarFallback className="bg-primary text-xs font-bold text-primary-foreground">
@@ -173,7 +173,7 @@ export function StageConfirmDialog({
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
               Estimated Time
             </label>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-xs">
               {PRESETS.map((p) => (
                 <button
                   key={p.label}
@@ -181,7 +181,7 @@ export function StageConfirmDialog({
                   onClick={() => { setSelectedMinutes(p.minutes); setEstimateError(false); }}
                   className={`h-7 rounded-md border px-2.5 text-s font-medium transition-colors ${
                     selectedMinutes === p.minutes
-                      ? "bg-blue-600/20 border-blue-500/40 text-blue-400"
+                      ? "bg-primary/20 border-primary/40 text-primary"
                       : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
                   }`}
                 >
@@ -198,9 +198,9 @@ export function StageConfirmDialog({
         )}
 
         {checkpoint.notice && (
-          <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 mt-4">
-            <span className="text-amber-400 text-s">⏱</span>
-            <p className="text-s text-amber-400/90 font-medium">{checkpoint.notice}</p>
+          <div className="flex items-center gap-2 rounded-lg border border-orange/30 bg-orange/10 px-3 py-2 mt-4">
+            <span className="text-orange text-s">⏱</span>
+            <p className="text-s text-orange/90 font-medium">{checkpoint.notice}</p>
           </div>
         )}
 

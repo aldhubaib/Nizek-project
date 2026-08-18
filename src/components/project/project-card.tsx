@@ -63,9 +63,9 @@ export function ProjectCard({ project, teams = [], contractPrefixes = [] }: Proj
       <div className="relative group">
         <Link
           href={`/dashboard/projects/${project.id}`}
-          className="app-card block rounded-lg bg-card border border-border p-4 hover:border-muted-foreground/20 transition-colors no-underline"
+          className="app-card block rounded-lg bg-card border border-border p-card hover:border-muted-foreground/20 transition-colors no-underline"
         >
-          <div className="flex items-center gap-2.5 mb-3">
+          <div className="flex items-center gap-s mb-card">
             {project.logoUrl ? (
               <img src={project.logoUrl} alt={project.name} className="w-8 h-8 rounded-full object-cover border border-border" />
             ) : (
@@ -79,16 +79,16 @@ export function ProjectCard({ project, teams = [], contractPrefixes = [] }: Proj
               </p>
             </div>
             {!isActive && (
-              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${
+              <span className={`inline-flex items-center rounded-full border px-s py-0.5 text-xs font-semibold ${
                 hasLatePayment
-                  ? "bg-amber-500/15 text-amber-400 border-amber-500/20"
+                  ? "bg-orange/15 text-orange border-orange/20"
                   : "bg-destructive/15 text-destructive border-destructive/20"
               }`}>
                 {hasLatePayment ? "Late Payment" : "Expired"}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <div className="flex items-center gap-card text-xs text-muted-foreground">
             {project.team && <span className="font-medium text-muted-foreground/80">{project.team.name}</span>}
             <span>{project._count.members} members</span>
             <span>{project._count.tasks} tasks</span>

@@ -602,12 +602,12 @@ function ImportantMessageRow({
     <Link
       href={`/dashboard/messages/${message.threadId}?msg=${message.id}`}
       className={cn(
-        "flex min-h-[76px] items-center gap-3.5 border-b border-border/30 px-app py-3.5 transition-colors active:bg-surface/70 hover:bg-surface/60 max-lg:min-h-[80px] max-lg:gap-4 max-lg:py-4 lg:min-h-[68px] lg:py-3",
+        "flex min-h-[76px] items-center gap-m border-b border-border/30 px-app py-3.5 transition-colors active:bg-surface/70 hover:bg-surface/60 max-lg:min-h-[80px] max-lg:gap-4 max-lg:py-4 lg:min-h-[68px] lg:py-3",
         active && "bg-surface/80",
       )}
     >
-      <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-amber-500/15 max-lg:h-[52px] max-lg:w-[52px] lg:h-11 lg:w-11">
-        <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+      <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-orange/15 max-lg:h-[52px] max-lg:w-[52px] lg:h-11 lg:w-11">
+        <Star className="h-5 w-5 fill-orange text-orange" />
       </div>
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
@@ -641,7 +641,7 @@ function ThreadRow({
       href={`/dashboard/messages/${thread.id}`}
       className={cn(
         // WhatsApp-like row: tall touch target (~72–80px), large avatar, roomy padding.
-        "flex min-h-[76px] items-center gap-3.5 border-b border-border/30 px-app py-3.5 transition-colors active:bg-surface/70 hover:bg-surface/60 max-lg:min-h-[80px] max-lg:gap-4 max-lg:py-4 lg:min-h-[68px] lg:py-3",
+        "flex min-h-[76px] items-center gap-m border-b border-border/30 px-app py-3.5 transition-colors active:bg-surface/70 hover:bg-surface/60 max-lg:min-h-[80px] max-lg:gap-4 max-lg:py-4 lg:min-h-[68px] lg:py-3",
         active && "bg-surface/80",
         !thread.inactive && thread.unread > 0 && !active && "bg-primary/[0.05]",
         thread.inactive && "opacity-70 hover:opacity-100",
@@ -667,7 +667,7 @@ function ThreadRow({
           </div>
         )}
         {isOnline && (
-          <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-background bg-emerald-500" />
+          <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-background bg-success" />
         )}
       </div>
       <div className="min-w-0 flex-1 space-y-1">
@@ -682,7 +682,7 @@ function ThreadRow({
             {thread.name}
           </span>
           {thread.kind === "client" && !thread.inactive && (
-            <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-amber-400">
+            <span className="shrink-0 rounded-full bg-orange/15 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-orange">
               Client
             </span>
           )}
