@@ -1,0 +1,1924 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  PROJECT_MANAGER
+  MEMBER
+  CLIENT
+}
+
+enum SystemRole {
+  ADMIN
+  PM
+  TECH_LEAD
+  DEVELOPER
+  DESIGNER
+  CLIENT
+}
+
+enum Stage {
+  NEW_REQUEST
+  CLARIFICATION
+  READY_FOR_DEV
+  IN_DEVELOPMENT
+  INTERNAL_REVIEW
+  CLIENT_REVIEW
+  READY_FOR_RELEASE
+  DONE
+}
+
+enum TaskType {
+  FEATURE
+  ENHANCEMENT
+  BUG
+  REPORTED_BUG
+  DESIGN
+}
+
+enum ContractType {
+  FULL_TEAM
+  PART_TEAM
+  FIXED
+  MAINTENANCE
+  STARTUP
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
+
+enum TeamRole {
+  ADMIN
+  MEMBER
+}
+
+enum EstimateAccuracy {
+  WAY_OVER
+  OVER
+  ON_TRACK
+  UNDER
+  WAY_UNDER
+}
+
+// ─── Models ──────────────────────────────────────────────
+
+model User {
+  id         String     @id @default(cuid())
+  clerkId    String     @unique
+  email      String     @unique
+  name       String?
+  imageUrl   String?
+  systemRole SystemRole @default(DEVELOPER)
+  blocked    Boolean    @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  teams          TeamMember[]
+  projects       ProjectMember[]
+  assignedTasks       Task[]    @relation("TaskAssignee")
+  createdTasks        Task[]    @relation("TaskCreator")
+  developerTasks      Task[]    @relation("TaskDeveloper")
+  clientReviewTasks   Task[]    @relation("TaskClientReviewer")
+  defaultClientProjects Project[] @relation("ProjectDefaultClient")
+  taskActivities TaskActivity[] @relation("ActivityUser")
+  taskComments   TaskComment[]  @relation("CommentUser")
+  commentMentions TaskCommentMention[] @relation("MentionedUser")
+  meetingNotes   MeetingNote[]
+  noteEdits      NoteHistory[]
+  assets         Asset[]
+  invitations    Invitation[]
+
+  conversations     ConversationParticipant[] @relation("ConversationMember")
+  messages          Message[]                 @relation("MessageAuthor")
+  messageMentions   MessageMention[]          @relation("MessageMentionedUser")
+  messageReactions  MessageReaction[]         @relation("MessageReactionAuthor")
+  importantMessages ImportantMessage[]        @relation("UserImportantMessages")
+  notifications     Notification[]            @relation("NotificationRecipient")
+  pushSubscriptions PushSubscription[]        @relation("PushSubscriptionMember")
+  pushDeliveryLogs  PushDeliveryLog[]         @relation("PushDeliveryLogRecipient")
+  notificationPreference NotificationPreference? @relation("UserNotificationPreference")
+  mutedThreads      MutedThread[]             @relation("UserMutedThreads")
+  auditPermissions  AuditPermission[]         @relation("UserAuditPermissions")
+  equityPermission  EquityPermission?         @relation("UserEquityPermission")
+  vaultPermissions  VaultPermission[]         @relation("UserVaultPermissions")
+  vaultCredentials  VaultCredential[]         @relation("VaultCredentialAuthor")
+  vaultFolders      VaultFolder[]             @relation("VaultFolderAuthor")
+  vaultActivities   VaultActivity[]           @relation("VaultActivityUser")
+  taskAudits        TaskAudit[]               @relation("AuditCreator")
+  auditBlames       TaskAuditItem[]           @relation("AuditBlamedUser")
+  equityActivities  EquityActivity[]          @relation("EquityActivityUser")
+  trashedItems      TrashItem[]               @relation("TrashDeletedBy")
+  noteCommentThreads NoteCommentThread[]      @relation("NoteCommentThreadAuthor")
+  noteComments       NoteComment[]            @relation("NoteCommentAuthor")
+  noteCommentMentions NoteCommentMention[]    @relation("NoteCommentMentionedUser")
+  noteCommentSubs    NoteCommentSubscriber[]  @relation("NoteCommentSubscriber")
+  noteTaskLinks      NoteTaskLink[]           @relation("NoteTaskLinkCreator")
+  taskHighlightThreads TaskHighlightThread[]  @relation("TaskHighlightThreadAuthor")
+  taskHighlightComments TaskHighlightComment[] @relation("TaskHighlightCommentAuthor")
+  taskHighlightMentions TaskHighlightMention[] @relation("TaskHighlightMentionedUser")
+  taskHighlightSubs    TaskHighlightSubscriber[] @relation("TaskHighlightSubscriber")
+
+  @@index([systemRole])
+  @@index([blocked])
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  projects Project[]
+  members  TeamMember[]
+  auditPermissions AuditPermission[] @relation("TeamAuditPermissions")
+  pendingInvites   PendingTeamInvite[] @relation("PendingInviteTeam")
+}
+
+model TeamMember {
+  id   String   @id @default(cuid())
+  role TeamRole @default(MEMBER)
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId String
+  team   Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, teamId])
+  @@index([userId])
+  @@index([teamId])
+}
+
+model Project {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  logoUrl     String?
+
+  teamId String?
+  team   Team?  @relation(fields: [teamId], references: [id])
+
+  defaultClientReviewerId String?
+  defaultClientReviewer   User?  @relation("ProjectDefaultClient", fields: [defaultClientReviewerId], references: [id], onDelete: SetNull)
+
+  maxPipelineTasks Int @default(3)
+
+  /// When true, a sibling Conversation (kind=client) is the client-facing room.
+  clientChatEnabled Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members      ProjectMember[]
+  contracts    Contract[]
+  tasks        Task[]
+  meetingNotes MeetingNote[]
+  assets       Asset[]
+  invitations  Invitation[]
+  messages     Message[]
+  conversations Conversation[]
+  equityPortfolio EquityPortfolio?
+  vaultCredentials VaultCredential[]
+  vaultFolders     VaultFolder[]
+  vaultPermissions VaultPermission[]
+  @@index([teamId])
+}
+
+
+model ProjectMember {
+  id   String @id @default(cuid())
+  role Role   @default(MEMBER)
+
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  roleId    String?
+  projectRole ProjectRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  canInviteMembers Boolean @default(false)
+  canInviteClients Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, projectId])
+  @@index([projectId])
+  @@index([userId])
+  @@index([projectId, role])
+}
+
+model ProjectRole {
+  id                 String  @id @default(cuid())
+  name               String  @unique
+  description        String?
+  isAdmin            Boolean @default(false)
+  canCreateTask      Boolean @default(false)
+  canModifyTask      Boolean @default(false)
+  canMoveTask        Boolean @default(false)
+  canDeleteTask      Boolean @default(false)
+  canDeclineTask     Boolean @default(false)
+  isTeamLead         Boolean @default(false)
+  allowedStages      String?
+  allowedTransitions String?
+
+  createdAt DateTime @default(now())
+
+  members     ProjectMember[]
+  invitations Invitation[]
+}
+
+model ContractPrefix {
+  id        String   @id @default(cuid())
+  prefix    String   @unique
+  name      String
+  nextNumber Int     @default(1)
+  createdAt DateTime @default(now())
+
+  contracts Contract[]
+}
+
+model Contract {
+  id           String       @id @default(cuid())
+  label        String?
+  code         String?      @unique
+  contractType ContractType @default(FULL_TEAM)
+  startDate    DateTime?
+  endDate      DateTime?
+  latePayment  Boolean      @default(false)
+
+  prefixId  String?
+  prefix    ContractPrefix? @relation(fields: [prefixId], references: [id])
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+  @@index([prefixId])
+  @@index([endDate])
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  taskNumber  Int      @default(0)
+  title       String
+  description String?
+  priority          Int?
+  taskType          TaskType @default(FEATURE)
+  stage             Stage
+  order             Int
+  estimatedMinutes  Int?
+  estimateAccuracy  EstimateAccuracy?
+
+  projectId   String
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assigneeId  String?
+  assignee    User?   @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdById String
+  createdBy   User    @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  developerId      String?
+  developer        User?   @relation("TaskDeveloper", fields: [developerId], references: [id], onDelete: SetNull)
+  clientReviewerId String?
+  clientReviewer   User?   @relation("TaskClientReviewer", fields: [clientReviewerId], references: [id], onDelete: SetNull)
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  startedAt  DateTime?
+  archivedAt DateTime?
+
+  answers    TaskAnswer[]
+  activities TaskActivity[]
+  comments   TaskComment[]
+  highlightThreads TaskHighlightThread[]
+  stageLogs  StageLog[]
+  notes      MeetingNote[]
+  noteLinks  NoteTaskLink[]
+  messages   Message[]
+
+  @@unique([projectId, taskNumber])
+  @@index([projectId, stage])
+  @@index([projectId, order])
+  @@index([projectId, archivedAt])
+  @@index([assigneeId])
+  @@index([createdById])
+  @@index([stage, archivedAt])
+  @@index([updatedAt])
+  @@index([startedAt])
+}
+
+model StageLog {
+  id        String   @id @default(cuid())
+  stage     Stage
+  enteredAt DateTime @default(now())
+  exitedAt  DateTime?
+
+  taskId String
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, exitedAt])
+}
+
+model TaskComment {
+  id      String @id @default(cuid())
+  content String
+
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation("CommentUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  mentions    TaskCommentMention[]
+  attachments CommentAttachment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId])
+}
+
+model CommentAttachment {
+  id        String @id @default(cuid())
+  commentId String
+  comment   TaskComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  filename  String
+  url       String
+  fileSize  Int?
+  mimeType  String?
+  createdAt DateTime @default(now())
+
+  @@index([commentId])
+}
+
+model TaskCommentMention {
+  id        String    @id @default(cuid())
+  commentId String
+  comment   TaskComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User   @relation("MentionedUser", fields: [userId], references: [id], onDelete: Cascade)
+  readAt    DateTime?
+
+  @@unique([commentId, userId])
+  @@index([userId])
+  @@index([userId, readAt])
+}
+
+model TaskActivity {
+  id       String  @id @default(cuid())
+  action   String
+  field    String?
+  oldValue String?
+  newValue String?
+
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation("ActivityUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([taskId, action])
+  @@index([taskId, createdAt])
+  @@index([action, createdAt])
+}
+
+enum NoteType {
+  MEETING_NOTE
+  DECISION
+  CLARIFICATION
+  DEADLINE
+  FEATURE
+  ENHANCEMENT
+  BUG
+  REPORTED_BUG
+  DESIGN
+}
+
+enum RoadmapStatus {
+  PLANNED
+  NEXT
+  PROGRESS
+  SHIPPED
+}
+
+model MeetingNote {
+  id       String   @id @default(cuid())
+  title    String
+  content  String
+  date     DateTime
+  noteType NoteType @default(MEETING_NOTE)
+
+  dueDate        DateTime?
+  startedAt      DateTime?
+  workingDays    Int?
+  completedAt    DateTime?
+  roadmapStatus  RoadmapStatus @default(PLANNED)
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  taskId    String?
+  task      Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  history         NoteHistory[]
+  reminderLogs    DeadlineReminderLog[]
+  taskLinks       NoteTaskLink[]
+  commentThreads  NoteCommentThread[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([taskId])
+  @@index([projectId, date])
+  @@index([noteType, completedAt, dueDate])
+  @@index([noteType, roadmapStatus])
+}
+
+// Tracks which deadline milestone reminders were already sent so we don't spam
+// project chat. offsetDays = days until due (+30 before, 0 due today, -3/-6/…
+// every 3 days overdue until the note is completed).
+model DeadlineReminderLog {
+  id         String      @id @default(cuid())
+  noteId     String
+  note       MeetingNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  offsetDays Int
+  sentAt     DateTime    @default(now())
+
+  @@unique([noteId, offsetDays])
+  @@index([noteId])
+}
+
+model NoteHistory {
+  id        String   @id @default(cuid())
+  field     String
+  oldValue  String?  @db.Text
+  newValue  String?  @db.Text
+
+  noteId    String
+  note      MeetingNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([noteId])
+}
+
+// Many-to-many: a note can spawn / attach to many tasks, and a task can show
+// every linked note. MeetingNote.taskId remains the original "created from
+// this task" pointer; this table is the two-way relation.
+model NoteTaskLink {
+  id          String @id @default(cuid())
+  noteId      String
+  note        MeetingNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  taskId      String
+  task        Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  quoteText   String?
+  createdById String
+  createdBy   User        @relation("NoteTaskLinkCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([noteId, taskId])
+  @@index([noteId])
+  @@index([taskId])
+}
+
+// Highlighted excerpt on a note. Replies live as NoteComment rows and also as
+// messages in `conversation` so the thread shows up in the owner's inbox.
+model NoteCommentThread {
+  id             String   @id @default(cuid())
+  noteId         String
+  note           MeetingNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  quoteText      String
+  conversationId String?  @unique
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  createdById    String
+  createdBy      User     @relation("NoteCommentThreadAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  comments    NoteComment[]
+  subscribers NoteCommentSubscriber[]
+
+  createdAt DateTime @default(now())
+
+  @@index([noteId])
+}
+
+model NoteComment {
+  id        String @id @default(cuid())
+  threadId  String
+  thread    NoteCommentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User   @relation("NoteCommentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  messageId String? @unique
+
+  mentions NoteCommentMention[]
+
+  createdAt DateTime @default(now())
+
+  @@index([threadId])
+}
+
+model NoteCommentMention {
+  id        String @id @default(cuid())
+  commentId String
+  comment   NoteComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User   @relation("NoteCommentMentionedUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([userId])
+}
+
+model NoteCommentSubscriber {
+  id       String @id @default(cuid())
+  threadId String
+  thread   NoteCommentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation("NoteCommentSubscriber", fields: [userId], references: [id], onDelete: Cascade)
+
+  understoodAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@unique([threadId, userId])
+  @@index([userId])
+}
+
+// Highlighted excerpt on a task description. Same inbox pattern as note comments.
+model TaskHighlightThread {
+  id             String   @id @default(cuid())
+  taskId         String
+  task           Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  quoteText      String
+  conversationId String?  @unique
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  createdById    String
+  createdBy      User     @relation("TaskHighlightThreadAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  comments    TaskHighlightComment[]
+  subscribers TaskHighlightSubscriber[]
+
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model TaskHighlightComment {
+  id        String @id @default(cuid())
+  threadId  String
+  thread    TaskHighlightThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User   @relation("TaskHighlightCommentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  /// Matching inbox Message.id when this reply was mirrored into chat.
+  messageId String? @unique
+
+  mentions TaskHighlightMention[]
+
+  createdAt DateTime @default(now())
+
+  @@index([threadId])
+}
+
+model TaskHighlightMention {
+  id        String @id @default(cuid())
+  commentId String
+  comment   TaskHighlightComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User   @relation("TaskHighlightMentionedUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([userId])
+}
+
+model TaskHighlightSubscriber {
+  id       String @id @default(cuid())
+  threadId String
+  thread   TaskHighlightThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation("TaskHighlightSubscriber", fields: [userId], references: [id], onDelete: Cascade)
+
+  understoodAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@unique([threadId, userId])
+  @@index([userId])
+}
+
+model Asset {
+  id       String  @id @default(cuid())
+  filename String
+  url      String
+  fileSize Int?
+  mimeType String?
+
+  projectId    String
+  project      Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedById String
+  uploadedBy   User    @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+}
+
+model TaskAnswer {
+  id     String @id @default(cuid())
+  answer String
+
+  taskId     String
+  task       Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  questionId String
+  question   DefaultQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, questionId])
+  @@index([taskId])
+  @@index([questionId])
+}
+
+model Invitation {
+  id    String           @id @default(cuid())
+  email String
+  role  Role             @default(MEMBER)
+  status InvitationStatus @default(PENDING)
+
+  projectId   String
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invitedById String
+  invitedBy   User      @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+  roleId      String?
+  projectRole ProjectRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@unique([email, projectId])
+  @@index([email, status])
+  @@index([projectId, status])
+}
+
+// ── Equity module ────────────────────────────────────────────────────────────
+// Private tracker for equity deals with startups (one portfolio per project).
+// Access is granted per user — see src/lib/equity-access.ts.
+
+// Grants one user access to the whole Equity module. Unlike AuditPermission
+// there is no team dimension: equity is all-or-nothing. Admins are deliberately
+// not implicit — this is private financial data, so every holder is a row here
+// and can be pointed at.
+model EquityPermission {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation("UserEquityPermission", fields: [userId], references: [id], onDelete: Cascade)
+  grantedById String?
+  createdAt   DateTime @default(now())
+}
+
+model EquityPortfolio {
+  id        String  @id @default(cuid())
+  projectId String  @unique
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  confidence   String? // CONTRACT_SIGNED | VERBAL_PROMISE | NEEDS_VERIFICATION
+  moaStatus    String? // NOT_STARTED | PENDING_MOA | COMPLETED | NOT_APPLICABLE
+  equityStatus String? // VERBAL_PROMISED | PENDING_MOA | CONFIRMED | NEEDS_VERIFICATION
+
+  vestingStartDate DateTime?
+  vestingEndDate   DateTime?
+  vestingFrequency String? // MONTHLY | QUARTERLY | YEARLY
+  totalEquityPct   Float?
+
+  dilutionDealType   String? // VALUATION_TRANCHES | SINGLE_TRIGGER | DILUTED_DAY_ONE
+  valuationCurrency  String    @default("KWD")
+  latestCapTableDate DateTime?
+  // When the product went, or is due to go, live. Whether it *is* live is read
+  // off this date rather than kept alongside it as a flag, so a launch that
+  // slips can't leave the two disagreeing — the same trick as EquityContract's
+  // endDate driving fee status.
+  liveDate           DateTime?
+  notes              String?
+
+  // Thrown away but kept: a portfolio is years of contracts, splits and
+  // financials, so deleting one moves it to the trash instead of dropping it.
+  // Every read filters on this, and only emptying the trash removes the row.
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contracts  EquityContract[]
+  sets       EquitySet[]
+  grants     EquityGrant[]
+  tranches   EquityTranche[]
+  financialReports EquityFinancialReport[]
+  performance      EquityPerformanceEntry[]
+  reportFields     EquityPortfolioField[]
+  opportunity      EquityOpportunity?
+  productPhotos    EquityProductPhoto[]
+  marketTiers      EquityMarketTier[]
+  milestones       EquityTractionMilestone[]
+  teamSnapshots    EquityTeamSnapshot[]
+  activities       EquityActivity[]
+
+  @@index([deletedAt])
+}
+
+// Who changed what, one row per field. Written by the equity actions as they
+// save, so the history is a record of what actually reached the database rather
+// than what a form thought it was sending.
+//
+// Values are stored as the text they were shown as, not as typed columns: a
+// history is read, not recomputed, and a percentage, a date and a name all read
+// the same way once written down.
+model EquityActivity {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // Which part of the page the change landed in, so history can be read one
+  // section at a time. Matches the section headings: OPPORTUNITY, CONTRACTS,
+  // EQUITY, FINANCIALS, TRANCHES, PORTFOLIO.
+  section String
+  // created | updated | deleted | restored
+  action  String
+
+  // The row within the section — a contract title, a split's date, the person
+  // a grant belongs to. Null when the change is the section itself.
+  subject String?
+  // What was edited, in the words the form uses for it.
+  label    String?
+  oldValue String?
+  newValue String?
+
+  userId String
+  user   User   @relation("EquityActivityUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([portfolioId, createdAt])
+  @@index([portfolioId, section, createdAt])
+}
+
+// One list of everything deleted but not yet gone, across the whole app.
+//
+// The deleted row stays where it is, flagged; this table only records that it
+// was thrown away, by whom, and what it was called at the time. That keeps the
+// trash honest about entities it doesn't own — it holds no foreign key per type,
+// so a new kind of deletable thing needs a handler, not a migration.
+model TrashItem {
+  id String @id @default(cuid())
+
+  // EQUITY_PORTFOLIO, and whatever comes next. Paired with entityId to find the
+  // row again, and to stop the same thing being trashed twice.
+  entityType String
+  entityId   String
+
+  // What it was called when it was deleted. Kept as text so the trash still
+  // reads properly if the row it points at is unreadable or already gone.
+  label    String
+  sublabel String?
+
+  deletedById String
+  deletedBy   User   @relation("TrashDeletedBy", fields: [deletedById], references: [id], onDelete: Cascade)
+
+  deletedAt DateTime @default(now())
+
+  @@unique([entityType, entityId])
+  @@index([deletedAt])
+}
+
+// The case for the startup, in the order a deck tells it: the problem, the
+// solution, the market, the product, how it makes money, and who's building it.
+// One per portfolio — a project has a single story, revised rather than
+// duplicated.
+//
+// The three long-form sections live here as columns because there is exactly
+// one of each. Everything else repeats, and repeats in nearly the same shape, so
+// it sits in the item table below rather than in six near-identical tables.
+model EquityOpportunity {
+  id          String          @id @default(cuid())
+  portfolioId String          @unique
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  problem  String?
+  solution String?
+  product  String?
+
+  // What the competition is judged on — the corners of the radar the report
+  // draws, 3 to 6 of them, named per portfolio since every market is fought
+  // on its own terms. Each competitor row carries a score per anchor.
+  radarAnchors String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items EquityOpportunityItem[]
+}
+
+// A repeating line in one of the opportunity's sections. The columns are
+// deliberately generic — a validation stat, a market tier, a competitor and a
+// team member are all "a heading, a figure and a line of prose" — and `section`
+// says which of them a row is. What each column means per section:
+//
+//   MARKET_VALIDATION  heading=source  figure=the number  caption=what it counts  body=note
+//   BUSINESS_MODEL     figure=amount (optional)  body=the line
+//   MARKET_ADOPTION    heading=channel  body=how we reach it
+//   COMPETITION        heading=who  axisX/axisY=where they sit  isUs=that's us
+//   ADVANTAGE          heading=the edge  body=why it holds
+//
+// The team was one of these until it needed dating: who is building the thing
+// changes, and a pitch made last year was made by the team of last year. It
+// moved to EquityTeamSnapshot below, which keeps every lineup rather than
+// overwriting one.
+model EquityOpportunityItem {
+  id            String            @id @default(cuid())
+  opportunityId String
+  opportunity   EquityOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  section String
+  order   Int    @default(0)
+
+  heading String?
+  figure  String?
+  caption String?
+  body    String?
+
+  // An amount held the way a market tier holds one: a number, the scale it's
+  // said at and what it's counted in. A row that carries money is compared and
+  // formatted rather than read, which a line of text can't be.
+  value    Float?
+  unit     String? // THOUSAND | MILLION | BILLION | TRILLION, null for none
+  currency String? // ISO code, null where the figure isn't money
+
+  // Where a figure was measured, as ISO 3166-1 alpha-2 codes. Codes rather than
+  // names so the same market reads the same on every row, and a list because a
+  // validation figure usually spans more than one country.
+  countries String[]
+
+  // Where a competitor sits on the deck's quadrant, -100 to 100: axisX runs
+  // offline to online, axisY expensive to affordable. Superseded by the radar
+  // scores below but kept, so nothing entered before the radar is lost.
+  axisX Int?
+  axisY Int?
+  isUs  Boolean @default(false)
+
+  // A competitor's 0–10 score against each of the opportunity's radar anchors,
+  // keyed by the anchor's name. JSON rather than rows because the whole map is
+  // replaced with its section on every save and is never queried into.
+  scores Json?
+
+  // What portion of the whole this row accounts for, as a percentage. Only
+  // sections drawn as a split use it, and there the rows have to reach 100
+  // between them or the chart would be claiming a total nobody stated.
+  share Float?
+
+  // A team member is a name from the shared registry, so a face and a bio are
+  // written once and reused wherever the person appears.
+  holderId String?
+  holder   EquityHolder? @relation(fields: [holderId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([opportunityId, section, order])
+  @@index([holderId])
+}
+
+// One dated version of a project's whole split, and what the company was worth
+// when it was agreed. Ownership is versioned rather than edited in place: the
+// earliest set is what we were granted, the latest is what we hold, and the gap
+// between the two is the dilution.
+//
+// This replaced a separate table of funding rounds. Percentages were entered
+// there too, so keeping both meant one split could disagree with the other
+// about who owns what; the split is now the only place ownership is recorded.
+// Deal facts a round carried — amount raised, lead investor — are gone with it,
+// nothing having been derived from them.
+model EquitySet {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // The day this split took effect. Ordering reads off this rather than
+  // createdAt so a set entered late still lands in its right place in the
+  // history, and a future-dated one isn't read as today's position.
+  effectiveOn DateTime
+  // Post-money at the time, in the portfolio's valuationCurrency, and what
+  // decides which protected stakes have started diluting. Optional: a split
+  // agreed before anyone priced the company is still a split.
+  valuation   Float?
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  grants EquityGrant[]
+
+  @@index([portfolioId])
+  @@index([portfolioId, effectiveOn])
+}
+
+// A screenshot of the product, for the module that describes it. Kept as its
+// own rows rather than a list of URLs on the opportunity, so a caption can sit
+// with the shot it belongs to and the order they're shown in is a field rather
+// than an accident of how they were uploaded.
+model EquityProductPhoto {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  url     String
+  // What the shot is of — "the booking screen, after search".
+  caption String?
+
+  order Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([portfolioId, order])
+}
+
+// One tier of the market a project is going after: the whole thing, then the
+// part that can be served, then the part that can realistically be reached.
+//
+// This was a section of the opportunity until it stopped fitting there. The
+// other sections are lists of prose — a source, a channel, a competitor — and
+// this one is a set of nested amounts drawn to scale against each other, which
+// is a different thing to hold and a different thing to read.
+//
+// The amount is held as a number, a scale and a currency rather than as the
+// line it reads as. Written by hand it was ambiguous the moment two tiers had
+// to be drawn against each other — "$2+ billion" against "670,000" needs a
+// parser to compare and gets it wrong as often as not.
+model EquityMarketTier {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // "TAM" — what this slice of the market is called.
+  tier     String?
+  // 1.3, with the scale beside it rather than in it: entering 1300000000 is
+  // how a zero goes missing, and 1.3 billion is how the figure is said.
+  value    Float?
+  unit     String? // THOUSAND | MILLION | BILLION | TRILLION, null for none
+  currency String? // ISO code, null where the market isn't counted in money
+
+  // Largest first, by hand rather than by the amount: the order tiers are meant
+  // to be read in is the order they were entered in, and an amount nobody can
+  // parse would otherwise fall to the end.
+  order Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([portfolioId, order])
+}
+
+// One thing that happened, dated: a launch, a first customer, a round closed.
+//
+// Traction is the part of a deck that is checked rather than read, so each
+// milestone is a row with a day against it instead of a paragraph listing
+// several. The report draws them along a time axis, and the gaps between the
+// dates are the argument — three in a quarter reads as pace in a way that the
+// same three as bullet points don't.
+//
+// A milestone dated ahead of today is shown as upcoming rather than achieved.
+// That falls out of the date, so there's no status to keep honest.
+model EquityTractionMilestone {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // The day it happened. Held at UTC midnight, like a split's effectiveOn, so
+  // two entered for the same day are the same day.
+  happenedOn DateTime
+  // What happened, in a few words — "First paying customer".
+  title      String
+  // The detail behind it, for whoever stops on this one.
+  body       String?
+  // A shot of the thing itself: the launch screen, the signed page, the stand.
+  // Optional, and shown under the detail where there is one.
+  photoUrl   String?
+
+  // Where it sits in the list as entered. The report reads the dates, so this
+  // only settles milestones sharing a day.
+  order Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([portfolioId, happenedOn])
+}
+
+// Who was building the project on a given day. Dated and kept rather than
+// edited in place, for the same reason the split is: a team changes, and a deck
+// shown last quarter was the case made by the people on it at the time.
+//
+// The lineup in force is simply the latest-dated one; everything before it is
+// the history, which is why nothing here is flagged as current.
+model EquityTeamSnapshot {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // The day this lineup was true from. Held at UTC midnight, like a split's
+  // effectiveOn, so two entered for the same day are the same day.
+  effectiveOn DateTime
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members EquityTeamMember[]
+
+  @@index([portfolioId, effectiveOn])
+}
+
+// One person in one lineup. Who they are is a name from the shared registry —
+// the photo, bio and LinkedIn are written once there and follow the person
+// everywhere — and what's held here is what was true of them on this team:
+// the title they went by, and what they brought to it.
+model EquityTeamMember {
+  id         String             @id @default(cuid())
+  snapshotId String
+  snapshot   EquityTeamSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  // Restricted rather than cascading: a name still on a team can't be deleted
+  // from the registry, the same rule as a name on a cap table.
+  holderId String
+  holder   EquityHolder @relation(fields: [holderId], references: [id], onDelete: Restrict)
+
+  // What they are on the team, picked from the shared roles registry so the
+  // same capacity reads identically across projects and a rename follows.
+  roleId String?
+  role   EquityRole? @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  // What they were called on the deck before roles: kept so lineups written
+  // as free text still read; new rows carry a roleId instead.
+  title String?
+  // What they bring, where it differs from the bio on their name.
+  body  String?
+
+  order Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A person is on a team once. Twice would be two answers to what they do.
+  @@unique([snapshotId, holderId])
+  @@index([snapshotId, order])
+  @@index([holderId])
+  @@index([roleId])
+}
+
+// Someone who can hold equity: us, a founder, a fund, an option pool. Names live
+// in one shared registry so a fund on two cap tables is the same row in both and
+// a correction to a name follows everywhere it appears.
+model EquityHolder {
+  id   String @id @default(cuid())
+  name String @unique
+
+  // Exactly one holder is us, enforced by a partial unique index in the
+  // migration. Our stake in any split is read from this holder's rows rather
+  // than stored alongside them, so there's no second copy to fall out of step.
+  isUs Boolean @default(false)
+
+  kind String? // FOUNDER | INVESTOR | POOL | OTHER — descriptive only
+
+  // Who the name belongs to, for anyone reading a cap table they didn't write.
+  photoUrl    String?
+  bio         String?
+  linkedinUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  grants           EquityGrant[]
+  opportunityItems EquityOpportunityItem[]
+  teamMembers      EquityTeamMember[]
+
+  @@index([isUs])
+}
+
+// The capacity a name holds equity in on a particular deal — development
+// partner, founder, advisor. Kept as its own list rather than a fixed set
+// because the arrangements differ per deal, and held against the grant rather
+// than the name since the same party can appear in different capacities across
+// projects.
+model EquityRole {
+  id   String @id @default(cuid())
+  name String @unique
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  grants      EquityGrant[]
+  teamMembers EquityTeamMember[]
+}
+
+// Something a project is tracked on: users, churn, revenue, the day a licence
+// lands. Defined once here and picked per entry, so "MRR" on two projects means
+// the same thing and renaming it follows every figure already recorded.
+//
+// The list is deliberately open — what's worth watching differs per startup and
+// changes as one grows, so these are rows rather than columns on the entry.
+model EquityMetric {
+  id   String @id @default(cuid())
+  name String @unique
+
+  // PERFORMANCE | FINANCIAL. Which module offers the field: a dated reading, or
+  // a closed reporting period. Kept as one registry because the two are the same
+  // thing — a named figure recorded over and over — and one list is one place to
+  // look when a name needs changing.
+  group String @default("PERFORMANCE")
+
+  // NUMBER | PERCENT | DATE | FORMULA. Decides the input the form offers and how
+  // a value reads back; it's also why a metric can't be flipped between a figure
+  // and a date once values exist, there being nothing to convert. A FORMULA is
+  // never entered — it's worked out from the two fields below, every time it's
+  // read, so it can't drift out of step with them.
+  type String @default("NUMBER")
+
+  // ADD | SUBTRACT | MULTIPLY | DIVIDE, over leftId and rightId. Set together
+  // and only for a FORMULA; a formula missing an operand simply reads as blank
+  // rather than guessing at a value.
+  formulaOp String?
+  leftId    String?
+  left      EquityMetric?  @relation("MetricLeft", fields: [leftId], references: [id], onDelete: SetNull)
+  leftOf    EquityMetric[] @relation("MetricLeft")
+  rightId   String?
+  right     EquityMetric?  @relation("MetricRight", fields: [rightId], references: [id], onDelete: SetNull)
+  rightOf   EquityMetric[] @relation("MetricRight")
+
+  // What the figure counts — "users", "KWD/mo", "months". Shown after the number
+  // and never parsed, so it can say whatever the metric needs it to.
+  unit String?
+
+  // Where it sits in its group, on the form and on every table that follows.
+  order Int @default(0)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  values          EquityPerformanceValue[]
+  financialValues EquityFinancialValue[]
+  portfolioFields EquityPortfolioField[]
+
+  @@index([group, order])
+}
+
+// Which of the registry's fields one project is actually asked for, and which of
+// them it can't file a period without.
+//
+// The registry above is the vocabulary — every figure anyone might report — and
+// this is the questionnaire, per project. They have to be separate: a SaaS
+// company reports MRR and a marketplace reports GMV, and asking either for the
+// other's figures produces blanks that look like missing data rather than what
+// they are, which is a question that doesn't apply.
+//
+// Required is enforced when a period is first filed and only warned about
+// afterwards. Tightening the rule shouldn't make an old report unopenable, and
+// a field added today has no history in the periods that closed before it.
+model EquityPortfolioField {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // Cascading rather than restricting, unlike the tables that hold values: this
+  // row is a question, not an answer, and a field deleted from the registry is
+  // a question nobody can be asked any more. Deleting one that carries reported
+  // figures is blocked by those tables regardless.
+  metricId String
+  metric   EquityMetric @relation(fields: [metricId], references: [id], onDelete: Cascade)
+
+  required Boolean @default(false)
+
+  // Where it sits on this project's form, which is why the registry's own order
+  // isn't enough: two projects can want the same fields asked in a different
+  // order.
+  order Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A field is asked once per project. Twice would be the same question with
+  // two answers about whether it's required.
+  @@unique([portfolioId, metricId])
+  @@index([portfolioId, order])
+  @@index([metricId])
+}
+
+// Where a project stood on a given day, across whichever metrics were worth
+// recording that day. Dated rather than periodic — unlike a financial report,
+// this is a snapshot taken when someone looks, not a period being closed.
+model EquityPerformanceEntry {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // Held at UTC midnight, like a financial report's periodStart, so two
+  // readings on the same day sort by nothing but their order of entry.
+  recordedOn DateTime
+  notes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  values EquityPerformanceValue[]
+
+  @@index([portfolioId, recordedOn])
+}
+
+// One metric's value in one reading. Which column holds it is decided by the
+// metric's type: NUMBER and PERCENT land in numberValue, DATE in dateValue.
+// Storing them typed rather than as text keeps a series plottable, which is the
+// point of recording the same metric over and over.
+model EquityPerformanceValue {
+  id      String                 @id @default(cuid())
+  entryId String
+  entry   EquityPerformanceEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  // Restricted rather than cascading: a metric still being reported on can't be
+  // deleted from the registry, the same rule as a name on a cap table.
+  metricId String
+  metric   EquityMetric @relation(fields: [metricId], references: [id], onDelete: Restrict)
+
+  order Int @default(0)
+
+  numberValue Float?
+  dateValue   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A metric reads once per day's reading — a second row for it would be two
+  // answers to the same question.
+  @@unique([entryId, metricId])
+  @@index([metricId])
+}
+
+// One financial field's value in one reported period. The twin of
+// EquityPerformanceValue, and typed the same way for the same reason: a figure
+// reported quarter after quarter is only worth plotting if it stayed a number.
+model EquityFinancialValue {
+  id       String                @id @default(cuid())
+  reportId String
+  report   EquityFinancialReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  // Restricted rather than cascading: a field still carrying reported figures
+  // can't be deleted from the registry, the same rule as a name on a cap table.
+  metricId String
+  metric   EquityMetric @relation(fields: [metricId], references: [id], onDelete: Restrict)
+
+  order Int @default(0)
+
+  numberValue Float?
+  dateValue   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A field reports once per period — a second row for it would be two answers
+  // to the same question.
+  @@unique([reportId, metricId])
+  @@index([metricId])
+}
+
+// A periodic financial check-in on the startup, entered by Nizek from figures
+// the founders report. The period and whether it was audited are fixed; what
+// gets reported for it isn't, and lives in the values above.
+model EquityFinancialReport {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // periodType is the shape of the period, periodStart pins it to a specific
+  // one — Q3 2026 rather than just "a quarter". Held at UTC midnight on the
+  // first day, like TaskAudit.auditDate, so a stray time-of-day can't slip a
+  // duplicate past the unique constraint below.
+  periodType  String   // QUARTERLY | YEARLY
+  periodStart DateTime
+  audited     Boolean  @default(false)
+
+  // Nothing reads or writes these any more. P&L and cash became defined fields
+  // in the registry, and the operations block was taken off the form before
+  // that; both stay until the old values are confirmed disposable.
+  revenue            Float?
+  cost               Float?
+  cashInBank         Float?
+  periodBurn         Float?
+  customersGained    Int?
+  customersLost      Int?
+  teamSize           Int? // full-time employees
+  raisingNextQuarter Boolean?
+  risks              String?
+  wins               String?
+
+  needsHelp Boolean @default(false)
+  helpNotes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // What was reported for the period, in the portfolio's valuationCurrency where
+  // the field is money — same reasoning as a round's post-money, the figures
+  // aren't comparable across currencies.
+  values EquityFinancialValue[]
+
+  // The statements behind the figures — the P&L, bank statement or audit the
+  // period was reported from, uploaded alongside it.
+  documents EquityFinancialDocument[]
+
+  @@unique([portfolioId, periodType, periodStart])
+  @@index([portfolioId, periodStart])
+}
+
+// A file uploaded with a financial period: the founders' own statements, held
+// beside the figures entered from them so a figure can be checked against its
+// source. Same shape as a message attachment — the file itself lives on R2 and
+// only its address is kept here.
+model EquityFinancialDocument {
+  id       String                @id @default(cuid())
+  reportId String
+  report   EquityFinancialReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  filename String
+  url      String
+  fileSize Int?
+  mimeType String?
+  order    Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([reportId])
+}
+
+// Equity granted under a specific contract. The vesting window defaults to the
+// contract's term; the date fields here are optional overrides.
+model EquityGrant {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // The dated split this row belongs to. Every row belongs to one: a grant with
+  // no set would be an ownership figure with no date, which is what having two
+  // tables for the same question used to cause.
+  setId String
+  set   EquitySet @relation(fields: [setId], references: [id], onDelete: Cascade)
+
+  contractId String?
+  contract   EquityContract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+
+  // Who holds the stake and in what capacity, both picked from lists managed on
+  // the equity page so the same party reads identically across projects.
+  // Restricted rather than cascading, matching EquityHolding: removing a name or
+  // a role must not quietly delete the grants that reference it.
+  holderId String?
+  holder   EquityHolder? @relation(fields: [holderId], references: [id], onDelete: Restrict)
+  roleId   String?
+  role     EquityRole?   @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  // Where the row sits in its split. Kept explicitly because a whole split is
+  // written in one transaction, so createdAt ties and can't order them — and
+  // the order is meaningful anyway, being the one it was arranged in.
+  order Int @default(0)
+
+  // FIXED | TRANCHED | DIVIDEND — decides which fields below apply.
+  structureType String @default("FIXED")
+
+  // The grant total. Entered by hand for FIXED/DIVIDEND; for TRANCHED it is kept
+  // in sync with the sum of its valuation tranches.
+  equityPct Float
+
+  // Vesting isn't stored here on purpose: the window is the linked contract's
+  // term and the interval comes from the portfolio, so they can't fall out of sync.
+
+  dividendFrequency String? // MONTHLY | QUARTERLY | YEARLY — DIVIDEND structures only
+
+  notes String?
+
+  createdAt DateTime @default(now())
+
+  tranches EquityTranche[]
+
+  @@index([portfolioId])
+  @@index([setId])
+  @@index([contractId])
+  @@index([holderId])
+  @@index([roleId])
+}
+
+model EquityContract {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  title     String?
+  signed    Boolean   @default(false)
+  startDate DateTime?
+  // Term length as entered (e.g. 18 MONTHS or 1.5 YEARS). endDate is derived
+  // from startDate + this, never entered by hand.
+  lengthValue Float?
+  // MONTHS | YEARS | ONGOING. ONGOING has no term at all, so lengthValue,
+  // endDate and monthlyFee are all cleared when it's chosen.
+  lengthUnit  String?
+  endDate     DateTime?
+  // Recurring fee the startup owes once the term expires — the basic team they
+  // take over paying for, or a flat tech-expense charge. Billing status is never
+  // stored: it reads as estimated while the term runs and actual once endDate
+  // passes, so it can't go stale when a term is extended.
+  monthlyFee  Float?
+  notes       String?
+
+  // The signed document itself, uploaded to R2.
+  fileUrl      String?
+  fileName     String?
+  fileSize     Int?
+  fileMimeType String?
+
+  createdAt DateTime @default(now())
+
+  grants EquityGrant[]
+
+  @@index([portfolioId])
+}
+
+model EquityTranche {
+  id          String          @id @default(cuid())
+  portfolioId String
+  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  // Set when the tranche belongs to a specific equity grant. Rows with no grant
+  // are portfolio-wide (the original deal-level dilution schedule).
+  grantId String?
+  grant   EquityGrant? @relation(fields: [grantId], references: [id], onDelete: Cascade)
+
+  order     Int
+  equityPct Float
+  // The stake is granted non-diluted; this slice of it starts diluting once the
+  // company is valued at or above this figure.
+  startsAtValuation Float
+
+  createdAt DateTime @default(now())
+
+  @@index([portfolioId])
+  @@index([grantId])
+}
+
+model PendingTeamInvite {
+  id         String     @id @default(cuid())
+  email      String     @unique
+  firstName  String?
+  lastName   String?
+  systemRole SystemRole
+  // Team the person joins automatically once they sign up.
+  teamId     String?
+  team       Team?      @relation("PendingInviteTeam", fields: [teamId], references: [id], onDelete: SetNull)
+  createdAt  DateTime   @default(now())
+}
+
+model DefaultQuestion {
+  id       String   @id @default(cuid())
+  question String
+  type     String   @default("text")
+  options  String?
+  multiple  Boolean  @default(false)
+  mandatory Boolean  @default(false)
+  required  Boolean  @default(false)
+  order     Int
+  taskType TaskType @default(FEATURE)
+
+  createdAt DateTime @default(now())
+
+  answers TaskAnswer[]
+
+  @@index([taskType])
+}
+
+// ─── Chat / Inbox (Centrifugo) ───────────────────────────
+// Unified message model: a message belongs to exactly one thread —
+// a task (taskId), a project channel (projectId), or a direct
+// conversation (conversationId). Identity everywhere is User.id.
+
+model Conversation {
+  id        String   @id @default(cuid())
+  isGroup   Boolean  @default(false)
+  title     String?
+  /// "direct" (DM/group) or "client" (per-project client room).
+  kind      String   @default("direct")
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ConversationParticipant[]
+  messages     Message[]
+  noteCommentThread NoteCommentThread?
+  taskHighlightThread TaskHighlightThread?
+
+  @@unique([projectId, kind])
+  @@index([projectId])
+  @@index([kind])
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  memberId       String
+  member         User         @relation("ConversationMember", fields: [memberId], references: [id], onDelete: Cascade)
+  lastReadAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@unique([conversationId, memberId])
+  @@index([memberId])
+}
+
+model Message {
+  id             String        @id @default(cuid())
+  taskId         String?
+  task           Task?         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  projectId      String?
+  project        Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  replyToId      String?
+  authorId       String
+  author         User          @relation("MessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  body           String
+  kind           String        @default("message")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  mentions    MessageMention[]
+  reactions   MessageReaction[]
+  attachments MessageAttachment[]
+  importantFor ImportantMessage[]
+
+  @@index([taskId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([conversationId, createdAt])
+  @@index([authorId])
+}
+
+model ImportantMessage {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("UserImportantMessages", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, userId])
+  @@index([userId, createdAt])
+}
+
+model MessageMention {
+  id        String  @id @default(cuid())
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  memberId  String
+  member    User    @relation("MessageMentionedUser", fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, memberId])
+  @@index([memberId])
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  memberId  String
+  member    User     @relation("MessageReactionAuthor", fields: [memberId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, memberId, emoji])
+  @@index([messageId])
+}
+
+model MessageAttachment {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  filename  String
+  url       String
+  fileSize  Int?
+  mimeType  String?
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  recipientId String
+  recipient   User      @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  type        String
+  title       String
+  body        String?
+  linkUrl     String?
+  // Web-push notification tag for this event (thread-scoped). Lets clients
+  // close the matching OS banner on every device when the row is read.
+  tag         String?
+  read        Boolean   @default(false)
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([recipientId, read, createdAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  memberId  String
+  member    User     @relation("PushSubscriptionMember", fields: [memberId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  deviceId  String?
+  userAgent String?
+  /// True when subscribed from an installed PWA (display-mode: standalone),
+  /// false from a browser tab, null for rows created before this was tracked
+  /// (backfilled on the device's next app open via syncPushSubscription).
+  standalone Boolean?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([memberId])
+  @@index([memberId, deviceId])
+}
+
+// Audit trail for every web-push send attempt. Powers the admin push-health
+// dashboard and lets us answer "did this employee's device actually get the
+// push?" instead of silently swallowing failures. Pruned after 30 days by cron.
+model PushDeliveryLog {
+  id             String   @id @default(cuid())
+  recipientId    String
+  recipient      User     @relation("PushDeliveryLogRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  subscriptionId String?
+  endpointHost   String?
+  type           String?
+  tag            String?
+  ok             Boolean
+  statusCode     Int?
+  error          String?
+  latencyMs      Int?
+  createdAt      DateTime @default(now())
+
+  @@index([recipientId, createdAt])
+  @@index([ok, createdAt])
+  @@index([createdAt])
+}
+
+// Per-user notification preferences (server-side so they follow the user
+// across devices). Absent row = all defaults (everything on).
+model NotificationPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation("UserNotificationPreference", fields: [userId], references: [id], onDelete: Cascade)
+
+  notifyMessages   Boolean @default(true)
+  notifyMentions   Boolean @default(true)
+  notifyRejections Boolean @default(true)
+  notifyDeadlines  Boolean @default(true)
+  soundEnabled     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// A muted thread produces no notification row, no push, and no chime for this
+// user on any device. threadKey: "task-{id}" | "conv-{id}" | "project-{id}".
+model MutedThread {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("UserMutedThreads", fields: [userId], references: [id], onDelete: Cascade)
+  threadKey String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, threadKey])
+  @@index([userId])
+}
+
+// ─── Task Audit module ──────────────────────────────────
+// A manager with an AuditPermission grant reviews flagged tasks daily and
+// assigns responsibility. Admins implicitly have every team.
+
+// Grants a user the right to audit one team's projects.
+model AuditPermission {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("UserAuditPermissions", fields: [userId], references: [id], onDelete: Cascade)
+  teamId      String
+  team        Team     @relation("TeamAuditPermissions", fields: [teamId], references: [id], onDelete: Cascade)
+  grantedById String?
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, teamId])
+  @@index([userId])
+}
+
+// One daily report per auditor. Items are snapshotted at creation so the
+// report stays stable even as the live board changes during the day.
+model TaskAudit {
+  id          String    @id @default(cuid())
+  // Calendar day of the report, stored at UTC midnight. Reports can only be
+  // created for "today"; reopening the same day resumes the draft.
+  auditDate   DateTime
+  createdById String
+  createdBy   User      @relation("AuditCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  // Teams the auditor selected for this report (subset of their grants).
+  teamIds     String[]
+  teamNames   String[]
+  status      String    @default("draft") // draft | submitted
+  submittedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items TaskAuditItem[]
+
+  @@unique([createdById, auditDate])
+  @@index([auditDate])
+}
+
+// One flagged task (or overdue deadline note) inside a report, with the
+// manager's verdict. Snapshot columns freeze what the auditor saw.
+model TaskAuditItem {
+  id      String    @id @default(cuid())
+  auditId String
+  audit   TaskAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  // Exactly one of taskId / noteId is set.
+  taskId String?
+  noteId String?
+
+  flagType String // critical_late | rejected | deadline_overdue | warn_late | client_input
+  severity Int
+
+  // Snapshot of the flagged state at report-creation time.
+  title        String
+  taskNumber   Int?
+  projectId    String
+  projectName  String
+  teamName     String?
+  stage        String?
+  stageLabel   String?
+  stageHours   Int?
+  declineCount Int?
+  dueInDays    Int?
+  assigneeId   String?
+  assigneeName String?
+
+  // True when the same task/note already received a verdict in an earlier
+  // report — shown as "carried over, still unresolved" instead of asking for
+  // a fresh verdict.
+  carriedOver Boolean @default(false)
+
+  verdict      String    @default("pending") // pending | blamed | excused | skipped
+  blamedUserId String?
+  blamedUser   User?     @relation("AuditBlamedUser", fields: [blamedUserId], references: [id], onDelete: SetNull)
+  reasonNote   String?
+  decidedAt    DateTime?
+
+  @@index([auditId])
+  @@index([taskId])
+  @@index([noteId])
+  @@index([blamedUserId])
+}
+
+model BrandingAsset {
+  id          String   @id @default(cuid())
+  slot        String   @unique
+  url         String
+  r2Key       String
+  contentType String
+  fileName    String
+  width       Int      @default(0)
+  height      Int      @default(0)
+  size        Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model LoginPhoto {
+  id          String   @id @default(cuid())
+  url         String
+  r2Key       String
+  contentType String?
+  column      String   @default("a")
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([column, order])
+}
+
+// ─── Vault (project credentials) ─────────────────────────────────────────────
+//
+// Password-manager style storage for project logins, emails, API keys, etc.
+// Access is granted per user per project (VaultPermission) — not the same as
+// being on the project team. Secrets are encrypted at rest; history never
+// stores plaintext passwords. Soft-deleted rows go to the shared trash, but
+// only system admins can see / restore / permanently delete vault items.
+
+model VaultPermission {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("UserVaultPermissions", fields: [userId], references: [id], onDelete: Cascade)
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  grantedById String?
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, projectId])
+  @@index([userId])
+  @@index([projectId])
+}
+
+model VaultFolder {
+  id        String  @id @default(cuid())
+  name      String
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation("VaultFolderAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  credentials VaultCredential[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+}
+
+model VaultCredential {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  folderId String?
+  folder   VaultFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  title    String
+  username String?
+  /// AES-256-GCM ciphertext (iv:tag:data), never plaintext.
+  passwordEnc String?
+  url         String?
+  notesEnc    String?
+  category    String? // LOGIN | EMAIL | API_KEY | OTHER
+
+  createdById String
+  createdBy   User   @relation("VaultCredentialAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  activities VaultActivity[]
+
+  @@index([projectId, deletedAt])
+  @@index([projectId, folderId])
+  @@index([deletedAt])
+}
+
+model VaultActivity {
+  id           String          @id @default(cuid())
+  credentialId String
+  credential   VaultCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+
+  // created | updated | deleted | restored | revealed
+  action String
+
+  label    String?
+  oldValue String?
+  newValue String?
+
+  userId String
+  user   User   @relation("VaultActivityUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([credentialId, createdAt])
+}

@@ -1,0 +1,21 @@
+[build]
+# NEXT_PUBLIC_APP_BUILD_TIME is inlined at `next build` so every replica of this
+# image shares one monotonic timestamp. The update prompt uses it to jump to the
+# newest deploy instead of stepping through rolling-replica SHAs.
+buildCommand = "NEXT_PUBLIC_APP_BUILD_TIME=$(date +%s)000 npm run build && cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public"
+
+[deploy]
+# Migrations run at deploy time (not build): the Postgres private network is only
+# reachable at runtime. `migrate deploy` takes an advisory lock, so it is safe
+# even with multiple replicas booting at once.
+startCommand = "node prisma/migrate.mjs && NODE_OPTIONS='--max-old-space-size=2048' node .next/standalone/server.js"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 300
+# Horizontal scale-out. The app is stateless (Clerk JWT auth, Centrifugo runs as
+# its own service, caches are TTL/tag-based per replica), so it scales safely.
+# Each replica opens up to PG_POOL_MAX (default 10) DB connections; to go beyond
+# ~a few replicas, put a Postgres connection pooler (PgBouncer) in front and/or
+# lower PG_POOL_MAX so total connections stay under Postgres max_connections.
+numReplicas = 2
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

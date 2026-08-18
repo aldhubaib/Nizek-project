@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Notification SW harness</title>
+  </head>
+  <body>
+    <h1>Service worker test harness</h1>
+    <p id="status">registering…</p>
+    <script>
+      // Registers the REAL production service worker (served from this same
+      // origin by the harness server) so E2E tests exercise the exact code
+      // that ships. Exposes helpers on window for the tests.
+      window.swReady = navigator.serviceWorker
+        .register("/sw.js")
+        .then(() => navigator.serviceWorker.ready)
+        .then((reg) => {
+          document.getElementById("status").textContent = "sw-ready";
+          return reg;
+        })
+        .catch((err) => {
+          document.getElementById("status").textContent = "sw-error: " + err;
+          throw err;
+        });
+
+      // Ask the SW to run its real push-display path with this payload.
+      window.simulatePush = async function (data, forceShow) {
+        const reg = await window.swReady;
+        reg.active.postMessage({ type: "simulate-push", data, forceShow });
+        // Give the SW a beat to process and show/skip the notification.
+        await new Promise((r) => setTimeout(r, 400));
+        return (await reg.getNotifications()).map((n) => ({
+          title: n.title,
+          body: n.body,
+          tag: n.tag || null,
+        }));
+      };
+
+      window.closeAllNotifications = async function () {
+        const reg = await window.swReady;
+        for (const n of await reg.getNotifications()) n.close();
+      };
+
+      // Mirror of NotificationSync's dismissal: close banners matching tags.
+      // close() is async in some engines (Firefox) — wait before counting.
+      window.closeByTags = async function (tags) {
+        const reg = await window.swReady;
+        const wanted = new Set(tags);
+        for (const n of await reg.getNotifications()) {
+          if (n.tag && wanted.has(n.tag)) n.close();
+        }
+        await new Promise((r) => setTimeout(r, 400));
+        return (await reg.getNotifications()).length;
+      };
+    </script>
+  </body>
+</html>

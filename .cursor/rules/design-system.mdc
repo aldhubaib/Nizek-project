@@ -1,0 +1,206 @@
+---
+description: Complete design system — type, spacing, color, radius, icons, z-index, touch targets, safe-area, density
+globs: src/**/*.{tsx,css}
+alwaysApply: true
+---
+
+# Design system
+
+One rule for every visual decision. Covers web, iOS PWA, and Android. Tokens live in `@theme inline` and `:root` in `src/app/globals.css`. Shell classes (`.app-top-bar`, `.px-app`, etc.) are unlayered so they beat Tailwind preflight.
+
+## Breakpoint
+
+`1024` / `lg:` / `DESKTOP_BREAKPOINT`. Below that: bottom nav, stacked columns, 20px gutter. Above: sidebar, rail columns, 1.5rem gutter. Never use `@container` for shell decisions.
+
+---
+
+## Type (shirt sizes)
+
+| Token | Size | How | Use |
+|---|---|---|---|
+| `xs` | 10px | rem | badges, pills, meta, table headers |
+| `s` | 13px | rem | page titles, column names, rows, buttons, default UI |
+| `m` | 16px | rem | overlay / document headings, note titles |
+| `l` | 20-28px | `clamp()` + `cqi` | KPI only, inside `@container/card` |
+| `text-fit` | container | `min()` + `cqi` | glyph in `.app-badge` circle only |
+
+`text-sm` (14px) is shadcn + chat only. Do not use `text-sm` in app chrome. Auth / print may use `text-3xl`. Tiptap headings and chat emoji are content, not chrome.
+
+**iOS inflation:** buttons inflate text to 16px. Shirt sizes are unlayered in `globals.css` so they win. Put pill labels on an inner `<span>`, not on the `<button>` directly. Keep 16px floor on `input`/`textarea`/`select` (coarse pointers) so iOS does not zoom.
+
+Banned names: `text-xxs`, `text-ui`, `text-title`, `text-stat`, `text-micro`, `text-tiny`, `text-lg`, `text-xl`, `text-2xl`, `text-4xl`.
+
+---
+
+## Spacing (shirt sizes)
+
+Fixed rem. Not fluid. Not `cqi`.
+
+| Token | Size | Tailwind # | Use |
+|---|---|---|---|
+| `xs` | 4px | `1` | icon clusters, inline gaps |
+| `s` | 8px | `2` | chips in a row, small gaps |
+| `m` | 12px | `3` | default stack, card padding |
+| `l` | 16px | `4` | dashboard panels, section padding |
+| `xl` | 24px | `6` | section breaks |
+
+`card` aliases `m` (12px). `app` aliases `--app-gutter`.
+
+**Use token names:** `gap-xs`, `gap-s`, `gap-m`, `gap-card`, `p-l`, `mt-xl`.
+**Do not use:** `gap-1.5`, `gap-2.5`, `p-3`, `mt-10`, `py-20`, or any Tailwind numeric that is not a token step. Exception: icon/control sizing (`size-8`, `h-16`) which is not spacing.
+
+Logical properties for design (`ms-`, `ps-`, `text-start`, `border-s`). Physical only for device chrome (`left-0`, `right-0`, `inset-x-0`, `env(safe-area-*)`).
+
+---
+
+## Color
+
+Always dark. `:root` is the only palette. No `.dark` overrides needed.
+
+### Surfaces (light to dark)
+`background` (#0e0e10) > `surface` (8%) > `card`/`popover` (4%) > `muted`/`accent`/`secondary` (10%) > `surface-2`/`sidebar-border` (12%) > `input` (14%)
+
+### Text
+`foreground` (93%) > `muted-foreground` (45%)
+
+### Accents
+| Token | Hue | Use |
+|---|---|---|
+| `primary` | blue 217 | actions, links, active states |
+| `destructive` | red 0 | errors, delete, decline |
+| `success` | green 142 | done, positive |
+| `purple` | purple 258 | sidebar active, chart |
+| `orange` | amber 25 | warnings, late payment, expiry |
+
+### Chrome
+`border`, `input`, `ring`, `sidebar-*`
+
+**Banned raw colors:** no Tailwind palette colors (`amber-*`, `emerald-*`, `rose-*`, `red-*`, `blue-*`, `green-*`, `zinc-*`, `slate-*`, `gray-*`, `neutral-*`) in app code. Use semantic tokens:
+- amber/orange -> `text-orange` / `bg-orange/15` / `border-orange/20`
+- emerald/green -> `text-success` / `bg-success/15` / `border-success/20`
+- blue -> `text-primary` / `bg-primary/15` / `border-primary/20`
+- red/rose -> `text-destructive` / `bg-destructive/15` / `border-destructive/20`
+- zinc (neutral) -> `text-muted-foreground` / `bg-muted-foreground`
+- `border-white/*` -> `border-border`
+
+**Documented exceptions** (do NOT change):
+- `bg-black/60` for backdrop overlays
+- `text-white` / `bg-white/*` in lightbox/gallery controls, auth layout, and equity report print pages
+- `bg-white` on switch thumb (shadcn UI primitive)
+- shadcn `src/components/ui/` files keep their own classes
+
+---
+
+## Radius
+
+Base `--radius: 0.5rem`. Scale: `sm` (0.3rem), `md` (0.4rem), `lg` (0.5rem), `xl` (0.7rem), `2xl` (0.9rem), `3xl` (1.1rem), `4xl` (1.3rem).
+
+| Element | Radius |
+|---|---|
+| Cards | `rounded-xl` |
+| Pills / chips | `rounded-full` |
+| Inputs / buttons | `rounded-lg` |
+| Small controls | `rounded-md` |
+| Avatars | `rounded-full` |
+
+---
+
+## Icons and touch targets
+
+**Icon sizes:** `size-3` (12px inline), `size-3.5` (14px small), `size-4` (16px default), `size-5` (20px nav/badge).
+
+**Touch targets:** interactive elements must reach **44px** hit area on touch devices. The visible icon can be smaller; padding or min-w/min-h must cover the difference. `size-8` (32px) is not enough alone -- add `app-touch-target` (forces `min-w: 44px; min-h: 44px` on coarse pointers) or use `p-s` / larger sizing to reach 44px.
+
+**Lucide defaults:** `strokeWidth={1.5}` inactive, `strokeWidth={2}` active. Do not use `strokeWidth` above 2.
+
+---
+
+## Z-index scale
+
+| z | Layer |
+|---|---|
+| `10` | page header (`PageHeader`) |
+| `50` | sidebar panel / task sidebar / dropdown |
+| `90` | status frost strip |
+| `100` | shell bell + overflow menu |
+| `300` | floating toolbar |
+| `400` | bottom nav |
+| `500` | backdrop overlay |
+| `600` | drawer |
+
+Do not invent new z values. If a new layer is needed, slot it between existing ones.
+
+---
+
+## Cards and containers
+
+Parent gets `container: card / inline-size` via `.app-card`. Descendants query that box with `@md/card:` (>= 28rem / 448px). Keep `lg:` when it means "the window has a sidebar" (shell decisions).
+
+```tsx
+// correct
+<article className="app-card rounded-xl border p-card gap-card">
+  <h2 className="text-s font-medium">Title</h2>
+</article>
+
+// wrong -- viewport query for card internals
+<div className="grid lg:grid-cols-4">
+```
+
+---
+
+## Safe-area (iOS + Android)
+
+`viewportFit` is `cover`. The page draws under the Dynamic Island and home indicator. `env(safe-area-inset-*)` is ~47-59px top, ~34px bottom on iPhone. It is `0` on Android/desktop and in Chrome device mode.
+
+### The four edges
+
+| Edge | What | How |
+|---|---|---|
+| Top | Dynamic Island / status bar | `.app-top-bar` / `PageHeader` only. Padding, not `top: env()`. |
+| Bottom | home indicator + tab bar | `.app-bottom-bar` on nav. `.app-has-bottom-nav` on main. |
+| Left / Right | notch in landscape + gutter | `.px-app` / header padding. No second gutter on cards. |
+| Keyboard | iOS visual viewport | Chat composer hook. Do not use `100vh` for keyboard-visible screens. |
+
+### Classes (unlayered in globals.css)
+- `.app-top-bar` / `.app-top-bar-tall` -- top inset + gutter
+- `.px-app` -- horizontal gutter + safe-area left/right
+- `.app-bottom-bar` -- bottom safe-area padding
+- `.app-has-bottom-nav` -- body padding for bottom nav height + inset
+
+### Phone vs desktop
+Below `lg:` the phone has a bottom nav and columns stack. Do not fill phone columns to the viewport. `lg:h-dvh` / `lg:h-full` is desktop only.
+
+### iOS 26.x `100dvh` bug
+In standalone PWA, `100dvh` excludes the bottom safe area (~34px gap). Use flex layout to fill the viewport, or `min-height: calc(100vh)` in standalone mode. Never use magic-number viewport calcs like `h-[calc(100vh-220px)]`.
+
+### Must
+- One top inset per screen -- do not stack `PageHeader` on another `app-top-bar`
+- Do not change `viewportFit: "cover"` or `statusBarStyle: "black-translucent"` per page
+- After header, board height, nav, or gutter work: **refresh iOS Simulator Safari** at `http://localhost:3000`. Desktop looking right is not enough.
+- Never judge insets from Chrome device mode (reports `0`)
+
+---
+
+## Page gutter
+
+`--app-gutter`: 20px below 1024px, 1.5rem on desktop. Plus `env(safe-area-inset-left/right)`. Bodies: `px-app`. Headers: `.app-top-bar`. Cards do not add a second screen gutter.
+
+---
+
+## Density
+
+Dense panel app. Body type is fixed `rem`. Only `text-l` (KPI) is fluid via `cqi`. Spacing tokens do not change with viewport. If a future "compact" mode is needed, swap `--spacing-card` and the 5 spacing tokens -- do not fork components.
+
+---
+
+## Do not
+
+- Use raw Tailwind colors (`amber-*`, `white/*`, `black/*`) in app chrome
+- Use non-token spacing (`gap-1.5`, `gap-2.5`, `p-3`, `mt-10`) in new code
+- Use `text-[Npx]` arbitrary font sizes
+- Scale body/labels with `cqw` / unbounded `cqi`
+- Step card titles with `@md/card:text-sm` -- titles stay `text-s`
+- Move `--app-gutter`, bottom nav, or `DESKTOP_BREAKPOINT` onto a container query
+- Use `h-dvh` / `h-screen` without `lg:` prefix (breaks phone)
+- Treat Chrome device mode as proof of iOS rendering
+- Use `if (isIOS) return <IOSHeader />` -- one component, one code path
