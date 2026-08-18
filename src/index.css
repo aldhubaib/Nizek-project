@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@theme {
+  --color-surface-900: #1a1a2e;
+  --color-surface-800: #16213e;
+  --color-surface-700: #1e2a45;
+  --color-surface-600: #263352;
+  --color-surface-500: #334466;
+  --color-surface-400: #4a5a7a;
+  --color-surface-300: #8892a8;
+
+  --color-accent-green: #4ade80;
+  --color-accent-purple: #c084fc;
+  --color-accent-amber: #fbbf24;
+  --color-accent-rose: #fb7185;
+  --color-accent-cyan: #22d3ee;
+  --color-accent-blue: #60a5fa;
+
+  --color-node-bg: #1e2235;
+  --color-node-border: #2a3050;
+  --color-node-header: #252a40;
+
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-surface-900 text-gray-200 antialiased;
+    font-family: var(--font-sans);
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #334466;
+    border-radius: 3px;
+  }
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: #334466;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #4ade80;
+  cursor: pointer;
+  border: 2px solid #1a1a2e;
+  transition: transform 0.15s;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}

@@ -1,0 +1,62 @@
+---
+description: Conventions for defining model schemas and parameters
+globs: src/models/**/*.ts
+alwaysApply: false
+---
+
+# Model Schema Conventions
+
+## ModelSchema Structure
+
+Every model file exports a single `ModelSchema` object with these fields:
+
+```typescript
+export const myModel: ModelSchema = {
+  id: "kebab-case-unique-id",
+  name: "Display Name",
+  provider: "Provider Company",
+  icon: "single-emoji-or-symbol",
+  iconColor: "#hex",
+  cost: 5,                          // credits per run
+  category: "generation",           // generation | editing | upscaling | inpainting
+  inputs: [...],                    // PortDef[] — left-side node connectors
+  outputs: [...],                   // PortDef[] — right-side node connectors
+  parameters: [...],                // ParameterDef[] — sidebar config fields
+};
+```
+
+## Reuse Common Fields
+
+Always import from `common-fields.ts` before defining inline:
+
+```typescript
+import { SEED_PARAM, OUTPUT_FORMAT_PARAM, GUIDANCE_SCALE_PARAM } from "./common-fields";
+```
+
+Override defaults via spread: `{ ...GUIDANCE_SCALE_PARAM, widget: { type: "slider", min: 1, max: 20, step: 0.5, default: 4.5 } }`
+
+## Conditional Visibility
+
+Use `visibility` to conditionally show a field:
+
+```typescript
+{
+  key: "output_quality",
+  label: "Output Quality",
+  widget: { type: "slider", min: 1, max: 100, step: 1, default: 80 },
+  visibility: { dependsOn: "output_format", values: ["jpeg", "webp"] },
+}
+```
+
+## Registration
+
+After creating a model file, add it to `src/models/registry.ts`:
+
+```typescript
+import { myModel } from "./my-model";
+export const MODEL_REGISTRY: ModelSchema[] = [...existing, myModel];
+```
+
+## Widget Types Available
+
+slider, dropdown, checkbox, seed, text (with multiline), number, lora_picker, image_upload, color

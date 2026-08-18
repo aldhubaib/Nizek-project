@@ -1,0 +1,80 @@
+---
+description: AI Node Studio project architecture and conventions. Schema-driven UI for AI image generation models.
+alwaysApply: true
+---
+
+# AI Node Studio — What This Project Is
+
+**This is OUR application.** It is a React + TypeScript web app that WE built and own. It runs locally via Vite at `http://localhost:5173`.
+
+This is NOT ComfyUI, n8n, Glif, fal.ai, or any third-party tool. If the user shares screenshots showing nodes like "Qwen Image Edit," "Flux Pro 1.1," or "SDXL Lightning" — those are components rendered by THIS codebase. Do not ask "what platform is this" or "what tool are you using." The answer is always: this project, `ai-node-studio`.
+
+When the user mentions models, nodes, fields, sidebars, or parameters — they are talking about code in this repo. Look at the source files below, not the internet.
+
+## Tech Stack
+
+React + TypeScript + Vite + Tailwind CSS v4. Schema-driven dynamic UI — models declare themselves with data, the UI renders generically from schemas. No backend yet — frontend only.
+
+## Project Structure
+
+```
+src/
+  types/schema.ts          — Core types: FieldWidget, ParameterDef, PortDef, ModelSchema, NodeValues
+  models/
+    common-fields.ts       — Reusable parameter mixins (SEED_PARAM, OUTPUT_FORMAT_PARAM, etc.)
+    registry.ts            — MODEL_REGISTRY array, getModel(), getDefaultValues()
+    flux-pro.ts            — Flux Pro 1.1 schema
+    qwen-image-edit.ts     — Qwen Image Edit 2511 schema
+    sdxl-lightning.ts      — SDXL Lightning schema
+    stable-diffusion-3.ts  — Stable Diffusion 3 schema
+    real-esrgan.ts         — Real-ESRGAN x4 schema
+  components/
+    FieldRenderer.tsx       — Maps ParameterDef → widget component (single switch)
+    Sidebar.tsx             — Renders all params for active model
+    NodeCard.tsx            — Node with input/output ports
+    ModelPicker.tsx         — Left panel model list
+    widgets/                — SliderField, DropdownField, CheckboxField, SeedField, TextField, LoraPicker
+  App.tsx                   — Layout: ModelPicker | Canvas | Sidebar
+```
+
+## How to Add a New Model
+
+1. Create `src/models/<model-name>.ts` exporting a `ModelSchema`
+2. Compose parameters from `common-fields.ts` mixins + model-specific fields
+3. Import and add to `MODEL_REGISTRY` array in `src/models/registry.ts`
+4. No UI code changes needed — the renderer picks it up automatically
+
+## How to Add a New Widget Type
+
+1. Add the new variant to the `FieldWidget` union in `src/types/schema.ts`
+2. Create `src/components/widgets/<WidgetName>.tsx`
+3. Add one case to the switch in `src/components/FieldRenderer.tsx`
+
+## Key Patterns
+
+- **Schema-driven**: Never hardcode per-model UI. Models are pure data (`ModelSchema`).
+- **Composable mixins**: Common params (seed, output_format, guidance_scale) live in `common-fields.ts` and are spread into model schemas. Override defaults with `{ ...PARAM, widget: { ...overrides } }`.
+- **Conditional visibility**: Parameters can declare `visibility: { dependsOn: "field_key", values: [...] }` to show/hide based on sibling field values.
+- **State isolation**: Each model's values stored separately in `allValues[modelId]`.
+- **Port types**: Input/output ports use `PortDef` with types: text, image, lora, number, mask, control_image.
+
+## Running the App
+
+```bash
+cd /Users/abdulazizaldhubaib/ai-node-studio
+npm run dev
+# → http://localhost:5173
+```
+
+## Style
+
+- Dark theme with CSS custom properties defined in `src/index.css` under `@theme`
+- Tailwind v4 via `@tailwindcss/vite` plugin
+- Fonts: DM Sans (body) + JetBrains Mono (monospace), loaded from Google Fonts in `index.html`
+- Accent colors: green (#4ade80), purple (#c084fc), amber (#fbbf24), rose (#fb7185), cyan (#22d3ee)
+
+## Important
+
+- All source code is local in this repo. Never search the web to understand how this app works — read the files.
+- If the user shares a screenshot of the app, reference the components in `src/components/` and schemas in `src/models/`.
+- The node UI (with ports, sidebars, fields) is entirely built by us in React — it is not a third-party library.
