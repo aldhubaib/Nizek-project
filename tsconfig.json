@@ -30,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "functions"]
+  "exclude": ["node_modules", "functions", "vite.config.ts", "tsconfig.app.json", "tsconfig.node.json", "src/App.tsx", "src/components/FieldRenderer.tsx", "src/components/ModelPicker.tsx", "src/components/NodeCard.tsx", "src/components/widgets", "src/models", "src/types/schema.ts", "src/main.tsx"]
 }
