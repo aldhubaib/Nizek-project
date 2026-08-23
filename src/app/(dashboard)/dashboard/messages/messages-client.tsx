@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OverflowTabBar, type OverflowTabItem } from "@/components/overflow-tab-bar";
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { outlineBadge } from "@/lib/task-label";
 import {
   listImportantMessages,
   type InboxThread,
@@ -364,7 +366,7 @@ export function ThreadSidebar({
         className="absolute inset-x-0 top-0 z-20 flex app-top-bar-tall flex-col items-stretch gap-0 border-b border-border/60 pb-3.5"
       >
         <div className="flex items-center gap-1">
-          <div className="text-s font-semibold">Inbox</div>
+          <div className="page-name text-foreground">Inbox</div>
           <Button
             variant="ghost"
             size="icon"
@@ -682,14 +684,10 @@ function ThreadRow({
             {thread.name}
           </span>
           {thread.kind === "client" && !thread.inactive && (
-            <span className="shrink-0 rounded-full bg-orange/15 px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-orange">
-              Client
-            </span>
+            <StatusBadge config={outlineBadge("Client", "text-orange", "border-orange/30")} className="uppercase tracking-wide" />
           )}
           {thread.inactive && (
-            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Inactive
-            </span>
+            <StatusBadge config={outlineBadge("Inactive", "text-muted-foreground", "border-border")} className="uppercase tracking-wide" />
           )}
           <span
             className={cn(

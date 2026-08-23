@@ -15,6 +15,8 @@ import { publish, broadcast, broadcastTaskEvent, taskChannel, projectChannel, us
 import { createAndPublishNotifications } from "@/lib/notify";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import { sendPush } from "@/lib/push";
+import { isQuestionAnswerFilled, isWaitingOnClientAnswer } from "@/lib/task-readiness";
+import { requireUserOnProject } from "@/lib/project-mentions";
 
 // ─── Stage → Role Track ─────────────────────────────────
 type RoleTrack = "pm" | "developer" | "client";
@@ -40,6 +42,25 @@ const ALLOWED_ROLES_BY_TRACK: Record<RoleTrack, string[]> = {
   client: CLIENT_ROLES,
 };
 
+async function resolveInternalReviewAssignee(projectId: string): Promise<string | null> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { internalReviewRoleId: true },
+  });
+  if (!project?.internalReviewRoleId) return null;
+
+  const member = await prisma.projectMember.findFirst({
+    where: {
+      projectId,
+      roleId: project.internalReviewRoleId,
+      user: { systemRole: { not: "CLIENT" } },
+    },
+    orderBy: [{ createdAt: "asc" }],
+    select: { userId: true },
+  });
+  return member?.userId ?? null;
+}
+
 async function resolveAutoAssignee(
   stage: string,
   task: { createdById: string; developerId: string | null; clientReviewerId: string | null },
@@ -51,6 +72,9 @@ async function resolveAutoAssignee(
 
   switch (track) {
     case "pm":
+      if (stage === "INTERNAL_REVIEW") {
+        return (await resolveInternalReviewAssignee(projectId)) ?? task.createdById;
+      }
       return task.createdById;
     case "developer":
       return task.developerId ?? actingUserId;
@@ -136,6 +160,10 @@ export async function createTask(data: {
 
   const priority = data.priority != null ? Math.min(10, Math.max(1, data.priority)) : null;
 
+  if (data.assigneeId) {
+    await requireUserOnProject(data.projectId, data.assigneeId);
+  }
+
   const task = await prisma.task.create({
     data: {
       taskNumber: (maxTaskNumber._max.taskNumber ?? 0) + 1,
@@ -147,7 +175,7 @@ export async function createTask(data: {
       order: (maxOrder._max.order ?? 0) + 1,
       projectId: data.projectId,
       createdById: user.id,
-      assigneeId: data.assigneeId ?? user.id,
+      assigneeId: data.assigneeId ?? null,
       ...(data.answers?.length && {
         answers: {
           create: data.answers
@@ -176,6 +204,7 @@ export async function updateTask(data: {
   description?: string;
   priority?: number | null;
   assigneeId?: string | null;
+  estimatedMinutes?: number | null;
 }) {
   const task = await prisma.task.findUnique({
     where: { id: data.taskId },
@@ -211,8 +240,7 @@ export async function updateTask(data: {
   const stickyUpdates: Record<string, string | null> = {};
   if (data.assigneeId !== undefined && data.assigneeId !== task.assigneeId) {
     if (data.assigneeId) {
-      const newAssignee = await prisma.user.findUnique({ where: { id: data.assigneeId }, select: { id: true, name: true, systemRole: true } });
-      if (!newAssignee) throw new Error("User not found");
+      const newAssignee = await requireUserOnProject(task.projectId, data.assigneeId);
 
       if (user.systemRole !== "ADMIN") {
         const track = STAGE_ROLE_MAP[task.stage];
@@ -245,6 +273,7 @@ export async function updateTask(data: {
       ...(data.description !== undefined && { description: data.description }),
       ...(data.priority !== undefined && { priority: data.priority != null ? Math.min(10, Math.max(1, data.priority)) : null }),
       ...(data.assigneeId !== undefined && { assigneeId: data.assigneeId }),
+      ...(data.estimatedMinutes !== undefined && { estimatedMinutes: data.estimatedMinutes }),
       ...stickyUpdates,
     },
   });
@@ -320,6 +349,7 @@ export async function moveTask(data: {
   stage: "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "READY_FOR_RELEASE" | "DONE";
   order: number;
   estimatedMinutes?: number;
+  proofOfWorkId?: string;
 }): Promise<{ success: true } | { success: false; error: string }> {
   try {
     const task = await prisma.task.findUnique({
@@ -343,28 +373,23 @@ export async function moveTask(data: {
 
     const oldStage = task.stage;
 
-    if (!isAdmin && oldStage === "CLARIFICATION" && data.stage !== "CLARIFICATION" && data.stage !== "NEW_REQUEST") {
+    if (!isAdmin && (oldStage === "NEW_REQUEST" || oldStage === "CLARIFICATION") && data.stage !== "NEW_REQUEST" && data.stage !== "CLARIFICATION") {
       const errors: string[] = [];
 
-      if (task.priority == null) {
-        errors.push("Priority must be set");
-      }
-
-      const requiredQuestions = await prisma.defaultQuestion.findMany({
-        where: { taskType: task.taskType, required: true, type: { not: "client" } },
-        select: { id: true, question: true },
+      const specQuestions = await prisma.defaultQuestion.findMany({
+        where: { taskType: task.taskType, type: { not: "client" } },
+        select: { id: true, question: true, type: true },
       });
 
-      if (requiredQuestions.length > 0) {
+      if (specQuestions.length > 0) {
         const existingAnswers = await prisma.taskAnswer.findMany({
-          where: { taskId: task.id, questionId: { in: requiredQuestions.map((q) => q.id) } },
+          where: { taskId: task.id, questionId: { in: specQuestions.map((q) => q.id) } },
           select: { questionId: true, answer: true },
         });
 
         const answeredMap = new Map(existingAnswers.map((a) => [a.questionId, a.answer]));
-        const unanswered = requiredQuestions.filter((q) => {
-          const answer = answeredMap.get(q.id);
-          return !answer || !answer.trim();
+        const unanswered = specQuestions.filter((q) => {
+          return !isQuestionAnswerFilled(q.type, answeredMap.get(q.id));
         });
 
         errors.push(...unanswered.map((q) => q.question));
@@ -390,58 +415,22 @@ export async function moveTask(data: {
       if (errors.length > 0) {
         return { success: false, error: `REQUIRED_QUESTIONS:${JSON.stringify(errors)}` };
       }
-
-      if (task.priority != null) {
-        const higherPriorityTasks = await prisma.task.findMany({
-          where: {
-            projectId: task.projectId,
-            stage: "CLARIFICATION",
-            id: { not: task.id },
-            priority: { gt: task.priority },
-            archivedAt: null,
-          },
-          select: { taskNumber: true, title: true, priority: true, taskType: true },
-          orderBy: { priority: "desc" },
-        });
-
-        if (higherPriorityTasks.length > 0) {
-          const blockingList = higherPriorityTasks.map((t) => {
-            const prefix = t.taskType === "BUG" ? "B" : t.taskType === "REPORTED_BUG" ? "RB" : t.taskType === "ENHANCEMENT" ? "E" : t.taskType === "DESIGN" ? "D" : "F";
-            return `${prefix}-${String(t.taskNumber).padStart(3, "0")} (P${t.priority}): ${t.title}`;
-          });
-          return { success: false, error: `PRIORITY_BLOCKED:${JSON.stringify(blockingList)}` };
-        }
-      }
     }
 
     let targetStage = data.stage;
     if (!isAdmin && task.taskType === "BUG" && targetStage === "CLIENT_REVIEW") {
-      targetStage = "READY_FOR_RELEASE";
+      targetStage = "DONE";
     }
 
-    // Pipeline WIP limit: block bringing a new task into the active pipeline
-    // (Ready for Dev, In Development, Internal Review) when it's already full.
-    // Moves within the pipeline, moves out of it, and declines back into it are
-    // never blocked — only fresh entries from an earlier stage count.
-    const PIPELINE_STAGES = ["READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW"];
-    const STAGE_SEQUENCE = ["NEW_REQUEST", "CLARIFICATION", "READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW", "READY_FOR_RELEASE", "DONE"];
-    const isEnteringPipeline =
-      PIPELINE_STAGES.includes(targetStage) &&
-      !PIPELINE_STAGES.includes(oldStage) &&
-      STAGE_SEQUENCE.indexOf(oldStage) < STAGE_SEQUENCE.indexOf("READY_FOR_DEV");
-
-    if (isEnteringPipeline) {
-      const maxPipelineTasks = task.project.maxPipelineTasks ?? 3;
-      const pipelineCount = await prisma.task.count({
-        where: {
-          projectId: task.projectId,
-          stage: { in: PIPELINE_STAGES as any },
-          archivedAt: null,
-        },
-      });
-      if (pipelineCount >= maxPipelineTasks) {
-        return { success: false, error: `WIP_LIMIT:${maxPipelineTasks}` };
+    if (oldStage !== "INTERNAL_REVIEW" && targetStage === "INTERNAL_REVIEW") {
+      if (!data.proofOfWorkId) {
+        return { success: false, error: "PROOF_REQUIRED" };
       }
+      const proof = await prisma.proofOfWork.findFirst({
+        where: { id: data.proofOfWorkId, taskId: task.id },
+        select: { id: true },
+      });
+      if (!proof) return { success: false, error: "PROOF_REQUIRED" };
     }
 
     const isEnteringDev = oldStage !== "READY_FOR_DEV" && targetStage === "READY_FOR_DEV";
@@ -952,6 +941,8 @@ const BOARD_TASK_SELECT = {
   developerId: true,
   clientReviewerId: true,
   projectId: true,
+  sprintId: true,
+  sprint: { select: { id: true, name: true, status: true } },
   assignee: { select: { id: true, name: true, imageUrl: true } },
   createdBy: { select: { id: true, name: true, imageUrl: true } },
   answers: { select: { questionId: true, answer: true, question: { select: { type: true } } } },
@@ -961,7 +952,7 @@ const BOARD_TASK_SELECT = {
     take: 1,
     select: { enteredAt: true },
   },
-  _count: { select: { notes: true } },
+  _count: { select: { notes: true, sprintSnapshots: true } },
 } as const;
 
 type BoardTaskRow = {
@@ -974,40 +965,38 @@ type BoardTaskRow = {
   estimateAccuracy: unknown;
   answers: { questionId: string; answer: string; question: { type: string } }[];
   stageLogs: { enteredAt: Date }[];
-  _count: { notes: number };
+  _count: { notes: number; sprintSnapshots: number };
   [key: string]: unknown;
 };
 
-function requiredIdsByType(
-  requiredQuestions: { id: string; taskType: string; type: string }[],
-): Map<string, string[]> {
-  const requiredByType = new Map<string, string[]>();
-  for (const q of requiredQuestions) {
+function fieldsByType(
+  questions: { id: string; taskType: string; type: string }[],
+): Map<string, { id: string; type: string }[]> {
+  const byType = new Map<string, { id: string; type: string }[]>();
+  for (const q of questions) {
     if (q.type === "client") continue;
-    const list = requiredByType.get(q.taskType) ?? [];
-    list.push(q.id);
-    requiredByType.set(q.taskType, list);
+    const list = byType.get(q.taskType) ?? [];
+    list.push({ id: q.id, type: q.type });
+    byType.set(q.taskType, list);
   }
-  return requiredByType;
+  return byType;
 }
 
 function mapBoardTask(
   task: BoardTaskRow,
   declines: { internal: number; client: number },
-  reqIds: string[],
+  fields: { id: string; type: string }[],
 ) {
-  const answeredIds = new Set(task.answers.map((a) => a.questionId));
-  const hasAllRequired = reqIds.every((id) => answeredIds.has(id)) && task.priority != null;
+  const answerByQuestion = new Map(task.answers.map((a) => [a.questionId, a.answer]));
+  const hasAllFields = fields.every((q) =>
+    isQuestionAnswerFilled(q.type, answerByQuestion.get(q.id)),
+  );
 
-  const waitingOnClient = task.answers.some((a) => {
-    if (a.question.type !== "client") return false;
-    try {
-      const parsed = JSON.parse(a.answer);
-      return parsed.needed === true && !parsed.completed;
-    } catch { return false; }
-  });
+  const waitingOnClient = task.answers.some((a) =>
+    isWaitingOnClientAnswer(a.question.type, a.answer),
+  );
 
-  const isReadyForTransition = hasAllRequired && !waitingOnClient;
+  const isReadyForTransition = hasAllFields && !waitingOnClient;
   const currentLog = task.stageLogs[0];
 
   return {
@@ -1023,20 +1012,29 @@ function mapBoardTask(
     estimatedMinutes: task.estimatedMinutes,
     estimateAccuracy: task.estimateAccuracy,
     notesCount: task._count.notes,
+    sprintId: (task.sprintId as string | null) ?? null,
+    sprintName: (task.sprint as { name: string } | null)?.name ?? null,
+    sprintCount:
+      (task._count.sprintSnapshots ?? 0) +
+      ((task.sprintId &&
+        ["PLANNED", "ACTIVE"].includes(
+          (task.sprint as { status?: string } | null)?.status ?? "",
+        ))
+        ? 1
+        : 0),
   };
 }
 
 export async function getTasksByProject(projectId: string) {
   await requireProjectMember(projectId);
 
-  const [tasks, requiredQuestions, declineCounts] = await Promise.all([
+  const [tasks, specQuestions, declineCounts] = await Promise.all([
     prisma.task.findMany({
       where: { projectId, archivedAt: null },
       select: BOARD_TASK_SELECT,
       orderBy: { order: "asc" },
     }),
     prisma.defaultQuestion.findMany({
-      where: { required: true },
       select: { id: true, taskType: true, type: true },
     }),
     prisma.taskActivity.findMany({
@@ -1054,13 +1052,13 @@ export async function getTasksByProject(projectId: string) {
     declinesByTask.set(d.taskId, entry);
   }
 
-  const requiredByType = requiredIdsByType(requiredQuestions);
+  const fieldsByTaskType = fieldsByType(specQuestions);
 
   return tasks.map((task) =>
     mapBoardTask(
       task as unknown as BoardTaskRow,
       declinesByTask.get(task.id) ?? { internal: 0, client: 0 },
-      requiredByType.get(task.taskType) ?? [],
+      fieldsByTaskType.get(task.taskType) ?? [],
     ),
   );
 }
@@ -1077,9 +1075,9 @@ export async function getBoardTask(taskId: string) {
 
   await requireProjectMember(task.projectId as string);
 
-  const [requiredQuestions, declineCounts] = await Promise.all([
+  const [specQuestions, declineCounts] = await Promise.all([
     prisma.defaultQuestion.findMany({
-      where: { required: true, taskType: task.taskType },
+      where: { taskType: task.taskType },
       select: { id: true, taskType: true, type: true },
     }),
     prisma.taskActivity.findMany({
@@ -1094,8 +1092,8 @@ export async function getBoardTask(taskId: string) {
     else declines.internal += 1;
   }
 
-  const reqIds = (requiredIdsByType(requiredQuestions).get(task.taskType) ?? []);
-  return mapBoardTask(task as unknown as BoardTaskRow, declines, reqIds);
+  const fields = fieldsByType(specQuestions).get(task.taskType) ?? [];
+  return mapBoardTask(task as unknown as BoardTaskRow, declines, fields);
 }
 
 export async function pollTaskUpdates(projectId: string) {
@@ -1114,6 +1112,8 @@ export async function pollTaskUpdates(projectId: string) {
       estimatedMinutes: true,
       estimateAccuracy: true,
       startedAt: true,
+      sprintId: true,
+      sprint: { select: { name: true } },
       assignee: { select: { id: true, name: true, email: true, imageUrl: true } },
       createdBy: { select: { id: true, name: true, email: true, imageUrl: true } },
       stageLogs: {
@@ -1138,6 +1138,8 @@ export async function pollTaskUpdates(projectId: string) {
     estimateAccuracy: t.estimateAccuracy,
     startedAt: t.startedAt?.toISOString() ?? null,
     stageEnteredAt: t.stageLogs[0]?.enteredAt?.toISOString() ?? null,
+    sprintId: t.sprintId,
+    sprintName: t.sprint?.name ?? null,
     assignee: t.assignee,
     createdBy: t.createdBy,
   }));

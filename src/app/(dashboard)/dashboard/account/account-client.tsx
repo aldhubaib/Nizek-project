@@ -12,7 +12,7 @@ import {
   enablePush,
   disablePush,
 } from "@/lib/push-client";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageName } from "@/components/page-header";
 import {
   isNotificationSoundEnabled,
   setNotificationSoundEnabled,
@@ -157,7 +157,7 @@ export function AccountClient({
         >
           <ArrowLeft className="h-4 w-4" />
         </Link>
-        <h1 className="text-s font-semibold">Account</h1>
+        <PageName>Account</PageName>
       </PageHeader>
       <div className="mx-auto flex w-full max-w-lg flex-col gap-4 px-app py-4 sm:py-6">
 

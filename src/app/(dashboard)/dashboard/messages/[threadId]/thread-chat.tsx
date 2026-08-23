@@ -104,13 +104,21 @@ import {
   ChatPostAvatar,
   chatPostAuthorLabel,
 } from "@/components/messages/activity-card";
+import dynamic from "next/dynamic";
 import { NoteCommentCard } from "@/components/messages/note-comment-card";
 import { TaskCommentCard } from "@/components/messages/task-comment-card";
 import { NoteActivityCard } from "@/components/messages/note-activity-card";
+import { TaskRejectionCard } from "@/components/messages/task-rejection-card";
 import type { DeadlineReminderPayload } from "@/lib/deadline-reminder-payload";
 import type { NoteCommentPayload } from "@/lib/note-comment-payload";
 import type { TaskCommentPayload } from "@/lib/task-comment-payload";
 import type { NoteActivityPayload } from "@/lib/note-activity-payload";
+import type { ProofBypassPayload } from "@/lib/proof-bypass-payload";
+
+const ProofBypassCard = dynamic(
+  () => import("@/components/messages/proof-bypass-card").then((m) => m.ProofBypassCard),
+  { ssr: false },
+);
 import { closePushBannersByTags } from "@/lib/close-push-banners";
 import { threadPushTag } from "@/lib/notification-read";
 import { updateAppBadge } from "@/lib/app-badge";
@@ -215,11 +223,18 @@ export type ChatMessage = {
   noteComment?: NoteCommentPayload | null;
   taskComment?: TaskCommentPayload | null;
   noteActivity?: NoteActivityPayload | null;
+  proofBypass?: ProofBypassPayload | null;
   important?: boolean;
 };
 
 function isFeedCardKind(kind?: string) {
-  return kind === "deadline_reminder" || kind === "note_activity" || kind === "note_comment";
+  return (
+    kind === "deadline_reminder" ||
+    kind === "note_activity" ||
+    kind === "note_comment" ||
+    kind === "proof_bypass" ||
+    kind === "rejection"
+  );
 }
 
 const fmtTaskNumber = (n: number) => `T-${String(n).padStart(3, "0")}`;
@@ -478,7 +493,7 @@ function ReactionChips({
                             : fullName,
                         )}
                       </div>
-                      <span className="min-w-0 flex-1 truncate text-sm">
+                      <span className="min-w-0 flex-1 truncate text-s">
                         {label}
                       </span>
                     </li>
@@ -488,7 +503,7 @@ function ReactionChips({
               <button
                 type="button"
                 onClick={() => onToggle(r.emoji)}
-                className="mt-0.5 w-full rounded-md px-2 py-2 text-left text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
+                className="mt-0.5 w-full rounded-md px-2 py-2 text-left text-s text-muted-foreground hover:bg-surface hover:text-foreground"
               >
                 {mineReacted ? "Remove your reaction" : `React with ${r.emoji}`}
               </button>
@@ -702,7 +717,7 @@ const MessageRow = memo(function MessageRow({
     swiped.current = false;
   };
 
-  if (m.noteActivity || m.noteComment || m.deadlineReminder) {
+  if (m.noteActivity || m.noteComment || m.deadlineReminder || m.proofBypass || m.kind === "proof_bypass" || m.kind === "rejection") {
     const authorLabel = chatPostAuthorLabel(m.authorId, m.authorName);
     return (
       <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
@@ -733,6 +748,26 @@ const MessageRow = memo(function MessageRow({
               <DeadlineReminderCard payload={m.deadlineReminder} createdAt={m.createdAt} />
             ) : m.noteActivity ? (
               <NoteActivityCard payload={m.noteActivity} createdAt={m.createdAt} />
+            ) : m.kind === "rejection" ? (
+              <TaskRejectionCard
+                title={m.task?.title ?? "Task"}
+                taskNumber={m.task?.number}
+                projectId={m.task?.projectId}
+                taskId={m.task?.id}
+                body={m.body}
+                mentions={m.mentions}
+                createdAt={m.createdAt}
+              />
+            ) : m.kind === "proof_bypass" || m.proofBypass ? (
+              m.proofBypass ? (
+                <ProofBypassCard
+                  payload={m.proofBypass}
+                  createdAt={m.createdAt}
+                  currentUserId={currentMemberId}
+                />
+              ) : (
+                <p className="text-s text-muted-foreground">Video bypass request</p>
+              )
             ) : (
               <NoteCommentCard payload={m.noteComment!} createdAt={m.createdAt} />
             )}
@@ -862,7 +897,7 @@ const MessageRow = memo(function MessageRow({
             <div className="group relative">
               <div
                 className={cn(
-                  "flex max-w-full flex-col gap-xs text-sm leading-relaxed",
+                  "flex max-w-full flex-col gap-xs text-s leading-relaxed",
                   notice
                     ? "min-w-64 rounded-xl border border-border/60 bg-surface-2/80 p-2.5 text-foreground"
                     : "rounded-2xl px-3.5 py-2",
@@ -875,7 +910,7 @@ const MessageRow = memo(function MessageRow({
                 {m.task && showTaskCard && (
                   <Link
                     href={`/dashboard/projects/${m.task.projectId}/tasks/${m.task.id}`}
-                    className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2 transition-colors hover:bg-background"
+                    className="flex items-center gap-2 rounded-lg border border-border/60 bg-field/60 px-2.5 py-2 transition-colors hover:bg-field"
                   >
                     <CheckSquare className="h-4 w-4 shrink-0 text-primary" />
                     <div className="min-w-0 flex-1">
@@ -922,7 +957,7 @@ const MessageRow = memo(function MessageRow({
                     <textarea
                       value={editDraft}
                       onChange={(e) => onEditDraftChange(e.target.value)}
-                      className="min-h-[4rem] w-full resize-none rounded-md border border-border/60 bg-background px-2 py-1.5 text-sm text-foreground"
+                      className="min-h-[4rem] w-full resize-none rounded-md border border-border/60 bg-background px-2 py-1.5 text-s text-foreground"
                       rows={3}
                       autoFocus
                     />
@@ -1353,6 +1388,7 @@ export function ThreadChat({
                 noteComment: m.noteComment ?? null,
                 taskComment: m.taskComment ?? null,
                 noteActivity: m.noteActivity ?? null,
+                proofBypass: m.proofBypass ?? null,
               },
             ],
       );
@@ -1490,6 +1526,7 @@ export function ThreadChat({
             noteComment: m.noteComment ?? null,
             taskComment: m.taskComment ?? null,
             noteActivity: m.noteActivity ?? null,
+            proofBypass: m.proofBypass ?? null,
             important: false,
           },
         ];
@@ -2432,7 +2469,7 @@ export function ThreadChat({
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-primary/60 bg-surface/80 px-10 py-8 text-primary">
             <UploadCloud className="h-8 w-8" />
-            <span className="text-sm font-semibold">Drop files to upload</span>
+            <span className="text-s font-semibold">Drop files to upload</span>
           </div>
         </div>
       )}
@@ -2529,7 +2566,7 @@ export function ThreadChat({
                     setView("chat");
                     setSearchOpen(true);
                   }}
-                  className="min-h-11 gap-3 text-sm"
+                  className="min-h-11 gap-3 text-s"
                 >
                   <Search className="h-4 w-4" />
                   <span className="flex-1">Search in chat</span>
@@ -2537,7 +2574,7 @@ export function ThreadChat({
                 {canCreateTask && target.projectId && !inactive && (
                   <DropdownMenuItem
                     onClick={() => handleCreateTask(selectedMessage)}
-                    className="min-h-11 gap-3 text-sm"
+                    className="min-h-11 gap-3 text-s"
                   >
                     <CheckSquare className="h-4 w-4" />
                     <span className="flex-1">Create task</span>
@@ -2563,7 +2600,7 @@ export function ThreadChat({
         </Link>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold">{title}</span>
+            <span className="page-name truncate text-foreground">{title}</span>
             {muted && (
               <BellOff className="h-3 w-3 shrink-0 text-muted-foreground/70" aria-label="Muted" />
             )}
@@ -2718,7 +2755,7 @@ export function ThreadChat({
             ))}
             {messages.length === 0 && outbox.length === 0 && (
               <div className="flex flex-col items-center gap-1 py-16 text-center">
-                <div className="text-sm font-medium text-foreground">
+                <div className="text-s font-medium text-foreground">
                   No messages yet
                 </div>
                 <p className="text-s text-muted-foreground">
@@ -2801,7 +2838,7 @@ export function ThreadChat({
                         }}
                         onMouseEnter={() => setMentionIndex(i)}
                         className={cn(
-                          "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm",
+                          "flex w-full items-center gap-2 px-3 py-1.5 text-left text-s",
                           i === mentionIndex ? "bg-surface" : "hover:bg-surface/60",
                         )}
                       >
@@ -2846,7 +2883,7 @@ export function ThreadChat({
                         }}
                         onMouseEnter={() => setPickerIndex(i)}
                         className={cn(
-                          "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm",
+                          "flex w-full items-center gap-2 px-3 py-1.5 text-left text-s",
                           i === pickerIndex ? "bg-surface" : "hover:bg-surface/60",
                         )}
                       >
@@ -2951,7 +2988,7 @@ export function ThreadChat({
             <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-surface/40 p-2 sm:gap-3">
               {holdRecording ? (
                 <>
-                  <div className="flex shrink-0 items-center gap-xs text-sm">
+                  <div className="flex shrink-0 items-center gap-xs text-s">
                     <span
                       className={cn(
                         "h-2 w-2 rounded-full bg-destructive",
@@ -2991,7 +3028,7 @@ export function ThreadChat({
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
-                  <div className="flex shrink-0 items-center gap-xs text-sm">
+                  <div className="flex shrink-0 items-center gap-xs text-s">
                     <span
                       className={cn(
                         "h-2 w-2 rounded-full bg-destructive",
@@ -3119,7 +3156,7 @@ export function ThreadChat({
               <div
                 aria-hidden
                 ref={mirrorRef}
-                className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words p-2 text-[16px] leading-5 text-foreground md:text-sm md:leading-normal"
+                className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words p-2 text-[16px] leading-5 text-foreground md:text-s md:leading-normal"
               >
                 {renderComposerHighlight(draft, composerMentionNames)}
                 {"\u200b"}
@@ -3217,7 +3254,7 @@ export function ThreadChat({
                   window.scrollTo(0, 0);
                 }
               }}
-              className="relative max-h-32 min-h-10 w-full resize-none overflow-y-auto border-0 !bg-transparent p-2 text-[16px] leading-5 !text-transparent caret-foreground shadow-none [field-sizing:fixed] focus-visible:ring-0 dark:!bg-transparent md:text-sm md:leading-normal"
+              className="relative max-h-32 min-h-10 w-full resize-none overflow-y-auto border-0 !bg-transparent p-2 text-[16px] leading-5 !text-transparent caret-foreground shadow-none [field-sizing:fixed] focus-visible:ring-0 dark:!bg-transparent md:text-s md:leading-normal"
               rows={1}
             />
             </div>
@@ -3313,7 +3350,7 @@ export function ThreadChat({
             >
               <X className="h-4 w-4" />
             </Button>
-            <span className="text-sm font-semibold">Search messages</span>
+            <span className="page-name text-foreground">Search messages</span>
           </div>
           <div className="shrink-0 border-b border-border/60 px-3 py-3">
             <div className="relative">
@@ -3324,7 +3361,7 @@ export function ThreadChat({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Escape") { setSearchOpen(false); setSearchQuery(""); } }}
                 placeholder="Search"
-                className="h-10 rounded-full pl-9 pr-9 text-sm"
+                className="h-10 rounded-full pl-9 pr-9 text-s"
               />
               {searchQuery && (
                 <button
@@ -3340,12 +3377,12 @@ export function ThreadChat({
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {!sq && (
-              <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+              <div className="px-6 py-10 text-center text-s text-muted-foreground">
                 Search for messages in this conversation.
               </div>
             )}
             {sq && searchMatches && searchMatches.length === 0 && (
-              <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+              <div className="px-6 py-10 text-center text-s text-muted-foreground">
                 No messages found.
               </div>
             )}
@@ -3365,7 +3402,7 @@ export function ThreadChat({
                         <span className="text-xs text-muted-foreground">
                           {new Date(m.createdAt).toLocaleDateString([], { day: "2-digit", month: "2-digit", year: "numeric" })}
                         </span>
-                        <span className="line-clamp-2 text-sm text-foreground">
+                        <span className="line-clamp-2 text-s text-foreground">
                           <span className="text-muted-foreground">{m.authorName}:</span>{" "}
                           {m.body}
                         </span>
@@ -3398,7 +3435,7 @@ export function ThreadChat({
             >
               <X className="h-4 w-4" />
             </Button>
-            <span className="text-sm font-semibold">Important</span>
+            <span className="page-name text-foreground">Important</span>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {importantLoading && (
@@ -3407,7 +3444,7 @@ export function ThreadChat({
               </div>
             )}
             {!importantLoading && importantList.length === 0 && (
-              <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+              <div className="px-6 py-10 text-center text-s text-muted-foreground">
                 No important messages in this chat. Star a message from its menu to find it here.
               </div>
             )}
@@ -3428,7 +3465,7 @@ export function ThreadChat({
                           year: "numeric",
                         })}
                       </span>
-                      <span className="line-clamp-2 text-sm text-foreground">
+                      <span className="line-clamp-2 text-s text-foreground">
                         <span className="text-muted-foreground">{m.authorName}:</span>{" "}
                         {m.body}
                       </span>
@@ -3453,7 +3490,7 @@ export function ThreadChat({
             >
               <X className="h-4 w-4" />
             </Button>
-            <span className="text-sm font-semibold">People</span>
+            <span className="page-name text-foreground">People</span>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
             <ClientChatPeopleManager
@@ -3546,7 +3583,7 @@ function OutboxBubble({
               return (
                 <div
                   key={f.key}
-                  className="flex items-center gap-s rounded-xl border border-primary-foreground/20 bg-primary/80 px-3 py-2 text-sm text-primary-foreground"
+                  className="flex items-center gap-s rounded-xl border border-primary-foreground/20 bg-primary/80 px-3 py-2 text-s text-primary-foreground"
                 >
                   {entry.status === "uploading" && !failed ? (
                     <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
@@ -3565,7 +3602,7 @@ function OutboxBubble({
           </div>
         )}
         {entry.body && (
-          <div className="flex max-w-full items-end gap-2 rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-sm leading-relaxed text-primary-foreground opacity-90">
+          <div className="flex max-w-full items-end gap-2 rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-s leading-relaxed text-primary-foreground opacity-90">
             <span className="whitespace-pre-wrap break-words">{entry.body}</span>
             <Clock className="ml-1 h-3 w-3 shrink-0 translate-y-0.5 opacity-70" />
           </div>
@@ -3644,16 +3681,16 @@ function ActionsMenuContent({
         ))}
       </div>
       <DropdownMenuSeparator />
-      <DropdownMenuItem onClick={onReply} className="min-h-10 gap-3 text-sm">
+      <DropdownMenuItem onClick={onReply} className="min-h-10 gap-3 text-s">
         <Reply className="h-4 w-4" />
         <span className="flex-1">Reply</span>
       </DropdownMenuItem>
-      <DropdownMenuItem onClick={onCopy} className="min-h-10 gap-3 text-sm">
+      <DropdownMenuItem onClick={onCopy} className="min-h-10 gap-3 text-s">
         <Copy className="h-4 w-4" />
         <span className="flex-1">Copy</span>
       </DropdownMenuItem>
       {onToggleImportant && (
-        <DropdownMenuItem onClick={onToggleImportant} className="min-h-10 gap-3 text-sm">
+        <DropdownMenuItem onClick={onToggleImportant} className="min-h-10 gap-3 text-s">
           <Star
             className={cn(
               "h-4 w-4",
@@ -3666,19 +3703,19 @@ function ActionsMenuContent({
         </DropdownMenuItem>
       )}
       {onEdit && (
-        <DropdownMenuItem onClick={onEdit} className="min-h-10 gap-3 text-sm">
+        <DropdownMenuItem onClick={onEdit} className="min-h-10 gap-3 text-s">
           <Pencil className="h-4 w-4" />
           <span className="flex-1">Edit</span>
         </DropdownMenuItem>
       )}
       {onCreateTask && (
-        <DropdownMenuItem onClick={onCreateTask} className="min-h-10 gap-3 text-sm">
+        <DropdownMenuItem onClick={onCreateTask} className="min-h-10 gap-3 text-s">
           <CheckSquare className="h-4 w-4" />
           <span className="flex-1">Create task</span>
         </DropdownMenuItem>
       )}
       <DropdownMenuSeparator />
-      <DropdownMenuItem onClick={onDelete} variant="destructive" className="min-h-10 gap-3 text-sm">
+      <DropdownMenuItem onClick={onDelete} variant="destructive" className="min-h-10 gap-3 text-s">
         <Trash2 className="h-4 w-4" />
         <span className="flex-1">Delete</span>
       </DropdownMenuItem>
@@ -3730,7 +3767,7 @@ function ImageActionsMenu(handlers: MessageActionHandlers) {
       <DropdownMenuTrigger
         onClick={(e) => e.stopPropagation()}
         aria-label="Message actions"
-        className="grid size-9 place-items-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-black/80"
+        className="grid size-9 place-items-center rounded-full bg-overlay text-white backdrop-blur-sm transition-colors hover:bg-black/80"
       >
         <MoreVertical className="h-4 w-4" />
       </DropdownMenuTrigger>

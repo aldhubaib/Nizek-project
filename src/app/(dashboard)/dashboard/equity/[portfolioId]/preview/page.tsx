@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { canAccessEquity } from "@/lib/equity-access";
 import { getEquityPortfolio, listEquityMetrics } from "@/actions/equity";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageName } from "@/components/page-header";
 import { PortfolioPitch } from "@/components/equity/portfolio-pitch";
 
 /**
@@ -40,9 +40,7 @@ export default async function EquityPreviewPage({
         >
           <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
         </Link>
-        <h1 className="text-s font-semibold text-foreground truncate">
-          {portfolio.project.name}
-        </h1>
+        <PageName>{portfolio.project.name}</PageName>
         <span className="text-xs text-muted-foreground whitespace-nowrap">
           Pitch preview
         </span>

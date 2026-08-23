@@ -3,6 +3,8 @@
 // times), overdue deadlines, warn late (> 2d), and awaiting client input
 // (> 2d). Kept free of Prisma/React so it is unit-testable.
 
+import { TASK_STAGE_BADGE } from "@/lib/task-label";
+
 export type AuditFlagType =
   | "critical_late"
   | "rejected"
@@ -24,16 +26,9 @@ export const ACTIVE_STAGES = [
   "READY_FOR_RELEASE",
 ] as const;
 
-export const STAGE_LABELS: Record<string, string> = {
-  NEW_REQUEST: "New Request",
-  CLARIFICATION: "Clarification",
-  READY_FOR_DEV: "Ready for Dev",
-  IN_DEVELOPMENT: "In Development",
-  INTERNAL_REVIEW: "Internal Review",
-  CLIENT_REVIEW: "Client Review",
-  READY_FOR_RELEASE: "Ready for Release",
-  DONE: "Done",
-};
+export const STAGE_LABELS: Record<string, string> = Object.fromEntries(
+  Object.entries(TASK_STAGE_BADGE).map(([k, v]) => [k, v.label]),
+);
 
 /** Lower rank = more urgent; reports list items in this order. */
 const SEVERITY_RANK: Record<AuditFlagType, number> = {

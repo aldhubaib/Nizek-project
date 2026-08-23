@@ -1,6 +1,20 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+export function PageName({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <h1 className={cn("page-name min-w-0 truncate text-foreground", className)}>
+      {children}
+    </h1>
+  );
+}
+
 /**
  * The bar at the top of a page: title on the left, actions on the right, a rule
  * under it, and it follows you down the page.

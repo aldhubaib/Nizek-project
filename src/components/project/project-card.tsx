@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MoreVertical, Settings } from "lucide-react";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { outlineBadge } from "@/lib/task-label";
 import { ProjectSettingsOverlay } from "@/components/project/project-settings-overlay";
 
 interface Team {
@@ -79,13 +81,13 @@ export function ProjectCard({ project, teams = [], contractPrefixes = [] }: Proj
               </p>
             </div>
             {!isActive && (
-              <span className={`inline-flex items-center rounded-full border px-s py-0.5 text-xs font-semibold ${
-                hasLatePayment
-                  ? "bg-orange/15 text-orange border-orange/20"
-                  : "bg-destructive/15 text-destructive border-destructive/20"
-              }`}>
-                {hasLatePayment ? "Late Payment" : "Expired"}
-              </span>
+              <StatusBadge
+                config={
+                  hasLatePayment
+                    ? outlineBadge("Late Payment", "text-orange", "border-orange/30")
+                    : outlineBadge("Expired", "text-destructive", "border-destructive/30")
+                }
+              />
             )}
           </div>
           <div className="flex items-center gap-card text-xs text-muted-foreground">

@@ -7,7 +7,7 @@ export type NoteActivityPayload = {
   projectId: string;
   noteTitle: string;
   noteType: string;
-  action: "created" | "updated";
+  action: "created" | "updated" | "published";
   fields?: string[];
   excerpt?: string;
 };
@@ -17,6 +17,8 @@ const TYPE_LABEL: Record<string, string> = {
   DECISION: "Decision",
   CLARIFICATION: "Clarification",
   DEADLINE: "RoadMap",
+  SPRINT_PLANNING: "Sprint Planning",
+  SPRINT_REVIEW: "Sprint Review",
   FEATURE: "Business Case",
   ENHANCEMENT: "Enhancement",
   BUG: "Bug",
@@ -26,6 +28,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 export function noteActivityCategory(payload: NoteActivityPayload): string {
   const typeLabel = TYPE_LABEL[payload.noteType] ?? "Note";
+  if (payload.action === "published") return typeLabel;
   return payload.action === "created"
     ? `${typeLabel} Created`
     : `${typeLabel} Created edited`;

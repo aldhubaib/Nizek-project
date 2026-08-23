@@ -27,9 +27,9 @@ export type ContractType = "FULL_TEAM" | "PART_TEAM" | "FIXED" | "MAINTENANCE" |
 
 export const CONTRACT_TYPES: { id: ContractType; label: string; icon: typeof Users; description: string; color: string }[] = [
   { id: "FULL_TEAM", label: "Full Team", icon: Users, description: "Dedicated team, ongoing work", color: "bg-primary/15 border-primary/40 text-primary" },
-  { id: "PART_TEAM", label: "Part Team", icon: UserMinus, description: "Shared resources, part-time", color: "bg-violet-500/15 border-violet-500/40 text-violet-400" },
+  { id: "PART_TEAM", label: "Part Team", icon: UserMinus, description: "Shared resources, part-time", color: "bg-violet/15 border-violet/40 text-violet" },
   { id: "FIXED", label: "Fixed", icon: Lock, description: "Fixed scope and timeline", color: "bg-orange/15 border-orange/40 text-orange" },
-  { id: "MAINTENANCE", label: "Maintenance", icon: Wrench, description: "Bug fixes and upkeep", color: "bg-cyan-500/15 border-cyan-500/40 text-cyan-400" },
+  { id: "MAINTENANCE", label: "Maintenance", icon: Wrench, description: "Bug fixes and upkeep", color: "bg-cyan/15 border-cyan/40 text-cyan" },
   { id: "STARTUP", label: "Startup", icon: Rocket, description: "Startup engagement", color: "bg-destructive/15 border-destructive/40 text-destructive" },
 ];
 

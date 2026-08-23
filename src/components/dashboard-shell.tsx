@@ -18,6 +18,8 @@ import {
 } from "@/components/page-overflow-menu";
 import { ClientRouteGuard } from "@/components/client-route-guard";
 import { useHideHeaderOnScroll } from "@/hooks/use-hide-header-on-scroll";
+import { useScrollLock } from "@/hooks/use-scroll-lock";
+import { ProofUploadToast } from "@/components/kanban/proof-upload-toast";
 
 const DESKTOP_BREAKPOINT = 1024;
 
@@ -46,6 +48,7 @@ export function DashboardShell({
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [isDesktop, setIsDesktop] = useState(true);
+  useScrollLock(drawerOpen && !isDesktop);
   const pathname = usePathname();
   // The inbox has its own header — hide the global notification bell there so
   // it doesn't float over the conversation.
@@ -55,12 +58,9 @@ export function DashboardShell({
   const onThread =
     pathname.startsWith("/dashboard/messages/") &&
     pathname !== "/dashboard/messages";
-  // The expanded task page is a focus screen with its own back button, so the
-  // navigation (sidebar rail and bottom nav) gets out of the way entirely.
-  const onTaskPage = /^\/dashboard\/projects\/[^/]+\/tasks\/./.test(pathname);
   // Stay mounted on an open thread so the inbox badge can clear live; hide it
   // so the composer still owns the bottom edge.
-  const showBottomNav = !isDesktop && !onTaskPage;
+  const showBottomNav = !isDesktop;
   const bottomNavVisible = showBottomNav && !onThread;
 
   useEffect(() => {
@@ -90,8 +90,8 @@ export function DashboardShell({
 
   const headerActions = (
     <>
-      <NotificationBell currentUserId={currentUserId} />
       <div id={PAGE_HEADER_ACTIONS_SLOT} className="flex items-center gap-xs" />
+      <NotificationBell currentUserId={currentUserId} />
       <PageOverflowMenu />
     </>
   );
@@ -100,7 +100,7 @@ export function DashboardShell({
     <PageOverflowMenuProvider>
       <div className="flex min-h-screen">
       {/* Desktop sidebar — pushes content, not overlay */}
-      {isDesktop && !onTaskPage && (
+      {isDesktop && (
         <div
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
@@ -129,7 +129,7 @@ export function DashboardShell({
       {/* Mobile drawer overlay */}
       {!isDesktop && drawerOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-[500] backdrop-blur-sm"
+          className="fixed inset-0 bg-overlay z-[500] backdrop-blur-sm"
           onClick={() => setDrawerOpen(false)}
           aria-hidden
         />
@@ -156,7 +156,7 @@ export function DashboardShell({
       {/* Main content — pushed by sidebar, rounded corner */}
       <main
         className={`flex-1 min-w-0 bg-background relative z-10 ${
-          isDesktop && !onTaskPage ? "rounded-l-2xl" : ""
+          isDesktop ? "rounded-l-2xl" : ""
         } ${bottomNavVisible && !onInbox ? "app-has-bottom-nav" : ""}`}
       >
         <ClientRouteGuard enabled={isClient} />
@@ -181,6 +181,7 @@ export function DashboardShell({
           onOpenMenu={() => setDrawerOpen(true)}
         />
       )}
+      <ProofUploadToast />
       <NotificationSound currentUserId={currentUserId} soundUrl={notificationSoundUrl} />
       <NotificationSync currentUserId={currentUserId} />
       <PushNotifier />

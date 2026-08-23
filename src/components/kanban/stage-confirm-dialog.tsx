@@ -19,31 +19,22 @@ interface CheckpointConfig {
 }
 
 const CHECKPOINTS: Partial<Record<string, CheckpointConfig>> = {
-  "CLARIFICATION→READY_FOR_DEV": {
-    title: "Taking ownership",
-    message: "By confirming, you acknowledge that you understand the requirements and are taking ownership of this task.",
-    notice: "The task timer will start once you confirm.",
-    confirmLabel: "I Understand",
-    confirmColor: "bg-primary hover:bg-primary/90",
-    requiresEstimate: true,
-    assignToMe: true,
-  },
   "INTERNAL_REVIEW→CLIENT_REVIEW": {
     title: "Move to Client Review",
     message: "By moving this to client review, you confirm that you have tested this task and it is working correctly.",
     confirmLabel: "Confirm Tested",
     confirmColor: "bg-orange hover:bg-orange/80",
   },
-  "INTERNAL_REVIEW→READY_FOR_RELEASE": {
-    title: "Skip Client Review",
+  "INTERNAL_REVIEW→DONE": {
+    title: "Move to Done",
     message: "You are skipping the client approval for this task. By confirming, you acknowledge that you will be held responsible for this action and verify the task is tested and ready for release.",
     notice: "This action bypasses the client review process.",
     confirmLabel: "I Accept Responsibility & Skip",
     confirmColor: "bg-orange hover:bg-orange/80",
   },
-  "CLIENT_REVIEW→READY_FOR_RELEASE": {
-    title: "Move to Ready for Release",
-    message: "By moving this to Ready for Release, you confirm that you have reviewed and approved the work.",
+  "CLIENT_REVIEW→DONE": {
+    title: "Approve & Complete",
+    message: "By moving this to Done, you confirm that you have reviewed and approved the work.",
     confirmLabel: "Approve",
     confirmColor: "bg-success hover:bg-success/80",
   },
@@ -101,7 +92,7 @@ export function StageConfirmDialog({
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onCancel} />
+      <div className="absolute inset-0 bg-overlay" onClick={onCancel} />
       <div className="relative bg-card border border-border rounded-xl shadow-2xl max-w-lg w-full mx-4 p-5">
         <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-surface/60 p-3">
           <div
@@ -126,11 +117,11 @@ export function StageConfirmDialog({
               <div className="flex min-w-0 flex-wrap items-center gap-2 text-s">
                 {currentAssigneeName ? (
                   <span className="inline-flex min-w-0 max-w-full items-center gap-xs rounded-full bg-muted/60 py-0.5 ps-0.5 pe-2.5 text-muted-foreground">
-                    <Avatar className="size-5">
+                    <Avatar size="xs">
                       {currentAssigneeAvatar && (
                         <AvatarImage src={currentAssigneeAvatar} alt={currentAssigneeName} />
                       )}
-                      <AvatarFallback className="bg-muted text-xs font-semibold text-muted-foreground">
+                      <AvatarFallback className="bg-muted font-semibold text-muted-foreground">
                         {currentAssigneeName.slice(0, 1).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
@@ -143,9 +134,9 @@ export function StageConfirmDialog({
                 )}
                 <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="inline-flex min-w-0 max-w-full items-center gap-xs rounded-full bg-primary/15 py-0.5 ps-0.5 pe-2.5 font-medium text-primary">
-                  <Avatar className="size-5">
+                  <Avatar size="xs">
                     {meAvatar && <AvatarImage src={meAvatar} alt={me} />}
-                    <AvatarFallback className="bg-primary text-xs font-bold text-primary-foreground">
+                    <AvatarFallback className="bg-primary font-bold text-primary-foreground">
                       {me.slice(0, 1).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>

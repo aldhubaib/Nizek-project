@@ -109,9 +109,9 @@ export function RecordBadge({
         tone === "good" &&
           "text-success bg-success/15 border-success/30",
         tone === "warn" && "text-orange bg-orange/15 border-orange/30",
-        tone === "info" && "text-sky-400 bg-sky-500/15 border-sky-500/30",
+        tone === "info" && "text-sky bg-sky/15 border-sky/30",
         tone === "note" &&
-          "text-violet-400 bg-violet-500/15 border-violet-500/30",
+          "text-violet bg-violet/15 border-violet/30",
         tone === "neutral" && "text-muted-foreground bg-muted/40 border-border",
       )}
     >

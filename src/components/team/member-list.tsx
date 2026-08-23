@@ -9,8 +9,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Trash2, Shield, RefreshCw, X, Clock, Mail, UserPlus, Users, AlertTriangle, ArrowRightLeft } from "lucide-react";
+import { Trash2, Shield, RefreshCw, X, Clock, Mail, UserPlus, Users, AlertTriangle, ArrowRightLeft, Film } from "lucide-react";
 import { removeMember, updateMemberRole, resendInvitation, cancelInvitation, updateMemberInvitePerms } from "@/actions/project";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { outlineBadge } from "@/lib/task-label";
 
 interface WorkspaceRole {
   id: string;
@@ -28,6 +30,7 @@ interface Member {
   projectRole: WorkspaceRole | null;
   canInviteMembers: boolean;
   canInviteClients: boolean;
+  canBypassProof: boolean;
   user: {
     id: string;
     name: string | null;
@@ -77,6 +80,9 @@ export function MemberList({
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [transferState, setTransferState] = useState<TransferState | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [permOverrides, setPermOverrides] = useState<
+    Record<string, Partial<Pick<Member, "canInviteMembers" | "canInviteClients" | "canBypassProof">>>
+  >({});
 
   async function handleRoleChange(memberId: string, roleId: string) {
     try {
@@ -153,10 +159,12 @@ export function MemberList({
     }
   }
 
-  async function handleToggleInvitePerm(memberId: string, field: "canInviteMembers" | "canInviteClients", value: boolean) {
+  async function handleToggleInvitePerm(memberId: string, field: "canInviteMembers" | "canInviteClients" | "canBypassProof", value: boolean) {
+    setPermOverrides((prev) => ({ ...prev, [memberId]: { ...prev[memberId], [field]: value } }));
     try {
       await updateMemberInvitePerms({ projectId, memberId, [field]: value });
     } catch (err) {
+      setPermOverrides((prev) => ({ ...prev, [memberId]: { ...prev[memberId], [field]: !value } }));
       console.error(err);
     }
   }
@@ -170,7 +178,7 @@ export function MemberList({
   return (
     <div className="space-y-6">
       {transferState && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm">
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
@@ -308,25 +316,28 @@ export function MemberList({
                   </SelectContent>
                 </Select>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
-                  <Shield className="w-3 h-3" strokeWidth={1.5} />
-                  {roleName}
-                </span>
+                <StatusBadge config={outlineBadge(roleName, "text-muted-foreground", "border-border")} icon={Shield} />
               )}
 
               {isAdmin && !isSelf && (
                 <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border/50">
                   <InviteToggle
-                    checked={member.canInviteMembers}
+                    checked={permOverrides[member.id]?.canInviteMembers ?? member.canInviteMembers}
                     onChange={(v) => handleToggleInvitePerm(member.id, "canInviteMembers", v)}
                     icon={<Users className="w-3 h-3" strokeWidth={1.5} />}
                     label="Members"
                   />
                   <InviteToggle
-                    checked={member.canInviteClients}
+                    checked={permOverrides[member.id]?.canInviteClients ?? member.canInviteClients}
                     onChange={(v) => handleToggleInvitePerm(member.id, "canInviteClients", v)}
                     icon={<UserPlus className="w-3 h-3" strokeWidth={1.5} />}
                     label="Clients"
+                  />
+                  <InviteToggle
+                    checked={permOverrides[member.id]?.canBypassProof ?? member.canBypassProof}
+                    onChange={(v) => handleToggleInvitePerm(member.id, "canBypassProof", v)}
+                    icon={<Film className="w-3 h-3" strokeWidth={1.5} />}
+                    label="Bypass"
                   />
                 </div>
               )}
@@ -364,14 +375,9 @@ export function MemberList({
                         </p>
                         <div className="flex items-center gap-xs mt-0.5">
                           {expired ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-destructive/15 text-destructive border border-destructive/20 px-1.5 py-0.5 text-xs font-semibold">
-                              Expired
-                            </span>
+                            <StatusBadge config={outlineBadge("Expired", "text-destructive", "border-destructive/30")} />
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-orange/15 text-orange border border-orange/20 px-1.5 py-0.5 text-xs font-semibold">
-                              <Clock className="w-2.5 h-2.5" />
-                              Waiting
-                            </span>
+                            <StatusBadge config={outlineBadge("Waiting", "text-orange", "border-orange/30")} icon={Clock} />
                           )}
                           <span className="text-xs text-muted-foreground/50">
                             {new Date(inv.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
@@ -393,10 +399,7 @@ export function MemberList({
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
-                      <Shield className="w-3 h-3" strokeWidth={1.5} />
-                      {roleName}
-                    </span>
+                    <StatusBadge config={outlineBadge(roleName, "text-muted-foreground", "border-border")} icon={Shield} />
                     {isAdmin && (
                       <Button
                         variant="ghost"

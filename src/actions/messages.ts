@@ -35,6 +35,12 @@ import {
   noteActivityPreview,
   type NoteActivityPayload,
 } from "@/lib/note-activity-payload";
+import {
+  decodeProofBypassPayload,
+  isProofBypassMessage,
+  proofBypassPreview,
+  type ProofBypassPayload,
+} from "@/lib/proof-bypass-payload";
 import { plainTextExcerpt } from "@/lib/html-annotate";
 import { ALL_MENTION_ID, ALL_MENTION_NAME } from "@/lib/mentions";
 import {
@@ -106,6 +112,8 @@ function inboxPreview(body: string): string {
   if (note?.comment) return note.comment;
   const task = decodeTaskCommentPayload(body);
   if (task?.comment) return task.comment;
+  const bypass = decodeProofBypassPayload(body);
+  if (bypass) return proofBypassPreview(bypass);
   return toDisplayBody(body) || "📎 Attachment";
 }
 
@@ -123,6 +131,9 @@ function mapDeadlineReminderMessage<T extends { kind: string; body: string; auth
   const noteActivity = isNoteActivityMessage(c.kind)
     ? decodeNoteActivityPayload(c.body)
     : null;
+  const proofBypass = isProofBypassMessage(c.kind)
+    ? decodeProofBypassPayload(c.body)
+    : null;
   const highlight = noteComment ?? taskComment;
   return {
     authorId: isBot ? NIZEK_BOT_AUTHOR_ID : c.authorId,
@@ -135,12 +146,15 @@ function mapDeadlineReminderMessage<T extends { kind: string; body: string; auth
           ? highlight.comment
           : noteActivity
             ? noteActivityPreview(noteActivity)
-            : toDisplayBody(c.body),
+            : proofBypass
+              ? proofBypassPreview(proofBypass)
+              : toDisplayBody(c.body),
     mentions: isBot && payload ? [ALL_MENTION_NAME] : parseMentionNames(c.body),
     deadlineReminder: payload,
     noteComment,
     taskComment,
     noteActivity,
+    proofBypass,
   };
 }
 
@@ -200,6 +214,7 @@ export type MessageDTO = {
   noteComment?: NoteCommentPayload | null;
   taskComment?: TaskCommentPayload | null;
   noteActivity?: NoteActivityPayload | null;
+  proofBypass?: ProofBypassPayload | null;
 };
 
 type AttachmentInput = {
@@ -315,6 +330,7 @@ export type ThreadMessage = {
   noteComment?: NoteCommentPayload | null;
   taskComment?: TaskCommentPayload | null;
   noteActivity?: NoteActivityPayload | null;
+  proofBypass?: ProofBypassPayload | null;
   important: boolean;
 };
 
@@ -454,6 +470,7 @@ export async function getThreadMessages(input: {
       noteComment: mapped.noteComment,
       taskComment: mapped.taskComment,
       noteActivity: mapped.noteActivity,
+      proofBypass: mapped.proofBypass,
       important: importantIds.has(c.id),
     };
   });
@@ -1026,12 +1043,17 @@ export async function sendMessage(
     const noteActivityPayload = isNoteActivityMessage(message.kind)
       ? decodeNoteActivityPayload(body)
       : null;
+    const proofBypassPayload = isProofBypassMessage(message.kind)
+      ? decodeProofBypassPayload(body)
+      : null;
     const highlightPayload = noteCommentPayload ?? taskCommentPayload;
     const display = highlightPayload
       ? highlightPayload.comment
       : noteActivityPayload
         ? noteActivityPreview(noteActivityPayload)
-        : toDisplayBody(body);
+        : proofBypassPayload
+          ? proofBypassPreview(proofBypassPayload)
+          : toDisplayBody(body);
     const previewText =
       (noteCommentPayload
         ? noteCommentPreview(noteCommentPayload)
@@ -1039,7 +1061,9 @@ export async function sendMessage(
           ? taskCommentPreview(taskCommentPayload)
           : noteActivityPayload
             ? noteActivityPreview(noteActivityPayload)
-            : display) || (attachments.length > 0 ? `📎 ${attachments[0].name}` : "");
+            : proofBypassPayload
+              ? proofBypassPreview(proofBypassPayload)
+              : display) || (attachments.length > 0 ? `📎 ${attachments[0].name}` : "");
     const preview =
       previewText.length > 80 ? previewText.slice(0, 80) + "…" : previewText;
 
@@ -1100,6 +1124,7 @@ export async function sendMessage(
       noteComment: noteCommentPayload,
       taskComment: taskCommentPayload,
       noteActivity: noteActivityPayload,
+      proofBypass: proofBypassPayload,
     };
 
     // Recipients + notification (mention-driven; DMs notify all participants).
@@ -1611,6 +1636,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         OR: [
           { noteCommentThread: { isNot: null } },
           { taskHighlightThread: { isNot: null } },
+          { messages: { some: { kind: "proof_bypass" } } },
         ],
         participants: { some: { memberId: user.id } },
       },
@@ -1711,25 +1737,26 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
     const name = note?.title ?? task?.title ?? c.title ?? (isTask ? "Task comment" : "Note comment");
     const notePayload = last ? decodeNoteCommentPayload(last.body) : null;
     const taskPayload = last ? decodeTaskCommentPayload(last.body) : null;
+    const bypassPayload = last ? decodeProofBypassPayload(last.body) : null;
+    const isBypass = Boolean(bypassPayload) && !note && !task;
     const lastBody = notePayload
       ? notePayload.comment
       : taskPayload
         ? taskPayload.comment
-        : last
-          ? inboxPreview(last.body)
-          : "";
+        : bypassPayload
+          ? proofBypassPreview(bypassPayload)
+          : last
+            ? inboxPreview(last.body)
+            : "";
     const peer = c.participants.find((p) => p.memberId !== user.id);
-    const projectName = note?.project.name ?? task?.project.name;
-    const projectId = note?.project.id ?? task?.project.id ?? task?.projectId ?? null;
+    const projectName = note?.project.name ?? task?.project.name ?? bypassPayload?.projectName;
+    const projectId = note?.project.id ?? task?.project.id ?? task?.projectId ?? bypassPayload?.projectId ?? null;
+    const threadLabel = isBypass ? "Video bypass" : isTask ? "Task comment" : "Note comment";
     return {
       id: `conv-${c.id}`,
       kind: "direct" as const,
-      name,
-      subtitle: projectName
-        ? `${projectName} · ${isTask ? "Task comment" : "Note comment"}`
-        : isTask
-          ? "Task comment"
-          : "Note comment",
+      name: isBypass ? (bypassPayload?.taskTitle ?? c.title ?? "Video bypass") : name,
+      subtitle: projectName ? `${projectName} · ${threadLabel}` : threadLabel,
       projectId,
       conversationId: c.id,
       logoUrl: null,

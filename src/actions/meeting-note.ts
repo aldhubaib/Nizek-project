@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireProjectMember, requireProjectRole } from "@/lib/auth";
 import {
   canCreateInStage,
+  canSprint,
   getAdminPermissions,
   getPermissionsFromRole,
 } from "@/lib/permissions";
@@ -16,6 +17,7 @@ import { sendMessage } from "@/actions/messages";
 import { applyStoredAnnotationMarks, plainTextExcerpt, taskMarkTag, wrapFirstPlainText } from "@/lib/html-annotate";
 import { diffNoteParagraphs, encodeContentDiff } from "@/lib/note-content-diff";
 import { encodeNoteActivityBody } from "@/lib/note-activity-payload";
+import { ALL_MENTION_TOKEN } from "@/lib/mentions";
 import {
   ROADMAP_NEXT_FULL_ERROR,
   ROADMAP_NEXT_MAX,
@@ -26,13 +28,14 @@ import {
   type RoadmapStatus,
 } from "@/lib/roadmap-status";
 import { addWorkingDays, parseWorkingDays, startOfLocalDay, parseDateInputValue, toDateInputValue } from "@/lib/working-days";
+import { sprintIdFromPlanningHtml } from "@/lib/sprint-planning-doc";
 
 export async function createMeetingNote(data: {
   projectId: string;
   title: string;
   content: string;
   date: string;
-  noteType?: "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+  noteType?: "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "SPRINT_PLANNING" | "SPRINT_REVIEW" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
   dueDate?: string;
   taskId?: string;
   roadmapStatus?: RoadmapStatus;
@@ -40,6 +43,19 @@ export async function createMeetingNote(data: {
 }) {
   const { user, member } = await requireProjectMember(data.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot create notes");
+
+  if (data.noteType === "SPRINT_PLANNING" || data.noteType === "SPRINT_REVIEW") {
+    const perms =
+      user.systemRole === "ADMIN"
+        ? getAdminPermissions()
+        : getPermissionsFromRole(member.projectRole);
+    if (data.noteType === "SPRINT_PLANNING" && !canSprint(perms, "createPlanning")) {
+      throw new Error("You do not have permission to create sprint planning");
+    }
+    if (data.noteType === "SPRINT_REVIEW" && !canSprint(perms, "end")) {
+      throw new Error("You do not have permission to create a sprint review");
+    }
+  }
 
   const workingDays =
     data.noteType === "DEADLINE" ? parseWorkingDays(data.workingDays) : null;
@@ -104,14 +120,16 @@ export async function createMeetingNote(data: {
   }
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
-  await postNoteActivityToChat({
-    projectId: data.projectId,
-    noteId: note.id,
-    noteTitle: note.title,
-    noteType: note.noteType,
-    action: "created",
-    excerpt: plainTextExcerpt(note.content),
-  });
+  if (note.noteType !== "SPRINT_PLANNING" && note.noteType !== "SPRINT_REVIEW") {
+    await postNoteActivityToChat({
+      projectId: data.projectId,
+      noteId: note.id,
+      noteTitle: note.title,
+      noteType: note.noteType,
+      action: "created",
+      excerpt: plainTextExcerpt(note.content),
+    });
+  }
   return note;
 }
 
@@ -266,6 +284,36 @@ export async function updateMeetingNote(data: {
 
   const { user, member } = await requireProjectMember(note.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot edit notes");
+
+  if (note.noteType === "SPRINT_PLANNING" || note.noteType === "SPRINT_REVIEW") {
+    const perms =
+      user.systemRole === "ADMIN"
+        ? getAdminPermissions()
+        : getPermissionsFromRole(member.projectRole);
+    if (note.noteType === "SPRINT_PLANNING" && !canSprint(perms, "createPlanning")) {
+      throw new Error("You do not have permission to edit sprint planning");
+    }
+    if (note.noteType === "SPRINT_REVIEW" && !canSprint(perms, "end")) {
+      throw new Error("You do not have permission to edit a sprint review");
+    }
+  }
+
+  if (note.noteType === "SPRINT_PLANNING") {
+    const sprintId = sprintIdFromPlanningHtml(data.content ?? note.content);
+    if (sprintId) {
+      const sprint = await prisma.sprint.findUnique({
+        where: { id: sprintId },
+        select: { status: true },
+      });
+      const perms =
+        user.systemRole === "ADMIN"
+          ? getAdminPermissions()
+          : getPermissionsFromRole(member.projectRole);
+      if (sprint && sprint.status !== "PLANNED" && !perms.isAdmin) {
+        throw new Error("Sprint planning is locked after the sprint starts. Only an admin can edit it.");
+      }
+    }
+  }
 
   const historyEntries: { field: string; oldValue: string | null; newValue: string | null; noteId: string; userId: string }[] = [];
 
@@ -538,6 +586,28 @@ export async function getMeetingNote(noteId: string) {
   return next;
 }
 
+async function getSprintTypedNote(
+  projectId: string,
+  sprintId: string,
+  noteType: "SPRINT_PLANNING" | "SPRINT_REVIEW",
+) {
+  await requireProjectMember(projectId);
+  const notes = await prisma.meetingNote.findMany({
+    where: { projectId, noteType },
+    select: { id: true, title: true, content: true },
+    orderBy: { createdAt: "desc" },
+  });
+  return notes.find((n) => n.content.includes(sprintId)) ?? null;
+}
+
+export async function getSprintPlanningNote(projectId: string, sprintId: string) {
+  return getSprintTypedNote(projectId, sprintId, "SPRINT_PLANNING");
+}
+
+export async function getSprintReviewNote(projectId: string, sprintId: string) {
+  return getSprintTypedNote(projectId, sprintId, "SPRINT_REVIEW");
+}
+
 /** Note plus the permissions needed to open it as a full workspace from chat. */
 export async function getNoteWorkspace(noteId: string) {
   const note = await getMeetingNote(noteId);
@@ -579,7 +649,7 @@ export async function getNoteWorkspace(noteId: string) {
     canCreateTask:
       member.role !== "CLIENT" &&
       isActive &&
-      (isSystemAdmin || canCreateInStage(perms, "NEW_REQUEST")),
+      (isSystemAdmin || canCreateInStage(perms, "BACKLOG")),
     allowedTaskTypes,
     activeContractType: activeContract?.contractType ?? null,
     isActive,
@@ -807,18 +877,11 @@ export async function createTaskFromNoteHighlight(data: {
   }
 
   const quote = data.quoteText.trim();
-  const description = [
-    data.description?.trim() || quote,
-    "",
-    `— From note "${note.title}"`,
-  ]
-    .filter((line, i, arr) => !(line === "" && i === arr.length - 1))
-    .join("\n");
 
   const task = await createTask({
     projectId: note.projectId,
     title: data.title.trim(),
-    description,
+    description: data.description?.trim() || undefined,
     priority: data.priority,
     taskType: data.taskType,
     answers: data.answers,
@@ -850,16 +913,36 @@ async function postNoteActivityToChat(payload: {
   noteId: string;
   noteTitle: string;
   noteType: string;
-  action: "created" | "updated";
+  action: "created" | "updated" | "published";
   fields?: string[];
   excerpt?: string;
+  mentionAll?: boolean;
 }) {
+  const encoded = encodeNoteActivityBody(payload);
   const sent = await sendMessage({
     projectId: payload.projectId,
-    body: encodeNoteActivityBody(payload),
+    body: payload.mentionAll ? `${encoded}\n${ALL_MENTION_TOKEN}` : encoded,
     kind: "note_activity",
   });
   if (!sent.ok) {
     console.error("[note activity chat]", sent.error);
   }
+}
+
+export async function announceSprintNoteToChat(options: {
+  projectId: string;
+  sprintId: string;
+  noteType: "SPRINT_PLANNING" | "SPRINT_REVIEW";
+}) {
+  const note = await getSprintTypedNote(options.projectId, options.sprintId, options.noteType);
+  if (!note) return;
+  await postNoteActivityToChat({
+    projectId: options.projectId,
+    noteId: note.id,
+    noteTitle: note.title,
+    noteType: options.noteType,
+    action: "published",
+    excerpt: plainTextExcerpt(note.content),
+    mentionAll: true,
+  });
 }

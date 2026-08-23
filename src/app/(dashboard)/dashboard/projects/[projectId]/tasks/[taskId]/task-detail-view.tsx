@@ -2,87 +2,79 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddButton } from "@/components/add-button";
 import {
   ArrowLeft, Loader2, MessageCircleQuestion, History, MessageSquare,
-  ChevronRight, ChevronDown, Pencil, Check, Clock, Undo2, Gauge, Timer,
-  FileText, Paperclip, X, MoreVertical, Trash2, ExternalLink,
-  CalendarClock,
+  ChevronRight, ChevronLeft, ChevronDown, Pencil, Check, Undo2,
+  FileText, Paperclip, X, MoreVertical, Trash2, Zap, Info, Plus,
 } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
-import { updateTask, moveTask as moveTaskAction, declineTask, deleteTask } from "@/actions/task";
-import { createMeetingNote, getTaskNotes } from "@/actions/meeting-note";
+import { updateTask, moveTask as moveTaskAction, declineTask, deleteTask, assignTaskToMe } from "@/actions/task";
+import { getTaskNotes } from "@/actions/meeting-note";
 import { AttachExistingNoteDialog } from "@/components/project/attach-existing-note-dialog";
-import { TaskRoadmapEditor } from "@/components/project/task-roadmap-editor";
-import { RichTextEditor } from "@/components/rich-text-editor-lazy";
+import { NoteFullScreenCreate, NOTES_CREATE_TYPES } from "@/components/project/note-full-screen-create";
+import { getNoteTypeConfig } from "@/components/project/note-types";
+import { NoteCommentReplyDialog } from "@/components/messages/note-comment-reply-dialog";
 import { formatDistanceToNow } from "date-fns";
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
 import { CommentSection } from "@/components/kanban/comment-section";
-import { TaskDescriptionComments } from "@/components/project/task-description-comments";
-import { LinkedCountPopover } from "@/components/project/linked-count-popover";
-import type { TaskHighlightThreadView } from "@/components/project/task-highlight-popover";
 import { StageConfirmDialog, getCheckpoint } from "@/components/kanban/stage-confirm-dialog";
+import { ProofOfWorkDialog } from "@/components/kanban/proof-of-work-dialog";
 import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
+import { needsProofOfWork } from "@/lib/proof-of-work";
+import { DeclineDialog } from "@/components/kanban/decline-dialog";
 import { projectNoteUrl, isRoadmapNote } from "@/lib/project-note-url";
 import { cn } from "@/lib/utils";
+import { sprintTabForStatus, taskStageBadge } from "@/lib/task-label";
+import { EstimateBadge, TaskTypeBadge } from "@/components/project/sprint-task-row";
+import { SprintStatusControl } from "@/components/project/sprint-status-control";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { CountBadge } from "@/components/ui/count-badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/page-header";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import { markThreadRead } from "@/actions/messages";
 import { closePushBannersByTags } from "@/lib/close-push-banners";
 import { threadPushTag } from "@/lib/notification-read";
 import { updateAppBadge } from "@/lib/app-badge";
+import { computeIsReadyForTransition } from "@/lib/task-readiness";
+import { syncTaskReadiness } from "@/lib/backlog-placement";
 
-const ACCURACY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  WAY_OVER:  { label: "Way Over",  color: "text-destructive",  bg: "bg-destructive/20 border-destructive/40" },
-  OVER:      { label: "Over",      color: "text-orange-400",   bg: "bg-orange-500/20 border-orange-500/40" },
-  ON_TRACK:  { label: "On Track",  color: "text-success",  bg: "bg-success/20 border-success/40" },
-  UNDER:     { label: "Under",     color: "text-primary",     bg: "bg-primary/20 border-primary/40" },
-  WAY_UNDER: { label: "Way Under", color: "text-violet-400",   bg: "bg-violet-500/20 border-violet-500/40" },
-};
-
-function formatEstimate(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h > 0 && m > 0) return `${h}h ${m}m`;
-  if (h > 0) return `${h}h`;
-  return `${m}m`;
-}
-
-function formatDuration(from: Date, to: Date): string {
-  const ms = to.getTime() - from.getTime();
-  if (ms < 0) return "0s";
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  if (days > 0) return `${days}d ${hours % 24}h`;
-  if (hours > 0) return `${hours}h ${minutes % 60}m`;
-  if (minutes > 0) return `${minutes}m`;
-  return `${seconds}s`;
-}
 
 const TASK_TYPE_META: Record<string, { prefix: string; label: string; color: string }> = {
   FEATURE: { prefix: "F", label: "Business Case", color: "text-primary" },
-  ENHANCEMENT: { prefix: "E", label: "Enhancement", color: "text-violet-400" },
+  ENHANCEMENT: { prefix: "E", label: "Enhancement", color: "text-violet" },
   BUG: { prefix: "B", label: "Internal Bug", color: "text-orange" },
   REPORTED_BUG: { prefix: "RB", label: "Reported Bug", color: "text-destructive" },
-  DESIGN: { prefix: "D", label: "Design", color: "text-cyan-400" },
+  DESIGN: { prefix: "D", label: "Design", color: "text-cyan" },
 };
 
-type Stage = "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "READY_FOR_RELEASE" | "DONE";
+type Stage = "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "DONE";
 
-const STAGES: { id: Stage; label: string; color: string }[] = [
-  { id: "NEW_REQUEST", label: "New Request", color: "bg-muted-foreground" },
-  { id: "CLARIFICATION", label: "Clarification", color: "bg-violet-500" },
-  { id: "READY_FOR_DEV", label: "Ready for Dev", color: "bg-primary" },
-  { id: "IN_DEVELOPMENT", label: "In Development", color: "bg-sky-500" },
-  { id: "INTERNAL_REVIEW", label: "Internal Review", color: "bg-orange" },
-  { id: "CLIENT_REVIEW", label: "Client Review", color: "bg-orange-500" },
-  { id: "READY_FOR_RELEASE", label: "Ready for Release", color: "bg-teal-500" },
-  { id: "DONE", label: "Done", color: "bg-success" },
+const STAGES: { id: Stage }[] = [
+  { id: "NEW_REQUEST" },
+  { id: "CLARIFICATION" },
+  { id: "READY_FOR_DEV" },
+  { id: "IN_DEVELOPMENT" },
+  { id: "INTERNAL_REVIEW" },
+  { id: "CLIENT_REVIEW" },
+  { id: "DONE" },
 ];
+
+const ASSIGN_TO_ME_CHECKPOINT = {
+  title: "Taking ownership",
+  message: "By confirming, this task will be assigned to you and you take ownership of it.",
+  confirmLabel: "Assign to Me",
+  confirmColor: "bg-primary hover:bg-primary/90",
+  assignToMe: true,
+} as const;
 
 interface QuestionWithType extends TaskQuestion {
   taskType: string;
@@ -102,11 +94,14 @@ interface TaskData {
   createdAt: string;
   estimatedMinutes?: number | null;
   estimateAccuracy?: string | null;
-}
-
-interface StageLogData {
-  startedAt: Date | null;
-  logs: { stage: string; enteredAt: Date; exitedAt: Date | null }[];
+  sprints: {
+    id: string;
+    name: string;
+    status: string;
+    startDate: string;
+    endDate: string;
+    estimatedMinutes?: number | null;
+  }[];
 }
 
 interface NoteData {
@@ -115,7 +110,7 @@ interface NoteData {
   content: string;
   createdAt: Date;
   noteType?: string;
-  author: { name: string | null };
+  author: { name: string | null; imageUrl?: string | null };
 }
 
 interface Props {
@@ -124,13 +119,14 @@ interface Props {
   projectName: string;
   questions: QuestionWithType[];
   initialAnswers: Record<string, string>;
-  stageLogData: StageLogData;
   initialNotes: NoteData[];
   isAdmin: boolean;
   canSkipClientReview?: boolean;
   canDelete?: boolean;
   initialThreadId?: string | null;
   backToNoteId?: string | null;
+  embedded?: boolean;
+  onClose?: () => void;
 }
 
 export function TaskDetailPage({
@@ -139,13 +135,14 @@ export function TaskDetailPage({
   projectName,
   questions: allQuestions,
   initialAnswers,
-  stageLogData,
   initialNotes,
   isAdmin,
   canSkipClientReview,
   canDelete,
   initialThreadId = null,
   backToNoteId = null,
+  embedded = false,
+  onClose,
 }: Props) {
   const router = useRouter();
   const questions = allQuestions.filter((q) => q.taskType === initialTask.taskType);
@@ -155,7 +152,7 @@ export function TaskDetailPage({
   const [taskStage, setTaskStage] = useState<Stage>(initialTask.stage as Stage);
   const [titleValue, setTitleValue] = useState(initialTask.title);
   const [editingTitle, setEditingTitle] = useState(false);
-  const titleInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const [priorityValue, setPriorityValue] = useState<number | null>(initialTask.priority);
 
   // Questions
@@ -169,6 +166,10 @@ export function TaskDetailPage({
   const [movingStage, setMovingStage] = useState(false);
   const [moveError, setMoveError] = useState<string[] | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showProof, setShowProof] = useState(false);
+  const [showStageDialog, setShowStageDialog] = useState(false);
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [pendingDecline, setPendingDecline] = useState<{ taskId: string; fromStage: Stage; mentionName: string | null; mentionAvatar: string | null } | null>(null);
   const [showDecline, setShowDecline] = useState(false);
   const [declineComment, setDeclineComment] = useState("");
   const [declineFiles, setDeclineFiles] = useState<File[]>([]);
@@ -185,7 +186,6 @@ export function TaskDetailPage({
   const [questionsOpen, setQuestionsOpen] = useState(true);
   const [activityKey, setActivityKey] = useState(0);
   const [commentKey, setCommentKey] = useState(0);
-  const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
   // Opening the task counts as reading its mention notifications — same
@@ -216,22 +216,8 @@ export function TaskDetailPage({
   // Notes + roadmap (same NoteTaskLink; split by noteType)
   const [notes, setNotes] = useState<NoteData[]>(initialNotes);
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
+  const [viewingNote, setViewingNote] = useState<{ id: string; title: string } | null>(null);
   const [attachNoteOpen, setAttachNoteOpen] = useState(false);
-  const [roadmapEditorOpen, setRoadmapEditorOpen] = useState(false);
-  const [attachRoadmapOpen, setAttachRoadmapOpen] = useState(false);
-  const [notesOpen, setNotesOpen] = useState(false);
-  const [roadmapOpen, setRoadmapOpen] = useState(false);
-  const [commentsOpen, setCommentsOpen] = useState(false);
-  const [highlightThreads, setHighlightThreads] = useState<TaskHighlightThreadView[]>([]);
-  const [headerThreadId, setHeaderThreadId] = useState<string | null>(initialThreadId);
-
-  // Time tracking
-  const startedAt = stageLogData.startedAt ? new Date(stageLogData.startedAt).toISOString() : null;
-  const stageLogs = stageLogData.logs.map((l) => ({
-    stage: l.stage,
-    enteredAt: new Date(l.enteredAt).toISOString(),
-    exitedAt: l.exitedAt ? new Date(l.exitedAt).toISOString() : null,
-  }));
 
   const currentStageIndex = STAGES.findIndex((s) => s.id === taskStage);
   const nextStage = currentStageIndex < STAGES.length - 1 ? STAGES[currentStageIndex + 1] : null;
@@ -271,7 +257,8 @@ export function TaskDetailPage({
     setDeleting(true);
     try {
       await deleteTask(initialTask.id);
-      router.push(`/dashboard/projects/${projectId}`);
+      if (onClose) onClose();
+      else router.push(`/dashboard/projects/${projectId}`);
     } catch (err) {
       alert((err as Error).message);
       setDeleting(false);
@@ -280,19 +267,18 @@ export function TaskDetailPage({
 
   async function handleAdminStageChange(stage: Stage) {
     if (stage === taskStage || movingStage) return;
+    if (needsProofOfWork(taskStage, stage)) {
+      setShowAdminStages(false);
+      setShowProof(true);
+      return;
+    }
     setShowAdminStages(false);
     setMovingStage(true);
     setMoveError(null);
     try {
       const result = await moveTaskAction({ taskId: initialTask.id, stage, order: initialTask.order });
       if (!result.success) {
-        const msg = result.error ?? "";
-        if (msg.startsWith("WIP_LIMIT:")) {
-          const max = msg.replace("WIP_LIMIT:", "");
-          setMoveError([`Pipeline limit reached — this project allows up to ${max} active tasks across Ready for Dev, In Development, and Internal Review. Move an existing task past Internal Review before adding another.`]);
-        } else {
-          setMoveError([msg || "Failed to change stage"]);
-        }
+        setMoveError([result.error || "Failed to change stage"]);
         return;
       }
       setTaskStage(stage);
@@ -336,6 +322,7 @@ export function TaskDetailPage({
     setAnswers(updated);
     answersRef.current = updated;
     setEditingAnswers((prev) => ({ ...prev, [questionId]: true }));
+    syncTaskReadiness(initialTask.id, computeIsReadyForTransition(questions, updated));
     debouncedSaveAnswer(questionId, value);
   }
 
@@ -357,6 +344,10 @@ export function TaskDetailPage({
 
   function handleMoveToNext() {
     if (!nextStage || movingStage) return;
+    if (needsProofOfWork(taskStage, nextStage.id)) {
+      setShowProof(true);
+      return;
+    }
     const checkpoint = getCheckpoint(taskStage, nextStage.id);
     if (checkpoint) { setShowConfirm(true); return; }
     executeMove();
@@ -379,9 +370,8 @@ export function TaskDetailPage({
           catch { setMoveError(["Higher priority tasks must be completed first"]); }
         } else if (msg === "ESTIMATE_REQUIRED") {
           setMoveError(["An estimated time is required"]);
-        } else if (msg.startsWith("WIP_LIMIT:")) {
-          const max = msg.replace("WIP_LIMIT:", "");
-          setMoveError([`Pipeline limit reached — up to ${max} active tasks are allowed across Ready for Dev, In Development, and Internal Review. Move an existing task past Internal Review before adding another.`]);
+        } else if (msg === "PROOF_REQUIRED") {
+          setShowProof(true);
         } else {
           setMoveError([msg || "Failed to move task. Please try again."]);
         }
@@ -408,12 +398,12 @@ export function TaskDetailPage({
     setMoveError(null);
     setShowSkipConfirm(false);
     try {
-      const result = await moveTaskAction({ taskId: initialTask.id, stage: "READY_FOR_RELEASE", order: initialTask.order });
+      const result = await moveTaskAction({ taskId: initialTask.id, stage: "DONE", order: initialTask.order });
       if (!result.success) {
         setMoveError([result.error || "Failed to skip. Please try again."]);
         return;
       }
-      setTaskStage("READY_FOR_RELEASE");
+      setTaskStage("DONE");
       setActivityKey((k) => k + 1);
     } catch (err) {
       setMoveError([(err as Error).message || "Failed to skip. Please try again."]);
@@ -463,454 +453,252 @@ export function TaskDetailPage({
   }
 
   const attachedNotes = notes.filter((n) => !isRoadmapNote(n.noteType));
-  const attachedRoadmaps = notes.filter((n) => isRoadmapNote(n.noteType));
+
+  const actionsMenu = (
+    <div className={cn("relative", !embedded && "ms-auto", noteEditorOpen && "hidden")} ref={menuRef}>
+      <button
+        onClick={() => setShowMenu((v) => !v)}
+        disabled={deleting}
+        title="More actions"
+        className="flex items-center justify-center rounded-md border border-border w-7 h-7 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+      >
+        {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MoreVertical className="w-3.5 h-3.5" />}
+      </button>
+      {showMenu && (
+        <div className="absolute top-full right-0 mt-1.5 z-50 rounded-lg border border-border bg-card shadow-xl py-1 min-w-[160px]">
+          <button
+            onClick={() => {
+              setShowMenu(false);
+              setShowHistory(true);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-s font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors text-start"
+          >
+            <History className="w-3.5 h-3.5" />
+            History
+          </button>
+          {canDelete && (
+            <button
+              onClick={handleDeleteTask}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-s font-medium text-destructive hover:bg-destructive/10 transition-colors text-start"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete task
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   return (
-    <div className="min-h-screen">
-      {/* Header */}
+    <div className={embedded ? "min-h-0 flex-1 overflow-y-auto overscroll-contain" : "min-h-screen"}>
+      {embedded ? (
+        <div className="flex justify-end px-app pt-3">{actionsMenu}</div>
+      ) : (
       <PageHeader>
         <button
-          onClick={() =>
+          onClick={() => {
+            if (noteEditorOpen) {
+              setNoteEditorOpen(false);
+              return;
+            }
             router.push(
               backToNoteId
                 ? projectNoteUrl(projectId, backToNoteId)
                 : `/dashboard/projects/${projectId}`,
-            )
-          }
+            );
+          }}
           className="text-muted-foreground hover:text-foreground transition-colors"
-          title={backToNoteId ? "Back to note" : "Back to project"}
-          aria-label={backToNoteId ? "Back to note" : "Back to project"}
+          title={
+            noteEditorOpen
+              ? "Back to task"
+              : backToNoteId
+                ? "Back to note"
+                : "Back to project"
+          }
+          aria-label={
+            noteEditorOpen
+              ? "Back to task"
+              : backToNoteId
+                ? "Back to note"
+                : "Back to project"
+          }
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs text-muted-foreground font-mono truncate">{projectName}</span>
-          <span className="text-xs text-muted-foreground/40">/</span>
-          <span className={cn("text-xs font-semibold", taskTypeMeta.color)}>
-            {taskTypeMeta.prefix}-{String(initialTask.taskNumber).padStart(3, "0")}
-          </span>
-        </div>
-        <button
-          onClick={() => setShowHistory(true)}
-          title="Task history"
-          className="ms-auto flex items-center gap-xs rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-        >
-          <History className="w-3.5 h-3.5" />
-          History
-        </button>
-        {canDelete && (
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setShowMenu((v) => !v)}
-              disabled={deleting}
-              title="More actions"
-              className="flex items-center justify-center rounded-md border border-border w-7 h-7 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-            >
-              {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MoreVertical className="w-3.5 h-3.5" />}
-            </button>
-            {showMenu && (
-              <div className="absolute top-full right-0 mt-1.5 z-50 rounded-lg border border-border bg-card shadow-xl py-1 min-w-[160px]">
-                <button
-                  onClick={handleDeleteTask}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-s font-medium text-destructive hover:bg-destructive/10 transition-colors text-start"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete task
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        <PageBreadcrumb
+          items={[
+            {
+              label: projectName,
+              onClick: () => router.push(`/dashboard/projects/${projectId}`),
+            },
+            {
+              label: `${taskTypeMeta.prefix}-${String(initialTask.taskNumber).padStart(3, "0")}`,
+              className: taskTypeMeta.color,
+              onClick: noteEditorOpen ? () => setNoteEditorOpen(false) : undefined,
+            },
+            ...(noteEditorOpen ? [{ label: "New note" }] : []),
+          ]}
+        />
+        {actionsMenu}
       </PageHeader>
+      )}
 
-      {/* Single-column layout */}
+      {noteEditorOpen ? (
+        <NoteFullScreenCreate
+          projectId={projectId}
+          createTypes={NOTES_CREATE_TYPES}
+          taskId={initialTask.id}
+          onCreated={() => {
+            setNoteEditorOpen(false);
+            void refreshNotes();
+            setActivityKey((k) => k + 1);
+          }}
+        />
+      ) : (
       <div className="max-w-2xl mx-auto px-app py-8 space-y-6">
         {/* Title */}
-        <div>
-          {editingTitle && !isPostClarification ? (
-            <input
-              ref={titleInputRef}
-              value={titleValue}
-              onChange={(e) => setTitleValue(e.target.value)}
-              onBlur={handleTitleSave}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleTitleSave();
-                if (e.key === "Escape") { setTitleValue(initialTask.title); setEditingTitle(false); }
-              }}
-              className="text-m font-bold bg-transparent border-b border-primary outline-none w-full"
-            />
-          ) : (
-            <h1
-              className={cn("text-m font-bold", !isPostClarification && "cursor-text hover:text-primary/80 transition-colors")}
-              onClick={() => !isPostClarification && setEditingTitle(true)}
-            >
-              {titleValue}
-            </h1>
-          )}
-          {(attachedNotes.length > 0 || attachedRoadmaps.length > 0 || highlightThreads.length > 0) && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-s text-muted-foreground/70">
-              {attachedNotes.length > 0 && (
-                <LinkedCountPopover
-                  count={attachedNotes.length}
-                  singular="Note"
-                  plural="Notes"
-                  icon={FileText}
-                  open={notesOpen}
-                  onOpenChange={setNotesOpen}
-                >
-                  {attachedNotes.map((note) => (
-                    <button
-                      key={note.id}
-                      type="button"
-                      onClick={() => {
-                        setNotesOpen(false);
-                        router.push(projectNoteUrl(projectId, note.id, { noteType: note.noteType }));
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-start text-s hover:border-border"
-                    >
-                      <span className="min-w-0 flex-1 truncate">{note.title}</span>
-                      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    </button>
-                  ))}
-                </LinkedCountPopover>
-              )}
-              {attachedRoadmaps.length > 0 && (
-                <LinkedCountPopover
-                  count={attachedRoadmaps.length}
-                  singular="Roadmap item"
-                  plural="Roadmap items"
-                  icon={CalendarClock}
-                  open={roadmapOpen}
-                  onOpenChange={setRoadmapOpen}
-                >
-                  {attachedRoadmaps.map((note) => (
-                    <button
-                      key={note.id}
-                      type="button"
-                      onClick={() => {
-                        setRoadmapOpen(false);
-                        router.push(projectNoteUrl(projectId, note.id, { noteType: note.noteType }));
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-start text-s hover:border-border"
-                    >
-                      <span className="min-w-0 flex-1 truncate">{note.title}</span>
-                      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    </button>
-                  ))}
-                </LinkedCountPopover>
-              )}
-              {(attachedNotes.length > 0 || attachedRoadmaps.length > 0) && highlightThreads.length > 0 && <span>·</span>}
-              {highlightThreads.length > 0 && (
-                <LinkedCountPopover
-                  count={highlightThreads.length}
-                  singular="Comment"
-                  plural="Comments"
-                  icon={MessageSquare}
-                  open={commentsOpen}
-                  onOpenChange={setCommentsOpen}
-                >
-                  {highlightThreads.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      data-note-comment-ui
-                      onClick={() => {
-                        setCommentsOpen(false);
-                        setHeaderThreadId(t.id);
-                      }}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-start text-s transition-colors",
-                        t.understood
-                          ? "border-border/40 text-muted-foreground"
-                          : "border-border/50 hover:border-border",
-                      )}
-                    >
-                      <MessageSquare
-                        className={cn(
-                          "h-3.5 w-3.5 shrink-0",
-                          t.understood ? "text-muted-foreground/50" : "text-orange",
-                        )}
-                      />
-                      <span className={cn("min-w-0 flex-1 truncate italic", t.understood && "opacity-60")}>
-                        {t.quoteText}
-                      </span>
-                      {t.understood ? (
-                        <span className="grid size-5 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
-                          <Check className="h-3 w-3" strokeWidth={3} />
-                        </span>
-                      ) : (
-                        <span className="grid min-w-5 shrink-0 place-items-center rounded-full bg-orange px-1 text-xs font-bold leading-5 text-background">
-                          {t.comments.length}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </LinkedCountPopover>
-              )}
-            </div>
-          )}
-          {initialTask.description && (
-            <div className="mt-3">
-              <TaskDescriptionComments
-                description={initialTask.description}
-                taskId={initialTask.id}
-                projectId={projectId}
-                initialThreadId={headerThreadId}
-                onThreadsChange={setHighlightThreads}
+        <div className="rounded-lg border border-border/50 bg-card px-3 pb-3">
+          <label className="text-s font-semibold text-foreground px-1 py-4 block">Title</label>
+          <div className="group relative rounded-md border border-border bg-field px-3 py-3">
+            {editingTitle && !isPostClarification ? (
+              <textarea
+                ref={titleInputRef}
+                value={titleValue}
+                onChange={(e) => setTitleValue(e.target.value)}
+                onBlur={handleTitleSave}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleTitleSave(); }
+                  if (e.key === "Escape") { setTitleValue(initialTask.title); setEditingTitle(false); }
+                }}
+                rows={1}
+                className="text-m font-bold leading-normal bg-transparent outline-none w-full resize-none overflow-hidden break-words"
+                style={{ fieldSizing: "content" } as React.CSSProperties}
               />
-            </div>
-          )}
-        </div>
-
-        {/* Type, Priority, Assigned To, Created By */}
-        <div className="rounded-xl bg-card border border-border p-5 space-y-5">
-          <div className="grid grid-cols-2 gap-5">
-            <div>
-              <label className="text-s font-semibold text-foreground mb-2 block">Type</label>
-              <span className={cn("inline-flex items-center gap-xs rounded-lg border px-3 py-1.5 text-s font-medium", taskTypeMeta.color,
-                taskTypeMeta.color === "text-primary" ? "bg-primary/15 border-primary/20"
-                : taskTypeMeta.color === "text-violet-400" ? "bg-violet-500/15 border-violet-500/20"
-                : taskTypeMeta.color === "text-orange" ? "bg-orange/15 border-orange/20"
-                : taskTypeMeta.color === "text-destructive" ? "bg-destructive/15 border-destructive/20"
-                : "bg-cyan-500/15 border-cyan-500/20"
-              )}>{taskTypeMeta.label}</span>
-            </div>
-
-            <div>
-              <label className="text-s font-semibold text-foreground mb-2 block">Created By</label>
-              <div className="flex items-center gap-2">
-                {initialTask.createdBy.imageUrl ? (
-                  <img src={initialTask.createdBy.imageUrl} alt="" className="w-6 h-6 rounded-full" />
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground">
-                    {(initialTask.createdBy.name ?? "?")[0]}
-                  </div>
-                )}
-                <span className="text-s text-foreground">{initialTask.createdBy.name ?? "Unknown"}</span>
-              </div>
-            </div>
-          </div>
-
-          {initialTask.assignee && (
-            <div>
-              <label className="text-s font-semibold text-foreground mb-2 block">Assigned To</label>
-              <div className="flex items-center gap-2">
-                {initialTask.assignee.imageUrl ? (
-                  <img src={initialTask.assignee.imageUrl} alt="" className="w-6 h-6 rounded-full" />
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground">
-                    {(initialTask.assignee.name ?? "?")[0]}
-                  </div>
-                )}
-                <span className="text-s text-foreground">{initialTask.assignee.name ?? "Unknown"}</span>
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label className="text-s font-semibold text-foreground mb-2 block">Priority</label>
-            {isPostClarification ? (
-              priorityValue != null ? (
-                <span className={cn(
-                  "inline-flex items-center rounded-md border px-2.5 py-1 text-s font-semibold",
-                  priorityValue >= 9 ? "bg-destructive/20 border-destructive/40 text-destructive"
-                    : priorityValue >= 7 ? "bg-orange-500/20 border-orange-500/40 text-orange-400"
-                    : priorityValue >= 4 ? "bg-primary/20 border-primary/40 text-primary"
-                    : "bg-muted border-border text-foreground"
-                )}>P{priorityValue}</span>
-              ) : <span className="text-s text-muted-foreground/50">No priority</span>
             ) : (
-              <div className="flex flex-wrap gap-xs">
-                <button type="button" onClick={() => handlePrioritySave(null)}
-                  className={cn("h-8 rounded-md border px-3 text-s font-medium transition-colors",
-                    priorityValue == null ? "bg-orange/20 border-orange/40 text-orange" : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
-                  )}>None</button>
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                  <button key={n} type="button" onClick={() => handlePrioritySave(n)}
-                    className={cn("h-8 w-8 rounded-md border text-s font-medium transition-colors",
-                      priorityValue === n
-                        ? n >= 9 ? "bg-destructive/20 border-destructive/40 text-destructive"
-                          : n >= 7 ? "bg-orange-500/20 border-orange-500/40 text-orange-400"
-                          : n >= 4 ? "bg-primary/20 border-primary/40 text-primary"
-                          : "bg-muted border-primary/40 text-foreground"
-                        : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
-                    )}>{n}</button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Status */}
-        <div className="rounded-xl bg-card border border-border p-5">
-          <label className="text-s font-semibold text-foreground mb-3 block">Status</label>
-          <div className="flex items-center gap-2 flex-wrap">
-            {isAdmin ? (
-              <div className="relative" ref={adminStagesRef}>
-                <button
-                  onClick={() => setShowAdminStages(!showAdminStages)}
-                  disabled={movingStage}
-                  className="inline-flex items-center gap-xs rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-primary/15 border-primary/20 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50"
-                >
-                  {movingStage ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <>
-                      <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
-                      {STAGES[currentStageIndex]?.label}
-                      <ChevronDown className="w-3 h-3 ms-0.5" />
-                    </>
-                  )}
-                </button>
-                {showAdminStages && (
-                  <div className="absolute top-full left-0 mt-1.5 z-50 rounded-lg border border-border bg-card shadow-xl py-1 min-w-[180px]">
-                    {STAGES.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => handleAdminStageChange(s.id)}
-                        disabled={s.id === taskStage}
-                        className={cn(
-                          "w-full flex items-center gap-2 px-3 py-1.5 text-s font-medium transition-colors text-start",
-                          s.id === taskStage
-                            ? "text-primary bg-primary/10"
-                            : "text-foreground hover:bg-accent"
-                        )}
-                      >
-                        <span className={cn("w-2 h-2 rounded-full shrink-0", s.color)} />
-                        {s.label}
-                        {s.id === taskStage && <Check className="w-3 h-3 ms-auto text-primary" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <span className="inline-flex items-center gap-xs rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-primary/15 border-primary/20 text-primary">
-                <span className={cn("w-2 h-2 rounded-full", STAGES[currentStageIndex]?.color)} />
-                {STAGES[currentStageIndex]?.label}
-              </span>
-            )}
-            {nextStage && (
               <>
-                <ChevronRight className="w-3 h-3 text-muted-foreground/50" />
-                <button
-                  onClick={handleMoveToNext}
-                  disabled={movingStage}
-                  className="inline-flex items-center gap-xs rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-muted border-border text-muted-foreground hover:bg-accent hover:text-foreground hover:border-primary/30 transition-colors disabled:opacity-50"
-                >
-                  {movingStage ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <>
-                      <span className={cn("w-2 h-2 rounded-full", nextStage.color)} />
-                      {nextStage.label}
-                    </>
-                  )}
-                </button>
+                <h1 className="text-m font-bold leading-normal break-words pe-8">{titleValue}</h1>
+                {!isPostClarification && (
+                  <button
+                    onClick={() => setEditingTitle(true)}
+                    className="absolute top-2 right-2 p-1 rounded-md text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-accent transition-all"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </>
             )}
           </div>
-          {showSkipButton && (
-            <div className="mt-2">
-              <button
-                onClick={handleSkipClientReview}
-                disabled={movingStage}
-                className="inline-flex items-center gap-xs text-xs font-medium text-orange/80 hover:text-orange transition-colors disabled:opacity-50"
-              >
-                <ChevronRight className="w-3 h-3" />
-                Skip Client Review → Ready for Release
-              </button>
+        </div>
+
+        {/* Details */}
+        <div className="rounded-lg border border-border/50 bg-card px-3 pb-3">
+          <div className="flex items-center gap-2 px-1 py-4">
+            <Info className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+            <h3 className="text-s font-semibold">Details</h3>
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between rounded-md border border-border bg-field px-3 py-3">
+              <span className="text-s text-muted-foreground">Type</span>
+              <span title={taskTypeMeta.label}>
+                <TaskTypeBadge taskType={initialTask.taskType} />
+              </span>
             </div>
-          )}
-          {canDecline && (
-            <div className="mt-3">
-              {!showDecline ? (
-                <button
-                  onClick={() => setShowDecline(true)}
-                  className="inline-flex items-center gap-xs text-xs font-medium text-destructive/70 hover:text-destructive transition-colors"
-                >
-                  <Undo2 className="w-3 h-3" />
-                  Decline &amp; return to {declineTargetLabel}
+
+            <div className="flex items-center justify-between rounded-md border border-border bg-field px-3 py-3">
+              <span className="text-s text-muted-foreground">Assigned To</span>
+              {initialTask.assignee ? (
+                <button onClick={() => setShowAssignDialog(true)} className="cursor-pointer">
+                  <Avatar size="sm" title={initialTask.assignee.name ?? "Unknown"}>
+                    <AvatarImage src={initialTask.assignee.imageUrl ?? undefined} alt={initialTask.assignee.name ?? ""} />
+                    <AvatarFallback>{(initialTask.assignee.name ?? "?")[0]}</AvatarFallback>
+                  </Avatar>
                 </button>
               ) : (
-                <div
-                  ref={declinePasteRef}
-                  className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2.5 mt-2"
-                >
-                  <p className="text-xs font-medium text-destructive">Why is this being declined?</p>
-                  <textarea
-                    value={declineComment}
-                    onChange={(e) => setDeclineComment(e.target.value)}
-                    placeholder="Explain what needs to be fixed... Paste screenshots to attach"
-                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-s text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-destructive/50 resize-none"
-                    rows={3}
-                    autoFocus
-                  />
-                  {declineFiles.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {declineFiles.map((f, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 rounded bg-muted/50 px-1.5 py-0.5 text-xs text-foreground/70">
-                          <FileText className="w-2.5 h-2.5" />
-                          <span className="truncate max-w-[80px]">{f.name}</span>
-                          <button onClick={() => setDeclineFiles((prev) => prev.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive">
-                            <X className="w-2.5 h-2.5" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" variant="destructive" onClick={handleDecline} disabled={!declineComment.trim() || declining} className="h-7 text-xs">
-                      {declining ? <Loader2 className="w-3 h-3 animate-spin me-1" /> : <Undo2 className="w-3 h-3 me-1" />}
-                      Decline
-                    </Button>
-                    <button
-                      onClick={() => declineFileRef.current?.click()}
-                      className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                      title="Attach files"
-                    >
-                      <Paperclip className="w-3.5 h-3.5" />
-                    </button>
-                    <input
-                      ref={declineFileRef}
-                      type="file"
-                      multiple
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files) setDeclineFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
-                        e.target.value = "";
-                      }}
-                    />
-                    <Button size="sm" variant="ghost" onClick={() => { setShowDecline(false); setDeclineComment(""); setDeclineFiles([]); }} className="h-7 text-xs">
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
+                <button onClick={() => setShowAssignDialog(true)} className="text-s text-muted-foreground/50 cursor-pointer hover:text-foreground transition-colors">
+                  Unassigned
+                </button>
               )}
             </div>
-          )}
-          {moveError && (
-            <div className="mt-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
-              <p className="text-xs font-medium text-destructive mb-1">Answer these required questions first:</p>
-              <ul className="space-y-0.5">
-                {moveError.map((q, i) => (
-                  <li key={i} className="text-xs text-destructive/80">• {q}</li>
+
+            <div className="flex items-center justify-between rounded-md border border-border bg-field px-3 py-3">
+              <span className="text-s text-muted-foreground">Priority</span>
+              <Select value={priorityValue?.toString() ?? ""} onValueChange={(val) => handlePrioritySave(val === "" ? null : Number(val))}>
+                <SelectTrigger className="h-8 w-auto min-w-[5rem] gap-1 rounded-lg border-border bg-transparent px-2.5 text-s">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                    <SelectItem key={n} value={n.toString()}>P{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border border-border bg-field px-3 py-3">
+              <span className="text-s text-muted-foreground">Current Status</span>
+              {isAdmin ? (
+                <button
+                  onClick={() => setShowStageDialog(true)}
+                  disabled={movingStage}
+                  className="cursor-pointer disabled:opacity-50"
+                >
+                  <StatusBadge
+                    config={taskStageBadge(taskStage)}
+                  />
+                </button>
+              ) : (
+                <StatusBadge
+                  config={taskStageBadge(taskStage)}
+                />
+              )}
+            </div>
+
+          </div>
+        </div>
+
+        {/* Sprints */}
+        <div className="rounded-lg border border-border/50 bg-card px-3 pb-3">
+          <div className="flex items-center gap-2 px-1 py-4">
+            <Zap className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+            <h3 className="text-s font-semibold">Sprints</h3>
+            {initialTask.sprints.length > 0 && (
+              <CountBadge count={initialTask.sprints.length} size="sm" muted />
+            )}
+          </div>
+          {initialTask.sprints.length === 0 ? (
+            <p className="text-s text-muted-foreground/60 px-1 py-2">Not in a sprint</p>
+          ) : (
+            <div className="space-y-1">
+              {initialTask.sprints.map((sprint) => (
+                  <Link
+                    key={sprint.id}
+                    href={`/dashboard/projects/${projectId}?tab=${sprintTabForStatus(sprint.status)}`}
+                    className="flex w-full items-center justify-between rounded-md border border-border bg-field px-3 py-3 hover:border-foreground/40 transition-colors"
+                  >
+                    <p className="text-s font-semibold text-foreground">{sprint.name}</p>
+                    <div className="flex items-center gap-2">
+                      <EstimateBadge minutes={sprint.estimatedMinutes} />
+                      <SprintStatusControl status={sprint.status} endDate={sprint.endDate} />
+                    </div>
+                  </Link>
                 ))}
-              </ul>
             </div>
           )}
         </div>
 
+
         {/* Questions */}
         {questions.length > 0 && (
-          <div className="rounded-xl bg-card border border-border p-5">
-            <button onClick={() => setQuestionsOpen((v) => !v)} className="flex items-center gap-2 w-full text-start">
+          <div className="rounded-lg border border-border/50 bg-card px-3 pb-3">
+            <button onClick={() => setQuestionsOpen((v) => !v)} className="flex items-center gap-2 w-full text-start px-1 py-4">
               <MessageCircleQuestion className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
               <h3 className="text-s font-semibold flex-1">Questions</h3>
               <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", questionsOpen && "rotate-180")} />
             </button>
             {questionsOpen && (
-              <div className="space-y-5 mt-4">
+              <div className="space-y-3">
                 {questions.map((q, i) => {
                   const currentVal = answers[q.id] ?? "";
                   const hasAnswer = !!currentVal.trim();
@@ -918,29 +706,36 @@ export function TaskDetailPage({
                   const isEditing = explicitlyEditing || !hasAnswer;
                   const saveState = savingAnswers[q.id];
                   return (
-                    <div key={q.id} className="relative group">
-                      <QuestionField
-                        question={q}
-                        index={i}
-                        value={answers[q.id] ?? ""}
-                        readonly={isPostClarification || !isEditing}
-                        showRequiredAs="transition"
-                        onChange={(val) => handleAnswerChange(q.id, val)}
-                      />
-                      {!isPostClarification && (
-                        <div className="absolute top-0 right-0 flex items-center gap-1">
-                          {saveState === "saving" && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
-                          {saveState === "saved" && <Check className="w-3 h-3 text-success" />}
-                          {hasAnswer && !isEditing && (
-                            <button
-                              onClick={() => setEditingAnswers((prev) => ({ ...prev, [q.id]: true }))}
-                              className="p-1 rounded-md text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-accent transition-all"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      )}
+                    <div key={q.id} className="relative group space-y-1.5">
+                      <label className="text-s font-medium text-muted-foreground px-1">
+                        {i + 1}. {q.question}
+                        {(q.mandatory || q.required) && <span className="text-destructive ms-0.5">*</span>}
+                      </label>
+                      <div className="relative rounded-md border border-border bg-field px-3 py-3">
+                        {!isPostClarification && (
+                          <div className="absolute top-2 right-2 flex items-center gap-1">
+                            {saveState === "saving" && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+                            {saveState === "saved" && <Check className="w-3 h-3 text-success" />}
+                            {hasAnswer && !isEditing && (
+                              <button
+                                onClick={() => setEditingAnswers((prev) => ({ ...prev, [q.id]: true }))}
+                                className="p-1 rounded-md text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-accent transition-all"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        <QuestionField
+                          question={q}
+                          index={i}
+                          value={answers[q.id] ?? ""}
+                          readonly={isPostClarification || !isEditing}
+                          showRequiredAs="transition"
+                          showLabel={false}
+                          onChange={(val) => handleAnswerChange(q.id, val)}
+                        />
+                      </div>
                     </div>
                   );
                 })}
@@ -949,172 +744,74 @@ export function TaskDetailPage({
           </div>
         )}
 
-        {/* Time Tracking */}
-        <div className="rounded-xl bg-card border border-border p-5">
-          <button onClick={() => setTimeTrackingOpen(!timeTrackingOpen)} className="flex items-center gap-2 w-full text-start">
-            <Clock className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-            <h3 className="text-s font-semibold flex-1">Time Tracking</h3>
-            {initialTask.estimatedMinutes ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums text-foreground">
-                <Timer className="w-3 h-3 text-muted-foreground" />
-                Est {formatEstimate(initialTask.estimatedMinutes)}
-              </span>
-            ) : null}
-            <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", timeTrackingOpen && "rotate-180")} />
-          </button>
-          {timeTrackingOpen && (
-            <div className="mt-4 space-y-3">
-              {startedAt && stageLogs.length > 0 ? (
-                <>
-                  <div className="flex items-center justify-between">
-                    <span className="text-s text-muted-foreground flex items-center gap-xs">
-                      <Clock className="w-3.5 h-3.5" /> Total time
-                    </span>
-                    <span className="text-s font-semibold font-mono tabular-nums">
-                      {formatDuration(new Date(startedAt), new Date())}
-                    </span>
-                  </div>
-                  <div className="border-t border-border/30 pt-3 space-y-2">
-                    {stageLogs
-                      .filter((l) => l.stage !== "NEW_REQUEST" && l.stage !== "CLARIFICATION")
-                      .map((log, i) => {
-                        const entered = new Date(log.enteredAt);
-                        const exited = log.exitedAt ? new Date(log.exitedAt) : new Date();
-                        const stageInfo = STAGES.find((s) => s.id === log.stage);
-                        return (
-                          <div key={i} className="flex items-center justify-between">
-                            <span className="text-s text-muted-foreground flex items-center gap-xs">
-                              <span className={cn("w-2 h-2 rounded-full", stageInfo?.color ?? "bg-muted-foreground")} />
-                              {stageInfo?.label ?? log.stage}
-                              {!log.exitedAt && <span className="text-xs text-primary ms-1">(current)</span>}
-                            </span>
-                            <span className="text-s font-mono tabular-nums text-muted-foreground">
-                              {formatDuration(entered, exited)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-4 text-center">
-                  <Clock className="w-6 h-6 text-muted-foreground/30 mb-1" />
-                  <p className="text-xs text-muted-foreground/60">Tracking starts at Ready for Dev</p>
-                </div>
-              )}
-              {(initialTask.estimatedMinutes || initialTask.estimateAccuracy) && (
-                <div className="border-t border-border/30 pt-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {initialTask.estimatedMinutes && (
-                      <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2.5 py-1 text-s font-semibold text-foreground">
-                        <Timer className="w-3 h-3 text-muted-foreground" /> Est: {formatEstimate(initialTask.estimatedMinutes)}
-                      </span>
-                    )}
-                    {initialTask.estimateAccuracy && ACCURACY_CONFIG[initialTask.estimateAccuracy] && (
-                      <span className={cn("inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-s font-semibold", ACCURACY_CONFIG[initialTask.estimateAccuracy].bg, ACCURACY_CONFIG[initialTask.estimateAccuracy].color)}>
-                        <Gauge className="w-3 h-3" /> {ACCURACY_CONFIG[initialTask.estimateAccuracy].label}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
         {/* Notes */}
-        <div className="rounded-xl bg-card border border-border p-5">
-          <div className="flex items-center justify-between mb-3">
+        <div className="rounded-lg border border-border/50 bg-card px-3 pb-3">
+          <div className="flex items-center justify-between px-1 py-4">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
               <h3 className="text-s font-semibold">Notes</h3>
               {attachedNotes.length > 0 && (
-                <span className="text-xs font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
-                  {attachedNotes.length}
-                </span>
+                <CountBadge count={attachedNotes.length} size="sm" muted />
               )}
             </div>
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onClick={() => setAttachNoteOpen(true)} className="h-7 text-s">
-                Attach
+              <Button size="sm" variant="ghost" onClick={() => setAttachNoteOpen(true)} className="h-7 w-7 p-0" title="Attach existing note">
+                <Paperclip className="h-4 w-4" />
               </Button>
-              <AddButton label="New note" onClick={() => setNoteEditorOpen(true)} />
+              <Button size="sm" variant="ghost" onClick={() => setNoteEditorOpen(true)} className="h-7 w-7 p-0" title="New note">
+                <Plus className="h-4 w-4" />
+              </Button>
             </div>
           </div>
           {attachedNotes.length === 0 ? (
-            <p className="text-s text-muted-foreground/60 py-2">No notes attached</p>
+            <p className="text-s text-muted-foreground/60 px-1 py-2">No notes attached</p>
           ) : (
-            <div className="space-y-2">
-              {attachedNotes.map((note) => (
+            <div className="space-y-1">
+              {attachedNotes.map((note) => {
+                const cfg = getNoteTypeConfig(note.noteType);
+                const TypeIcon = cfg.icon;
+                const authorName = note.author.name ?? "Unknown";
+                const authorInitial = authorName.charAt(0).toUpperCase();
+                return (
                 <button
                   key={note.id}
-                  onClick={() => router.push(projectNoteUrl(projectId, note.id, { noteType: note.noteType }))}
-                  className="w-full text-start rounded-lg border border-border/60 bg-background p-3 hover:border-border transition-colors"
+                  onClick={() => setViewingNote({ id: note.id, title: note.title })}
+                  className="flex w-full items-center justify-between text-start rounded-md border border-border bg-field px-3 py-3 hover:border-foreground/40 transition-colors"
                 >
-                  <div className="flex items-center justify-between">
-                    <p className="text-s font-medium text-primary truncate">{note.title}</p>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap ms-2">
-                      {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">by {note.author.name ?? "Unknown"}</p>
+                  <p className="text-s font-semibold text-foreground truncate">{note.title}</p>
+                  <StatusBadge config={cfg} icon={TypeIcon} />
                 </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Roadmap */}
-        <div className="rounded-xl bg-card border border-border p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <CalendarClock className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-              <h3 className="text-s font-semibold">Roadmap</h3>
-              {attachedRoadmaps.length > 0 && (
-                <span className="text-xs font-medium text-muted-foreground bg-muted rounded-full px-1.5 py-0.5">
-                  {attachedRoadmaps.length}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onClick={() => setAttachRoadmapOpen(true)} className="h-7 text-s">
-                Attach
-              </Button>
-              <AddButton label="New roadmap item" onClick={() => setRoadmapEditorOpen(true)} />
-            </div>
-          </div>
-          {attachedRoadmaps.length === 0 ? (
-            <p className="text-s text-muted-foreground/60 py-2">No roadmap items attached</p>
-          ) : (
-            <div className="space-y-2">
-              {attachedRoadmaps.map((note) => (
-                <button
-                  key={note.id}
-                  onClick={() => router.push(projectNoteUrl(projectId, note.id, { noteType: note.noteType }))}
-                  className="w-full text-start rounded-lg border border-border/60 bg-background p-3 hover:border-border transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="text-s font-medium text-primary truncate">{note.title}</p>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap ms-2">
-                      {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">by {note.author.name ?? "Unknown"}</p>
-                </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
         {/* Comments */}
-        <div className="rounded-xl bg-card border border-border p-5">
-          <div className="flex items-center gap-2 mb-4">
+        <div className="rounded-lg border border-border/50 bg-card px-3 pb-3">
+          <div className="flex items-center gap-2 px-1 py-4">
             <MessageSquare className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
             <h3 className="text-s font-semibold">Comments</h3>
           </div>
           <CommentSection key={`comments-${initialTask.id}-${commentKey}`} taskId={initialTask.id} projectId={projectId} />
         </div>
       </div>
+      )}
+
+      {showProof ? (
+        <ProofOfWorkDialog
+          target={{
+            taskId: initialTask.id,
+            taskTitle: initialTask.title,
+            order: initialTask.order,
+          }}
+          onSubmitted={() => {
+            setShowProof(false);
+            setActivityKey((k) => k + 1);
+          }}
+          onCancel={() => setShowProof(false)}
+        />
+      ) : null}
 
       {/* Stage confirm dialog */}
       {showConfirm && nextStage && (() => {
@@ -1129,7 +826,7 @@ export function TaskDetailPage({
       })()}
 
       {showSkipConfirm && (() => {
-        const checkpoint = getCheckpoint("INTERNAL_REVIEW" as Stage, "READY_FOR_RELEASE" as Stage);
+        const checkpoint = getCheckpoint("INTERNAL_REVIEW" as Stage, "DONE" as Stage);
         return checkpoint ? (
           <StageConfirmDialog
             checkpoint={checkpoint}
@@ -1148,26 +845,18 @@ export function TaskDetailPage({
         />
       )}
 
-      {/* Note editor (full-screen) */}
-      {noteEditorOpen && (
-        <TaskNoteEditor
-          task={initialTask}
-          projectId={projectId}
-          taskTypeMeta={taskTypeMeta}
-          onClose={() => setNoteEditorOpen(false)}
-          onSaved={() => { setNoteEditorOpen(false); refreshNotes(); setActivityKey((k) => k + 1); }}
-        />
-      )}
-
-      {roadmapEditorOpen && (
-        <TaskRoadmapEditor
-          task={initialTask}
-          projectId={projectId}
-          taskTypeMeta={taskTypeMeta}
-          onClose={() => setRoadmapEditorOpen(false)}
-          onSaved={() => { setRoadmapEditorOpen(false); refreshNotes(); setActivityKey((k) => k + 1); }}
-        />
-      )}
+      <NoteCommentReplyDialog
+        open={Boolean(viewingNote)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setViewingNote(null);
+            void refreshNotes();
+          }
+        }}
+        noteId={viewingNote?.id ?? ""}
+        noteTitle={viewingNote?.title ?? ""}
+        projectId={projectId}
+      />
 
       <AttachExistingNoteDialog
         open={attachNoteOpen}
@@ -1178,93 +867,82 @@ export function TaskDetailPage({
         onAttached={() => { refreshNotes(); setActivityKey((k) => k + 1); }}
       />
 
-      <AttachExistingNoteDialog
-        open={attachRoadmapOpen}
-        onClose={() => setAttachRoadmapOpen(false)}
-        projectId={projectId}
-        taskId={initialTask.id}
-        kind="roadmap"
-        onAttached={() => { refreshNotes(); setActivityKey((k) => k + 1); }}
-      />
-    </div>
-  );
-}
+      <Dialog open={showStageDialog} onOpenChange={(open) => { if (!open) setShowStageDialog(false); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Move Task</DialogTitle>
+          </DialogHeader>
 
-function TaskNoteEditor({
-  task,
-  projectId,
-  taskTypeMeta,
-  onClose,
-  onSaved,
-}: {
-  task: TaskData;
-  projectId: string;
-  taskTypeMeta: { prefix: string; label: string; color: string };
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function handleSave() {
-    if (!title.trim()) return;
-    setSaving(true);
-    try {
-      const noteType = task.taskType as "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
-      await createMeetingNote({
-        projectId,
-        title: title.trim(),
-        content,
-        date: new Date().toISOString().split("T")[0],
-        noteType,
-        taskId: task.id,
-      });
-      onSaved();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-[200] bg-background flex flex-col">
-      <div className="flex app-top-bar items-center justify-between px-4 shrink-0 border-b border-border">
-        <div className="flex items-center gap-3">
-          <button onClick={onClose} className="flex items-center gap-2 text-s text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="w-4 h-4" /> Back
-          </button>
-          <span className="text-xs text-muted-foreground/50">|</span>
-          <span className={`text-s font-medium ${taskTypeMeta.color}`}>
-            {taskTypeMeta.prefix}-{String(task.taskNumber).padStart(3, "0")}
-          </span>
-          <span className="text-s text-muted-foreground truncate max-w-[200px]">{task.title}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={handleSave} disabled={saving || !title.trim()}>
-            {saving ? "Saving..." : "Save Note"}
-          </Button>
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-8 sm:px-16 py-10">
-          <div className="mb-6">
-            <span className={`inline-flex items-center gap-xs rounded-full border px-3 py-1 text-xs font-semibold ${taskTypeMeta.color} bg-muted/50 border-border`}>
-              {taskTypeMeta.label} Note
-            </span>
+          <div className="flex items-center gap-2 text-s text-muted-foreground">
+            Current status:
+            <StatusBadge
+              config={taskStageBadge(taskStage)}
+            />
           </div>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Note title..."
-            className="w-full text-m font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-8"
-            autoFocus
-          />
-          <RichTextEditor content={content} onChange={setContent} placeholder="Write your note... (type / for commands)" borderless projectId={projectId} />
-        </div>
-      </div>
+
+          <div className="space-y-2">
+            {nextStage && (
+              <button
+                onClick={() => { handleMoveToNext(); setShowStageDialog(false); }}
+                disabled={movingStage}
+                className="flex w-full items-center gap-3 rounded-md border border-border px-4 py-3 text-s font-medium text-foreground hover:border-success/40 hover:bg-success/5 transition-colors disabled:opacity-50"
+              >
+                <ChevronRight className="w-4 h-4 text-success" />
+                Move Forward
+              </button>
+            )}
+            {canDecline && (
+              <button
+                onClick={() => { setShowStageDialog(false); setPendingDecline({ taskId: initialTask.id, fromStage: taskStage as Stage, mentionName: initialTask.assignee?.name ?? null, mentionAvatar: initialTask.assignee?.imageUrl ?? null }); }}
+                className="flex w-full items-center gap-3 rounded-md border border-border px-4 py-3 text-s font-medium text-foreground hover:border-destructive/40 hover:bg-destructive/5 transition-colors"
+              >
+                <Undo2 className="w-4 h-4 text-destructive" />
+                Decline
+              </button>
+            )}
+          </div>
+
+          {moveError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
+              <p className="text-xs font-medium text-destructive mb-1">Answer these required questions first:</p>
+              <ul className="space-y-0.5">
+                {moveError.map((q, i) => (
+                  <li key={i} className="text-xs text-destructive/80">• {q}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {pendingDecline && (
+        <DeclineDialog
+          fromStage={pendingDecline.fromStage}
+          mentionName={pendingDecline.mentionName}
+          mentionAvatar={pendingDecline.mentionAvatar}
+          onConfirm={async (comment, attachments) => {
+            await declineTask({ taskId: initialTask.id, comment, attachments });
+            setTaskStage(declineTargetStage as Stage);
+            setActivityKey((k) => k + 1);
+            setCommentKey((k) => k + 1);
+            setPendingDecline(null);
+          }}
+          onCancel={() => setPendingDecline(null)}
+        />
+      )}
+
+      {showAssignDialog && (
+        <StageConfirmDialog
+          checkpoint={ASSIGN_TO_ME_CHECKPOINT}
+          currentAssigneeName={initialTask.assignee?.name ?? null}
+          currentAssigneeAvatar={initialTask.assignee?.imageUrl ?? null}
+          onConfirm={() => {
+            setShowAssignDialog(false);
+            assignTaskToMe(initialTask.id).then(() => router.refresh());
+          }}
+          onCancel={() => setShowAssignDialog(false)}
+        />
+      )}
     </div>
   );
 }

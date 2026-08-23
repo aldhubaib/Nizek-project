@@ -1,8 +1,8 @@
 import Link from "next/link";
-import Image from "next/image";
 import type { LucideIcon } from "lucide-react";
 import { ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   NIZEK_BOT_AUTHOR_ID,
   NIZEK_BOT_INITIALS,
@@ -89,7 +89,7 @@ export function ActivityCard({
           {status && theme.pill && (
             <span
               className={cn(
-                "shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold",
+                "shrink-0 rounded-lg border px-2 py-0.5 text-xs font-semibold",
                 theme.pill,
               )}
             >
@@ -136,15 +136,14 @@ function formatTime(iso: string) {
 }
 
 export function NizekBotAvatar({ show }: { show: boolean }) {
-  if (!show) return <div className="w-8 shrink-0" aria-hidden />;
+  if (!show) return <div className="size-8 shrink-0" aria-hidden />;
   return (
-    <div className="w-8 shrink-0 self-start">
-      <div
-        className="grid h-8 w-8 place-items-center rounded-full bg-success text-xs font-bold text-white shadow-sm"
-        aria-hidden
-      >
-        {NIZEK_BOT_INITIALS}
-      </div>
+    <div className="shrink-0 self-start">
+      <Avatar>
+        <AvatarFallback className="bg-success font-bold text-white shadow-sm">
+          {NIZEK_BOT_INITIALS}
+        </AvatarFallback>
+      </Avatar>
     </div>
   );
 }
@@ -184,26 +183,16 @@ export function ChatPostAvatar({
   if (isNizekBotAuthor(authorId) || !authorName?.trim()) {
     return <NizekBotAvatar show={show} />;
   }
-  if (!show) return <div className="w-8 shrink-0" aria-hidden />;
+  if (!show) return <div className="size-8 shrink-0" aria-hidden />;
   const name = authorName.trim();
   return (
-    <div className="w-8 shrink-0 self-start">
-      {authorImageUrl ? (
-        <Image
-          src={authorImageUrl}
-          alt=""
-          width={32}
-          height={32}
-          className="h-8 w-8 rounded-full object-cover"
-        />
-      ) : (
-        <div
-          className="grid h-8 w-8 place-items-center rounded-full bg-primary/20 text-xs font-semibold text-primary"
-          aria-hidden
-        >
+    <div className="shrink-0 self-start">
+      <Avatar>
+        {authorImageUrl && <AvatarImage src={authorImageUrl} alt="" />}
+        <AvatarFallback className="bg-primary/20 font-semibold text-primary">
           {initials(name)}
-        </div>
-      )}
+        </AvatarFallback>
+      </Avatar>
     </div>
   );
 }

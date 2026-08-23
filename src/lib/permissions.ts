@@ -4,6 +4,10 @@ export interface ProjectRolePermissions {
   canModifyTask: boolean;
   canDeleteTask: boolean;
   canDeclineTask: boolean;
+  canCreateSprintPlanning: boolean;
+  canStartSprint: boolean;
+  canEndSprint: boolean;
+  canDeleteSprint: boolean;
   canMoveTask: boolean;
   allowedTransitions: Record<string, string[]>;
   createStages: string[];
@@ -32,9 +36,41 @@ export function canTransition(
   const allowed = permissions.allowedTransitions[fromStage];
   if (!allowed) return false;
   if (allowed.includes(toStage)) return true;
-  // Bugs skip Client Review and go straight to Ready for Release, so being
-  // allowed forward out of Internal Review covers that lane too. Checked here
+  // Bugs skip Client Review and go straight to Done, so being allowed
+  // forward out of Internal Review covers that lane too. Checked here
   // rather than trusting the stored role, which may predate the shortcut.
+  if (
+    fromStage === "INTERNAL_REVIEW" &&
+    toStage === "DONE" &&
+    (allowed.includes("CLIENT_REVIEW") || allowed.includes("READY_FOR_RELEASE"))
+  ) {
+    return true;
+  }
+  // Ready for Release was removed from the board; Client Review now
+  // forwards to Done. Roles that still store the old next-stage still work.
+  if (
+    fromStage === "CLIENT_REVIEW" &&
+    toStage === "DONE" &&
+    allowed.includes("READY_FOR_RELEASE")
+  ) {
+    return true;
+  }
+  // Clarification was removed from the board; Backlog now forwards to
+  // Ready for Dev. Roles that still store the old next-stage still work.
+  if (
+    fromStage === "NEW_REQUEST" &&
+    toStage === "READY_FOR_DEV" &&
+    allowed.includes("CLARIFICATION")
+  ) {
+    return true;
+  }
+  if (
+    fromStage === "READY_FOR_DEV" &&
+    toStage === "NEW_REQUEST" &&
+    allowed.includes("CLARIFICATION")
+  ) {
+    return true;
+  }
   return (
     fromStage === "INTERNAL_REVIEW" &&
     toStage === "READY_FOR_RELEASE" &&
@@ -66,6 +102,10 @@ export function getPermissionsFromRole(role: {
   canModifyTask: boolean;
   canDeleteTask?: boolean;
   canDeclineTask?: boolean;
+  canCreateSprintPlanning?: boolean;
+  canStartSprint?: boolean;
+  canEndSprint?: boolean;
+  canDeleteSprint?: boolean;
   canMoveTask: boolean;
   allowedTransitions?: string | null;
   allowedStages?: string | null;
@@ -77,6 +117,10 @@ export function getPermissionsFromRole(role: {
       canModifyTask: false,
       canDeleteTask: false,
       canDeclineTask: false,
+      canCreateSprintPlanning: false,
+      canStartSprint: false,
+      canEndSprint: false,
+      canDeleteSprint: false,
       canMoveTask: false,
       allowedTransitions: {},
       createStages: [],
@@ -113,6 +157,10 @@ export function getPermissionsFromRole(role: {
     canModifyTask: hasModifyStages || role.canModifyTask,
     canDeleteTask: role.canDeleteTask ?? false,
     canDeclineTask: role.canDeclineTask ?? false,
+    canCreateSprintPlanning: role.canCreateSprintPlanning ?? false,
+    canStartSprint: role.canStartSprint ?? false,
+    canEndSprint: role.canEndSprint ?? false,
+    canDeleteSprint: role.canDeleteSprint ?? false,
     canMoveTask: hasTransitions || role.canMoveTask,
     allowedTransitions: transitions,
     createStages: hasCreateStages ? createStages : (role.canCreateTask ? ALL_STAGE_IDS : []),
@@ -155,9 +203,33 @@ export function getAdminPermissions(): ProjectRolePermissions {
     canModifyTask: true,
     canDeleteTask: true,
     canDeclineTask: true,
+    canCreateSprintPlanning: true,
+    canStartSprint: true,
+    canEndSprint: true,
+    canDeleteSprint: true,
     canMoveTask: true,
     allowedTransitions: {},
     createStages: ALL_STAGE_IDS,
     modifyStages: ALL_STAGE_IDS,
   };
+}
+
+export type SprintAction = "createPlanning" | "start" | "end" | "delete";
+
+export function canSprint(
+  permissions: Pick<
+    ProjectRolePermissions,
+    | "isAdmin"
+    | "canCreateSprintPlanning"
+    | "canStartSprint"
+    | "canEndSprint"
+    | "canDeleteSprint"
+  >,
+  action: SprintAction,
+): boolean {
+  if (permissions.isAdmin) return true;
+  if (action === "createPlanning") return permissions.canCreateSprintPlanning;
+  if (action === "start") return permissions.canStartSprint;
+  if (action === "end") return permissions.canEndSprint;
+  return permissions.canDeleteSprint;
 }

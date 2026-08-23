@@ -10,8 +10,8 @@ import { createPortal } from "react-dom";
  *
  * The bell is fixed to the corner by the dashboard shell, so anything a page
  * draws at the right edge of its own header lands on top of it. The shell keeps
- * a slot next to the bell instead, and a page fills it from wherever the button
- * naturally lives in its markup — the bell first, the page's own controls after.
+ * a slot to the left of the bell instead, and a page fills it from wherever the
+ * button naturally lives in its markup.
  */
 export const PAGE_HEADER_ACTIONS_SLOT = "page-header-actions";
 

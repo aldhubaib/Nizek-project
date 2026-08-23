@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useTransition } from "react";
+import { useState, useEffect, useRef, useCallback, useTransition, type Dispatch, type SetStateAction } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OverflowTabBar, type OverflowTabItem } from "@/components/overflow-tab-bar";
-import { KanbanBoard } from "@/components/kanban/board-lazy";
 import { MeetingNotesTab } from "@/components/project/meeting-notes-tab";
+import { SprintsTab } from "@/components/project/sprints-tab";
+import { CompletedSprintsTab } from "@/components/project/completed-sprints-tab";
+import { BacklogPlanner } from "@/components/project/backlog-planner";
 import { AssetsTab } from "@/components/project/assets-tab";
 import { MemberList } from "@/components/team/member-list";
 import { InviteMemberDialog } from "@/components/team/invite-member-dialog";
@@ -20,6 +22,7 @@ import { getRoles } from "@/actions/role";
 import { getContractPrefixes } from "@/actions/contract-prefix";
 import { getTeams } from "@/actions/team";
 import { listProjectVaultCredentials, type VaultCredentialDTO } from "@/actions/vault";
+import { listSprints, type SprintDTO } from "@/actions/sprint";
 
 import type { TaskQuestion } from "@/components/kanban/question-field";
 import type { KanbanTask } from "@/store/kanban";
@@ -27,7 +30,10 @@ import Link from "next/link";
 import { Users, KeyRound, Settings, Loader2, ArrowLeft, Check } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { outlineBadge } from "@/lib/task-label";
 import { PageHeader } from "@/components/page-header";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 
 const PROJECT_TAB_CLASS =
   "flex-none gap-1 px-2 group-data-horizontal/tabs:after:bottom-0";
@@ -38,6 +44,10 @@ export interface UserPermissions {
   canMoveTask: boolean;
   canDeleteTask: boolean;
   canDeclineTask: boolean;
+  canCreateSprintPlanning: boolean;
+  canStartSprint: boolean;
+  canEndSprint: boolean;
+  canDeleteSprint: boolean;
   canInviteMembers: boolean;
   canInviteClients: boolean;
   allowedStages: string[];
@@ -79,6 +89,7 @@ interface Member {
   roleId: string | null;
   canInviteMembers: boolean;
   canInviteClients: boolean;
+  canBypassProof: boolean;
   projectRole: {
     id: string;
     name: string;
@@ -105,7 +116,7 @@ interface Project {
   contracts: Contract[];
   _count: { tasks: number; meetingNotes: number; assets: number };
   defaultClientReviewerId?: string | null;
-  maxPipelineTasks?: number;
+  internalReviewRoleId?: string | null;
 }
 
 interface NoteHistoryEntry {
@@ -212,22 +223,33 @@ export function ProjectDetailClient({
   const canManageTeam = userPermissions.canInviteMembers || userPermissions.canInviteClients;
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTabState] = useState(searchParams.get("tab") ?? "board");
+  const [activeTab, setActiveTabState] = useState(() => {
+    const tab = searchParams.get("tab") ?? "board";
+    // The Roadmap tab merged into Notes; keep old links working.
+    return tab === "roadmap" ? "notes" : tab;
+  });
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Lazy-loaded tab data
   const [notes, setNotes] = useState<MeetingNote[] | null>(null);
+  const [sprints, setSprints] = useState<SprintDTO[] | null>(null);
   const [assets, setAssets] = useState<Asset[] | null>(null);
   const [teamData, setTeamData] = useState<{ roles: ProjectRole[]; invitations: Invitation[] } | null>(null);
   const [vaultCredentials, setVaultCredentials] = useState<VaultCredentialDTO[] | null>(null);
   const [settingsData, setSettingsData] = useState<{ teams: Team[]; contractPrefixes: ContractPrefixOption[] } | null>(null);
 
   const [loadingNotes, startNotesTransition] = useTransition();
+  const [loadingSprints, startSprintsTransition] = useTransition();
   const [loadingAssets, startAssetsTransition] = useTransition();
   const [loadingTeam, startTeamTransition] = useTransition();
   const [loadingVault, startVaultTransition] = useTransition();
   const [loadingSettings, startSettingsTransition] = useTransition();
   const [noteFullscreen, setNoteFullscreen] = useState(false);
+  const [noteHeader, setNoteHeader] = useState<{
+    crumbs?: string[];
+    title?: string;
+    backLabel?: string;
+  } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const noteBackRef = useRef<(() => void) | null>(null);
 
@@ -239,9 +261,13 @@ export function ProjectDetailClient({
     return () => mq.removeEventListener("change", sync);
   }, []);
 
-  const handleNoteFullscreen = useCallback((open: boolean, goBack?: () => void) => {
+  const handleNoteFullscreen = useCallback((
+    open: boolean,
+    opts?: { goBack?: () => void; crumbs?: string[]; title?: string; backLabel?: string },
+  ) => {
     setNoteFullscreen(open);
-    noteBackRef.current = open && goBack ? goBack : null;
+    noteBackRef.current = open && opts?.goBack ? opts.goBack : null;
+    setNoteHeader(open ? { crumbs: opts?.crumbs, title: opts?.title, backLabel: opts?.backLabel } : null);
   }, []);
 
   const handleNotesChange = useCallback((updater: (prev: MeetingNote[]) => MeetingNote[]) => {
@@ -250,9 +276,7 @@ export function ProjectDetailClient({
 
   useEffect(() => {
     const wantsNotes =
-      activeTab === "notes" ||
-      activeTab === "roadmap" ||
-      Boolean(searchParams.get("noteId"));
+      activeTab === "notes" || Boolean(searchParams.get("noteId"));
     if (wantsNotes && notes === null) {
       startNotesTransition(async () => {
         const data = await getMeetingNotes(project.id);
@@ -262,13 +286,43 @@ export function ProjectDetailClient({
   }, [activeTab, notes, project.id, searchParams]);
 
   useEffect(() => {
+    if (
+      (activeTab === "sprints" || activeTab === "board" || activeTab === "completed") &&
+      sprints === null
+    ) {
+      startSprintsTransition(async () => {
+        setSprints(await listSprints(project.id));
+      });
+    }
+  }, [activeTab, sprints, project.id]);
+
+  const handleSprintsChange: Dispatch<SetStateAction<SprintDTO[]>> = (update) => {
+    setSprints((prev) => {
+      const current = prev ?? [];
+      return typeof update === "function" ? update(current) : update;
+    });
+  };
+
+  useEffect(() => {
+    function onSprintStatusChanged(event: Event) {
+      const next = (event as CustomEvent<SprintDTO>).detail;
+      if (!next?.id) return;
+      setSprints((prev) => {
+        if (!prev) return prev;
+        return prev.map((sprint) => (sprint.id === next.id ? { ...sprint, ...next } : sprint));
+      });
+    }
+    window.addEventListener("sprint-status-changed", onSprintStatusChanged);
+    return () => window.removeEventListener("sprint-status-changed", onSprintStatusChanged);
+  }, []);
+
+  useEffect(() => {
     if (!notes) return;
     const noteId = searchParams.get("noteId");
     if (!noteId) return;
     const note = notes.find((n) => n.id === noteId);
     if (!note) return;
-    const tab = note.noteType === "DEADLINE" ? "roadmap" : "notes";
-    if (activeTab !== tab) setActiveTab(tab);
+    if (activeTab !== "notes") setActiveTab("notes");
   }, [notes, searchParams, activeTab]);
 
   useEffect(() => {
@@ -324,17 +378,13 @@ export function ProjectDetailClient({
     window.history.replaceState(null, "", `?${params.toString()}`);
   }
 
-  const roadmapCount = notes
-    ? notes.filter((n) => n.noteType === "DEADLINE").length
-    : 0;
-  const notesCount = notes
-    ? notes.filter((n) => n.noteType !== "DEADLINE").length
-    : project._count.meetingNotes;
+  const notesCount = notes ? notes.length : project._count.meetingNotes;
   const assetsCount = assets ? assets.length : project._count.assets;
 
   const projectTabs: OverflowTabItem<string>[] = [
-    { id: "board", label: "Board" },
-    { id: "roadmap", label: "Roadmap", count: roadmapCount },
+    { id: "board", label: "Backlog" },
+    { id: "sprints", label: "Active sprint" },
+    { id: "completed", label: "Completed sprints" },
     { id: "notes", label: "Notes", count: notesCount },
     { id: "assets", label: "Assets", count: assetsCount },
   ];
@@ -397,7 +447,9 @@ export function ProjectDetailClient({
         onValueChange={(val) => setActiveTab(val as string)}
         className={cn(
           "w-full min-w-0 gap-0",
-          activeTab === "board" && !noteFullscreen && "lg:h-dvh lg:overflow-hidden",
+          (activeTab === "board" || activeTab === "sprints" || activeTab === "completed") &&
+            !noteFullscreen &&
+            "lg:h-dvh lg:overflow-hidden",
         )}
       >
       <PageHeader hasMenu className="relative w-full min-w-0 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-2">
@@ -407,8 +459,8 @@ export function ProjectDetailClient({
               type="button"
               onClick={() => noteBackRef.current?.()}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              title="Back to notes"
-              aria-label="Back to notes"
+              title={noteHeader?.backLabel ?? "Back"}
+              aria-label={noteHeader?.backLabel ?? "Back"}
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
@@ -435,13 +487,22 @@ export function ProjectDetailClient({
               </span>
             </div>
           )}
-          <h1 className="min-w-0 truncate text-s font-semibold">
-            {project.name}
-          </h1>
+          <PageBreadcrumb
+            items={[
+              {
+                label: project.name,
+                onClick: noteFullscreen ? () => noteBackRef.current?.() : undefined,
+              },
+              ...(noteFullscreen
+                ? (noteHeader?.crumbs ?? (noteHeader?.title ? [noteHeader.title] : [])).map((label, i, arr) => ({
+                    label,
+                    onClick: i < arr.length - 1 ? () => noteBackRef.current?.() : undefined,
+                  }))
+                : []),
+            ]}
+          />
           {!isActive && (
-            <span className="inline-flex items-center rounded-full border border-destructive/20 bg-destructive/15 px-2 py-0.5 text-xs font-semibold text-destructive">
-              Expired
-            </span>
+            <StatusBadge config={outlineBadge("Expired", "text-destructive", "border-destructive/30")} />
           )}
         </div>
         <div
@@ -459,7 +520,8 @@ export function ProjectDetailClient({
           </div>
           <TabsList className="hidden">
             <TabsTrigger value="board" className={PROJECT_TAB_CLASS} />
-            <TabsTrigger value="roadmap" className={PROJECT_TAB_CLASS} />
+            <TabsTrigger value="sprints" className={PROJECT_TAB_CLASS} />
+            <TabsTrigger value="completed" className={PROJECT_TAB_CLASS} />
             <TabsTrigger value="notes" className={PROJECT_TAB_CLASS} />
             <TabsTrigger value="assets" className={PROJECT_TAB_CLASS} />
             {canManageTeam && <TabsTrigger value="team" className={PROJECT_TAB_CLASS} />}
@@ -474,24 +536,69 @@ export function ProjectDetailClient({
           "min-w-0",
           noteFullscreen
             ? "px-0 py-0"
-            : activeTab === "board"
+            : (activeTab === "board" || activeTab === "sprints" || activeTab === "completed")
               ? "flex flex-col px-app pt-4 pb-4 lg:min-h-0 lg:flex-1 lg:pb-0"
               : "px-app py-4",
         )}
       >
           <TabsContent value="board" className="flex min-h-0 flex-1 flex-col">
-            <KanbanBoard
-              initialTasks={tasks as unknown as KanbanTask[]}
-              projectId={project.id}
-              userRole={userRole}
-              userPermissions={userPermissions}
-              isProjectActive={isActive}
-              questions={questions as unknown as (TaskQuestion & { taskType: string })[]}
-              currentUserId={currentUserId}
-              allowedTaskTypes={allowedTaskTypes}
-              activeContractType={activeContractType}
-              maxPipelineTasks={project.maxPipelineTasks}
-            />
+            {activeTab === "board" && (loadingSprints || !sprints ? (
+              <TabSpinner />
+            ) : (
+              <BacklogPlanner
+                projectId={project.id}
+                sprints={sprints}
+                onSprintsChange={handleSprintsChange}
+                initialTasks={tasks as unknown as KanbanTask[]}
+                isProjectActive={isActive}
+                canManage={canEdit}
+                isAdmin={isAdmin}
+                canCreateSprintPlanning={userPermissions.isAdmin || userPermissions.canCreateSprintPlanning}
+                canStartSprint={userPermissions.isAdmin || userPermissions.canStartSprint}
+                canEndSprint={userPermissions.isAdmin || userPermissions.canEndSprint}
+                canDeleteSprint={userPermissions.isAdmin || userPermissions.canDeleteSprint}
+                canCreateTask={userPermissions.isAdmin || (userPermissions.createStages ?? []).includes("NEW_REQUEST")}
+                onFullscreenChange={handleNoteFullscreen}
+                onNoteCreated={(note) => handleNotesChange((prev) => [note as unknown as MeetingNote, ...prev])}
+              />
+            ))}
+          </TabsContent>
+
+          <TabsContent value="sprints" className="flex min-h-0 flex-1 flex-col">
+            {activeTab === "sprints" && (loadingSprints || !sprints ? (
+              <TabSpinner />
+            ) : (
+              <SprintsTab
+                projectId={project.id}
+                sprints={sprints}
+                onSprintsChange={handleSprintsChange}
+                tasks={tasks as unknown as KanbanTask[]}
+                userRole={userRole}
+                userPermissions={userPermissions}
+                isActive={isActive}
+                questions={questions as unknown as (TaskQuestion & { taskType: string })[]}
+                currentUserId={currentUserId}
+                allowedTaskTypes={allowedTaskTypes}
+                activeContractType={activeContractType}
+                canManage={canEdit}
+                onOpenBacklog={() => setActiveTab("board")}
+              />
+            ))}
+          </TabsContent>
+
+          <TabsContent value="completed" className="flex min-h-0 flex-1 flex-col">
+            {activeTab === "completed" && (loadingSprints || !sprints ? (
+              <TabSpinner />
+            ) : (
+              <CompletedSprintsTab
+                projectId={project.id}
+                sprints={sprints}
+                onSprintsChange={handleSprintsChange}
+                initialTasks={tasks as unknown as KanbanTask[]}
+                canManage={userPermissions.isAdmin || userPermissions.canDeleteSprint}
+                isProjectActive={isActive}
+              />
+            ))}
           </TabsContent>
 
           <TabsContent value="notes">
@@ -502,34 +609,16 @@ export function ProjectDetailClient({
                 notes={notes as unknown as MeetingNote[]}
                 projectId={project.id}
                 canEdit={canEdit}
+                isAdmin={isAdmin}
+                canCreateSprintPlanning={userPermissions.isAdmin || userPermissions.canCreateSprintPlanning}
+                canStartSprint={userPermissions.isAdmin || userPermissions.canStartSprint}
+                canEndSprint={userPermissions.isAdmin || userPermissions.canEndSprint}
                 currentUserId={currentUserId}
                 isSystemAdmin={isSystemAdmin}
                 isDeadlineTestProject={isDeadlineTestProject}
                 allowedTaskTypes={allowedTaskTypes ?? []}
                 activeContractType={activeContractType ?? null}
                 isActive={isActive}
-                section="notes"
-                onFullscreenChange={handleNoteFullscreen}
-                onNotesChange={handleNotesChange}
-              />
-            ))}
-          </TabsContent>
-
-          <TabsContent value="roadmap">
-            {activeTab === "roadmap" && (loadingNotes || !notes ? (
-              <TabSpinner />
-            ) : (
-              <MeetingNotesTab
-                notes={notes as unknown as MeetingNote[]}
-                projectId={project.id}
-                canEdit={canEdit}
-                currentUserId={currentUserId}
-                isSystemAdmin={isSystemAdmin}
-                isDeadlineTestProject={isDeadlineTestProject}
-                allowedTaskTypes={allowedTaskTypes ?? []}
-                activeContractType={activeContractType ?? null}
-                isActive={isActive}
-                section="roadmap"
                 onFullscreenChange={handleNoteFullscreen}
                 onNotesChange={handleNotesChange}
               />

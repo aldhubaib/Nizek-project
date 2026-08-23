@@ -88,7 +88,7 @@ describe("buildOwnershipTimeline", () => {
       {
         action: "moved",
         field: "stage",
-        oldValue: "READY_FOR_DEV",
+        oldValue: "CLARIFICATION",
         newValue: "IN_DEVELOPMENT",
         createdAt: "2026-07-03T10:00:00Z",
         user: user("u2", "Ahmed"),
@@ -107,7 +107,7 @@ describe("buildOwnershipTimeline", () => {
     expect(timeline).toHaveLength(4);
     expect(timeline[0].label).toBe("Created the task");
     expect(timeline[1].label).toBe("Assigned to Ahmed");
-    expect(timeline[2].label).toBe("Moved Ready for Dev → In Development");
+    expect(timeline[2].label).toBe("Moved Clarification → In Development");
     expect(timeline[3].label).toBe("Declined at Internal Review");
   });
 

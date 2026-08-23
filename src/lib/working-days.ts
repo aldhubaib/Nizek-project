@@ -17,6 +17,36 @@ export function formatWorkingDays(n: number): string {
   return n === 1 ? "1 effort" : `${n} efforts`;
 }
 
+/** Inclusive working days between two calendar dates (skips Fri–Sat). */
+export function countWorkingDays(from: Date | string, to: Date | string): number {
+  const start = startOfLocalDay(from);
+  const end = startOfLocalDay(to);
+  if (end < start) return 0;
+  let n = 0;
+  const d = new Date(start);
+  while (d <= end) {
+    if (!WEEKEND_DAYS.has(d.getDay())) n += 1;
+    d.setDate(d.getDate() + 1);
+  }
+  return n;
+}
+
+/** Inclusive end date after `days` working days from `from` (skips Fri–Sat). */
+export function endDateForWorkingDays(from: Date | string, days: number): string {
+  if (!Number.isInteger(days) || days < 1 || days > MAX_WORKING_DAYS) {
+    throw new Error("Working days must be a whole number of at least 1.");
+  }
+  const start =
+    typeof from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(from)
+      ? parseDateInputValue(from)
+      : startOfLocalDay(from);
+  const end = new Date(start);
+  while (countWorkingDays(start, end) < days) {
+    end.setDate(end.getDate() + 1);
+  }
+  return toDateInputValue(end);
+}
+
 /** Due date = N working days after `from` (skipping Fri–Sat), at 17:00 local. */
 export function addWorkingDays(from: Date, days: number): Date {
   if (!Number.isInteger(days) || days < 1 || days > MAX_WORKING_DAYS) {

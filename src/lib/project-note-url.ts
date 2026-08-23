@@ -1,5 +1,6 @@
-export function projectNoteTab(noteType?: string | null): "notes" | "roadmap" {
-  return noteType === "DEADLINE" ? "roadmap" : "notes";
+// The Roadmap tab merged into Notes; every note now lives under the Notes tab.
+export function projectNoteTab(_noteType?: string | null): "notes" {
+  return "notes";
 }
 
 export function isRoadmapNote(noteType?: string | null): boolean {

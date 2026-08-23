@@ -1,6 +1,11 @@
-import { cn } from "@/lib/utils";
+import { Avatar, AvatarImage, AvatarFallback, type AvatarSize } from "@/components/ui/avatar";
 
-/** The photo if there is one, the initial if there isn't. */
+const LEGACY_SIZE_MAP: Record<6 | 8 | 14, AvatarSize> = {
+  6: "sm",
+  8: "md",
+  14: "xl",
+};
+
 export function HolderAvatar({
   name,
   photoUrl,
@@ -10,31 +15,12 @@ export function HolderAvatar({
   photoUrl: string | null;
   size?: 6 | 8 | 14;
 }) {
-  const cls =
-    size === 14
-      ? "w-14 h-14 text-m"
-      : size === 6
-        ? "w-6 h-6 text-xs"
-        : "w-8 h-8 text-s";
-
-  if (photoUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={photoUrl}
-        alt=""
-        className={cn(cls, "rounded-full object-cover shrink-0")}
-      />
-    );
-  }
   return (
-    <div
-      className={cn(
-        cls,
-        "rounded-full bg-primary/15 flex items-center justify-center font-semibold text-primary shrink-0",
-      )}
-    >
-      {name.trim()[0]?.toUpperCase() ?? "?"}
-    </div>
+    <Avatar size={LEGACY_SIZE_MAP[size]}>
+      {photoUrl && <AvatarImage src={photoUrl} alt="" />}
+      <AvatarFallback className="bg-primary/15 font-semibold text-primary">
+        {name.trim()[0]?.toUpperCase() ?? "?"}
+      </AvatarFallback>
+    </Avatar>
   );
 }

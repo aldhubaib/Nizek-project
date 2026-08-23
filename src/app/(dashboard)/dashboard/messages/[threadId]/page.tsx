@@ -257,24 +257,19 @@ export default async function ThreadPage({
     notFound();
   }
 
-  // People involved in a project/task thread: project members plus system
-  // admins (who can access every project without being explicit members).
+  // Project / task threads: only people on the project can be mentioned.
   // Skip for client rooms — mentionables are conversation participants only.
   if (target.projectId && !isClientRoom) {
-    const [projectMembers, admins, { user: memberUser, member }] =
+    const [projectMembers, { user: memberUser, member }] =
       await Promise.all([
         prisma.projectMember.findMany({
           where: { projectId: target.projectId },
           select: { user: { select: { id: true, name: true, email: true } } },
         }),
-        prisma.user.findMany({
-          where: { systemRole: "ADMIN" },
-          select: { id: true, name: true, email: true },
-        }),
         requireProjectMember(target.projectId),
       ]);
     const map = new Map<string, { id: string; name: string }>();
-    for (const m of [...projectMembers.map((pm) => pm.user), ...admins]) {
+    for (const m of projectMembers.map((pm) => pm.user)) {
       map.set(m.id, { id: m.id, name: m.name ?? m.email });
       memberNames[m.id] = m.name ?? m.email;
     }

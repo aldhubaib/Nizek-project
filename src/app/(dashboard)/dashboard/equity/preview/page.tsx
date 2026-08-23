@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { canAccessEquity } from "@/lib/equity-access";
 import { getEquityPortfolios } from "@/actions/equity";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageName } from "@/components/page-header";
 import { EquityMenu } from "@/components/equity/equity-menu";
 import {
   AllProjectsTable,
@@ -37,9 +37,7 @@ export default async function EquityPreviewPage() {
         >
           <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
         </Link>
-        <h1 className="text-s font-semibold text-foreground flex-1">
-          Report preview
-        </h1>
+        <PageName className="flex-1">Report preview</PageName>
         <EquityMenu />
       </PageHeader>
 
@@ -47,7 +45,7 @@ export default async function EquityPreviewPage() {
         {/* The report is designed on its own dark sheet, so the preview keeps
             that ground rather than borrowing the dashboard's — otherwise the
             colours are checked against a background they'll never print on. */}
-        <div className="rounded-xl bg-[#0a0a0a] ring-1 ring-white/10 px-8 py-7">
+        <div className="rounded-xl bg-card ring-1 ring-white/10 px-8 py-7">
           <header className="flex items-center justify-between gap-4">
             <Wordmark className="text-3xl" />
             <p className="text-xs text-white/40">

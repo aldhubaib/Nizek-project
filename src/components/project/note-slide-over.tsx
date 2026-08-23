@@ -1,8 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useScrollLock } from "@/hooks/use-scroll-lock";
 
 /**
  * Chat-opened note: full-bleed on mobile, slides in from the right on
@@ -21,17 +23,34 @@ export function NoteSlideOver({
   children: ReactNode;
   className?: string;
 }) {
-  return (
-    <div className="fixed inset-0 z-[200] flex justify-end">
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useScrollLock(mounted);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mounted, onClose]);
+
+  const ui = (
+    <div data-slide-over className="fixed inset-0 z-[200] flex justify-end">
       <button
         type="button"
         aria-label="Close note"
         onClick={onClose}
-        className="absolute inset-0 hidden bg-black/40 lg:block"
+        className="absolute inset-0 hidden bg-overlay lg:block"
       />
       <div
         className={cn(
-          "relative z-10 flex h-full w-full flex-col bg-background shadow-2xl",
+          "relative z-10 flex h-full min-h-0 w-full flex-col overscroll-none bg-background shadow-2xl",
           "animate-in slide-in-from-right duration-200",
           "lg:w-[min(100%,max(45rem,calc(100%-min(24vw,20rem))))] lg:border-s lg:border-border",
           className,
@@ -53,4 +72,7 @@ export function NoteSlideOver({
       </div>
     </div>
   );
+
+  if (!mounted) return null;
+  return createPortal(ui, document.body);
 }

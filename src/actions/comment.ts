@@ -21,14 +21,26 @@ export async function createComment(data: {
 
     const { user } = await requireProjectMember(task.projectId);
 
+    const allowedMentions = data.mentionedUserIds?.length
+      ? new Set(
+          (
+            await prisma.projectMember.findMany({
+              where: { projectId: task.projectId, userId: { in: data.mentionedUserIds } },
+              select: { userId: true },
+            })
+          ).map((m) => m.userId),
+        )
+      : new Set<string>();
+    const mentionedUserIds = (data.mentionedUserIds ?? []).filter((id) => allowedMentions.has(id));
+
     const comment = await prisma.taskComment.create({
       data: {
         content: data.content,
         taskId: data.taskId,
         userId: user.id,
-        ...(data.mentionedUserIds?.length && {
+        ...(mentionedUserIds.length && {
           mentions: {
-            create: data.mentionedUserIds.map((id) => ({ userId: id })),
+            create: mentionedUserIds.map((id) => ({ userId: id })),
           },
         }),
         ...(data.attachments?.length && {
@@ -49,7 +61,7 @@ export async function createComment(data: {
       },
     });
 
-    const mentionRecipients = (data.mentionedUserIds ?? []).filter(
+    const mentionRecipients = mentionedUserIds.filter(
       (id) => id !== user.id,
     );
     if (mentionRecipients.length) {

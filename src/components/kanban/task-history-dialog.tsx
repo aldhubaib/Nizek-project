@@ -8,7 +8,11 @@ import {
 } from "lucide-react";
 import { getTaskActivities } from "@/actions/activity";
 import { getComments } from "@/actions/comment";
+import { getProofHistory, type ProofHistoryItem } from "@/actions/proof-of-work";
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { Avatar as UiAvatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { stageLabel, taskStageBadge, TASK_STAGE_BADGE, TASK_STAGE_DOT, outlineBadge } from "@/lib/task-label";
 
 interface Activity {
   id: string;
@@ -38,53 +42,14 @@ interface Comment {
 
 type FilterMode = "all" | "comments" | "status";
 
-const STAGE_LABEL: Record<string, string> = {
-  NEW_REQUEST: "New Request",
-  CLARIFICATION: "Clarification",
-  READY_FOR_DEV: "Ready for Dev",
-  IN_DEVELOPMENT: "In Development",
-  INTERNAL_REVIEW: "Internal Review",
-  CLIENT_REVIEW: "Client Review",
-  READY_FOR_RELEASE: "Ready for Release",
-  DONE: "Done",
-};
-
-const STAGE_DOT: Record<string, string> = {
-  NEW_REQUEST: "bg-muted-foreground",
-  CLARIFICATION: "bg-violet-500",
-  READY_FOR_DEV: "bg-primary",
-  IN_DEVELOPMENT: "bg-sky-500",
-  INTERNAL_REVIEW: "bg-orange",
-  CLIENT_REVIEW: "bg-orange-500",
-  READY_FOR_RELEASE: "bg-teal-500",
-  DONE: "bg-success",
-};
-
-const STAGE_BADGE: Record<string, string> = {
-  NEW_REQUEST: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
-  CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  READY_FOR_DEV: "bg-primary/10 text-primary border-primary/20",
-  IN_DEVELOPMENT: "bg-sky-500/10 text-sky-400 border-sky-500/20",
-  INTERNAL_REVIEW: "bg-orange/10 text-orange border-orange/20",
-  CLIENT_REVIEW: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  READY_FOR_RELEASE: "bg-teal-500/10 text-teal-400 border-teal-500/20",
-  DONE: "bg-success/10 text-success border-success/20",
-};
-
-function stageBadgeClass(stage: string | null): string {
-  if (!stage) return "bg-muted/60 text-muted-foreground border-border";
-  return STAGE_BADGE[stage] ?? "bg-muted/60 text-muted-foreground border-border";
+function stageBadgeConfig(stage: string | null): { label: string; color: string; bg: string } {
+  return taskStageBadge(stage ?? "");
 }
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"];
 
 function isTransition(a: Activity): boolean {
   return (a.action === "moved" || a.action === "declined") && a.field === "stage";
-}
-
-function stageLabel(val: string | null): string {
-  if (!val) return "—";
-  return STAGE_LABEL[val] ?? val;
 }
 
 function formatDuration(ms: number): string {
@@ -139,6 +104,10 @@ function describeActivity(a: Activity): string {
       return `${name} added a note${a.newValue ? `: ${a.newValue}` : ""}`;
     case "transferred":
       return `${name} removed ${a.oldValue ?? "a member"} → assigned ${a.newValue ?? "another member"}`;
+    case "proof_of_work":
+      return `${name} uploaded proof of work${a.newValue ? `: ${a.newValue}` : ""}`;
+    case "proof_bypass":
+      return `${name} used a bypass (approved by ${a.newValue ?? "a manager"})`;
     default:
       return `${name} ${a.action}`;
   }
@@ -162,15 +131,13 @@ interface TimelineItem {
 }
 
 function Avatar({ user }: { user: { name: string | null; imageUrl: string | null } }) {
-  if (user.imageUrl) {
-    return <img src={user.imageUrl} alt="" className="w-[18px] h-[18px] rounded-full ring-2 ring-card object-cover" />;
-  }
   return (
-    <div className="w-[18px] h-[18px] rounded-full bg-muted ring-2 ring-card flex items-center justify-center">
-      <span className="text-xs font-bold text-muted-foreground">
+    <UiAvatar size="xs" className="ring-2 ring-card">
+      {user.imageUrl && <AvatarImage src={user.imageUrl} alt="" />}
+      <AvatarFallback className="font-bold">
         {user.name?.charAt(0)?.toUpperCase() ?? "?"}
-      </span>
-    </div>
+      </AvatarFallback>
+    </UiAvatar>
   );
 }
 
@@ -183,6 +150,7 @@ interface Props {
 export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [proofs, setProofs] = useState<ProofHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterMode>("all");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -197,12 +165,13 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([getTaskActivities(taskId), getComments(taskId)])
-      .then(([acts, commentRes]) => {
+    Promise.all([getTaskActivities(taskId), getComments(taskId), getProofHistory(taskId)])
+      .then(([acts, commentRes, proofRows]) => {
         setActivities(acts as Activity[]);
         if (commentRes && (commentRes as { success: boolean }).success) {
           setComments((commentRes as unknown as { comments: Comment[] }).comments);
         }
+        setProofs(proofRows);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -256,7 +225,7 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
     }
     if (curStage) bump(curStage, now - lastTransitionTime);
 
-    const orderedStages = Object.keys(STAGE_LABEL).filter((s) => totals.has(s));
+    const orderedStages = Object.keys(TASK_STAGE_BADGE).filter((s) => totals.has(s));
 
     const activityItems: TimelineItem[] = activities.map((a) => ({
       key: `a-${a.id}`,
@@ -325,16 +294,13 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
       <div className="relative bg-card border border-border rounded-xl shadow-2xl max-w-lg w-full mx-4 flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border shrink-0">
           <History className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
           <h3 className="text-s font-semibold">Task History</h3>
-          <span className="ms-auto inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium text-foreground/80">
-            <Clock className="w-3 h-3 text-muted-foreground" />
-            Total {formatDuration(totalMs)}
-          </span>
+          <StatusBadge config={outlineBadge(`Total ${formatDuration(totalMs)}`, "text-foreground/80", "border-border")} icon={Clock} className="ms-auto" />
           <button
             onClick={onClose}
             className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -395,7 +361,7 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
                       : "border-border text-muted-foreground hover:text-foreground hover:bg-accent"
                   )}
                 >
-                  <span className={cn("w-1.5 h-1.5 rounded-full", STAGE_DOT[s] ?? "bg-primary")} />
+                  <span className={cn("w-1.5 h-1.5 rounded-full", TASK_STAGE_DOT[s] ?? "bg-primary")} />
                   {stageLabel(s)}
                 </button>
               ))}
@@ -403,7 +369,7 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
             {selectedTotal && (
               <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
                 <span className="text-xs font-medium text-foreground/80 flex items-center gap-xs">
-                  <span className={cn("w-2 h-2 rounded-full", STAGE_DOT[statusFilter!] ?? "bg-primary")} />
+                  <span className={cn("w-2 h-2 rounded-full", TASK_STAGE_DOT[statusFilter!] ?? "bg-primary")} />
                   Total in {stageLabel(statusFilter)}
                   {statusFilter === currentStage && (
                     <span className="text-xs text-primary">(ongoing)</span>
@@ -420,6 +386,40 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
           </div>
         )}
 
+        {proofs.length > 0 ? (
+          <div className="border-t border-border px-5 py-3">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Proof of work
+            </p>
+            <div className="space-y-3">
+              {proofs.map((proof) => (
+                <div key={proof.id} className="rounded-lg border border-border/60 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    {proof.createdBy.name ?? "Someone"} · {timeAgo(proof.createdAt)}
+                    {proof.bypassedBy
+                      ? ` · bypassed by ${proof.bypassedBy.name ?? "a manager"}`
+                      : ""}
+                  </p>
+                  {proof.videos.length > 0 ? (
+                    <div className="mt-2 space-y-2">
+                      {proof.videos.map((video) => (
+                        <video
+                          key={video.id}
+                          src={video.url}
+                          controls
+                          className="max-h-48 w-full rounded-md bg-black"
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-s text-muted-foreground">No videos — bypass approved.</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {/* Body */}
         <div className="overflow-y-auto px-5 py-4">
           {loading ? (
@@ -434,18 +434,15 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
                 {showCurrentStage && (
                   <div className="relative flex gap-3 py-2">
                     <div className="relative z-10 mt-0.5 shrink-0">
-                      <span className={cn("block w-[18px] h-[18px] rounded-full ring-2 ring-card", STAGE_DOT[currentStage!] ?? "bg-primary")}>
-                        <span className={cn("block w-full h-full rounded-full animate-ping opacity-40", STAGE_DOT[currentStage!] ?? "bg-primary")} />
+                      <span className={cn("block w-[18px] h-[18px] rounded-full ring-2 ring-card", TASK_STAGE_DOT[currentStage!] ?? "bg-primary")}>
+                        <span className={cn("block w-full h-full rounded-full animate-ping opacity-40", TASK_STAGE_DOT[currentStage!] ?? "bg-primary")} />
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-s font-medium text-foreground leading-snug">
                         Currently in {stageLabel(currentStage)}
                       </p>
-                      <span className="inline-flex items-center gap-1 mt-1 rounded-full bg-primary/10 border border-primary/20 px-1.5 py-0.5 text-xs font-medium text-primary">
-                        <Clock className="w-2.5 h-2.5" />
-                        {formatDuration(currentStageMs)} · ongoing
-                      </span>
+                      <StatusBadge config={outlineBadge(`${formatDuration(currentStageMs)} · ongoing`, "text-primary", "border-primary/30")} icon={Clock} className="mt-1" />
                     </div>
                   </div>
                 )}
@@ -494,14 +491,8 @@ function ActivityRow({
           <span className="text-xs text-muted-foreground/50 me-0.5">{timeAgo(activity.createdAt)}</span>
           {durationMs !== undefined && durationStage && (
             <>
-              <span className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium border tabular-nums", stageBadgeClass(durationStage))}>
-                <Clock className="w-2.5 h-2.5" />
-                {formatDuration(durationMs)}
-              </span>
-              <span className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium border", stageBadgeClass(durationStage))}>
-                <span className={cn("w-1.5 h-1.5 rounded-full", STAGE_DOT[durationStage] ?? "bg-current")} />
-                {stageLabel(durationStage)}
-              </span>
+              <StatusBadge config={{ ...stageBadgeConfig(durationStage), label: formatDuration(durationMs) }} icon={Clock} className="tabular-nums" />
+              <StatusBadge config={stageBadgeConfig(durationStage)} dot dotColor={TASK_STAGE_DOT[durationStage]} />
             </>
           )}
         </div>
@@ -522,7 +513,7 @@ function CommentRow({ comment }: { comment: Comment }) {
           <span className="text-xs text-muted-foreground/50">commented</span>
           <span className="text-xs text-muted-foreground/50">· {timeAgo(comment.createdAt)}</span>
         </div>
-        <div className="mt-1 rounded-lg border border-border/60 bg-background px-2.5 py-2">
+        <div className="mt-1 rounded-lg border border-border/60 bg-field px-2.5 py-2">
           <p className="text-s text-foreground/80 leading-relaxed whitespace-pre-wrap break-words">
             {comment.content}
           </p>

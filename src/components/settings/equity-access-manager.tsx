@@ -101,9 +101,9 @@ export function EquityAccessManager() {
                   className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4"
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-s">
-                    <Avatar className="h-7 w-7 shrink-0">
+                    <Avatar size="sm">
                       <AvatarImage src={m.imageUrl ?? undefined} />
-                      <AvatarFallback className="text-xs">
+                      <AvatarFallback>
                         {(m.name ?? m.email).slice(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>

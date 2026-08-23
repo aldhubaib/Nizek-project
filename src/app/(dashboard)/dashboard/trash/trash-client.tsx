@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { PageHeaderActions } from "@/components/page-header-actions";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageName } from "@/components/page-header";
 import {
   emptyTrash,
   purgeTrashItem,
@@ -53,9 +53,7 @@ export function TrashClient({
           className="w-4 h-4 text-muted-foreground shrink-0"
           strokeWidth={1.5}
         />
-        <h1 className="text-s font-semibold text-foreground flex-1 truncate">
-          Trash
-        </h1>
+        <PageName className="flex-1">Trash</PageName>
         {isAdmin && items.length > 0 && (
           <PageHeaderActions>
             <Button

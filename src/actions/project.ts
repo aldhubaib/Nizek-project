@@ -155,9 +155,17 @@ export async function updateProject(data: {
   // null clears the team ("No team"); undefined leaves it unchanged.
   teamId?: string | null;
   defaultClientReviewerId?: string | null;
-  maxPipelineTasks?: number;
+  internalReviewRoleId?: string | null;
 }) {
   await requireProjectRole(data.projectId, ["ADMIN", "PROJECT_MANAGER"]);
+
+  if (data.internalReviewRoleId) {
+    const role = await prisma.projectRole.findUnique({
+      where: { id: data.internalReviewRoleId },
+      select: { id: true },
+    });
+    if (!role) throw new Error("That role does not exist");
+  }
 
   const updated = await prisma.project.update({
     where: { id: data.projectId },
@@ -167,9 +175,7 @@ export async function updateProject(data: {
       ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
       ...(data.teamId !== undefined && { teamId: data.teamId || null }),
       ...(data.defaultClientReviewerId !== undefined && { defaultClientReviewerId: data.defaultClientReviewerId }),
-      ...(data.maxPipelineTasks !== undefined && {
-        maxPipelineTasks: Math.max(1, Math.min(50, Math.round(data.maxPipelineTasks))),
-      }),
+      ...(data.internalReviewRoleId !== undefined && { internalReviewRoleId: data.internalReviewRoleId }),
     },
   });
 
@@ -788,6 +794,7 @@ export async function updateMemberInvitePerms(data: {
   memberId: string;
   canInviteMembers?: boolean;
   canInviteClients?: boolean;
+  canBypassProof?: boolean;
 }) {
   const { user, member } = await requireProjectMember(data.projectId);
   const isSystemAdmin = user.systemRole === "ADMIN";
@@ -799,6 +806,7 @@ export async function updateMemberInvitePerms(data: {
     data: {
       ...(data.canInviteMembers !== undefined && { canInviteMembers: data.canInviteMembers }),
       ...(data.canInviteClients !== undefined && { canInviteClients: data.canInviteClients }),
+      ...(data.canBypassProof !== undefined && { canBypassProof: data.canBypassProof }),
     },
   });
 

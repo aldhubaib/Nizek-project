@@ -6,8 +6,14 @@ import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { FileText, Trash2, Gavel, Clock, History, Pencil, Sparkles, Wrench, Bug, AlertCircle, Palette, ExternalLink, CalendarClock, CheckCircle2, Circle, Link2, MessageSquare, Check, CheckSquare, MessageCircleQuestion, MoreVertical } from "lucide-react";
-import { createMeetingNote, updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete, updateRoadmapStatus, getMeetingNote } from "@/actions/meeting-note";
+import { FileText, Trash2, Clock, History, Pencil, ExternalLink, CalendarClock, CheckCircle2, Circle, Link2, MessageSquare, Check, CheckSquare, MoreVertical } from "lucide-react";
+import { NoteFullScreenCreate } from "@/components/project/note-full-screen-create";
+import { ALL_NOTE_TYPES, NOTE_TYPE_CONFIG, NOTES_CREATE_TYPES, type NoteType } from "@/components/project/note-types";
+import { OverflowTabBar } from "@/components/overflow-tab-bar";
+import { updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete, getMeetingNote } from "@/actions/meeting-note";
+import { getSprintPlanningTasks } from "@/actions/sprint";
+import { useNoteAutosave } from "@/components/project/use-note-autosave";
+import { documentDateIsoFromPlanningHtml, sprintIdFromPlanningHtml, sprintPlanningIsLocked, type SprintPlanningTask } from "@/lib/sprint-planning-doc";
 import { getNoteCommentThreads } from "@/actions/note-comment";
 import { testDeadlineReminder } from "@/actions/deadline-reminder";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
@@ -18,7 +24,7 @@ import { CreateTaskFromNoteDialog } from "@/components/project/create-task-from-
 import { PageHeaderActions } from "@/components/page-header-actions";
 import { AddButton } from "@/components/add-button";
 import { PageOverflowItems } from "@/components/page-overflow-menu";
-import { taskCode } from "@/lib/task-label";
+import { taskCode, outlineBadge } from "@/lib/task-label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,37 +48,23 @@ import {
 import { NoteHistoryDialog } from "@/components/project/note-history-dialog";
 import { NoteSlideOver } from "@/components/project/note-slide-over";
 import { LinkedCountPopover } from "@/components/project/linked-count-popover";
-import { RoadmapBoard } from "@/components/project/roadmap-board";
 import { RoadmapWarningDialog } from "@/components/project/roadmap-commit-dialog";
 import { normalizeRoadmapStatus, roadmapAllowsCreateTask, roadmapScheduleError, type RoadmapStatus } from "@/lib/roadmap-status";
-import { addWorkingDays, formatWorkingDays, parseWorkingDays, startOfLocalDay, toDateInputValue } from "@/lib/working-days";
+import { formatWorkingDays, parseWorkingDays, toDateInputValue } from "@/lib/working-days";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 
-type NoteType = "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
-
-const NOTE_TYPE_CONFIG: Record<NoteType, { label: string; color: string; bgColor: string; icon: typeof FileText }> = {
-  MEETING_NOTE: { label: "Meeting Note", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: FileText },
-  DECISION: { label: "Decision", color: "text-orange", bgColor: "bg-orange/10 border-orange/20", icon: Gavel },
-  CLARIFICATION: { label: "Clarification", color: "text-sky-400", bgColor: "bg-sky-500/10 border-sky-500/20", icon: MessageCircleQuestion },
-  DEADLINE: { label: "Roadmap", color: "text-destructive", bgColor: "bg-destructive/10 border-destructive/20", icon: CalendarClock },
-  FEATURE: { label: "Business Case", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: Sparkles },
-  ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bgColor: "bg-violet-500/10 border-violet-500/20", icon: Wrench },
-  BUG: { label: "Bug", color: "text-orange", bgColor: "bg-orange/10 border-orange/20", icon: Bug },
-  REPORTED_BUG: { label: "Reported Bug", color: "text-destructive", bgColor: "bg-destructive/10 border-destructive/20", icon: AlertCircle },
-  DESIGN: { label: "Design", color: "text-cyan-400", bgColor: "bg-cyan-500/10 border-cyan-500/20", icon: Palette },
-};
-
 function getDeadlineStatus(dueDate: Date | string, completedAt: Date | string | null) {
-  if (completedAt) return { label: "Completed", color: "text-success", bg: "bg-success/10 border-success/20" };
+  if (completedAt) return outlineBadge("Completed", "text-success", "border-success/30");
   const now = new Date();
   const due = new Date(dueDate);
   const diffMs = due.getTime() - now.getTime();
   const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  if (days < 0) return { label: `${Math.abs(days)}d overdue`, color: "text-destructive", bg: "bg-destructive/10 border-destructive/20" };
-  if (days === 0) return { label: "Due today", color: "text-orange", bg: "bg-orange/10 border-orange/20" };
-  if (days === 1) return { label: "Due tomorrow", color: "text-orange", bg: "bg-orange/10 border-orange/20" };
-  if (days <= 7) return { label: `${days}d left`, color: "text-orange", bg: "bg-orange/10 border-orange/20" };
-  return { label: `${days}d left`, color: "text-muted-foreground", bg: "bg-muted border-border" };
+  if (days < 0) return outlineBadge(`${Math.abs(days)}d overdue`, "text-destructive", "border-destructive/30");
+  if (days === 0) return outlineBadge("Due today", "text-orange", "border-orange/30");
+  if (days === 1) return outlineBadge("Due tomorrow", "text-orange", "border-orange/30");
+  if (days <= 7) return outlineBadge(`${days}d left`, "text-orange", "border-orange/30");
+  return outlineBadge(`${days}d left`, "text-muted-foreground", "border-border");
 }
 
 interface NoteHistoryEntry {
@@ -212,45 +204,42 @@ interface Props {
   notes: MeetingNote[];
   projectId: string;
   canEdit: boolean;
+  isAdmin?: boolean;
+  canCreateSprintPlanning?: boolean;
+  canStartSprint?: boolean;
+  canEndSprint?: boolean;
   currentUserId?: string;
   isSystemAdmin?: boolean;
   isDeadlineTestProject?: boolean;
   allowedTaskTypes?: string[];
   activeContractType?: string | null;
   isActive?: boolean;
-  section?: "notes" | "roadmap";
-  onFullscreenChange?: (open: boolean, goBack?: () => void) => void;
+  onFullscreenChange?: (
+    open: boolean,
+    opts?: { goBack?: () => void; crumbs?: string[]; title?: string; backLabel?: string },
+  ) => void;
   onNotesChange?: (updater: (prev: MeetingNote[]) => MeetingNote[]) => void;
 }
-
-const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "CLARIFICATION", "DEADLINE", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
-const NOTES_CREATE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "CLARIFICATION"];
-const ROADMAP_CREATE_TYPES: NoteType[] = ["DEADLINE"];
 
 export function MeetingNotesTab({
   notes: allNotes,
   projectId,
   canEdit,
+  isAdmin = false,
+  canCreateSprintPlanning = false,
+  canStartSprint = false,
+  canEndSprint = false,
   currentUserId,
   isSystemAdmin = false,
   isDeadlineTestProject = false,
   allowedTaskTypes = [],
   activeContractType = null,
   isActive = true,
-  section = "notes",
   onFullscreenChange,
   onNotesChange,
 }: Props) {
-  const isRoadmap = section === "roadmap";
-  const tabKey = isRoadmap ? "roadmap" : "notes";
-  const createTypes = isRoadmap ? ROADMAP_CREATE_TYPES : NOTES_CREATE_TYPES;
-  const notes = useMemo(
-    () =>
-      allNotes.filter((n) =>
-        isRoadmap ? n.noteType === "DEADLINE" : n.noteType !== "DEADLINE",
-      ),
-    [allNotes, isRoadmap],
-  );
+  const createTypes = NOTES_CREATE_TYPES;
+  const notes = allNotes;
   const [filter, setFilter] = useState<NoteType | "ALL">("ALL");
   const [view, setView] = useState<"list" | "create" | "detail">("list");
   const [selectedNote, setSelectedNote] = useState<MeetingNote | null>(null);
@@ -272,14 +261,26 @@ export function MeetingNotesTab({
     setSelectedNote(null);
     params.delete("noteId");
     params.delete("threadId");
-    params.set("tab", tabKey);
+    params.set("tab", "notes");
     const qs = params.toString();
     window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
-  }, [tabKey]);
+  }, []);
 
   useEffect(() => {
-    onFullscreenChange?.(view !== "list", view !== "list" ? goBack : undefined);
-  }, [view, goBack, onFullscreenChange]);
+    if (view === "list") {
+      onFullscreenChange?.(false);
+      return;
+    }
+    const title =
+      view === "create"
+        ? (createTypes.length === 1 ? NOTE_TYPE_CONFIG[createTypes[0]].label : "New note")
+        : selectedNote?.title || "Note";
+    onFullscreenChange?.(true, {
+      goBack,
+      crumbs: ["Notes", title],
+      backLabel: "Back to notes",
+    });
+  }, [view, goBack, onFullscreenChange, selectedNote, createTypes]);
 
   useEffect(() => {
     return () => onFullscreenChange?.(false);
@@ -324,76 +325,6 @@ export function MeetingNotesTab({
     );
   }, [setNotes, notes]);
 
-  const moveStatus = useCallback(async (noteId: string, status: RoadmapStatus) => {
-    const note =
-      notes.find((n) => n.id === noteId) ??
-      (selectedNote?.id === noteId ? selectedNote : null);
-    const blocked = roadmapScheduleError(status, note?.dueDate, note?.workingDays);
-    if (blocked) {
-      setScheduleError(blocked);
-      return;
-    }
-    setScheduleError(null);
-    const prevStatus = note?.roadmapStatus;
-    const prevCompleted = note?.completedAt ?? null;
-    const prevDue = note?.dueDate ?? null;
-    const prevStarted = note?.startedAt ?? null;
-    const completedAt = status === "SHIPPED" ? new Date() : null;
-    const optimisticStart =
-      status === "PROGRESS" ? startOfLocalDay() : undefined;
-    const optimisticDue =
-      status === "PROGRESS" && note?.workingDays != null
-        ? addWorkingDays(optimisticStart ?? startOfLocalDay(), note.workingDays)
-        : undefined;
-    setNotes((prev) =>
-      prev.map((n) =>
-        n.id === noteId
-          ? {
-              ...n,
-              roadmapStatus: status,
-              completedAt: status === "SHIPPED" ? n.completedAt ?? completedAt : null,
-              ...(optimisticDue ? { dueDate: optimisticDue } : {}),
-              ...(optimisticStart ? { startedAt: optimisticStart } : {}),
-            }
-          : n,
-      ),
-    );
-    setSelectedNote((prev) =>
-      prev?.id === noteId
-        ? {
-            ...prev,
-            roadmapStatus: status,
-            completedAt: status === "SHIPPED" ? prev.completedAt ?? completedAt : null,
-            ...(optimisticDue ? { dueDate: optimisticDue } : {}),
-            ...(optimisticStart ? { startedAt: optimisticStart } : {}),
-          }
-        : prev,
-    );
-    try {
-      const result = await updateRoadmapStatus(noteId, status);
-      setNotes((prev) =>
-        prev.map((n) => (n.id === noteId ? { ...n, ...result } : n)),
-      );
-      setSelectedNote((prev) =>
-        prev?.id === noteId ? { ...prev, ...result } : prev,
-      );
-    } catch (err) {
-      setNotes((prev) =>
-        prev.map((n) =>
-          n.id === noteId
-            ? { ...n, roadmapStatus: prevStatus, completedAt: prevCompleted, dueDate: prevDue, startedAt: prevStarted }
-            : n,
-        ),
-      );
-      setSelectedNote((prev) =>
-        prev?.id === noteId
-          ? { ...prev, roadmapStatus: prevStatus, completedAt: prevCompleted, dueDate: prevDue, startedAt: prevStarted }
-          : prev,
-      );
-      setScheduleError(err instanceof Error ? err.message : "Could not update status");
-    }
-  }, [setNotes, notes, selectedNote]);
-
   const filtered = useMemo(() => {
     if (filter === "ALL") return notes;
     return notes.filter((n) => n.noteType === filter);
@@ -409,7 +340,7 @@ export function MeetingNotesTab({
     setSelectedNote(note);
     setView("detail");
     const params = new URLSearchParams(window.location.search);
-    params.set("tab", tabKey);
+    params.set("tab", "notes");
     params.set("noteId", note.id);
     params.delete("threadId");
     window.history.replaceState(null, "", `?${params.toString()}`);
@@ -425,7 +356,7 @@ export function MeetingNotesTab({
         projectId={projectId}
         createTypes={createTypes}
         onCreated={(note) => {
-          setNotes((prev) => [note, ...prev]);
+          setNotes((prev) => [note as unknown as MeetingNote, ...prev]);
           goBack();
         }}
       />
@@ -438,6 +369,10 @@ export function MeetingNotesTab({
         note={selectedNote}
         projectId={projectId}
         canEdit={canEdit}
+        isAdmin={isAdmin}
+        canCreateSprintPlanning={canCreateSprintPlanning}
+        canStartSprint={canStartSprint}
+        canEndSprint={canEndSprint}
         isSystemAdmin={isSystemAdmin}
         isDeadlineTestProject={isDeadlineTestProject}
         allowedTaskTypes={allowedTaskTypes}
@@ -459,71 +394,40 @@ export function MeetingNotesTab({
 
   return (
     <div>
-      {isRoadmap ? (
-        <>
-        <RoadmapBoard
-          notes={notes}
-          canEdit={canEdit}
-          currentUserId={currentUserId}
-          onOpen={(id) => {
-            const note = notes.find((n) => n.id === id);
-            if (note) openNote(note);
-          }}
-          onCreate={openCreate}
-          onMove={moveStatus}
-          onBlocked={setScheduleError}
-          onToggleComplete={(id) => void toggleComplete(id)}
-        />
-        {scheduleError ? (
-          <RoadmapWarningDialog
-            heading="Cannot move item"
-            message={scheduleError}
-            onDismiss={() => setScheduleError(null)}
-          />
-        ) : null}
-        </>
-      ) : (
       <>
-      {(usedTypes.length > 1 || canEdit) && (
-      <div className="mb-4 flex items-center gap-2">
-        {usedTypes.length > 1 && (
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg bg-muted/50 p-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {(["ALL" as const, ...usedTypes]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setFilter(t)}
-                className={cn(
-                  "shrink-0 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
-                  filter === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {t === "ALL" ? "All" : NOTE_TYPE_CONFIG[t].label}
-                <span className="ms-1 text-xs opacity-60">
-                  {t === "ALL" ? notes.length : notes.filter((n) => n.noteType === t).length}
-                </span>
-              </button>
-            ))}
-        </div>
-        )}
-        {canEdit && (
+      {canEdit && (
+        <PageHeaderActions>
           <AddButton
-            className="ms-auto"
-            label={isRoadmap ? "New roadmap item" : "New note"}
+            className="size-7 rounded-md"
+            label="New note"
             onClick={() => openCreate()}
           />
-        )}
+        </PageHeaderActions>
+      )}
+      {usedTypes.length > 1 && (
+      <div className="mb-4 flex items-center gap-2">
+          <OverflowTabBar
+            className="min-w-0 flex-1"
+            justify="start"
+            items={[
+              { id: "ALL" as const, label: "All", count: notes.length },
+              ...usedTypes.map((t) => ({
+                id: t,
+                label: NOTE_TYPE_CONFIG[t].label,
+                count: notes.filter((n) => n.noteType === t).length,
+              })),
+            ]}
+            value={filter}
+            onChange={setFilter}
+          />
       </div>
       )}
 
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-          {isRoadmap ? (
-            <CalendarClock className="h-10 w-10 mb-2 opacity-40" />
-          ) : (
-            <FileText className="h-10 w-10 mb-2 opacity-40" />
-          )}
+          <FileText className="h-10 w-10 mb-2 opacity-40" />
           <p className="text-s">
-            {filter === "ALL" ? (isRoadmap ? "Nothing on the roadmap yet" : "No notes yet") : `No ${NOTE_TYPE_CONFIG[filter].label.toLowerCase()}s yet`}
+            {filter === "ALL" ? "No notes yet" : `No ${NOTE_TYPE_CONFIG[filter].label.toLowerCase()}s yet`}
           </p>
         </div>
       ) : (
@@ -568,10 +472,7 @@ export function MeetingNotesTab({
               >
                 <div className="flex items-start justify-between gap-2">
                   {cfg && (
-                    <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs font-semibold ${cfg.bgColor} ${cfg.color}`}>
-                      <Icon className="h-2.5 w-2.5" />
-                      {cfg.label}
-                    </span>
+                    <StatusBadge config={cfg} icon={Icon} />
                   )}
                   {isDeadline && canEdit && (
                     <button
@@ -597,16 +498,19 @@ export function MeetingNotesTab({
                 </h3>
 
                 {(deadlineStatus || note.workingDays != null) && (
-                  <span className={`mt-2 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${deadlineStatus?.bg ?? "bg-muted border-border"} ${deadlineStatus?.color ?? "text-muted-foreground"}`}>
-                    {[
-                      deadlineStatus?.label,
-                      note.dueDate ? format(new Date(note.dueDate), "MMM d, yyyy") : null,
-                      note.startedAt ? `Started ${format(new Date(note.startedAt), "MMM d")}` : null,
-                      note.workingDays != null ? formatWorkingDays(note.workingDays) : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
+                  <StatusBadge
+                    config={{
+                      label: [
+                        deadlineStatus?.label,
+                        note.dueDate ? format(new Date(note.dueDate), "MMM d, yyyy") : null,
+                        note.startedAt ? `Started ${format(new Date(note.startedAt), "MMM d")}` : null,
+                        note.workingDays != null ? formatWorkingDays(note.workingDays) : null,
+                      ].filter(Boolean).join(" · "),
+                      color: deadlineStatus?.color ?? "text-muted-foreground",
+                      bg: deadlineStatus?.bg ?? "bg-muted border-border",
+                    }}
+                    className="mt-2 w-fit"
+                  />
                 )}
 
                 {bodyPreview ? (
@@ -658,143 +562,14 @@ export function MeetingNotesTab({
           })}
         </div>
       )}
+      {scheduleError ? (
+        <RoadmapWarningDialog
+          heading="Cannot complete item"
+          message={scheduleError}
+          onDismiss={() => setScheduleError(null)}
+        />
+      ) : null}
       </>
-      )}
-    </div>
-  );
-}
-
-/* ─── Full-screen create ─── */
-
-function NoteFullScreenCreate({
-  projectId,
-  onCreated,
-  createTypes,
-}: {
-  projectId: string;
-  onCreated: (note: MeetingNote) => void;
-  createTypes: NoteType[];
-}) {
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [noteType, setNoteType] = useState<NoteType | null>(createTypes.length === 1 ? createTypes[0] : null);
-  const [saving, setSaving] = useState(false);
-  const [typeError, setTypeError] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  const isDeadline = noteType === "DEADLINE";
-
-  async function handleSave() {
-    if (!noteType) { setTypeError(true); return; }
-    if (!title.trim()) return;
-    setTypeError(false);
-    setSaveError(null);
-    setSaving(true);
-    try {
-      const created = await createMeetingNote({
-        projectId,
-        title: title.trim(),
-        content,
-        date,
-        noteType,
-        ...(isDeadline ? { roadmapStatus: "PLANNED" } : {}),
-      });
-      const full = await getMeetingNote(created.id);
-      onCreated(full as unknown as MeetingNote);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Could not save");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const placeholders: Record<string, string> = {
-    DECISION: "What was decided?",
-    CLARIFICATION: "What needs clarifying?",
-    DEADLINE: "Title...",
-    MEETING_NOTE: "Meeting title...",
-  };
-
-  const editorPlaceholders: Record<string, string> = {
-    DECISION: "Describe the context, options considered, and rationale... (type / for commands)",
-    CLARIFICATION: "Capture the questions, missing details, and what was clarified... (type / for commands)",
-    DEADLINE: "Notes about this item... (type / for commands)",
-    MEETING_NOTE: "Write your meeting notes here... (type / for commands)",
-  };
-
-  return (
-    <div className="flex flex-col bg-background">
-      <PageHeaderActions>
-        <Button size="sm" onClick={handleSave} disabled={saving || !title.trim()}>
-          {saving ? "Saving..." : "Save"}
-        </Button>
-      </PageHeaderActions>
-
-      <div className="max-w-4xl mx-auto w-full px-app py-6 sm:py-10 lg:px-16">
-          {/* Type picker */}
-          {createTypes.length > 1 && (
-          <div className="mb-6">
-            <div className="flex gap-2 flex-wrap">
-              {createTypes.map((id) => {
-                const cfg = NOTE_TYPE_CONFIG[id];
-                const Icon = cfg.icon;
-                const isActive = noteType === id;
-                return (
-                  <button
-                    key={id}
-                    onClick={() => { setNoteType(id); setTypeError(false); }}
-                    className={cn(
-                      "flex items-center gap-2 rounded-lg border px-4 py-2 text-s font-medium transition-colors",
-                      isActive ? `${cfg.bgColor} ${cfg.color}` : "border-border text-muted-foreground hover:border-muted-foreground/40",
-                      typeError && !isActive && "border-destructive/40"
-                    )}
-                  >
-                    <Icon className="w-4 h-4" strokeWidth={1.5} />
-                    {cfg.label}
-                  </button>
-                );
-              })}
-            </div>
-            {typeError && <p className="text-xs text-destructive mt-1.5">Please select a type</p>}
-          </div>
-          )}
-
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder={placeholders[noteType ?? "MEETING_NOTE"] ?? "Title..."}
-            className="w-full text-m font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-4"
-            autoFocus
-          />
-
-          <div className="flex items-center gap-3 mb-8 pb-6 border-b border-border/50">
-            {isDeadline ? (
-              saveError ? (
-                <p className="text-xs text-destructive">{saveError}</p>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  New items start in Planned. Drag on the board to change status.
-                </p>
-              )
-            ) : (
-              <Input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-auto text-s h-8"
-              />
-            )}
-          </div>
-
-          <RichTextEditor
-            content={content}
-            onChange={setContent}
-            placeholder={editorPlaceholders[noteType ?? "MEETING_NOTE"] ?? "Write here... (type / for commands)"}
-            borderless
-            projectId={projectId}
-          />
-      </div>
     </div>
   );
 }
@@ -805,6 +580,10 @@ export function NoteFullScreenDetail({
   note,
   projectId,
   canEdit,
+  isAdmin = false,
+  canCreateSprintPlanning = false,
+  canStartSprint = false,
+  canEndSprint = false,
   isSystemAdmin,
   isDeadlineTestProject,
   allowedTaskTypes,
@@ -821,6 +600,10 @@ export function NoteFullScreenDetail({
   note: MeetingNote;
   projectId: string;
   canEdit: boolean;
+  isAdmin?: boolean;
+  canCreateSprintPlanning?: boolean;
+  canStartSprint?: boolean;
+  canEndSprint?: boolean;
   isSystemAdmin?: boolean;
   isDeadlineTestProject?: boolean;
   allowedTaskTypes: string[];
@@ -838,6 +621,8 @@ export function NoteFullScreenDetail({
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(note.title);
   const [content, setContent] = useState(note.content);
+  const [sprintTasks, setSprintTasks] = useState<SprintPlanningTask[]>([]);
+  const [sprintStatus, setSprintStatus] = useState("");
   const [dueDate, setDueDate] = useState(
     note.dueDate ? toDateInputValue(note.dueDate) : "",
   );
@@ -929,6 +714,37 @@ export function NoteFullScreenDetail({
   const config = NOTE_TYPE_CONFIG[(note.noteType as NoteType)] ?? NOTE_TYPE_CONFIG.MEETING_NOTE;
   const Icon = config?.icon ?? FileText;
   const isDeadline = note.noteType === "DEADLINE";
+  const isSprintPlanning = note.noteType === "SPRINT_PLANNING";
+  const isSprintReview = note.noteType === "SPRINT_REVIEW";
+  const isSprintDoc = isSprintPlanning || isSprintReview;
+  const planningLocked = sprintPlanningIsLocked(sprintStatus, isAdmin) && isSprintPlanning;
+  const liveEdit =
+    (isSprintPlanning && !planningLocked && canCreateSprintPlanning) ||
+    (isSprintReview && canEndSprint);
+  const { saveError: autoSaveError } = useNoteAutosave({
+    noteId: note.id,
+    title,
+    content,
+    enabled: liveEdit,
+  });
+
+  useEffect(() => {
+    if (!isSprintPlanning) return;
+    const sprintId = sprintIdFromPlanningHtml(note.content);
+    if (!sprintId) return;
+    let cancelled = false;
+    getSprintPlanningTasks(sprintId)
+      .then((data) => {
+        if (cancelled) return;
+        setSprintTasks(data.tasks);
+        setSprintStatus(data.status);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isSprintPlanning, note.content]);
+
   const currentRoadmapStatus = normalizeRoadmapStatus(note.roadmapStatus, completedAt);
   const canCreateTaskFromNote =
     isActive &&
@@ -985,10 +801,15 @@ export function NoteFullScreenDetail({
           return;
         }
       }
+      const planningDate =
+        note.noteType === "SPRINT_PLANNING"
+          ? documentDateIsoFromPlanningHtml(content)
+          : null;
       await updateMeetingNote({
         noteId: note.id,
         title: title.trim(),
         content,
+        ...(planningDate ? { date: planningDate } : {}),
         ...(isDeadline && currentRoadmapStatus === "NEXT"
           ? { workingDays: days ?? null }
           : {}),
@@ -1066,8 +887,6 @@ export function NoteFullScreenDetail({
 
   useEffect(() => {
     if (!overlay) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (showHistory || attachOpen || createQuote !== null) return;
@@ -1075,7 +894,6 @@ export function NoteFullScreenDetail({
     };
     window.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
     };
   }, [overlay, onClose, showHistory, attachOpen, createQuote]);
@@ -1112,10 +930,12 @@ export function NoteFullScreenDetail({
                       <span className="flex-1">{completedAt ? "Mark incomplete" : "Mark complete"}</span>
                     </DropdownMenuItem>
                   )}
+                  {!isSprintDoc && (
                   <DropdownMenuItem onClick={() => setIsEditing(true)}>
                     <Pencil className="h-4 w-4" />
                     <span className="flex-1">Edit</span>
                   </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => setAttachOpen(true)}>
                     <Link2 className="h-4 w-4" />
                     <span className="flex-1">Attach to task</span>
@@ -1177,21 +997,16 @@ export function NoteFullScreenDetail({
       <div className="max-w-4xl mx-auto w-full px-app py-6 sm:py-10 lg:px-16">
             {/* Type badge + meta */}
             <div className="flex flex-wrap items-center gap-3 mb-2">
-              {config && (
-                <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${config.bgColor} ${config.color}`}>
-                  <Icon className="w-3.5 h-3.5" />
-                  {config.label}
-                </span>
+              {config && !isSprintDoc && (
+                <StatusBadge config={config} icon={Icon} />
               )}
               {deadlineStatus && (
-                <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${deadlineStatus.bg} ${deadlineStatus.color}`}>
-                  {deadlineStatus.label}
-                </span>
+                <StatusBadge config={deadlineStatus} />
               )}
               {isDeadline && currentRoadmapStatus === "PLANNED" && (
                 <span className="text-s text-muted-foreground">Planned</span>
               )}
-              {!isDeadline && (
+              {!isDeadline && !isSprintDoc && (
               <span className="text-s text-muted-foreground">
                 {format(new Date(note.date), "MMMM d, yyyy")}
               </span>
@@ -1416,22 +1231,56 @@ export function NoteFullScreenDetail({
             </div>
 
             {/* Title */}
-            {isEditing ? (
+            {isEditing || liveEdit ? (
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full text-m font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-6 sm:mb-8"
+                className={cn(
+                  "w-full bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-6 sm:mb-8",
+                  isSprintDoc
+                    ? "text-center text-4xl font-bold leading-tight"
+                    : "text-m font-bold",
+                )}
                 autoFocus
               />
             ) : (
-              <h1 className={cn("text-m font-bold mb-6 sm:mb-8", completedAt && "line-through opacity-60")}>
+              <h1
+                className={cn(
+                  "mb-6 sm:mb-8 font-bold",
+                  isSprintDoc ? "text-center text-4xl leading-tight" : "text-m",
+                  completedAt && "line-through opacity-60",
+                )}
+              >
                 {note.title}
               </h1>
             )}
+            {isSprintDoc && (workingDaysError || autoSaveError) ? (
+              <p className="mb-4 text-s text-destructive">{workingDaysError ?? autoSaveError}</p>
+            ) : planningLocked ? (
+              <p className="mb-4 text-center text-xs text-muted-foreground">
+                This planning document is locked. Only an admin can edit it after the sprint starts.
+              </p>
+            ) : null}
 
             {/* Content */}
-            {isEditing ? (
-              <RichTextEditor content={content} onChange={setContent} borderless projectId={projectId} />
+            {isEditing || liveEdit || isSprintDoc ? (
+              <RichTextEditor
+                content={content}
+                onChange={setContent}
+                borderless
+                editable={isEditing || liveEdit}
+                isAdmin={isAdmin}
+                canStartSprint={canStartSprint}
+                canEndSprint={canEndSprint}
+                projectId={projectId}
+                sprintTasks={sprintTasks}
+                onSprintStatusChange={setSprintStatus}
+                onSprintTaskPatch={(taskId, patch) => {
+                  setSprintTasks((prev) =>
+                    prev.map((item) => (item.id === taskId ? { ...item, ...patch } : item)),
+                  );
+                }}
+              />
             ) : (
               <NoteAnnotatedContent
                 content={note.content}
@@ -1489,7 +1338,7 @@ export function NoteFullScreenDetail({
         title={note.title}
         onClose={onClose}
         headerRight={
-          isEditing ? (
+          isEditing && !liveEdit ? (
             <div className="flex shrink-0 items-center gap-1">{editActions}</div>
           ) : (
             <DropdownMenu>
@@ -1506,7 +1355,7 @@ export function NoteFullScreenDetail({
           )
         }
       >
-        <div className="min-h-0 flex-1 overflow-y-auto">{body}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{body}</div>
         {dialogs}
       </NoteSlideOver>
     );
@@ -1514,12 +1363,12 @@ export function NoteFullScreenDetail({
 
   return (
     <div className="flex flex-col bg-background">
-      {!isEditing && (
+      {(!isEditing || liveEdit) && (
         <PageOverflowItems id="note-detail" order={0}>
           {overflowItems}
         </PageOverflowItems>
       )}
-      {isEditing && <PageHeaderActions>{editActions}</PageHeaderActions>}
+      {isEditing && !liveEdit && <PageHeaderActions>{editActions}</PageHeaderActions>}
       {body}
       {dialogs}
     </div>

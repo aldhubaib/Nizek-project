@@ -26,6 +26,7 @@ import {
   Users,
   Check,
   Loader2,
+  ListTodo,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
@@ -37,13 +38,23 @@ import {
 import { getProjectMembersForMention } from "@/actions/comment";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { SprintInfoBlock } from "@/components/tiptap/sprint-info-block";
+import { SprintTaskBlock } from "@/components/tiptap/sprint-task-block";
+import { type SprintPlanningTask } from "@/lib/sprint-planning-doc";
 
 export interface RichTextEditorProps {
   content: string;
   onChange: (html: string) => void;
   placeholder?: string;
   borderless?: boolean;
+  editable?: boolean;
   projectId?: string;
+  isAdmin?: boolean;
+  canStartSprint?: boolean;
+  canEndSprint?: boolean;
+  sprintTasks?: SprintPlanningTask[];
+  onSprintTaskPatch?: (taskId: string, patch: Partial<SprintPlanningTask>) => void;
+  onSprintStatusChange?: (status: string) => void;
 }
 
 export function RichTextEditor({
@@ -51,7 +62,14 @@ export function RichTextEditor({
   onChange,
   placeholder = "Type '/' for commands...",
   borderless = false,
+  editable = true,
   projectId,
+  isAdmin = false,
+  canStartSprint = false,
+  canEndSprint = false,
+  sprintTasks = [],
+  onSprintTaskPatch,
+  onSprintStatusChange,
 }: RichTextEditorProps) {
   const [slashMenu, setSlashMenu] = useState<{ x: number; y: number; query: string } | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
@@ -62,6 +80,16 @@ export function RichTextEditor({
   const [memberQuery, setMemberQuery] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const onSprintTaskPatchRef = useRef(onSprintTaskPatch);
+  onSprintTaskPatchRef.current = onSprintTaskPatch;
+  const onSprintStatusChangeRef = useRef(onSprintStatusChange);
+  onSprintStatusChangeRef.current = onSprintStatusChange;
+  const isAdminRef = useRef(isAdmin);
+  isAdminRef.current = isAdmin;
+  const canStartSprintRef = useRef(canStartSprint);
+  canStartSprintRef.current = canStartSprint;
+  const canEndSprintRef = useRef(canEndSprint);
+  canEndSprintRef.current = canEndSprint;
 
   const editor = useEditor({
     extensions: [
@@ -72,7 +100,22 @@ export function RichTextEditor({
       Image.configure({ inline: false }),
       NoteAnnotation,
       AttendanceBlock,
+      SprintInfoBlock.configure({
+        isAdmin,
+        getIsAdmin: () => isAdminRef.current,
+        canStartSprint,
+        getCanStartSprint: () => canStartSprintRef.current,
+        canEndSprint,
+        getCanEndSprint: () => canEndSprintRef.current,
+        onSprintStatusChange: (status) => onSprintStatusChangeRef.current?.(status),
+      }),
+      SprintTaskBlock.configure({
+        projectId,
+        sprintTasks,
+        onTasksPatched: (taskId, patch) => onSprintTaskPatchRef.current?.(taskId, patch),
+      }),
     ],
+    editable,
     content,
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML());
@@ -83,7 +126,7 @@ export function RichTextEditor({
         class: cn(
           "focus:outline-none prose prose-invert max-w-none",
           borderless
-            ? "min-h-[60vh] text-lg leading-relaxed prose-headings:font-bold prose-h1:text-4xl prose-h2:text-2xl prose-h3:text-xl prose-p:text-base prose-img:rounded-lg prose-img:max-w-full"
+            ? "min-h-[60vh] text-lg leading-relaxed prose-headings:font-bold prose-h1:text-4xl prose-h2:text-2xl prose-h3:text-xl prose-p:text-m prose-img:rounded-lg prose-img:max-w-full"
             : "min-h-[120px] px-3 py-2 text-s prose-sm"
         ),
       },
@@ -144,8 +187,12 @@ export function RichTextEditor({
     },
   });
 
+  useEffect(() => {
+    editor?.setEditable(editable);
+  }, [editor, editable]);
+
   async function insertImageFile(file: File) {
-    if (!editor) return;
+    if (!editor?.isEditable) return;
     try {
       const { url } = await uploadFileToR2(file);
       editor.chain().focus().setImage({ src: url }).run();
@@ -155,6 +202,10 @@ export function RichTextEditor({
   }
 
   function checkSlashCommand(ed: Editor) {
+    if (!ed.isEditable) {
+      setSlashMenu(null);
+      return;
+    }
     const { state } = ed;
     const { from } = state.selection;
     const textBefore = state.doc.textBetween(
@@ -197,17 +248,25 @@ export function RichTextEditor({
           aliases: ["user", "member", "attendance", "attendee", "present"],
         }]
       : []),
+    ...sprintTasks.map((task) => ({
+      id: `sprint-task:${task.id}`,
+      label: task.code,
+      description: task.title,
+      icon: ListTodo,
+      aliases: [task.title.toLowerCase(), task.code.toLowerCase()],
+    })),
   ];
 
   function getFilteredCommands(query: string) {
-    if (!query) return COMMANDS;
+    const taskCmds = COMMANDS.filter((c) => c.id.startsWith("sprint-task:"));
+    const blockCmds = COMMANDS.filter((c) => !c.id.startsWith("sprint-task:"));
+    if (!query) return [...taskCmds, ...blockCmds];
     const q = query.toLowerCase();
-    return COMMANDS.filter(
-      (c) =>
-        c.label.toLowerCase().includes(q) ||
-        c.id.includes(q) ||
-        c.aliases.some((a) => a.includes(q)),
-    );
+    const match = (c: (typeof COMMANDS)[number]) =>
+      c.label.toLowerCase().includes(q) ||
+      c.id.toLowerCase().includes(q) ||
+      c.aliases.some((a) => a.includes(q));
+    return [...taskCmds.filter(match), ...blockCmds.filter(match)];
   }
 
   function getSlashRange(): { from: number; to: number } | null {
@@ -229,6 +288,20 @@ export function RichTextEditor({
     if (id === "image") {
       if (range) editor.chain().focus().deleteRange(range).run();
       fileInputRef.current?.click();
+      setSlashMenu(null);
+      return;
+    }
+
+    if (id.startsWith("sprint-task:")) {
+      const taskId = id.slice("sprint-task:".length);
+      const task = sprintTasks.find((t) => t.id === taskId);
+      if (range) editor.chain().focus().deleteRange(range).run();
+      if (task) {
+        editor.chain().focus().insertContent({
+          type: "sprintTask",
+          attrs: { task, showQuestions: false },
+        }).run();
+      }
       setSlashMenu(null);
       return;
     }
@@ -281,7 +354,7 @@ export function RichTextEditor({
     }
     setSlashMenu(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, slashMenu, projectId]);
+  }, [editor, slashMenu, projectId, sprintTasks]);
 
   async function openAttendancePicker() {
     if (!projectId) return;
@@ -323,6 +396,16 @@ export function RichTextEditor({
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
+
+  useEffect(() => {
+    if (!editor) return;
+    const ext = editor.extensionManager.extensions.find((item) => item.name === "sprintTask");
+    if (!ext) return;
+    ext.options.sprintTasks = sprintTasks;
+    ext.options.onTasksPatched = (taskId: string, patch: Partial<SprintPlanningTask>) =>
+      onSprintTaskPatchRef.current?.(taskId, patch);
+    editor.view.dispatch(editor.state.tr.setMeta("sprintTasks", sprintTasks.length));
+  }, [editor, sprintTasks]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -376,7 +459,7 @@ export function RichTextEditor({
       <div className="relative">
         {hiddenInput}
         <EditorContent editor={editor} />
-        {slashMenu && filteredCmds.length > 0 && (
+        {editable && slashMenu && filteredCmds.length > 0 && (
           <SlashCommandMenu
             ref={menuRef}
             commands={filteredCmds}
@@ -428,7 +511,7 @@ export function RichTextEditor({
       </div>
       <div className="relative">
         <EditorContent editor={editor} />
-        {slashMenu && filteredCmds.length > 0 && (
+        {editable && slashMenu && filteredCmds.length > 0 && (
           <SlashCommandMenu
             ref={menuRef}
             commands={filteredCmds}
@@ -461,32 +544,40 @@ const SlashCommandMenu = forwardRef<HTMLDivElement, SlashMenuProps>(
     return (
       <div
         ref={ref}
-        className="absolute z-50 w-56 rounded-lg border border-border bg-popover shadow-xl overflow-hidden"
+        className="absolute z-50 w-72 rounded-lg border border-border bg-popover shadow-xl overflow-hidden"
         style={{ left: x, top: y }}
       >
-        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Blocks
-        </div>
-        <div className="max-h-[260px] overflow-y-auto pb-1">
+        <div className="max-h-[320px] overflow-y-auto pb-1">
           {commands.map((cmd, i) => {
             const Icon = cmd.icon;
+            const isTask = cmd.id.startsWith("sprint-task:");
+            const prevIsTask = i > 0 && commands[i - 1].id.startsWith("sprint-task:");
+            const showHeading =
+              i === 0 || (isTask && !prevIsTask) || (!isTask && prevIsTask);
             return (
-              <button
-                key={cmd.id}
-                onClick={() => onSelect(cmd.id)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-2.5 py-2 text-start transition-colors",
-                  i === activeIndex ? "bg-accent" : "hover:bg-accent/50"
+              <div key={cmd.id}>
+                {showHeading && (
+                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    {isTask ? "Sprint tasks" : "Blocks"}
+                  </div>
                 )}
-              >
-                <div className="w-8 h-8 rounded-md border border-border bg-background flex items-center justify-center shrink-0">
-                  <Icon className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-                </div>
-                <div>
-                  <div className="text-s font-medium text-foreground">{cmd.label}</div>
-                  <div className="text-xs text-muted-foreground">{cmd.description}</div>
-                </div>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onSelect(cmd.id)}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-2.5 py-2 text-start transition-colors",
+                    i === activeIndex ? "bg-accent" : "hover:bg-accent/50"
+                  )}
+                >
+                  <div className="w-8 h-8 rounded-md border border-border bg-background flex items-center justify-center shrink-0">
+                    <Icon className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-s font-medium text-foreground truncate">{cmd.label}</div>
+                    <div className="text-xs text-muted-foreground truncate">{cmd.description}</div>
+                  </div>
+                </button>
+              </div>
             );
           })}
         </div>

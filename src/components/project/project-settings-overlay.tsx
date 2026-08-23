@@ -8,12 +8,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { deleteProject, updateProject, deleteContract, toggleLatePayment, setProjectClientChat } from "@/actions/project";
+import { getRoles } from "@/actions/role";
 import { getArchivedTasks, restoreTask, permanentlyDeleteTask } from "@/actions/task";
 import { ContractBadge } from "@/components/project/contract-badge";
 import { AddContractDialog } from "@/components/project/add-contract-dialog";
 import { EditContractDialog } from "@/components/project/edit-contract-dialog";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
+import { stageLabel, outlineBadge } from "@/lib/task-label";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import { ClientChatPeopleManager } from "@/components/messages/client-chat-people";
 
@@ -54,7 +57,7 @@ interface ProjectSettingsProps {
     team?: Team | null;
     contracts: Contract[];
     defaultClientReviewerId?: string | null;
-    maxPipelineTasks?: number;
+    internalReviewRoleId?: string | null;
     clientChatEnabled?: boolean;
   };
   teams?: Team[];
@@ -80,7 +83,8 @@ export function ProjectSettingsOverlay({
   const [description, setDescription] = useState(project.description || "");
   const [teamId, setTeamId] = useState(project.team?.id || "");
   const [clientReviewerId, setClientReviewerId] = useState(project.defaultClientReviewerId || "");
-  const [maxPipelineTasks, setMaxPipelineTasks] = useState(String(project.maxPipelineTasks ?? 3));
+  const [internalReviewRoleId, setInternalReviewRoleId] = useState(project.internalReviewRoleId || "");
+  const [roles, setRoles] = useState<{ id: string; name: string }[]>([]);
   const [clientChatEnabled, setClientChatEnabled] = useState(!!project.clientChatEnabled);
   const [clientChatSaving, setClientChatSaving] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -89,6 +93,12 @@ export function ProjectSettingsOverlay({
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<"general" | "archive">("general");
+
+  useEffect(() => {
+    void getRoles()
+      .then((rows) => setRoles(rows.map((r) => ({ id: r.id, name: r.name }))))
+      .catch(() => {});
+  }, []);
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -143,7 +153,6 @@ export function ProjectSettingsOverlay({
     setSaving(true);
     setSaveError(null);
     try {
-      const parsedMax = parseInt(maxPipelineTasks, 10);
       await updateProject({
         projectId: project.id,
         name: name.trim(),
@@ -151,7 +160,7 @@ export function ProjectSettingsOverlay({
         // Empty string = "No team" — send null so the team can be cleared.
         teamId: teamId || null,
         defaultClientReviewerId: clientReviewerId || null,
-        ...(Number.isFinite(parsedMax) && parsedMax > 0 && { maxPipelineTasks: parsedMax }),
+        internalReviewRoleId: internalReviewRoleId || null,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -306,6 +315,24 @@ export function ProjectSettingsOverlay({
             )}
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="proj-internal-review" className="text-s font-semibold">Internal Review role</Label>
+            <p className="text-xs text-muted-foreground">
+              Tasks moved to Internal Review are auto-assigned to a project member with this role.
+            </p>
+            <select
+              id="proj-internal-review"
+              value={internalReviewRoleId}
+              onChange={(e) => setInternalReviewRoleId(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-s text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Task creator (default)</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>{role.name}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Default Client Reviewer */}
           <div className="space-y-2">
             <Label htmlFor="proj-client" className="text-s font-semibold">Default Client Reviewer</Label>
@@ -391,23 +418,6 @@ export function ProjectSettingsOverlay({
             {clientChatEnabled && (
               <ClientChatPeopleManager projectId={project.id} enabled />
             )}
-          </div>
-
-          {/* Pipeline Task Limit */}
-          <div className="space-y-2">
-            <Label htmlFor="proj-max-tasks" className="text-s font-semibold">Max Tasks in Pipeline</Label>
-            <p className="text-xs text-muted-foreground">
-              The most tasks allowed at once across <strong className="text-foreground">Ready for Dev</strong>, <strong className="text-foreground">In Development</strong>, and <strong className="text-foreground">Internal Review</strong>. New tasks can&apos;t enter until an existing one moves past Internal Review.
-            </p>
-            <Input
-              id="proj-max-tasks"
-              type="number"
-              min={1}
-              max={50}
-              value={maxPipelineTasks}
-              onChange={(e) => setMaxPipelineTasks(e.target.value)}
-              className="text-s w-28"
-            />
           </div>
 
           {/* Contracts */}
@@ -516,10 +526,7 @@ function ContractList({ contracts, isAdmin, projectId, contractPrefixes = [] }: 
             <div className="flex items-center gap-3 min-w-0">
               <ContractBadge contract={contract} />
               {contract.latePayment && (
-                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold bg-orange/15 text-orange border border-orange/20 shrink-0">
-                  <AlertTriangle className="w-3 h-3" />
-                  Late Payment
-                </span>
+                <StatusBadge config={outlineBadge("Late Payment", "text-orange", "border-orange/30")} icon={AlertTriangle} className="shrink-0" />
               )}
             </div>
             {isAdmin && (
@@ -579,21 +586,10 @@ function ContractList({ contracts, isAdmin, projectId, contractPrefixes = [] }: 
 
 const TASK_TYPE_META: Record<string, { prefix: string; color: string }> = {
   FEATURE: { prefix: "F", color: "text-primary" },
-  ENHANCEMENT: { prefix: "E", color: "text-violet-400" },
+  ENHANCEMENT: { prefix: "E", color: "text-violet" },
   BUG: { prefix: "B", color: "text-orange" },
   REPORTED_BUG: { prefix: "RB", color: "text-destructive" },
-  DESIGN: { prefix: "D", color: "text-cyan-400" },
-};
-
-const STAGE_LABELS: Record<string, string> = {
-  NEW_REQUEST: "New Request",
-  CLARIFICATION: "Clarification",
-  READY_FOR_DEV: "Ready for Dev",
-  IN_DEVELOPMENT: "In Development",
-  INTERNAL_REVIEW: "Internal Review",
-  CLIENT_REVIEW: "Client Review",
-  READY_FOR_RELEASE: "Ready for Release",
-  DONE: "Done",
+  DESIGN: { prefix: "D", color: "text-cyan" },
 };
 
 interface ArchivedTask {
@@ -689,7 +685,7 @@ function ArchiveTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolea
                   <p className="text-s font-medium truncate">{task.title}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-muted-foreground">
-                      {STAGE_LABELS[task.stage] ?? task.stage}
+                      {stageLabel(task.stage)}
                     </span>
                     {task.priority && (
                       <span className="text-xs text-muted-foreground">

@@ -801,9 +801,9 @@ function HistoryRow({ entry }: { entry: VaultActivityDTO }) {
 
   return (
     <div className="flex gap-s">
-      <Avatar className="mt-0.5 h-6 w-6 shrink-0">
+      <Avatar size="sm" className="mt-0.5">
         <AvatarImage src={entry.user.imageUrl ?? undefined} />
-        <AvatarFallback className="text-xs">
+        <AvatarFallback>
           {(entry.user.name ?? "?").slice(0, 2).toUpperCase()}
         </AvatarFallback>
       </Avatar>

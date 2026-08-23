@@ -160,6 +160,7 @@ interface Props {
   compact?: boolean;
   readonly?: boolean;
   showRequiredAs?: "all" | "mandatory" | "transition";
+  showLabel?: boolean;
 }
 
 function parseClientValue(raw: string): {
@@ -200,7 +201,7 @@ function formatReceivedAt(iso: string | null | undefined): string | null {
   });
 }
 
-export function QuestionField({ question, index, value, onChange, compact, readonly: isReadonly, showRequiredAs = "all" }: Props) {
+export function QuestionField({ question, index, value, onChange, compact, readonly: isReadonly, showRequiredAs = "all", showLabel = true }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const clientTextareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -417,13 +418,15 @@ export function QuestionField({ question, index, value, onChange, compact, reado
   }
 
   return (
-    <div className="space-y-2">
-      <label className={cn("font-medium text-muted-foreground", compact ? "text-xs" : "text-s")}>
-        {index + 1}. {question.question}
-        {(showRequiredAs === "all" ? (question.mandatory || question.required) : showRequiredAs === "mandatory" ? question.mandatory : question.required) && (
-          <span className="text-destructive ms-0.5">*</span>
-        )}
-      </label>
+    <div className={showLabel ? "space-y-2" : undefined}>
+      {showLabel && (
+        <label className={cn("font-medium text-muted-foreground", compact ? "text-xs" : "text-s")}>
+          {index + 1}. {question.question}
+          {(showRequiredAs === "all" ? (question.mandatory || question.required) : showRequiredAs === "mandatory" ? question.mandatory : question.required) && (
+            <span className="text-destructive ms-0.5">*</span>
+          )}
+        </label>
+      )}
 
       {isReadonly ? renderReadonly() : question.type === "client" ? (() => {
         const cv = parseClientValue(value);

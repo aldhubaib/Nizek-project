@@ -43,7 +43,7 @@ const TASK_TYPES: {
     id: "ENHANCEMENT",
     label: "Enhancement",
     icon: Wrench,
-    activeColor: "bg-violet-500/15 border-violet-500/40 text-violet-400",
+    activeColor: "bg-violet/15 border-violet/40 text-violet",
   },
   {
     id: "BUG",
@@ -55,7 +55,7 @@ const TASK_TYPES: {
     id: "DESIGN",
     label: "Design",
     icon: Palette,
-    activeColor: "bg-cyan-500/15 border-cyan-500/40 text-cyan-400",
+    activeColor: "bg-cyan/15 border-cyan/40 text-cyan",
   },
 ];
 
@@ -197,7 +197,7 @@ export function CreateTaskFromMessageDialog({
             Create task from message
           </DialogTitle>
           <p className="text-xs text-muted-foreground">
-            {payload.projectName} · New Request
+            {payload.projectName} · Backlog
           </p>
         </DialogHeader>
 

@@ -20,7 +20,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { PageHeader } from "@/components/page-header";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { outlineBadge } from "@/lib/task-label";
+import { PageHeader, PageName } from "@/components/page-header";
 import { AddButton } from "@/components/add-button";
 import {
   createTodayAudit,
@@ -67,13 +69,13 @@ export function AuditClient({ access, reports }: Props) {
   return (
     <div>
       <PageHeader className="justify-between">
-        <h1 className="flex items-center gap-2 text-s font-semibold">
+        <PageName className="flex items-center gap-2">
           <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
           Task Audit
           <span className="text-xs font-normal text-muted-foreground">
             ({reports.length} report{reports.length === 1 ? "" : "s"})
           </span>
-        </h1>
+        </PageName>
         <AddButton
           label={hasTodayReport ? "Today's report" : "Create report"}
           onClick={() => setCreateOpen(true)}
@@ -141,16 +143,10 @@ export function AuditClient({ access, reports }: Props) {
                       )}
                     </div>
 
-                    <span
-                      className={cn(
-                        "inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
-                        submitted
-                          ? "border-success/20 bg-success/10 text-success"
-                          : "border-orange/20 bg-orange/10 text-orange",
-                      )}
-                    >
-                      {submitted ? "Submitted" : "Draft"}
-                    </span>
+                    <StatusBadge config={submitted
+                      ? outlineBadge("Submitted", "text-success", "border-success/30")
+                      : outlineBadge("Draft", "text-orange", "border-orange/30")
+                    } />
                     <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50" />
                   </Link>
                 );

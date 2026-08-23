@@ -260,9 +260,9 @@ function HistoryDialog({
 
 const ACTION_TONE: Record<string, string> = {
   created: "text-success bg-success/15 border-success/30",
-  updated: "text-sky-400 bg-sky-500/15 border-sky-500/30",
+  updated: "text-sky bg-sky/15 border-sky/30",
   deleted: "text-destructive bg-destructive/15 border-destructive/30",
-  restored: "text-violet-400 bg-violet-500/15 border-violet-500/30",
+  restored: "text-violet bg-violet/15 border-violet/30",
 };
 
 function HistoryRow({ entry }: { entry: EquityActivityDTO }) {

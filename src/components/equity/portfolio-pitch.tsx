@@ -85,7 +85,7 @@ import {
 
 type Item = NonNullable<EquityPortfolioDTO["opportunity"]>["items"][number];
 
-const ACCENT = "#ff3366";
+import { ACCENT } from "@/components/equity/report-design";
 
 function itemsOf(portfolio: EquityPortfolioDTO, section: string): Item[] {
   return (portfolio.opportunity?.items ?? []).filter(

@@ -3,9 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { BarChart3, ChevronRight, Table2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-/** The pitch's own accent, which the charts inside these frames are drawn in. */
-const ACCENT = "#ff3366";
+import { ACCENT } from "@/components/equity/report-design";
 
 /**
  * The rows a chart was drawn from, in the order the chart reads them.

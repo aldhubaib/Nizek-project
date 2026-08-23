@@ -29,7 +29,7 @@ export default async function EquityReportPage({
   const generatedAt = new Date();
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] py-8 print:py-0">
+    <div className="min-h-screen bg-card py-8 print:py-0">
       {/* The dark sheet is the design, so backgrounds have to survive printing —
           browsers drop them unless print-color-adjust is forced. Zero page
           margins let the sheet bleed to the paper edge; the padding below
@@ -38,14 +38,14 @@ export default async function EquityReportPage({
         @page { size: A4; margin: 0; }
         @media print {
           html, body {
-            background: #0a0a0a !important;
+            background: var(--card) !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
         }
       `}</style>
 
-      <div className="mx-auto w-[210mm] max-w-full bg-[#0a0a0a] px-10 py-9 print:w-full print:px-[14mm] print:py-[14mm]">
+      <div className="mx-auto w-[210mm] max-w-full bg-card px-10 py-9 print:w-full print:px-[14mm] print:py-[14mm]">
         <header>
           <div className="flex items-start justify-between gap-4 mb-5">
             <Wordmark className="text-3xl" />

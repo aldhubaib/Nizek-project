@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PieChart, X, FileSignature, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageName } from "@/components/page-header";
 import { AddButton } from "@/components/add-button";
 import { EquityMenu } from "@/components/equity/equity-menu";
 import {
@@ -75,7 +75,7 @@ export function EquityPageClient({
     <div>
       <PageHeader hasMenu>
         <PieChart className="w-4 h-4 text-primary shrink-0" strokeWidth={1.5} />
-        <h1 className="text-s font-semibold text-foreground flex-1">Equity</h1>
+        <PageName className="flex-1">Equity</PageName>
         <EquityMenu />
         {tab === "portfolios" && (
           <AddButton
@@ -193,7 +193,7 @@ export function EquityPageClient({
 
       {/* Project picker */}
       {showPicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-xl border border-border bg-sidebar p-5 shadow-xl mx-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-s font-semibold text-foreground">Add Portfolio</h3>

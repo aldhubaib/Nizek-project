@@ -9,11 +9,7 @@ import type { Stage } from "@/store/kanban";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 
-const STAGE_LABELS: Record<string, string> = {
-  INTERNAL_REVIEW: "Internal Review",
-  CLIENT_REVIEW: "Client Review",
-  IN_DEVELOPMENT: "In Development",
-};
+import { stageLabel } from "@/lib/task-label";
 
 const DECLINE_TARGETS: Record<string, string> = {
   INTERNAL_REVIEW: "IN_DEVELOPMENT",
@@ -58,7 +54,7 @@ export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm
 
   const me = user?.fullName || user?.firstName || "You";
   const meAvatar = user?.imageUrl || null;
-  const toLabel = STAGE_LABELS[DECLINE_TARGETS[fromStage]] ?? "the previous stage";
+  const toLabel = stageLabel(DECLINE_TARGETS[fromStage]) || "the previous stage";
 
   function handleFilesSelected(files: FileList | File[] | null) {
     if (!files || files.length === 0) return;
@@ -108,7 +104,7 @@ export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[900]"
+        className="fixed inset-0 bg-overlay backdrop-blur-sm z-[900]"
         onClick={onCancel}
       />
       <div
@@ -127,9 +123,9 @@ export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-s">
                   <span className="inline-flex items-center gap-xs rounded-full bg-muted/60 py-0.5 ps-0.5 pe-2.5 text-muted-foreground">
-                    <Avatar className="size-5">
+                    <Avatar size="xs">
                       {meAvatar && <AvatarImage src={meAvatar} alt={me} />}
-                      <AvatarFallback className="bg-muted text-xs font-semibold text-muted-foreground">
+                      <AvatarFallback className="bg-muted font-semibold text-muted-foreground">
                         {me.slice(0, 1).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
@@ -138,9 +134,9 @@ export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm
                   <ArrowRight className="h-4 w-4 text-muted-foreground" />
                   {mentionName ? (
                     <span className="inline-flex min-w-0 max-w-full items-center gap-xs rounded-full bg-primary/15 py-0.5 ps-0.5 pe-2.5 font-medium text-primary">
-                      <Avatar className="size-5">
+                      <Avatar size="xs">
                         {mentionAvatar && <AvatarImage src={mentionAvatar} alt={mentionName} />}
-                        <AvatarFallback className="bg-primary text-xs font-bold text-primary-foreground">
+                        <AvatarFallback className="bg-primary font-bold text-primary-foreground">
                           {mentionName.slice(0, 1).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>

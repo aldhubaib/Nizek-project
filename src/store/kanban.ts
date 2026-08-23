@@ -25,6 +25,9 @@ export interface KanbanTask {
   estimatedMinutes?: number | null;
   estimateAccuracy?: EstimateAccuracy | null;
   notesCount?: number;
+  sprintId?: string | null;
+  sprintName?: string | null;
+  sprintCount?: number;
 }
 
 interface KanbanState {

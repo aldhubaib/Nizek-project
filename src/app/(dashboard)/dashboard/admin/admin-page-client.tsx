@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Users,
   Shield,
@@ -35,7 +35,8 @@ import type { BrandingAssetDTO } from "@/actions/branding";
 import type { LoginPhotoDTO } from "@/actions/login-photos";
 import type { NotificationSoundDTO } from "@/actions/notification-sound-settings";
 import type { BrandingSlotId } from "@/lib/branding-slots";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageName } from "@/components/page-header";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 
 type TabId =
   | "teams"
@@ -187,6 +188,7 @@ export function AdminPageClient({
   projectOptions,
   currentUserId,
 }: Props) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const rawTab = searchParams.get("tab") as TabId | null;
   // Push Health folded into Member Notifications; old links keep working.
@@ -198,7 +200,7 @@ export function AdminPageClient({
     return (
       <div>
         <PageHeader>
-          <h1 className="text-s font-semibold">Settings</h1>
+          <PageName>Settings</PageName>
         </PageHeader>
         <div className="mx-auto max-w-2xl space-y-8 px-app py-8">
         {SECTIONS.map((section) => (
@@ -222,18 +224,12 @@ export function AdminPageClient({
   return (
     <div>
       <PageHeader>
-        <Link
-          href="/dashboard/admin"
-          className="flex items-center gap-xs text-s font-medium text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" strokeWidth={1.5} />
-          Settings
-        </Link>
-        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
-        <span className="flex items-center gap-xs text-s font-medium text-foreground">
-          <active.icon className="w-3.5 h-3.5" strokeWidth={1.5} />
-          {active.label}
-        </span>
+        <PageBreadcrumb
+          items={[
+            { label: "Settings", onClick: () => router.push("/dashboard/admin") },
+            { label: active.label },
+          ]}
+        />
       </PageHeader>
 
       <div className="px-app py-6 max-w-3xl">

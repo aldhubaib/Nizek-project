@@ -50,8 +50,8 @@ function StatCard({
 }) {
   const tones = {
     primary: { chip: "bg-primary/15 text-primary", value: "text-primary" },
-    sky: { chip: "bg-sky-500/15 text-sky-400", value: "text-sky-400" },
-    violet: { chip: "bg-violet-500/15 text-violet-400", value: "text-violet-400" },
+    sky: { chip: "bg-sky/15 text-sky", value: "text-sky" },
+    violet: { chip: "bg-violet/15 text-violet", value: "text-violet" },
     bad: { chip: "bg-destructive/15 text-destructive", value: "text-destructive" },
     good: { chip: "bg-success/15 text-success", value: "text-success" },
   }[tone];

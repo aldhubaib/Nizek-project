@@ -1,6 +1,8 @@
 "use client";
 
 import { format, isFuture, isWithinInterval } from "date-fns";
+import { StatusBadge, type BadgeConfig } from "@/components/ui/status-badge";
+import { outlineBadge } from "@/lib/task-label";
 
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
   FULL_TEAM: "Full Team",
@@ -8,6 +10,12 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
   FIXED: "Fixed",
   MAINTENANCE: "Maintenance",
   STARTUP: "Startup",
+};
+
+const STATUS_CONFIG: Record<string, BadgeConfig> = {
+  active: outlineBadge("Active", "text-success", "border-success/30"),
+  upcoming: outlineBadge("Upcoming", "text-primary", "border-primary/30"),
+  expired: outlineBadge("Expired", "text-destructive", "border-destructive/30"),
 };
 
 interface Contract {
@@ -37,32 +45,16 @@ export function ContractBadge({ contract }: { contract: Contract }) {
     status = "expired";
   }
 
-  const variants = {
-    active: "bg-success/15 text-success border-success/20",
-    upcoming: "bg-primary/15 text-primary border-primary/20",
-    expired: "bg-destructive/15 text-destructive border-destructive/20",
-  };
-
   const typeLabel = CONTRACT_TYPE_LABELS[contract.contractType];
 
   return (
     <div className="flex items-center gap-2">
-      <span
-        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${variants[status]}`}
-      >
-        {status === "active" && "Active"}
-        {status === "upcoming" && "Upcoming"}
-        {status === "expired" && "Expired"}
-      </span>
+      <StatusBadge config={STATUS_CONFIG[status]} />
       {typeLabel && (
-        <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
-          {typeLabel}
-        </span>
+        <StatusBadge config={outlineBadge(typeLabel, "text-muted-foreground", "border-border")} />
       )}
       {contract.code && (
-        <span className="inline-flex items-center rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs font-mono font-semibold text-foreground">
-          {contract.code}
-        </span>
+        <StatusBadge config={outlineBadge(contract.code, "text-foreground", "border-border")} className="font-mono" />
       )}
       <span className="text-xs text-muted-foreground">
         {contract.label && `${contract.label} · `}

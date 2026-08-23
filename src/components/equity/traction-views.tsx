@@ -3,15 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { PhotoGallery } from "@/components/equity/photo-gallery";
-
-/**
- * Traction: the milestones one under another down a spine, in whatever order
- * they're handed over (the report leads with the newest), all of them open.
- * Nothing to drag and nothing hidden, which is what makes it work the same on
- * a phone, in a print-out, and for anyone skimming.
- */
-
-const ACCENT = "#ff3366";
+import { ACCENT } from "@/components/equity/report-design";
 
 export type Milestone = {
   id: string;

@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NoteAnnotation } from "@/components/tiptap/note-annotation-mark";
 import { AttendanceBlock } from "@/components/tiptap/attendance-block";
+import { SprintInfoBlock } from "@/components/tiptap/sprint-info-block";
+import { SprintTaskBlock } from "@/components/tiptap/sprint-task-block";
 import { createNoteComment, getNoteCommentThread } from "@/actions/note-comment";
 import { getProjectMembersForMention } from "@/actions/comment";
 import {
@@ -147,12 +149,14 @@ export function NoteAnnotatedContent({
       Image.configure({ inline: false }),
       NoteAnnotation,
       AttendanceBlock,
+      SprintInfoBlock,
+      SprintTaskBlock.configure({ projectId }),
     ],
     content,
     editorProps: {
       attributes: {
         class:
-          "focus:outline-none prose prose-invert max-w-none text-base leading-relaxed prose-headings:font-bold prose-h1:text-4xl prose-h2:text-2xl prose-h3:text-xl prose-img:rounded-lg prose-img:max-w-full",
+          "focus:outline-none prose prose-invert max-w-none text-m leading-relaxed prose-headings:font-bold prose-h1:text-4xl prose-h2:text-2xl prose-h3:text-xl prose-img:rounded-lg prose-img:max-w-full",
       },
       handleClick: (view, pos) => {
         const marks = view.state.doc.resolve(pos).marks();

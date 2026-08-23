@@ -51,7 +51,7 @@ import {
 import { PortfolioMenu } from "@/components/equity/portfolio-menu";
 import { PerformanceSection } from "@/components/equity/performance-section";
 import { TeamSection } from "@/components/equity/team-section";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageName } from "@/components/page-header";
 import { AddButton } from "@/components/add-button";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
@@ -195,9 +195,7 @@ export function EquityPortfolioClient({
             {portfolio.project.name[0]?.toUpperCase()}
           </div>
         )}
-        <h1 className="text-s font-semibold text-foreground truncate">
-          {portfolio.project.name}
-        </h1>
+        <PageName>{portfolio.project.name}</PageName>
         <PortfolioMenu
           portfolioId={portfolio.id}
           projectName={portfolio.project.name}
@@ -825,7 +823,7 @@ function ContractForm({
                 ? "border-border bg-muted/30 text-muted-foreground"
                 : status === "ACTUAL"
                 ? "border-success/30 bg-success/10 text-success"
-                : "border-sky-500/30 bg-sky-500/10 text-sky-400"
+                : "border-sky/30 bg-sky/10 text-sky"
             )}
           >
             {status === "NONE"

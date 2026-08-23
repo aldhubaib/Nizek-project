@@ -5,6 +5,7 @@ import type { ECharts, EChartsOption } from "echarts";
 import { EChart } from "@/components/charts/echart";
 import { cn } from "@/lib/utils";
 import { MARKET_TIERS } from "@/lib/market-size";
+import { ACCENT } from "@/components/equity/report-design";
 
 /**
  * The charts the pitch is drawn with, on Apache ECharts.
@@ -15,9 +16,9 @@ import { MARKET_TIERS } from "@/lib/market-size";
  * and a chart that brings its own would stand out as a foreign object.
  */
 
-/** Enough hues to tell one holder from another, with ours always first. */
+/** Chart series palette — accent first, then enough hues to differentiate. */
 export const SERIES = [
-  "#ff3366",
+  ACCENT,
   "#22d3ee",
   "#a78bfa",
   "#4ade80",
@@ -31,10 +32,10 @@ export function seriesColor(i: number) {
   return SERIES[i % SERIES.length];
 }
 
-const TEXT = "#8a8a8a";
-const FOREGROUND = "#ededed";
-const GRID_LINE = "rgba(255,255,255,0.06)";
-const CARD = "#0a0a0a";
+const TEXT = "hsl(0 0% 54%)";
+const FOREGROUND = "hsl(0 0% 93%)";
+const GRID_LINE = "hsl(0 0% 100% / 0.06)";
+const CARD = "hsl(0 0% 4%)";
 
 const AXIS_LABEL = { color: TEXT, fontSize: 10 } as const;
 

@@ -24,8 +24,11 @@ import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/page-header";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { outlineBadge } from "@/lib/task-label";
 import { formatStageHours, FLAG_LABELS, type AuditFlagType } from "@/lib/audit-flags";
 import {
   getBlameCandidates,
@@ -38,32 +41,32 @@ import {
 
 const FLAG_STYLE: Record<
   string,
-  { icon: LucideIcon; color: string; chip: string }
+  { icon: LucideIcon; color: string; bg: string }
 > = {
   critical_late: {
     icon: AlertTriangle,
     color: "text-destructive",
-    chip: "border-destructive/20 bg-destructive/10 text-destructive",
+    bg: "bg-transparent border-destructive/30",
   },
   rejected: {
     icon: XCircle,
-    color: "text-orange-400",
-    chip: "border-orange-500/20 bg-orange-500/10 text-orange-400",
+    color: "text-orange",
+    bg: "bg-transparent border-orange/30",
   },
   deadline_overdue: {
     icon: CalendarClock,
     color: "text-destructive",
-    chip: "border-destructive/20 bg-destructive/10 text-destructive",
+    bg: "bg-transparent border-destructive/30",
   },
   warn_late: {
     icon: Clock,
     color: "text-orange",
-    chip: "border-orange/20 bg-orange/10 text-orange",
+    bg: "bg-transparent border-orange/30",
   },
   client_input: {
     icon: MessageCircleQuestion,
-    color: "text-sky-400",
-    chip: "border-sky-500/20 bg-sky-500/10 text-sky-400",
+    color: "text-sky",
+    bg: "bg-transparent border-sky/30",
   },
 };
 
@@ -92,15 +95,17 @@ export function ReportClient({ report }: { report: AuditReportDTO }) {
         <div className="flex min-w-0 items-center gap-3">
           <Link
             href="/dashboard/audit"
-            className="flex shrink-0 items-center gap-xs text-s text-muted-foreground transition-colors hover:text-foreground"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label="Back to reports"
           >
             <ArrowLeft className="h-4 w-4" />
-            Reports
           </Link>
-          <span className="text-border">|</span>
-          <h1 className="truncate text-s font-semibold">
-            {format(new Date(report.auditDate), "EEEE, MMM d, yyyy")}
-          </h1>
+          <PageBreadcrumb
+            items={[
+              { label: "Reports", onClick: () => router.push("/dashboard/audit") },
+              { label: format(new Date(report.auditDate), "EEEE, MMM d, yyyy") },
+            ]}
+          />
           <span className="hidden truncate text-xs text-muted-foreground sm:inline">
             {report.teamNames.join(", ")}
           </span>
@@ -111,10 +116,7 @@ export function ReportClient({ report }: { report: AuditReportDTO }) {
             {decided}/{items.length} reviewed
           </span>
           {report.status === "submitted" ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2.5 py-0.5 text-xs font-semibold text-success">
-              <ShieldCheck className="h-3 w-3" />
-              Submitted
-            </span>
+            <StatusBadge config={outlineBadge("Submitted", "text-success", "border-success/30")} icon={ShieldCheck} />
           ) : report.isOwner ? (
             <Button
               size="sm"
@@ -262,25 +264,13 @@ function AuditItemCard({
 
         <div className="flex shrink-0 items-center gap-2">
           {item.carriedOver && (
-            <span
-              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
-              title="Already reviewed in an earlier report — still unresolved"
-            >
-              <RotateCcw className="h-3 w-3" />
-              Carried over
-            </span>
+            <StatusBadge config={outlineBadge("Carried over", "text-muted-foreground", "border-border")} icon={RotateCcw} title="Already reviewed in an earlier report — still unresolved" />
           )}
-          <span
-            className={cn(
-              "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold",
-              style.chip,
-            )}
-          >
-            {FLAG_LABELS[item.flagType as AuditFlagType] ?? item.flagType}
-            {item.stageHours != null && ` · ${formatStageHours(item.stageHours)}`}
-            {item.declineCount != null && ` · ${item.declineCount}×`}
-            {item.dueInDays != null && ` · ${Math.abs(item.dueInDays)}d overdue`}
-          </span>
+          <StatusBadge config={{
+            label: `${FLAG_LABELS[item.flagType as AuditFlagType] ?? item.flagType}${item.stageHours != null ? ` · ${formatStageHours(item.stageHours)}` : ""}${item.declineCount != null ? ` · ${item.declineCount}×` : ""}${item.dueInDays != null ? ` · ${Math.abs(item.dueInDays)}d overdue` : ""}`,
+            color: style.color,
+            bg: style.bg,
+          }} />
           <VerdictBadge item={item} />
           <ChevronDown
             className={cn(
@@ -314,9 +304,9 @@ function AuditItemCard({
             <div className="mb-4 max-h-48 space-y-1.5 overflow-y-auto pe-1">
               {candidates.timeline.map((e, i) => (
                 <div key={i} className="flex items-center gap-2 text-s">
-                  <Avatar className="h-5 w-5 shrink-0">
+                  <Avatar size="xs">
                     <AvatarImage src={e.imageUrl ?? undefined} />
-                    <AvatarFallback className="text-xs">
+                    <AvatarFallback>
                       {(e.userName ?? "?").slice(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
@@ -358,15 +348,15 @@ function AuditItemCard({
                         })
                       }
                       className={cn(
-                        "flex items-center gap-xs rounded-full border px-2.5 py-1 text-s transition-colors",
+                        "flex items-center gap-xs rounded-lg border px-2.5 py-1 text-s transition-colors",
                         isBlamed
                           ? "border-destructive/40 bg-destructive/15 text-destructive"
                           : "border-border bg-card text-foreground hover:bg-accent/20",
                       )}
                     >
-                      <Avatar className="h-4 w-4">
+                      <Avatar size="xs">
                         <AvatarImage src={c.imageUrl ?? undefined} />
-                        <AvatarFallback className="text-xs">
+                        <AvatarFallback>
                           {(c.userName ?? "?").slice(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
@@ -380,7 +370,7 @@ function AuditItemCard({
                   disabled={saving}
                   onClick={() => applyVerdict("excused")}
                   className={cn(
-                    "flex items-center gap-xs rounded-full border px-2.5 py-1 text-s transition-colors",
+                    "flex items-center gap-xs rounded-lg border px-2.5 py-1 text-s transition-colors",
                     item.verdict === "excused"
                       ? "border-success/40 bg-success/15 text-success"
                       : "border-border bg-card text-foreground hover:bg-accent/20",
@@ -394,7 +384,7 @@ function AuditItemCard({
                   disabled={saving}
                   onClick={() => applyVerdict("skipped")}
                   className={cn(
-                    "flex items-center gap-xs rounded-full border px-2.5 py-1 text-s transition-colors",
+                    "flex items-center gap-xs rounded-lg border px-2.5 py-1 text-s transition-colors",
                     item.verdict === "skipped"
                       ? "border-border bg-muted text-foreground"
                       : "border-border bg-card text-muted-foreground hover:bg-accent/20",
@@ -408,7 +398,7 @@ function AuditItemCard({
                     type="button"
                     disabled={saving}
                     onClick={() => applyVerdict("pending")}
-                    className="flex items-center gap-xs rounded-full border border-border bg-card px-2.5 py-1 text-s text-muted-foreground transition-colors hover:bg-accent/20"
+                    className="flex items-center gap-xs rounded-lg border border-border bg-card px-2.5 py-1 text-s text-muted-foreground transition-colors hover:bg-accent/20"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
                     Reset
@@ -439,28 +429,13 @@ function AuditItemCard({
 
 function VerdictBadge({ item }: { item: AuditItemDTO }) {
   if (item.verdict === "blamed") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-destructive/20 bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">
-        <UserX className="h-3 w-3" />
-        {item.blamedUser?.name ?? "Blamed"}
-      </span>
-    );
+    return <StatusBadge config={outlineBadge(item.blamedUser?.name ?? "Blamed", "text-destructive", "border-destructive/30")} icon={UserX} />;
   }
   if (item.verdict === "excused") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-xs font-semibold text-success">
-        <ShieldCheck className="h-3 w-3" />
-        Excused
-      </span>
-    );
+    return <StatusBadge config={outlineBadge("Excused", "text-success", "border-success/30")} icon={ShieldCheck} />;
   }
   if (item.verdict === "skipped") {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-        <SkipForward className="h-3 w-3" />
-        Skipped
-      </span>
-    );
+    return <StatusBadge config={outlineBadge("Skipped", "text-muted-foreground", "border-border")} icon={SkipForward} />;
   }
   return null;
 }

@@ -23,6 +23,10 @@ export default async function TaskDetailPage({ params, searchParams }: Props) {
       project: true,
       assignee: true,
       createdBy: true,
+      sprint: true,
+      sprintSnapshots: {
+        include: { sprint: true },
+      },
     },
   });
 
@@ -48,7 +52,7 @@ export default async function TaskDetailPage({ params, searchParams }: Props) {
     userPermissions = { ...getPermissionsFromRole(member.projectRole), systemRole: user.systemRole };
   }
 
-  const [questions, existingAnswers, stageLogData, notes] = await Promise.all([
+  const [questions, existingAnswers, , notes] = await Promise.all([
     getTaskQuestions(),
     getTaskAnswers(taskId),
     getTaskStageLogs(taskId),
@@ -79,19 +83,47 @@ export default async function TaskDetailPage({ params, searchParams }: Props) {
         createdAt: task.createdAt.toISOString(),
         estimatedMinutes: task.estimatedMinutes,
         estimateAccuracy: task.estimateAccuracy,
+        sprints: [
+          ...(task.sprint
+            ? [
+                {
+                  id: task.sprint.id,
+                  name: task.sprint.name,
+                  status: task.sprint.status,
+                  startDate: task.sprint.startDate.toISOString(),
+                  endDate: task.sprint.endDate.toISOString(),
+                  estimatedMinutes: task.estimatedMinutes,
+                },
+              ]
+            : []),
+          ...task.sprintSnapshots
+            .filter((snap) => snap.sprintId !== task.sprintId)
+            .slice()
+            .sort(
+              (a, b) =>
+                new Date(b.sprint.endDate).getTime() - new Date(a.sprint.endDate).getTime(),
+            )
+            .map((snap) => ({
+              id: snap.sprint.id,
+              name: snap.sprint.name,
+              status: snap.sprint.status,
+              startDate: snap.sprint.startDate.toISOString(),
+              endDate: snap.sprint.endDate.toISOString(),
+              estimatedMinutes: snap.estimatedMinutes,
+            })),
+        ],
       }}
       projectId={projectId}
       projectName={task.project.name}
       questions={questions}
       initialAnswers={answersMap}
-      stageLogData={stageLogData}
       initialNotes={notes}
       isAdmin={user.systemRole === "ADMIN"}
       canDelete={user.systemRole === "ADMIN" || userPermissions.canDeleteTask}
       canSkipClientReview={
         user.systemRole === "ADMIN" ||
         (userPermissions.canMoveTask &&
-          (userPermissions.allowedTransitions?.["INTERNAL_REVIEW"] ?? []).includes("READY_FOR_RELEASE"))
+          (userPermissions.allowedTransitions?.["INTERNAL_REVIEW"] ?? []).includes("DONE"))
       }
       initialThreadId={threadId ?? null}
       backToNoteId={from === "note" ? (noteId ?? null) : null}

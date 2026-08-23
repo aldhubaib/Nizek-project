@@ -72,9 +72,9 @@ export const STAGE_ORDER: Stage[] = [
 ];
 
 export const STAGE_LABELS: Record<Stage, string> = {
-  NEW_REQUEST: "New Request",
+  NEW_REQUEST: "Backlog",
   CLARIFICATION: "Clarification",
-  READY_FOR_DEV: "Ready for Dev",
+  READY_FOR_DEV: "Todo",
   IN_DEVELOPMENT: "In Development",
   INTERNAL_REVIEW: "Internal Review",
   CLIENT_REVIEW: "Client Review",
@@ -91,11 +91,11 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
 };
 
 export const TASK_TYPE_CONFIG: Record<TaskType, { label: string; color: string; bg: string }> = {
-  FEATURE: { label: "Business Case", color: "text-primary", bg: "bg-primary/15 border-primary/20" },
-  ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bg: "bg-violet-500/15 border-violet-500/20" },
-  BUG: { label: "Bug", color: "text-destructive", bg: "bg-destructive/15 border-destructive/20" },
-  REPORTED_BUG: { label: "Reported Bug", color: "text-amber-400", bg: "bg-amber-500/15 border-amber-500/20" },
-  DESIGN: { label: "Design", color: "text-cyan-400", bg: "bg-cyan-500/15 border-cyan-500/20" },
+  FEATURE: { label: "Business Case", color: "text-primary", bg: "bg-transparent border-primary/30" },
+  ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bg: "bg-transparent border-violet-500/30" },
+  BUG: { label: "Bug", color: "text-destructive", bg: "bg-transparent border-destructive/30" },
+  REPORTED_BUG: { label: "Reported Bug", color: "text-amber-400", bg: "bg-transparent border-amber-500/30" },
+  DESIGN: { label: "Design", color: "text-cyan-400", bg: "bg-transparent border-cyan-500/30" },
 };
 
 export const ROLE_LABELS: Record<Role, string> = {

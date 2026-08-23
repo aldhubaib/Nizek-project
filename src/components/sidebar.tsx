@@ -120,7 +120,7 @@ export function Sidebar({
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-xs px-s overflow-y-auto">
+      <nav className="flex flex-1 flex-col gap-s overflow-y-auto px-s py-s">
         {navigation
           .filter((item) => {
             if (isClient) return item.href === "/dashboard/messages";
@@ -138,8 +138,8 @@ export function Sidebar({
             <Link
               href={item.href}
               className={cn(
-                "w-full flex items-center gap-s rounded-full text-s font-medium transition-colors mb-0.5 no-underline",
-                collapsed ? "justify-center px-0 py-s" : "px-s py-xs",
+                "flex w-full items-center gap-s rounded-full text-xs font-medium leading-none no-underline transition-colors",
+                collapsed ? "justify-center px-0 py-s" : "px-s py-s",
                 active
                   ? "bg-card text-foreground"
                   : "text-muted-foreground hover:bg-card/60 hover:text-muted-foreground"

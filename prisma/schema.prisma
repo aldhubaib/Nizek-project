@@ -36,6 +36,13 @@ enum Stage {
   DONE
 }
 
+enum SprintStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+  PARTIALLY_COMPLETED
+}
+
 enum TaskType {
   FEATURE
   ENHANCEMENT
@@ -129,6 +136,10 @@ model User {
   taskHighlightComments TaskHighlightComment[] @relation("TaskHighlightCommentAuthor")
   taskHighlightMentions TaskHighlightMention[] @relation("TaskHighlightMentionedUser")
   taskHighlightSubs    TaskHighlightSubscriber[] @relation("TaskHighlightSubscriber")
+  proofOfWorkCreated   ProofOfWork[]              @relation("ProofOfWorkAuthor")
+  proofOfWorkBypassed  ProofOfWork[]              @relation("ProofOfWorkBypassApprover")
+  proofBypassRequested ProofBypassPass[]          @relation("ProofBypassRequester")
+  proofBypassApproved  ProofBypassPass[]          @relation("ProofBypassApprover")
 
   @@index([systemRole])
   @@index([blocked])
@@ -174,6 +185,9 @@ model Project {
   defaultClientReviewerId String?
   defaultClientReviewer   User?  @relation("ProjectDefaultClient", fields: [defaultClientReviewerId], references: [id], onDelete: SetNull)
 
+  internalReviewRoleId String?
+  internalReviewRole   ProjectRole? @relation("ProjectInternalReviewRole", fields: [internalReviewRoleId], references: [id], onDelete: SetNull)
+
   maxPipelineTasks Int @default(3)
 
   /// When true, a sibling Conversation (kind=client) is the client-facing room.
@@ -185,6 +199,7 @@ model Project {
   members      ProjectMember[]
   contracts    Contract[]
   tasks        Task[]
+  sprints      Sprint[]
   meetingNotes MeetingNote[]
   assets       Asset[]
   invitations  Invitation[]
@@ -211,6 +226,7 @@ model ProjectMember {
 
   canInviteMembers Boolean @default(false)
   canInviteClients Boolean @default(false)
+  canBypassProof   Boolean @default(false)
 
   createdAt DateTime @default(now())
 
@@ -231,6 +247,10 @@ model ProjectRole {
   canDeleteTask      Boolean @default(false)
   canDeclineTask     Boolean @default(false)
   isTeamLead         Boolean @default(false)
+  canCreateSprintPlanning Boolean @default(false)
+  canStartSprint     Boolean @default(false)
+  canEndSprint       Boolean @default(false)
+  canDeleteSprint    Boolean @default(false)
   allowedStages      String?
   allowedTransitions String?
 
@@ -238,6 +258,7 @@ model ProjectRole {
 
   members     ProjectMember[]
   invitations Invitation[]
+  internalReviewProjects Project[] @relation("ProjectInternalReviewRole")
 }
 
 model ContractPrefix {
@@ -272,6 +293,48 @@ model Contract {
   @@index([endDate])
 }
 
+model Sprint {
+  id        String       @id @default(cuid())
+  name      String
+  goal      String?
+  startDate DateTime
+  endDate   DateTime
+  status    SprintStatus @default(PLANNED)
+  incompleteReason String?
+  completedAt DateTime?
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  tasks     Task[]
+  snapshots SprintTaskSnapshot[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, status])
+  @@index([projectId, startDate])
+}
+
+model SprintTaskSnapshot {
+  id               String @id @default(cuid())
+  sprintId         String
+  sprint           Sprint @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  taskId           String
+  task             Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  stage            Stage
+  estimatedMinutes Int?
+  incompleteReason String?
+  assigneeId       String?
+  assigneeName     String?
+  assigneeImageUrl String?
+  unplannedInSprint Boolean @default(false)
+
+  @@unique([sprintId, taskId])
+  @@index([sprintId])
+  @@index([taskId])
+}
+
 model Task {
   id          String   @id @default(cuid())
   taskNumber  Int      @default(0)
@@ -283,9 +346,12 @@ model Task {
   order             Int
   estimatedMinutes  Int?
   estimateAccuracy  EstimateAccuracy?
+  unplannedInSprint Boolean @default(false)
 
   projectId   String
   project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sprintId    String?
+  sprint      Sprint? @relation(fields: [sprintId], references: [id], onDelete: SetNull)
   assigneeId  String?
   assignee    User?   @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   createdById String
@@ -305,14 +371,18 @@ model Task {
   comments   TaskComment[]
   highlightThreads TaskHighlightThread[]
   stageLogs  StageLog[]
-  notes      MeetingNote[]
-  noteLinks  NoteTaskLink[]
-  messages   Message[]
+  notes           MeetingNote[]
+  noteLinks       NoteTaskLink[]
+  messages        Message[]
+  sprintSnapshots SprintTaskSnapshot[]
+  proofOfWork     ProofOfWork[]
+  proofBypassPasses ProofBypassPass[]
 
   @@unique([projectId, taskNumber])
   @@index([projectId, stage])
   @@index([projectId, order])
   @@index([projectId, archivedAt])
+  @@index([sprintId])
   @@index([assigneeId])
   @@index([createdById])
   @@index([stage, archivedAt])
@@ -376,6 +446,52 @@ model TaskCommentMention {
   @@index([userId, readAt])
 }
 
+model ProofOfWork {
+  id          String   @id @default(cuid())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User     @relation("ProofOfWorkAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+  bypassedById String?
+  bypassedBy   User?   @relation("ProofOfWorkBypassApprover", fields: [bypassedById], references: [id], onDelete: SetNull)
+  bypassedAt   DateTime?
+  videos       ProofOfWorkVideo[]
+  createdAt    DateTime @default(now())
+
+  @@index([taskId, createdAt])
+}
+
+model ProofOfWorkVideo {
+  id        String   @id @default(cuid())
+  proofId   String
+  proof     ProofOfWork @relation(fields: [proofId], references: [id], onDelete: Cascade)
+  filename  String
+  url       String
+  fileSize  Int?
+  mimeType  String?
+  createdAt DateTime @default(now())
+
+  @@index([proofId])
+}
+
+model ProofBypassPass {
+  id            String   @id @default(cuid())
+  taskId        String
+  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  code          String   @unique
+  requestedById String
+  requestedBy   User     @relation("ProofBypassRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+  approvedById  String?
+  approvedBy    User?    @relation("ProofBypassApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  status        String   @default("PENDING")
+  requestedAt   DateTime @default(now())
+  approvedAt    DateTime?
+  usedAt        DateTime?
+
+  @@index([taskId, status])
+  @@index([code])
+}
+
 model TaskActivity {
   id       String  @id @default(cuid())
   action   String
@@ -400,6 +516,8 @@ enum NoteType {
   DECISION
   CLARIFICATION
   DEADLINE
+  SPRINT_PLANNING
+  SPRINT_REVIEW
   FEATURE
   ENHANCEMENT
   BUG

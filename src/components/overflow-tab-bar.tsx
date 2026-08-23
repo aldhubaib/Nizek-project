@@ -132,6 +132,7 @@ export function OverflowTabBar<T extends string>({
   onChange,
   className,
   mobileMaxVisible,
+  justify = "center",
 }: {
   items: OverflowTabItem<T>[];
   value: T;
@@ -139,6 +140,8 @@ export function OverflowTabBar<T extends string>({
   className?: string;
   /** Below `lg`, show at most this many pills. `1` keeps the active pill + More. */
   mobileMaxVisible?: number;
+  /** Pill alignment inside the bar. Header tabs center; inline filter rows start. */
+  justify?: "center" | "start";
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
@@ -220,7 +223,12 @@ export function OverflowTabBar<T extends string>({
           </span>
         ))}
       </div>
-      <div className="flex min-w-0 items-center justify-center gap-2">
+      <div
+        className={cn(
+          "flex min-w-0 items-center gap-2",
+          justify === "center" ? "justify-center" : "justify-start",
+        )}
+      >
         {visible.map((item) => (
           <Pill
             key={item.id}

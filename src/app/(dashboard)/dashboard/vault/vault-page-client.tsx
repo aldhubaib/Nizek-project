@@ -15,7 +15,7 @@ import type {
   VaultCredentialDTO,
   VaultProjectFolderDTO,
 } from "@/actions/vault";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageName } from "@/components/page-header";
 
 function credentialMatches(c: VaultCredentialDTO, q: string) {
   return (
@@ -79,7 +79,7 @@ export function VaultPageClient({
     <div>
       <PageHeader>
         <KeyRound className="h-4 w-4 text-muted-foreground" />
-        <h1 className="text-s font-semibold">Vault</h1>
+        <PageName>Vault</PageName>
       </PageHeader>
       <div className="mx-auto max-w-3xl space-y-6 px-app py-8">
       <p className="text-s text-muted-foreground">

@@ -10,6 +10,7 @@ import {
 } from "@/lib/note-timeline";
 import type { ParagraphChange } from "@/lib/note-content-diff";
 import { cn } from "@/lib/utils";
+import { Avatar as UiAvatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 function timeAgo(date: Date): string {
   const diffMs = Date.now() - date.getTime();
@@ -99,21 +100,13 @@ function ParagraphChanges({ changes }: { changes: ParagraphChange[] }) {
 }
 
 function Avatar({ user }: { user: NoteTimelineUser }) {
-  if (user.imageUrl) {
-    return (
-      <img
-        src={user.imageUrl}
-        alt=""
-        className="w-[18px] h-[18px] rounded-full ring-2 ring-card object-cover"
-      />
-    );
-  }
   return (
-    <div className="w-[18px] h-[18px] rounded-full bg-muted ring-2 ring-card flex items-center justify-center">
-      <span className="text-xs font-bold text-muted-foreground">
+    <UiAvatar size="xs" className="ring-2 ring-card">
+      {user.imageUrl && <AvatarImage src={user.imageUrl} alt="" />}
+      <AvatarFallback className="font-bold">
         {user.name?.charAt(0)?.toUpperCase() ?? "?"}
-      </span>
-    </div>
+      </AvatarFallback>
+    </UiAvatar>
   );
 }
 
@@ -180,7 +173,7 @@ export function NoteHistoryDialog({ events, onClose }: Props) {
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="absolute inset-0 bg-overlay" onClick={onClose} />
       <div className="relative bg-card border border-border rounded-xl shadow-2xl max-w-xl w-full mx-4 flex flex-col max-h-[85vh]">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border shrink-0">
           <History className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />

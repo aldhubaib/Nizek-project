@@ -5,7 +5,7 @@ import { FolderKanban, Archive, Filter, X } from "lucide-react";
 import { CreateProjectDialog } from "@/components/project/create-project-dialog";
 import { ProjectCard } from "@/components/project/project-card";
 import { cn } from "@/lib/utils";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageName } from "@/components/page-header";
 
 interface Team {
   id: string;
@@ -101,7 +101,7 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader className="justify-between">
-        <h1 className="text-s font-semibold">Projects</h1>
+        <PageName>Projects</PageName>
         <CreateProjectDialog teams={teams} contractPrefixes={contractPrefixes} />
       </PageHeader>
 

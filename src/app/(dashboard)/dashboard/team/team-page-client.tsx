@@ -339,7 +339,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
 
       {/* Invite Dialog */}
       {showInvite && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay">
           <div className="w-full max-w-sm rounded-xl border border-border bg-sidebar p-5 shadow-xl">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-s font-semibold text-foreground">Invite Member</h3>
@@ -463,14 +463,14 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                   className={cn(
                     "flex items-center gap-2 rounded-lg border px-3 py-2 text-s font-medium transition-colors w-full",
                     inviteIsAdmin
-                      ? "bg-purple-500/15 border-purple-500/30 text-purple-400"
+                      ? "bg-purple/15 border-purple/30 text-purple"
                       : "border-border text-muted-foreground hover:border-muted-foreground/40"
                   )}
                 >
                   <div
                     className={cn(
                       "w-4 h-4 rounded-sm border flex items-center justify-center transition-colors",
-                      inviteIsAdmin ? "bg-purple-500 border-purple-500" : "border-muted-foreground/40"
+                      inviteIsAdmin ? "bg-purple border-purple" : "border-muted-foreground/40"
                     )}
                   >
                     {inviteIsAdmin && <ShieldCheck className="w-3 h-3 text-white" strokeWidth={2.5} />}
@@ -504,7 +504,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
 
       {/* Block Transfer Dialog */}
       {blockTransfer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm">
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[80vh] overflow-y-auto">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
@@ -648,7 +648,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                     {member.name || member.email}
                   </span>
                   {member.systemRole === "ADMIN" && (
-                    <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-purple-400 bg-purple-500/15 border-purple-500/30">
+                    <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-purple bg-purple/15 border-purple/30">
                       Admin
                     </span>
                   )}
@@ -773,7 +773,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                       className={cn(
                         "h-7 px-2.5 text-xs font-medium rounded-md border transition-colors disabled:opacity-50",
                         member.systemRole === "ADMIN"
-                          ? "bg-purple-500/15 border-purple-500/30 text-purple-400 hover:bg-purple-500/25"
+                          ? "bg-purple/15 border-purple/30 text-purple hover:bg-purple/25"
                           : "border-border text-muted-foreground hover:border-muted-foreground/40"
                       )}
                     >
@@ -817,7 +817,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                   <span className="text-s font-medium text-foreground truncate block">{inv.email}</span>
                   <div className="flex items-center gap-2 mt-0.5">
                     {inv.systemRole === "ADMIN" && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-purple-400 bg-purple-500/15 border-purple-500/30">Admin</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-purple bg-purple/15 border-purple/30">Admin</span>
                     )}
                     {inv.team && (
                       <span className="text-xs px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground">{inv.team.name}</span>
@@ -1014,7 +1014,7 @@ function ProjectRoleChip({
       )}
 
       {transfer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm">
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-orange/15 flex items-center justify-center shrink-0">

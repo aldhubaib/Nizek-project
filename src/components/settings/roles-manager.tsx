@@ -17,9 +17,8 @@ import { createRole, updateRole, deleteRole } from "@/actions/role";
 import { cn } from "@/lib/utils";
 
 const ALL_STAGES = [
-  { id: "NEW_REQUEST", label: "New Request" },
-  { id: "CLARIFICATION", label: "Clarification" },
-  { id: "READY_FOR_DEV", label: "Ready for Dev" },
+  { id: "NEW_REQUEST", label: "Backlog" },
+  { id: "READY_FOR_DEV", label: "Todo" },
   { id: "IN_DEVELOPMENT", label: "In Development" },
   { id: "INTERNAL_REVIEW", label: "Internal Review" },
   { id: "CLIENT_REVIEW", label: "Client Review" },
@@ -37,6 +36,10 @@ interface WorkspaceRole {
   canDeleteTask: boolean;
   canDeclineTask: boolean;
   isTeamLead: boolean;
+  canCreateSprintPlanning: boolean;
+  canStartSprint: boolean;
+  canEndSprint: boolean;
+  canDeleteSprint: boolean;
   allowedStages: string | null;
   allowedTransitions: string | null;
   _count: { members: number };
@@ -101,15 +104,21 @@ function stageLabel(id: string): string {
   return ALL_STAGES.find((s) => s.id === id)?.label ?? id;
 }
 
+const EMPTY_GENERAL = {
+  canMoveTask: false,
+  canDeleteTask: false,
+  canDeclineTask: false,
+  isTeamLead: false,
+  canCreateSprintPlanning: false,
+  canStartSprint: false,
+  canEndSprint: false,
+  canDeleteSprint: false,
+};
+
 export function RolesManager({ roles }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newPerms, setNewPerms] = useState({
-    canMoveTask: false,
-    canDeleteTask: false,
-    canDeclineTask: false,
-    isTeamLead: false,
-  });
+  const [newPerms, setNewPerms] = useState({ ...EMPTY_GENERAL });
   const [newStagePerms, setNewStagePerms] = useState<StagePerms>({
     transitions: {},
     createStages: [],
@@ -119,12 +128,7 @@ export function RolesManager({ roles }: Props) {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [editPerms, setEditPerms] = useState({
-    canMoveTask: false,
-    canDeleteTask: false,
-    canDeclineTask: false,
-    isTeamLead: false,
-  });
+  const [editPerms, setEditPerms] = useState({ ...EMPTY_GENERAL });
   const [editStagePerms, setEditStagePerms] = useState<StagePerms>({
     transitions: {},
     createStages: [],
@@ -148,10 +152,14 @@ export function RolesManager({ roles }: Props) {
         canDeleteTask: newPerms.canDeleteTask,
         canDeclineTask: newPerms.canDeclineTask,
         isTeamLead: newPerms.isTeamLead,
+        canCreateSprintPlanning: newPerms.canCreateSprintPlanning,
+        canStartSprint: newPerms.canStartSprint,
+        canEndSprint: newPerms.canEndSprint,
+        canDeleteSprint: newPerms.canDeleteSprint,
         allowedTransitions: serializeAllData(newStagePerms),
       });
       setNewName("");
-      setNewPerms({ canMoveTask: false, canDeleteTask: false, canDeclineTask: false, isTeamLead: false });
+      setNewPerms({ ...EMPTY_GENERAL });
       setNewStagePerms({ transitions: {}, createStages: [], modifyStages: [] });
       setShowCreate(false);
     } catch (err) {
@@ -169,6 +177,10 @@ export function RolesManager({ roles }: Props) {
       canDeleteTask: role.canDeleteTask,
       canDeclineTask: role.canDeclineTask,
       isTeamLead: role.isTeamLead,
+      canCreateSprintPlanning: role.canCreateSprintPlanning,
+      canStartSprint: role.canStartSprint,
+      canEndSprint: role.canEndSprint,
+      canDeleteSprint: role.canDeleteSprint,
     });
     const parsed = parseAllData(role.allowedTransitions);
     if (parsed.createStages.length === 0 && role.canCreateTask) {
@@ -192,6 +204,10 @@ export function RolesManager({ roles }: Props) {
         canDeleteTask: editPerms.canDeleteTask,
         canDeclineTask: editPerms.canDeclineTask,
         isTeamLead: editPerms.isTeamLead,
+        canCreateSprintPlanning: editPerms.canCreateSprintPlanning,
+        canStartSprint: editPerms.canStartSprint,
+        canEndSprint: editPerms.canEndSprint,
+        canDeleteSprint: editPerms.canDeleteSprint,
         allowedTransitions: serializeAllData(editStagePerms),
       });
       setEditingId(null);
@@ -245,6 +261,11 @@ export function RolesManager({ roles }: Props) {
             <PermToggle label="Team Lead" checked={newPerms.isTeamLead} onChange={(v) => setNewPerms((p) => ({ ...p, isTeamLead: v }))} />
           </div>
 
+          <SprintPermToggles
+            perms={newPerms}
+            onChange={(patch) => setNewPerms((p) => ({ ...p, ...patch }))}
+          />
+
           <StagePermissionsTable
             stagePerms={newStagePerms}
             onChange={setNewStagePerms}
@@ -295,6 +316,11 @@ export function RolesManager({ roles }: Props) {
                       <PermToggle label="Team Lead" checked={editPerms.isTeamLead} onChange={(v) => setEditPerms((p) => ({ ...p, isTeamLead: v }))} />
                     </div>
 
+                    <SprintPermToggles
+                      perms={editPerms}
+                      onChange={(patch) => setEditPerms((p) => ({ ...p, ...patch }))}
+                    />
+
                     <StagePermissionsTable
                       stagePerms={editStagePerms}
                       onChange={setEditStagePerms}
@@ -324,7 +350,7 @@ export function RolesManager({ roles }: Props) {
                           </span>
                         )}
                         {role.isAdmin && (
-                          <span className="text-xs bg-purple-500/15 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded-full font-medium">
+                          <span className="text-xs bg-purple/15 text-purple border border-purple/30 px-1.5 py-0.5 rounded-full font-medium">
                             Admin
                           </span>
                         )}
@@ -357,6 +383,10 @@ export function RolesManager({ roles }: Props) {
                     <div className="flex flex-wrap gap-xs mb-2">
                       <PermBadge label="Delete" enabled={role.canDeleteTask} />
                       <PermBadge label="Decline" enabled={role.canDeclineTask} />
+                      <PermBadge label="Sprint plan" enabled={role.canCreateSprintPlanning} />
+                      <PermBadge label="Start sprint" enabled={role.canStartSprint} />
+                      <PermBadge label="End sprint" enabled={role.canEndSprint} />
+                      <PermBadge label="Delete sprint" enabled={role.canDeleteSprint} />
                     </div>
 
                     {/* Stage summary */}
@@ -398,7 +428,7 @@ function RoleStageSummary({ parsed }: { parsed: StagePerms; canMoveTask?: boolea
           <span className="text-muted-foreground shrink-0 w-12">Modify:</span>
           <div className="flex flex-wrap gap-1">
             {parsed.modifyStages.map((s) => (
-              <span key={s} className="bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded">{stageLabel(s)}</span>
+              <span key={s} className="bg-purple/10 text-purple px-1.5 py-0.5 rounded">{stageLabel(s)}</span>
             ))}
           </div>
         </div>
@@ -454,9 +484,9 @@ function StagePermissionsTable({
     if (fromId === "INTERNAL_REVIEW" && toId === "CLIENT_REVIEW") {
       const enabling = !(stagePerms.transitions[fromId] ?? []).includes(toId);
       if (enabling) {
-        updated = { ...updated, [fromId]: [...new Set([...(updated[fromId] ?? []), "READY_FOR_RELEASE"])] };
+        updated = { ...updated, [fromId]: [...new Set([...(updated[fromId] ?? []), "DONE"])] };
       } else {
-        updated = { ...updated, [fromId]: (updated[fromId] ?? []).filter((s) => s !== "READY_FOR_RELEASE") };
+        updated = { ...updated, [fromId]: (updated[fromId] ?? []).filter((s) => s !== "DONE" && s !== "READY_FOR_RELEASE") };
       }
     }
     onChange({ ...stagePerms, transitions: updated });
@@ -534,7 +564,7 @@ function StagePermissionsTable({
 function StageCheckbox({ enabled, onClick, color }: { enabled: boolean; onClick: () => void; color: string }) {
   const colorMap: Record<string, { bg: string; border: string; text: string }> = {
     blue: { bg: "bg-primary/15", border: "border-primary/40", text: "text-primary" },
-    purple: { bg: "bg-purple-500/15", border: "border-purple-500/40", text: "text-purple-400" },
+    purple: { bg: "bg-purple/15", border: "border-purple/40", text: "text-purple" },
     emerald: { bg: "bg-success/15", border: "border-success/40", text: "text-success" },
     amber: { bg: "bg-orange/15", border: "border-orange/40", text: "text-orange" },
   };
@@ -551,6 +581,47 @@ function StageCheckbox({ enabled, onClick, color }: { enabled: boolean; onClick:
     >
       {enabled && <Check className={cn("w-3.5 h-3.5", c.text)} strokeWidth={2.5} />}
     </button>
+  );
+}
+
+function SprintPermToggles({
+  perms,
+  onChange,
+}: {
+  perms: {
+    canCreateSprintPlanning: boolean;
+    canStartSprint: boolean;
+    canEndSprint: boolean;
+    canDeleteSprint: boolean;
+  };
+  onChange: (patch: Partial<typeof perms>) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">Sprint</p>
+      <div className="flex flex-wrap gap-3">
+        <PermToggle
+          label="Create sprint planning"
+          checked={perms.canCreateSprintPlanning}
+          onChange={(v) => onChange({ canCreateSprintPlanning: v })}
+        />
+        <PermToggle
+          label="Start sprint"
+          checked={perms.canStartSprint}
+          onChange={(v) => onChange({ canStartSprint: v })}
+        />
+        <PermToggle
+          label="End sprint"
+          checked={perms.canEndSprint}
+          onChange={(v) => onChange({ canEndSprint: v })}
+        />
+        <PermToggle
+          label="Delete sprint"
+          checked={perms.canDeleteSprint}
+          onChange={(v) => onChange({ canDeleteSprint: v })}
+        />
+      </div>
+    </div>
   );
 }
 

@@ -5,9 +5,8 @@ import Link from "next/link";
 import { ArrowUpRight, CheckSquare, Loader2, X } from "lucide-react";
 import { getTaskPreview, type TaskPreview } from "@/actions/task";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { STAGE_LABELS } from "@/lib/audit-flags";
-import { taskCode } from "@/lib/task-label";
-import { cn } from "@/lib/utils";
+import { taskCode, taskStageBadge, stageLabel, TASK_STAGE_DOT } from "@/lib/task-label";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 export type TaskPreviewSeed = {
   id: string;
@@ -23,28 +22,6 @@ const TYPE_LABEL: Record<string, string> = {
   BUG: "Internal Bug",
   REPORTED_BUG: "Reported Bug",
   DESIGN: "Design",
-};
-
-const STAGE_BADGE: Record<string, string> = {
-  NEW_REQUEST: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/30",
-  CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/30",
-  READY_FOR_DEV: "bg-primary/10 text-primary border-primary/30",
-  IN_DEVELOPMENT: "bg-sky-500/10 text-sky-400 border-sky-500/30",
-  INTERNAL_REVIEW: "bg-orange/10 text-orange border-orange/30",
-  CLIENT_REVIEW: "bg-orange-500/10 text-orange-400 border-orange-500/30",
-  READY_FOR_RELEASE: "bg-teal-500/10 text-teal-400 border-teal-500/30",
-  DONE: "bg-success/10 text-success border-success/30",
-};
-
-const STAGE_DOT: Record<string, string> = {
-  NEW_REQUEST: "bg-muted-foreground",
-  CLARIFICATION: "bg-violet-400",
-  READY_FOR_DEV: "bg-primary",
-  IN_DEVELOPMENT: "bg-sky-400",
-  INTERNAL_REVIEW: "bg-orange",
-  CLIENT_REVIEW: "bg-orange-400",
-  READY_FOR_RELEASE: "bg-teal-400",
-  DONE: "bg-success",
 };
 
 export function TaskPreviewPopover({
@@ -100,9 +77,7 @@ export function TaskPreviewPopover({
   const title = preview?.title ?? seed?.title ?? "Task";
   const type = preview?.taskType ?? seed?.taskType ?? "FEATURE";
   const number = preview?.taskNumber ?? seed?.taskNumber ?? 0;
-  const stageLabel = preview?.stage
-    ? (STAGE_LABELS[preview.stage] ?? preview.stage.replaceAll("_", " "))
-    : null;
+  const stageText = preview?.stage ? stageLabel(preview.stage) : null;
 
   return (
     <div className="flex w-[min(calc(100vw-2rem),320px)] flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl">
@@ -137,23 +112,14 @@ export function TaskPreviewPopover({
           <p className="text-s text-destructive">{error}</p>
         ) : (
           <>
-            {(stageLabel || preview?.assigneeName) && (
+            {(stageText || preview?.assigneeName) && (
               <div className="flex items-center gap-2">
-                {stageLabel && preview?.stage && (
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-xs rounded-full border px-2 py-0.5 text-xs font-medium",
-                      STAGE_BADGE[preview.stage] ?? "bg-muted text-muted-foreground border-border",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "size-1.5 rounded-full",
-                        STAGE_DOT[preview.stage] ?? "bg-current",
-                      )}
-                    />
-                    {stageLabel}
-                  </span>
+                {stageText && preview?.stage && (
+                  <StatusBadge
+                    config={taskStageBadge(preview.stage)}
+                    dot
+                    dotColor={TASK_STAGE_DOT[preview.stage]}
+                  />
                 )}
                 {preview?.assigneeName && (
                   <Avatar

@@ -5,12 +5,13 @@ import {
   DndContext,
   DragOverlay,
   closestCorners,
+  pointerWithin,
   PointerSensor,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragStartEvent,
   type DragEndEvent,
-  type DragOverEvent,
 } from "@dnd-kit/core";
 import { KanbanColumn } from "./column";
 import { TaskCard } from "./task-card";
@@ -19,26 +20,43 @@ import { moveTask as moveTaskAction, declineTask, pollTaskUpdates, assignTaskToM
 import { useUser } from "@clerk/nextjs";
 import type { TaskQuestion } from "./question-field";
 import { StageConfirmDialog, getCheckpoint } from "./stage-confirm-dialog";
+import { ProofOfWorkDialog } from "./proof-of-work-dialog";
+import { needsProofOfWork } from "@/lib/proof-of-work";
 import { DeclineDialog, type DeclineAttachment } from "./decline-dialog";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { useChannel } from "@/components/realtime/hooks";
 import { projectChannel } from "@/lib/channels";
 import { canTransition } from "@/lib/permissions";
+import { stageLabel } from "@/lib/task-label";
 
 interface QuestionWithType extends TaskQuestion {
   taskType: string;
 }
 import type { UserPermissions } from "@/app/(dashboard)/dashboard/projects/[projectId]/project-detail-client";
 
+const COLUMN_IDS = new Set<string>([
+  "NEW_REQUEST",
+  "READY_FOR_DEV",
+  "IN_DEVELOPMENT",
+  "INTERNAL_REVIEW",
+  "CLIENT_REVIEW",
+  "DONE",
+]);
+
+const columnFirstCollision: CollisionDetection = (args) => {
+  const pointerHits = pointerWithin(args);
+  const columnHit = pointerHits.find((hit) => COLUMN_IDS.has(String(hit.id)));
+  if (columnHit) return [columnHit];
+  return closestCorners(args);
+};
+
 const STAGES: { id: Stage; label: string; color: string }[] = [
-  { id: "NEW_REQUEST", label: "New Request", color: "bg-muted-foreground" },
-  { id: "CLARIFICATION", label: "Clarification", color: "bg-violet-500" },
-  { id: "READY_FOR_DEV", label: "Ready for Dev", color: "bg-primary" },
-  { id: "IN_DEVELOPMENT", label: "In Development", color: "bg-sky-500" },
-  { id: "INTERNAL_REVIEW", label: "Internal Review", color: "bg-orange" },
-  { id: "CLIENT_REVIEW", label: "Client Review", color: "bg-orange-500" },
-  { id: "READY_FOR_RELEASE", label: "Ready for Release", color: "bg-teal-500" },
-  { id: "DONE", label: "Done", color: "bg-success" },
+  { id: "NEW_REQUEST", label: stageLabel("NEW_REQUEST"), color: "bg-muted-foreground" },
+  { id: "READY_FOR_DEV", label: stageLabel("READY_FOR_DEV"), color: "bg-cyan" },
+  { id: "IN_DEVELOPMENT", label: stageLabel("IN_DEVELOPMENT"), color: "bg-sky" },
+  { id: "INTERNAL_REVIEW", label: stageLabel("INTERNAL_REVIEW"), color: "bg-orange" },
+  { id: "CLIENT_REVIEW", label: stageLabel("CLIENT_REVIEW"), color: "bg-orange" },
+  { id: "DONE", label: stageLabel("DONE"), color: "bg-success" },
 ];
 
 export interface BoardProps {
@@ -51,10 +69,14 @@ export interface BoardProps {
   currentUserId?: string;
   allowedTaskTypes?: string[];
   activeContractType?: string | null;
-  maxPipelineTasks?: number;
+  /** When set, only this sprint's tasks appear on the board. */
+  filterSprintId?: string;
+  /** Hide Backlog; used on the Active sprint view. */
+  pipelineOnly?: boolean;
+  /** Completed sprints: view only, no drag or create. */
+  readOnly?: boolean;
+  onRemoveFromSprint?: (taskId: string) => void;
 }
-
-const PIPELINE_STAGES: Stage[] = ["READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW"];
 
 const ASSIGN_TO_ME_CHECKPOINT = {
   title: "Taking ownership",
@@ -64,8 +86,20 @@ const ASSIGN_TO_ME_CHECKPOINT = {
   assignToMe: true,
 } as const;
 
-function wipLimitMessage(max: number) {
-  return `Pipeline limit reached — this project allows up to ${max} active task${max === 1 ? "" : "s"} across Ready for Dev, In Development, and Internal Review. Move an existing task past Internal Review (or complete it) before adding another.`;
+function visibleStage(
+  stage: Stage | undefined | null,
+  pipelineOnly = false,
+): Stage | undefined {
+  if (!stage) return undefined;
+  if (pipelineOnly && (stage === "NEW_REQUEST" || stage === "CLARIFICATION")) {
+    return "READY_FOR_DEV";
+  }
+  if (pipelineOnly && stage === "CLIENT_REVIEW") {
+    return "INTERNAL_REVIEW";
+  }
+  if (stage === "CLARIFICATION") return "NEW_REQUEST";
+  if (stage === "READY_FOR_RELEASE") return "DONE";
+  return stage;
 }
 
 export function KanbanBoard({
@@ -78,7 +112,10 @@ export function KanbanBoard({
   currentUserId,
   allowedTaskTypes,
   activeContractType,
-  maxPipelineTasks = 3,
+  filterSprintId,
+  pipelineOnly = false,
+  readOnly = false,
+  onRemoveFromSprint,
 }: BoardProps) {
   // Selector subscriptions so the board only re-renders on task changes, not on
   // unrelated store updates (e.g. commentRefreshKey).
@@ -89,6 +126,7 @@ export function KanbanBoard({
   const cent = useCentrifugo();
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
   const [pendingMove, setPendingMove] = useState<{ taskId: string; fromStage: Stage; toStage: Stage; order: number; assigneeName: string | null; assigneeAvatar: string | null } | null>(null);
+  const [pendingProof, setPendingProof] = useState<{ taskId: string; taskTitle: string; order: number } | null>(null);
   const [pendingDecline, setPendingDecline] = useState<{ taskId: string; fromStage: Stage; mentionName: string | null; mentionAvatar: string | null } | null>(null);
   const [assignTarget, setAssignTarget] = useState<{ taskId: string; assigneeName: string | null; assigneeAvatar: string | null } | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -102,9 +140,29 @@ export function KanbanBoard({
   }, [pendingDecline]);
 
   useEffect(() => {
-    setTasks(initialTasks);
-    snapshotRef.current = initialTasks;
-  }, [initialTasks, setTasks]);
+    function onProofFailed(event: Event) {
+      const taskId = (event as CustomEvent<{ taskId?: string }>).detail?.taskId;
+      if (!taskId) return;
+      const snap = snapshotRef.current.find((t) => t.id === taskId);
+      if (!snap) return;
+      useKanbanStore.getState().updateTask(taskId, { stage: snap.stage, order: snap.order });
+    }
+    window.addEventListener("proof-upload-failed", onProofFailed);
+    return () => window.removeEventListener("proof-upload-failed", onProofFailed);
+  }, []);
+
+  useEffect(() => {
+    if (isDragging.current) return;
+    const current = useKanbanStore.getState().tasks;
+    if (current.length === 0 && initialTasks.length > 0) {
+      setTasks(initialTasks);
+      snapshotRef.current = initialTasks;
+      return;
+    }
+    if (current.length === 0) {
+      snapshotRef.current = initialTasks;
+    }
+  }, [projectId, initialTasks, setTasks]);
 
   const refetchTasks = useCallback(async () => {
     if (isDragging.current || pendingDeclineRef.current || document.hidden) return;
@@ -208,7 +266,7 @@ export function KanbanBoard({
 
   // Same rule the server applies (src/lib/permissions.ts), so a drag the
   // board allows can't be one the save then rejects — including the bug lane
-  // where Internal Review forwards straight to Ready for Release.
+  // where Internal Review forwards straight to Done.
   const canMoveFromTo = useCallback(
     (from: Stage, to: Stage) =>
       isProjectActive &&
@@ -231,7 +289,7 @@ export function KanbanBoard({
       allowedTransitions: userPermissions.allowedTransitions ?? {},
     },
     "INTERNAL_REVIEW",
-    "READY_FOR_RELEASE",
+    "DONE",
   );
 
   // Claim a task by clicking its avatar — offered when the viewer can move it at
@@ -282,6 +340,15 @@ export function KanbanBoard({
     });
   }
 
+  const boardStages = useMemo(
+    () =>
+      pipelineOnly
+        ? STAGES.filter((s) => s.id !== "NEW_REQUEST" && s.id !== "CLIENT_REVIEW")
+        : STAGES,
+    [pipelineOnly],
+  );
+  const stageOnBoard = (stage: Stage | undefined | null) => visibleStage(stage, pipelineOnly);
+
   function isDeclineMove(fromStage: Stage, toStage: Stage) {
     return (
       (fromStage === "INTERNAL_REVIEW" && toStage === "IN_DEVELOPMENT") ||
@@ -290,28 +357,16 @@ export function KanbanBoard({
   }
 
   function isValidMove(fromStage: Stage, toStage: Stage) {
-    const fromIdx = STAGES.findIndex((s) => s.id === fromStage);
-    const toIdx = STAGES.findIndex((s) => s.id === toStage);
+    const fromIdx = boardStages.findIndex((s) => s.id === fromStage);
+    const toIdx = boardStages.findIndex((s) => s.id === toStage);
     if (toIdx === fromIdx + 1) return true;
-    if (fromStage === "INTERNAL_REVIEW" && toStage === "READY_FOR_RELEASE") return true;
+    if (fromStage === "INTERNAL_REVIEW" && toStage === "DONE") return true;
     if (isDeclineMove(fromStage, toStage)) return true;
     return false;
   }
 
-  const readyForDevIndex = STAGES.findIndex((s) => s.id === "READY_FOR_DEV");
-  function wouldExceedWip(fromStage: Stage, toStage: Stage) {
-    const fromIdx = STAGES.findIndex((s) => s.id === fromStage);
-    const enteringPipeline =
-      PIPELINE_STAGES.includes(toStage) &&
-      !PIPELINE_STAGES.includes(fromStage) &&
-      fromIdx < readyForDevIndex;
-    if (!enteringPipeline) return false;
-    const count = tasks.filter((t) => PIPELINE_STAGES.includes(t.stage)).length;
-    return count >= maxPipelineTasks;
-  }
-
   const dragOriginRef = useRef<Stage | null>(null);
-  const canLeaveClarRef = useRef(false);
+  const canLeaveBacklogRef = useRef(false);
 
   const dragFromStage = useMemo(() => {
     if (!activeTask) return null;
@@ -322,47 +377,14 @@ export function KanbanBoard({
 
   function handleDragStart(event: DragStartEvent) {
     isDragging.current = true;
-    const task = tasks.find((t) => t.id === event.active.id);
+    snapshotRef.current = useKanbanStore.getState().tasks;
+    const task = useKanbanStore.getState().tasks.find((t) => t.id === event.active.id);
     if (task) {
-      dragOriginRef.current = task.stage;
-      if (task.stage === "CLARIFICATION") {
-        const ready = tasks
-          .filter((t) => t.stage === "CLARIFICATION" && t.isReadyForTransition)
-          .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
-        canLeaveClarRef.current = ready[0]?.id === task.id;
-      } else {
-        canLeaveClarRef.current = false;
-      }
+      const origin = stageOnBoard(task.stage) ?? task.stage;
+      dragOriginRef.current = origin;
+      canLeaveBacklogRef.current =
+        origin === "NEW_REQUEST" ? Boolean(task.isReadyForTransition) : false;
       setActiveTask(task);
-    }
-  }
-
-  function handleDragOver(event: DragOverEvent) {
-    const { active, over } = event;
-    if (!over) return;
-
-    const activeId = active.id as string;
-    const overId = over.id as string;
-    const fromStage = dragOriginRef.current;
-    if (!fromStage) return;
-
-    const activeTaskItem = tasks.find((t) => t.id === activeId);
-    if (!activeTaskItem) return;
-
-    const overStage = STAGES.find((s) => s.id === overId)?.id;
-    const overTask = tasks.find((t) => t.id === overId);
-    const targetStage = overStage ?? overTask?.stage;
-
-    if (targetStage && targetStage !== activeTaskItem.stage) {
-      let effectiveTarget = targetStage;
-      if (fromStage === "INTERNAL_REVIEW" && targetStage === "CLIENT_REVIEW" && activeTaskItem.taskType === "BUG") {
-        effectiveTarget = "READY_FOR_RELEASE";
-      }
-      if (!canMoveFromTo(fromStage, effectiveTarget)) return;
-      if (!isValidMove(fromStage, effectiveTarget)) return;
-      if (fromStage === "CLARIFICATION" && !canLeaveClarRef.current) return;
-      const tasksInTarget = tasks.filter((t) => t.stage === effectiveTarget);
-      moveTask(activeId, effectiveTarget, tasksInTarget.length);
     }
   }
 
@@ -383,14 +405,16 @@ export function KanbanBoard({
     if (!task) return;
 
     const overId = over.id as string;
-    const dropStage = STAGES.find((s) => s.id === overId)?.id ?? tasks.find((t) => t.id === overId)?.stage;
+    const dropStage = stageOnBoard(
+      boardStages.find((s) => s.id === overId)?.id ?? tasks.find((t) => t.id === overId)?.stage,
+    );
 
     // Determine the effective target stage (either from optimistic move or direct drop)
-    let targetStage = task.stage;
-    if (task.stage === fromStage && dropStage && dropStage !== fromStage) {
+    let targetStage = stageOnBoard(task.stage) ?? task.stage;
+    if (stageOnBoard(task.stage) === fromStage && dropStage && dropStage !== fromStage) {
       let effectiveDrop = dropStage;
       if (fromStage === "INTERNAL_REVIEW" && dropStage === "CLIENT_REVIEW" && task.taskType === "BUG") {
-        effectiveDrop = "READY_FOR_RELEASE";
+        effectiveDrop = "DONE";
       }
       if (!canMoveFromTo(fromStage, effectiveDrop)) {
         setTasks(snapshotRef.current);
@@ -400,16 +424,11 @@ export function KanbanBoard({
         return;
       }
       if (!isValidMove(fromStage, effectiveDrop)) { setTasks(snapshotRef.current); return; }
-      if (fromStage === "CLARIFICATION" && !canLeaveClarRef.current) { setTasks(snapshotRef.current); return; }
-      if (wouldExceedWip(fromStage, effectiveDrop)) {
-        setTasks(snapshotRef.current);
-        setPermissionError(wipLimitMessage(maxPipelineTasks));
-        return;
-      }
+      if (fromStage === "NEW_REQUEST" && !canLeaveBacklogRef.current) { setTasks(snapshotRef.current); return; }
       targetStage = effectiveDrop;
-      const tasksInTarget = tasks.filter((t) => t.stage === effectiveDrop);
+      const tasksInTarget = tasks.filter((t) => stageOnBoard(t.stage) === effectiveDrop);
       moveTask(activeId, effectiveDrop, tasksInTarget.length);
-    } else if (dropStage && dropStage !== task.stage) {
+    } else if (dropStage && dropStage !== stageOnBoard(task.stage)) {
       setTasks(snapshotRef.current);
       return;
     }
@@ -419,7 +438,7 @@ export function KanbanBoard({
       return;
     }
 
-    if (fromStage === "CLARIFICATION" && fromStage !== targetStage && !canLeaveClarRef.current) {
+    if (fromStage === "NEW_REQUEST" && fromStage !== targetStage && !canLeaveBacklogRef.current) {
       setTasks(snapshotRef.current);
       return;
     }
@@ -431,6 +450,11 @@ export function KanbanBoard({
 
     if (isDeclineMove(fromStage, targetStage)) {
       setPendingDecline({ taskId: activeId, fromStage, mentionName: task.assignee?.name ?? null, mentionAvatar: task.assignee?.imageUrl ?? null });
+      return;
+    }
+
+    if (needsProofOfWork(fromStage, targetStage)) {
+      setPendingProof({ taskId: activeId, taskTitle: task.title, order: task.order });
       return;
     }
 
@@ -456,18 +480,9 @@ export function KanbanBoard({
         } catch {
           alert("Cannot move task — some required questions are unanswered.");
         }
-      } else if (msg.startsWith("PRIORITY_BLOCKED:")) {
-        try {
-          const blocking = JSON.parse(msg.replace("PRIORITY_BLOCKED:", ""));
-          alert(`Cannot move — higher priority tasks must be completed first:\n\n${blocking.map((t: string) => `• ${t}`).join("\n")}`);
-        } catch {
-          alert("Cannot move — higher priority tasks must be completed first.");
-        }
-      } else if (msg === "ESTIMATE_REQUIRED") {
-        alert("An estimated time is required before moving to Ready for Dev.");
-      } else if (msg.startsWith("WIP_LIMIT:")) {
-        const max = parseInt(msg.replace("WIP_LIMIT:", ""), 10) || maxPipelineTasks;
-        setPermissionError(wipLimitMessage(max));
+      } else if (msg === "PROOF_REQUIRED") {
+        const current = useKanbanStore.getState().tasks.find((t) => t.id === taskId);
+        setPendingProof({ taskId, taskTitle: current?.title ?? "Task", order });
       } else if (msg.includes("permission") || msg.includes("Permission")) {
         setPermissionError(msg);
       } else {
@@ -523,26 +538,33 @@ export function KanbanBoard({
     setPendingDecline(null);
   }
 
+  const visibleTasks = useMemo(
+    () => (filterSprintId ? tasks.filter((t) => t.sprintId === filterSprintId) : tasks),
+    [tasks, filterSprintId],
+  );
+
   const tasksByStage = useMemo(() => {
     const map: Record<string, KanbanTask[]> = {};
-    for (const stage of STAGES) {
-      map[stage.id] = tasks
-        .filter((t) => t.stage === stage.id)
+    for (const stage of boardStages) {
+      map[stage.id] = visibleTasks
+        .filter((t) => stageOnBoard(t.stage) === stage.id)
         .sort((a, b) => a.order - b.order);
     }
     return map;
-  }, [tasks]);
+  }, [visibleTasks, boardStages]);
 
-  if (!isProjectActive) {
+  if (!isProjectActive || readOnly) {
     return (
       <div>
+        {!isProjectActive && (
         <div className="mb-6 rounded-lg border border-orange/30 bg-orange/10 px-4 py-3">
           <p className="text-s font-medium text-orange">
             No active contract — this project is read-only. Add a new contract to re-enable editing.
           </p>
         </div>
-        <div className="flex flex-col gap-4 pb-4 lg:h-full lg:min-h-0 lg:flex-1 lg:flex-row lg:overflow-x-auto lg:pb-0 scrollbar-hidden">
-          {STAGES.map((stage) => {
+        )}
+        <div className="flex w-full flex-col gap-4 pb-4 lg:h-full lg:min-h-0 lg:flex-1 lg:flex-row lg:pb-0">
+          {boardStages.map((stage) => {
             const stageTasks = tasksByStage[stage.id] ?? [];
             return (
               <KanbanColumn
@@ -551,6 +573,7 @@ export function KanbanBoard({
                 tasks={stageTasks}
                 disabled
                 projectId={projectId}
+                pipelineOnly={pipelineOnly}
               />
             );
           })}
@@ -562,15 +585,13 @@ export function KanbanBoard({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={columnFirstCollision}
       onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      {/* Below the desktop breakpoint columns stack like the phone board; from
-          lg up it's a full kanban rail that scrolls sideways. */}
-      <div className="flex flex-col gap-4 pb-4 lg:h-full lg:min-h-0 lg:flex-1 lg:flex-row lg:overflow-x-auto lg:pb-0 scrollbar-hidden">
-        {STAGES.map((stage) => {
+      {/* Below the desktop breakpoint columns stack; from lg up they share the full width. */}
+      <div className="flex w-full flex-col gap-4 pb-4 lg:h-full lg:min-h-0 lg:flex-1 lg:flex-row lg:pb-0">
+        {boardStages.map((stage) => {
           const stageTasks = tasksByStage[stage.id] ?? [];
           return (
             <KanbanColumn
@@ -578,18 +599,36 @@ export function KanbanBoard({
               stage={stage}
               tasks={stageTasks}
               projectId={projectId}
-              canCreateTask={userPermissions.isAdmin || (userPermissions.createStages ?? []).includes(stage.id)}
+              canCreateTask={
+                !filterSprintId &&
+                !pipelineOnly &&
+                (userPermissions.isAdmin || (userPermissions.createStages ?? []).includes(stage.id))
+              }
               dragFromStage={dragFromStage}
               dragTaskType={dragTaskType}
               canSelfAssign={canSelfAssign}
               onSelfAssign={openSelfAssign}
+              onRemoveFromSprint={onRemoveFromSprint}
+              hideSprintName={Boolean(filterSprintId || pipelineOnly)}
+              pipelineOnly={pipelineOnly}
             />
           );
         })}
       </div>
-      <DragOverlay>
-        {activeTask ? <TaskCard task={activeTask} isOverlay /> : null}
+      <DragOverlay dropAnimation={null}>
+        {activeTask ? <TaskCard task={activeTask} isOverlay hideSprintName={Boolean(filterSprintId || pipelineOnly)} /> : null}
       </DragOverlay>
+
+      {pendingProof ? (
+        <ProofOfWorkDialog
+          target={pendingProof}
+          onSubmitted={() => setPendingProof(null)}
+          onCancel={() => {
+            setTasks(snapshotRef.current);
+            setPendingProof(null);
+          }}
+        />
+      ) : null}
 
       {pendingMove && (() => {
         const checkpoint = getCheckpoint(pendingMove.fromStage, pendingMove.toStage);
@@ -636,7 +675,7 @@ export function KanbanBoard({
 
 function PermissionDeniedDialog({ message, onClose }: { message: string; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm">
       <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-10 h-10 rounded-full bg-destructive/15 flex items-center justify-center shrink-0">

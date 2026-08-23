@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useScrollLock } from "@/hooks/use-scroll-lock";
 import {
   Download,
   X,
@@ -63,6 +64,8 @@ export function Lightbox({
   onIndex: (i: number) => void;
   renderMenu?: (att: MessageAttachment) => React.ReactNode;
 }) {
+  useScrollLock(true);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -71,11 +74,8 @@ export function Lightbox({
         onIndex((index - 1 + images.length) % images.length);
     };
     window.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
     };
   }, [index, images.length, onClose, onIndex]);
 
@@ -95,7 +95,7 @@ export function Lightbox({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium">{current.name}</div>
+          <div className="truncate text-s font-medium">{current.name}</div>
           <div className="text-s text-white/60">
             {index + 1} of {images.length}
             {current.sizeBytes ? ` · ${formatBytes(current.sizeBytes)}` : ""}
@@ -220,7 +220,7 @@ export function AttachmentBubble({
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="absolute bottom-2 right-2 grid size-8 place-items-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 max-lg:opacity-100 group-hover:opacity-100"
+          className="absolute bottom-2 right-2 grid size-8 place-items-center rounded-full bg-overlay text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 max-lg:opacity-100 group-hover:opacity-100"
           aria-label="Download"
         >
           <Download className="h-4 w-4" />
@@ -244,7 +244,7 @@ export function AttachmentBubble({
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="absolute right-2 top-2 grid size-8 place-items-center rounded-full bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 max-lg:opacity-100 group-hover:opacity-100"
+          className="absolute right-2 top-2 grid size-8 place-items-center rounded-full bg-overlay text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 max-lg:opacity-100 group-hover:opacity-100"
           aria-label="Download"
         >
           <Download className="h-4 w-4" />
@@ -318,7 +318,7 @@ export function AttachmentBubble({
           <Download className="absolute h-5 w-5 opacity-0 transition-opacity max-lg:opacity-100 group-hover:opacity-100" />
         </div>
         <div className="min-w-0 flex-1 pe-6">
-          <div className="truncate text-sm font-semibold">{attachment.name}</div>
+          <div className="truncate text-s font-semibold">{attachment.name}</div>
           <div className="text-s text-muted-foreground">
             {(attachment.contentType ?? "").split("/")[1]?.toUpperCase() ?? "FILE"}
             {attachment.sizeBytes ? ` · ${formatBytes(attachment.sizeBytes)}` : ""}
@@ -382,7 +382,7 @@ export function FilesPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col border-s border-border/60">
       <div className="flex app-top-bar-tall shrink-0 items-center justify-between border-b border-border/60 px-4">
-        <span className="text-sm font-semibold">Shared Files</span>
+        <span className="text-s font-semibold">Shared Files</span>
         <button
           type="button"
           onClick={onClose}
@@ -457,7 +457,7 @@ export function FilesPanel({
                       </div>
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">
+                      <div className="truncate text-s font-medium">
                         {att.name}
                       </div>
                       <div className="truncate text-s text-muted-foreground">

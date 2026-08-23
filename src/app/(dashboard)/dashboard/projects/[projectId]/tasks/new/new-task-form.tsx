@@ -9,6 +9,7 @@ import { createTask } from "@/actions/task";
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 
 type TaskType = "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
 
@@ -18,9 +19,9 @@ interface QuestionWithType extends TaskQuestion {
 
 const TASK_TYPES: { id: TaskType; label: string; icon: typeof Sparkles; color: string; activeColor: string }[] = [
   { id: "FEATURE", label: "Business Case", icon: Sparkles, color: "text-muted-foreground", activeColor: "bg-primary/15 border-primary/40 text-primary" },
-  { id: "ENHANCEMENT", label: "Enhancement", icon: Wrench, color: "text-muted-foreground", activeColor: "bg-violet-500/15 border-violet-500/40 text-violet-400" },
+  { id: "ENHANCEMENT", label: "Enhancement", icon: Wrench, color: "text-muted-foreground", activeColor: "bg-violet/15 border-violet/40 text-violet" },
   { id: "BUG", label: "Internal Bug", icon: Bug, color: "text-muted-foreground", activeColor: "bg-orange/15 border-orange/40 text-orange" },
-  { id: "DESIGN", label: "Design", icon: Palette, color: "text-muted-foreground", activeColor: "bg-cyan-500/15 border-cyan-500/40 text-cyan-400" },
+  { id: "DESIGN", label: "Design", icon: Palette, color: "text-muted-foreground", activeColor: "bg-cyan/15 border-cyan/40 text-cyan" },
 ];
 
 interface Props {
@@ -98,13 +99,15 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs text-muted-foreground font-mono truncate">
-            {projectName}
-          </span>
-          <span className="text-xs text-muted-foreground/40">/</span>
-          <h1 className="text-s font-semibold">New Task</h1>
-        </div>
+        <PageBreadcrumb
+          items={[
+            {
+              label: projectName,
+              onClick: () => router.push(`/dashboard/projects/${projectId}`),
+            },
+            { label: "New Task" },
+          ]}
+        />
       </PageHeader>
 
       <form onSubmit={handleSubmit} className="max-w-2xl mx-auto px-app py-8">
@@ -192,33 +195,43 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
             </p>
           </div>
 
-          {/* Questions (filtered by type) */}
-          {filteredQuestions.length > 0 && (
-            <>
-              <div className="border-t border-border pt-6">
-                <h2 className="text-s font-semibold text-foreground mb-1">
-                  {TASK_TYPES.find((t) => t.id === taskType)?.label} Questions
-                </h2>
-                <p className="text-xs text-muted-foreground mb-5">
-                  Help the team understand context by answering these questions.
-                </p>
-              </div>
+          {/* Questions (filtered by type) — always shown so spec fields aren't silent */}
+          <div className="border-t border-border pt-6">
+            <h2 className="text-s font-semibold text-foreground mb-1">
+              {TASK_TYPES.find((t) => t.id === taskType)?.label} Questions
+            </h2>
+            <p className="text-xs text-muted-foreground mb-5">
+              These decide whether a task is ready for the Backlog or stays in Missing Data. Add or edit them in Admin → Task Questions.
+            </p>
+          </div>
 
-              <div className="space-y-5">
-                {filteredQuestions.map((q, i) => (
-                  <QuestionField
-                    key={q.id}
-                    question={q}
-                    index={i}
-                    value={answers[q.id] ?? ""}
-                    onChange={(val) =>
-                      setAnswers((prev) => ({ ...prev, [q.id]: val }))
-                    }
-                    showRequiredAs="mandatory"
-                  />
-                ))}
-              </div>
-            </>
+          {filteredQuestions.length > 0 ? (
+            <div className="space-y-5">
+              {filteredQuestions.map((q, i) => (
+                <QuestionField
+                  key={q.id}
+                  question={q}
+                  index={i}
+                  value={answers[q.id] ?? ""}
+                  onChange={(val) =>
+                    setAnswers((prev) => ({ ...prev, [q.id]: val }))
+                  }
+                  showRequiredAs="all"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border bg-card px-4 py-6 text-center">
+              <p className="text-s text-muted-foreground">
+                No questions configured for this type yet.
+              </p>
+              <a
+                href="/dashboard/admin?tab=questions"
+                className="mt-2 inline-block text-s font-medium text-primary hover:underline"
+              >
+                Add fields in Task Questions
+              </a>
+            </div>
           )}
 
           {mandatoryErrors.length > 0 && (

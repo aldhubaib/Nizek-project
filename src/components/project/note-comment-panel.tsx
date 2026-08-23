@@ -102,8 +102,8 @@ export function NoteCommentPopover({
             className={cn(
               "grid size-7 place-items-center rounded-full transition-colors",
               thread.understood
-                ? "bg-sky-500/20 text-sky-400"
-                : "text-muted-foreground hover:bg-accent hover:text-sky-400",
+                ? "bg-sky/20 text-sky"
+                : "text-muted-foreground hover:bg-accent hover:text-sky",
             )}
           >
             {toggling ? (

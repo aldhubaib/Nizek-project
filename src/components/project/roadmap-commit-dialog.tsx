@@ -16,7 +16,7 @@ export function RoadmapWarningDialog({
 }) {
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onDismiss} />
+      <div className="absolute inset-0 bg-overlay" onClick={onDismiss} />
       <div className="relative bg-card border border-border rounded-xl shadow-2xl max-w-lg w-full mx-4 p-5">
         <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-surface/60 p-3">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-orange/15 text-orange">
@@ -69,7 +69,7 @@ export function RoadmapCommitDialog({
 }) {
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onCancel} />
+      <div className="absolute inset-0 bg-overlay" onClick={onCancel} />
       <div className="relative bg-card border border-border rounded-xl shadow-2xl max-w-lg w-full mx-4 p-5">
         <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-surface/60 p-3">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-orange/15 text-orange">
