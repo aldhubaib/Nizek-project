@@ -106,3 +106,44 @@ WHERE t.stage IN ('READY_FOR_DEV','IN_DEVELOPMENT','INTERNAL_REVIEW','CLIENT_REV
     SELECT 1 FROM "SprintTaskSnapshot" x
     WHERE x."sprintId" = s.id AND x."taskId" = t.id
   );
+
+-- 2d: Create a sprint planning note for each seeded active sprint.
+-- The content embeds the sprint ID in a data-info JSON attribute so the UI
+-- can link the note to the sprint. Dates are pre-filled (Aug 24 – Aug 31,
+-- 6 working days for Kuwait/GCC Fri-Sat weekend).
+INSERT INTO "MeetingNote" (id, title, content, date, "noteType", "projectId", "authorId", "createdAt", "updatedAt")
+SELECT
+  gen_random_uuid()::text,
+  'Sprint 1 planning',
+  '<div data-type="sprint-info" data-info="'
+    || replace(
+         '{"sprintId":"' || s.id || '","sprintName":"Sprint 1","status":"ACTIVE",'
+         || '"documentDate":"24 Aug 2026","documentDateIso":"2026-08-24",'
+         || '"startDate":"24 Aug 2026","endDate":"31 Aug 2026",'
+         || '"startIso":"2026-08-24","endIso":"2026-08-31",'
+         || '"workingDays":6,"locked":false,"variant":"planning"}',
+         '"', '&quot;')
+    || '"></div>'
+    || '<h2>Introduction</h2>'
+    || '<p>This sprint outlines the development work planned for the upcoming iteration. '
+    || 'It serves as a shared commitment between all stakeholders, ensuring the team is '
+    || 'aligned on the agreed objectives, priorities, and expected deliverables for the sprint.</p>'
+    || '<h2>List of Sprint Items</h2>'
+    || '<p>Below is the list of development items that have been reviewed, prioritized, and '
+    || 'agreed upon by the team for this sprint. These items represent the scope of work to be '
+    || 'completed during the sprint and will be tracked throughout the development cycle.</p>',
+  '2026-08-24',
+  'SPRINT_PLANNING',
+  s."projectId",
+  (SELECT pm."userId" FROM "ProjectMember" pm WHERE pm."projectId" = s."projectId" ORDER BY pm."createdAt" ASC LIMIT 1),
+  NOW(),
+  NOW()
+FROM "Sprint" s
+WHERE s.name = 'Sprint 1'
+  AND s.status = 'ACTIVE'
+  AND NOT EXISTS (
+    SELECT 1 FROM "MeetingNote" mn
+    WHERE mn."projectId" = s."projectId"
+      AND mn."noteType" = 'SPRINT_PLANNING'
+      AND mn.content LIKE '%' || s.id || '%'
+  );
