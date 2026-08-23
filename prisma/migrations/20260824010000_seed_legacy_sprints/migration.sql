@@ -107,7 +107,40 @@ WHERE t.stage IN ('READY_FOR_DEV','IN_DEVELOPMENT','INTERNAL_REVIEW','CLIENT_REV
     WHERE x."sprintId" = s.id AND x."taskId" = t.id
   );
 
--- 2d: Create a sprint planning note for each seeded active sprint.
+-- 2d: Auto-assign unassigned active-sprint tasks to a Developer-role member.
+-- Picks the first project member whose ProjectRole name is 'Developer' (case-
+-- insensitive). Tasks that already have an assignee are left untouched.
+UPDATE "Task" t
+SET "assigneeId" = dev."userId"
+FROM "Sprint" s
+CROSS JOIN LATERAL (
+  SELECT pm."userId"
+  FROM "ProjectMember" pm
+  JOIN "ProjectRole" pr ON pr.id = pm."roleId"
+  WHERE pm."projectId" = s."projectId"
+    AND lower(pr.name) = 'developer'
+  ORDER BY pm."createdAt" ASC
+  LIMIT 1
+) dev
+WHERE s."projectId" = t."projectId"
+  AND s.status = 'ACTIVE'
+  AND t."sprintId" = s.id
+  AND t."archivedAt" IS NULL
+  AND t."assigneeId" IS NULL;
+
+-- 2e: Backfill assignee info on snapshots after the auto-assign above.
+UPDATE "SprintTaskSnapshot" ss
+SET
+  "assigneeId" = t."assigneeId",
+  "assigneeName" = u.name,
+  "assigneeImageUrl" = u."imageUrl"
+FROM "Task" t
+LEFT JOIN "User" u ON u.id = t."assigneeId"
+WHERE ss."taskId" = t.id
+  AND t."assigneeId" IS NOT NULL
+  AND ss."assigneeId" IS NULL;
+
+-- 2f: Create a sprint planning note for each seeded active sprint.
 -- The content embeds the sprint ID in a data-info JSON attribute so the UI
 -- can link the note to the sprint. Dates are pre-filled (Aug 24 – Aug 31,
 -- 6 working days for Kuwait/GCC Fri-Sat weekend).
