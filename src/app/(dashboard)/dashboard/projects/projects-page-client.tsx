@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { FolderKanban, Archive, Filter, X } from "lucide-react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { FolderKanban, Archive, Filter, X, ChevronDown, Check } from "lucide-react";
 import { CreateProjectDialog } from "@/components/project/create-project-dialog";
 import { ProjectCard } from "@/components/project/project-card";
 import { cn } from "@/lib/utils";
@@ -38,14 +38,6 @@ interface Project {
   contracts: Contract[];
 }
 
-const CONTRACT_TYPES: { id: string; label: string }[] = [
-  { id: "FULL_TEAM", label: "Full Team" },
-  { id: "PART_TEAM", label: "Part Team" },
-  { id: "FIXED", label: "Fixed" },
-  { id: "MAINTENANCE", label: "Maintenance" },
-  { id: "STARTUP", label: "Startup" },
-];
-
 interface Props {
   projects: Project[];
   teams: Team[];
@@ -53,35 +45,41 @@ interface Props {
 }
 
 export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props) {
-  const [teamFilter, setTeamFilter] = useState<string>("all");
-  const [contractFilter, setContractFilter] = useState<string>("all");
+  const [selectedTeams, setSelectedTeams] = useState<Set<string>>(new Set());
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   const usedTeams = useMemo(() => {
     const ids = new Set(projects.map((p) => p.team?.id).filter(Boolean));
     return teams.filter((t) => ids.has(t.id));
   }, [projects, teams]);
 
-  const usedContractTypes = useMemo(() => {
-    const types = new Set(projects.flatMap((p) => p.contracts.map((c) => c.contractType)));
-    return CONTRACT_TYPES.filter((t) => types.has(t.id));
-  }, [projects]);
+  function toggleTeam(id: string) {
+    setSelectedTeams((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const filtered = useMemo(() => {
+    if (selectedTeams.size === 0) return projects;
     return projects.filter((p) => {
-      if (teamFilter !== "all") {
-        if (teamFilter === "none") {
-          if (p.team) return false;
-        } else if (p.team?.id !== teamFilter) {
-          return false;
-        }
-      }
-      if (contractFilter !== "all") {
-        const hasType = p.contracts.some((c) => c.contractType === contractFilter);
-        if (!hasType) return false;
-      }
-      return true;
+      const tid = p.team?.id;
+      return tid ? selectedTeams.has(tid) : false;
     });
-  }, [projects, teamFilter, contractFilter]);
+  }, [projects, selectedTeams]);
 
   const now = new Date();
   const isProjectActive = (p: Project) =>
@@ -96,7 +94,16 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
   const activeProjects = filtered.filter(isProjectActive);
   const archivedProjects = filtered.filter((p) => !isProjectActive(p));
 
-  const hasFilters = teamFilter !== "all" || contractFilter !== "all";
+  const hasFilters = selectedTeams.size > 0;
+
+  const dropdownLabel = useMemo(() => {
+    if (selectedTeams.size === 0) return "All teams";
+    if (selectedTeams.size === 1) {
+      const t = usedTeams.find((t) => selectedTeams.has(t.id));
+      return t?.name ?? "1 team";
+    }
+    return `${selectedTeams.size} teams`;
+  }, [selectedTeams, usedTeams]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -105,62 +112,69 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
         <CreateProjectDialog teams={teams} contractPrefixes={contractPrefixes} />
       </PageHeader>
 
-      {/* Filters */}
-      {projects.length > 0 && (
+      {projects.length > 0 && usedTeams.length > 1 && (
         <div className="px-app pt-l pb-xs flex items-center gap-m flex-wrap">
           <Filter className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
 
-          <div className="flex items-center gap-xs">
-            <span className="text-xs text-muted-foreground/60 font-medium">Team</span>
-            <div className="flex items-center gap-xs">
-              <FilterChip
-                active={teamFilter === "all"}
-                onClick={() => setTeamFilter("all")}
-                label="All"
-              />
-              {usedTeams.map((t) => (
-                <FilterChip
-                  key={t.id}
-                  active={teamFilter === t.id}
-                  onClick={() => setTeamFilter(teamFilter === t.id ? "all" : t.id)}
-                  label={t.name}
-                />
-              ))}
-              {projects.some((p) => !p.team) && (
-                <FilterChip
-                  active={teamFilter === "none"}
-                  onClick={() => setTeamFilter(teamFilter === "none" ? "all" : "none")}
-                  label="No Team"
-                />
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen((o) => !o)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg border px-s py-xs text-xs font-medium transition-colors",
+                hasFilters
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "border-border bg-transparent text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground",
               )}
-            </div>
-          </div>
+            >
+              {dropdownLabel}
+              <ChevronDown className={cn("size-3 transition-transform", dropdownOpen && "rotate-180")} />
+            </button>
 
-          <span className="text-border">|</span>
-
-          <div className="flex items-center gap-xs">
-            <span className="text-xs text-muted-foreground/60 font-medium">Contract</span>
-            <div className="flex items-center gap-xs">
-              <FilterChip
-                active={contractFilter === "all"}
-                onClick={() => setContractFilter("all")}
-                label="All"
-              />
-              {usedContractTypes.map((t) => (
-                <FilterChip
-                  key={t.id}
-                  active={contractFilter === t.id}
-                  onClick={() => setContractFilter(contractFilter === t.id ? "all" : t.id)}
-                  label={t.label}
-                />
-              ))}
-            </div>
+            {dropdownOpen && (
+              <div className="absolute start-0 top-full z-50 mt-1 min-w-[10rem] rounded-lg border border-border bg-popover p-1 shadow-lg">
+                {usedTeams.map((t) => {
+                  const selected = selectedTeams.has(t.id);
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => toggleTeam(t.id)}
+                      className={cn(
+                        "flex w-full items-center gap-s rounded-md px-s py-xs text-xs transition-colors",
+                        selected
+                          ? "bg-primary/10 text-primary"
+                          : "text-foreground hover:bg-muted",
+                      )}
+                    >
+                      <span className={cn(
+                        "flex size-3.5 shrink-0 items-center justify-center rounded border transition-colors",
+                        selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40",
+                      )}>
+                        {selected && <Check className="size-2.5" strokeWidth={3} />}
+                      </span>
+                      {t.name}
+                    </button>
+                  );
+                })}
+                {hasFilters && (
+                  <>
+                    <div className="my-1 border-t border-border" />
+                    <button
+                      onClick={() => { setSelectedTeams(new Set()); setDropdownOpen(false); }}
+                      className="flex w-full items-center gap-s rounded-md px-s py-xs text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    >
+                      <X className="size-3" />
+                      Clear filter
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {hasFilters && (
             <button
-              onClick={() => { setTeamFilter("all"); setContractFilter("all"); }}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors ms-1"
+              onClick={() => setSelectedTeams(new Set())}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               <X className="w-3 h-3" />
               Clear
@@ -182,7 +196,7 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
           <Filter className="w-8 h-8 text-muted-foreground opacity-30" strokeWidth={1.5} />
           <p className="text-s text-muted-foreground">No projects match the current filters</p>
           <button
-            onClick={() => { setTeamFilter("all"); setContractFilter("all"); }}
+            onClick={() => setSelectedTeams(new Set())}
             className="text-s text-primary hover:underline"
           >
             Clear filters
@@ -228,18 +242,3 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
   );
 }
 
-function FilterChip({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "px-s py-xs rounded-full text-xs font-medium transition-colors border",
-        active
-          ? "bg-primary/15 text-primary border-primary/30"
-          : "bg-transparent text-muted-foreground border-border hover:border-muted-foreground/40 hover:text-foreground"
-      )}
-    >
-      {label}
-    </button>
-  );
-}
