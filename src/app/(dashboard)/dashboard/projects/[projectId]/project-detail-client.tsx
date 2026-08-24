@@ -117,6 +117,7 @@ interface Project {
   _count: { tasks: number; meetingNotes: number; assets: number };
   defaultClientReviewerId?: string | null;
   internalReviewRoleId?: string | null;
+  internalReviewUserId?: string | null;
 }
 
 interface NoteHistoryEntry {
@@ -686,6 +687,9 @@ export function ProjectDetailClient({
           contractPrefixes={settingsData?.contractPrefixes ?? []}
           clientMembers={members
             .filter((m) => m.user.systemRole === "CLIENT")
+            .map((m) => ({ id: m.user.id, name: m.user.name, imageUrl: m.user.imageUrl }))}
+          internalMembers={members
+            .filter((m) => m.user.systemRole !== "CLIENT")
             .map((m) => ({ id: m.user.id, name: m.user.name, imageUrl: m.user.imageUrl }))}
           isAdmin={isAdmin}
           onClose={() => { setSettingsOpen(false); router.refresh(); }}

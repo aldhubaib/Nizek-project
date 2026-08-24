@@ -151,8 +151,19 @@ export function KanbanBoard({
     return () => window.removeEventListener("proof-upload-failed", onProofFailed);
   }, []);
 
+  const prevProjectId = useRef(projectId);
+
   useEffect(() => {
     if (isDragging.current) return;
+    const projectChanged = prevProjectId.current !== projectId;
+    prevProjectId.current = projectId;
+
+    if (projectChanged) {
+      setTasks(initialTasks);
+      snapshotRef.current = initialTasks;
+      return;
+    }
+
     const current = useKanbanStore.getState().tasks;
     if (current.length === 0 && initialTasks.length > 0) {
       setTasks(initialTasks);
@@ -213,7 +224,7 @@ export function KanbanBoard({
   const applyRemoteTask = useCallback(
     async (taskId: string) => {
       try {
-        const updated = await getBoardTask(taskId);
+        const updated = await getBoardTask(taskId, projectId);
         if (!updated) {
           useKanbanStore.getState().removeTask(taskId);
           return;
@@ -229,7 +240,7 @@ export function KanbanBoard({
         // Best-effort; the fallback poll (when realtime is off) covers gaps.
       }
     },
-    [setTasks],
+    [projectId, setTasks],
   );
 
   const handleTaskEvent = useCallback(

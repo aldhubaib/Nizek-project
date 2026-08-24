@@ -58,11 +58,14 @@ interface ProjectSettingsProps {
     contracts: Contract[];
     defaultClientReviewerId?: string | null;
     internalReviewRoleId?: string | null;
+    internalReviewUserId?: string | null;
     clientChatEnabled?: boolean;
   };
   teams?: Team[];
   contractPrefixes?: ContractPrefixOption[];
   clientMembers?: ClientMember[];
+  /** Non-client project members for the internal review user picker. */
+  internalMembers?: ClientMember[];
   isAdmin?: boolean;
   onClose: () => void;
 }
@@ -72,6 +75,7 @@ export function ProjectSettingsOverlay({
   teams = [],
   contractPrefixes = [],
   clientMembers = [],
+  internalMembers = [],
   isAdmin = false,
   onClose,
 }: ProjectSettingsProps) {
@@ -84,6 +88,7 @@ export function ProjectSettingsOverlay({
   const [teamId, setTeamId] = useState(project.team?.id || "");
   const [clientReviewerId, setClientReviewerId] = useState(project.defaultClientReviewerId || "");
   const [internalReviewRoleId, setInternalReviewRoleId] = useState(project.internalReviewRoleId || "");
+  const [internalReviewUserId, setInternalReviewUserId] = useState(project.internalReviewUserId || "");
   const [roles, setRoles] = useState<{ id: string; name: string }[]>([]);
   const [clientChatEnabled, setClientChatEnabled] = useState(!!project.clientChatEnabled);
   const [clientChatSaving, setClientChatSaving] = useState(false);
@@ -160,7 +165,8 @@ export function ProjectSettingsOverlay({
         // Empty string = "No team" — send null so the team can be cleared.
         teamId: teamId || null,
         defaultClientReviewerId: clientReviewerId || null,
-        internalReviewRoleId: internalReviewRoleId || null,
+        internalReviewRoleId: internalReviewUserId ? null : (internalReviewRoleId || null),
+        internalReviewUserId: internalReviewUserId || null,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -316,20 +322,43 @@ export function ProjectSettingsOverlay({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="proj-internal-review" className="text-s font-semibold">Internal Review role</Label>
+            <Label htmlFor="proj-internal-review" className="text-s font-semibold">Internal Review assignment</Label>
             <p className="text-xs text-muted-foreground">
-              Tasks moved to Internal Review are auto-assigned to a project member with this role.
+              Tasks moved to Internal Review are auto-assigned to this person or a member with this role.
             </p>
             <select
               id="proj-internal-review"
-              value={internalReviewRoleId}
-              onChange={(e) => setInternalReviewRoleId(e.target.value)}
+              value={internalReviewUserId ? `user:${internalReviewUserId}` : internalReviewRoleId ? `role:${internalReviewRoleId}` : ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v.startsWith("user:")) {
+                  setInternalReviewUserId(v.slice(5));
+                  setInternalReviewRoleId("");
+                } else if (v.startsWith("role:")) {
+                  setInternalReviewUserId("");
+                  setInternalReviewRoleId(v.slice(5));
+                } else {
+                  setInternalReviewUserId("");
+                  setInternalReviewRoleId("");
+                }
+              }}
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-s text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">Task creator (default)</option>
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>{role.name}</option>
-              ))}
+              {roles.length > 0 && (
+                <optgroup label="By role">
+                  {roles.map((role) => (
+                    <option key={role.id} value={`role:${role.id}`}>{role.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              {internalMembers.length > 0 && (
+                <optgroup label="Specific person">
+                  {internalMembers.map((m) => (
+                    <option key={m.id} value={`user:${m.id}`}>{m.name ?? m.id}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
 

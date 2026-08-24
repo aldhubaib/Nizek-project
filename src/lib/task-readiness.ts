@@ -39,10 +39,10 @@ export function isMissingDataTask(task: {
 }
 
 export function computeIsReadyForTransition(
-  questions: { id: string; type: string }[],
+  questions: { id: string; type: string; required?: boolean }[],
   answers: Record<string, string>,
 ): boolean {
-  const specQs = questions.filter((q) => q.type !== "client");
+  const specQs = questions.filter((q) => q.type !== "client" && q.required !== false);
   const allAnswered = specQs.every((q) => isQuestionAnswerFilled(q.type, answers[q.id]));
   const waitingOnClient = questions.some((q) => isWaitingOnClientAnswer(q.type, answers[q.id]));
   return allAnswered && !waitingOnClient;

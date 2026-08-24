@@ -45,9 +45,13 @@ const ALLOWED_ROLES_BY_TRACK: Record<RoleTrack, string[]> = {
 async function resolveInternalReviewAssignee(projectId: string): Promise<string | null> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { internalReviewRoleId: true },
+    select: { internalReviewRoleId: true, internalReviewUserId: true },
   });
-  if (!project?.internalReviewRoleId) return null;
+  if (!project) return null;
+
+  if (project.internalReviewUserId) return project.internalReviewUserId;
+
+  if (!project.internalReviewRoleId) return null;
 
   const member = await prisma.projectMember.findFirst({
     where: {
@@ -377,7 +381,7 @@ export async function moveTask(data: {
       const errors: string[] = [];
 
       const specQuestions = await prisma.defaultQuestion.findMany({
-        where: { taskType: task.taskType, type: { not: "client" } },
+        where: { taskType: task.taskType, type: { not: "client" }, required: true },
         select: { id: true, question: true, type: true },
       });
 
@@ -970,11 +974,12 @@ type BoardTaskRow = {
 };
 
 function fieldsByType(
-  questions: { id: string; taskType: string; type: string }[],
+  questions: { id: string; taskType: string; type: string; required?: boolean }[],
 ): Map<string, { id: string; type: string }[]> {
   const byType = new Map<string, { id: string; type: string }[]>();
   for (const q of questions) {
     if (q.type === "client") continue;
+    if (q.required === false) continue;
     const list = byType.get(q.taskType) ?? [];
     list.push({ id: q.id, type: q.type });
     byType.set(q.taskType, list);
@@ -1035,7 +1040,7 @@ export async function getTasksByProject(projectId: string) {
       orderBy: { order: "asc" },
     }),
     prisma.defaultQuestion.findMany({
-      select: { id: true, taskType: true, type: true },
+      select: { id: true, taskType: true, type: true, required: true },
     }),
     prisma.taskActivity.findMany({
       where: { action: "declined", task: { projectId } },
@@ -1065,20 +1070,21 @@ export async function getTasksByProject(projectId: string) {
 
 // O(1) fetch for a single board task — used by the realtime delta path so a
 // remote task event patches one card instead of refetching the whole board.
-export async function getBoardTask(taskId: string) {
+export async function getBoardTask(taskId: string, expectedProjectId?: string) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     select: { ...BOARD_TASK_SELECT, archivedAt: true },
   });
-  // Caller (board) treats null as "removed" (deleted or archived off the board).
   if (!task || task.archivedAt) return null;
+
+  if (expectedProjectId && task.projectId !== expectedProjectId) return null;
 
   await requireProjectMember(task.projectId as string);
 
   const [specQuestions, declineCounts] = await Promise.all([
     prisma.defaultQuestion.findMany({
       where: { taskType: task.taskType },
-      select: { id: true, taskType: true, type: true },
+      select: { id: true, taskType: true, type: true, required: true },
     }),
     prisma.taskActivity.findMany({
       where: { action: "declined", taskId },

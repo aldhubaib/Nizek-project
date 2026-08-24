@@ -98,7 +98,8 @@ model User {
   createdTasks        Task[]    @relation("TaskCreator")
   developerTasks      Task[]    @relation("TaskDeveloper")
   clientReviewTasks   Task[]    @relation("TaskClientReviewer")
-  defaultClientProjects Project[] @relation("ProjectDefaultClient")
+  defaultClientProjects        Project[] @relation("ProjectDefaultClient")
+  internalReviewUserProjects   Project[] @relation("ProjectInternalReviewUser")
   taskActivities TaskActivity[] @relation("ActivityUser")
   taskComments   TaskComment[]  @relation("CommentUser")
   commentMentions TaskCommentMention[] @relation("MentionedUser")
@@ -187,6 +188,9 @@ model Project {
 
   internalReviewRoleId String?
   internalReviewRole   ProjectRole? @relation("ProjectInternalReviewRole", fields: [internalReviewRoleId], references: [id], onDelete: SetNull)
+
+  internalReviewUserId String?
+  internalReviewUser   User? @relation("ProjectInternalReviewUser", fields: [internalReviewUserId], references: [id], onDelete: SetNull)
 
   maxPipelineTasks Int @default(3)
 

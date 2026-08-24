@@ -152,10 +152,10 @@ export async function updateProject(data: {
   name?: string;
   description?: string;
   logoUrl?: string | null;
-  // null clears the team ("No team"); undefined leaves it unchanged.
   teamId?: string | null;
   defaultClientReviewerId?: string | null;
   internalReviewRoleId?: string | null;
+  internalReviewUserId?: string | null;
 }) {
   await requireProjectRole(data.projectId, ["ADMIN", "PROJECT_MANAGER"]);
 
@@ -176,6 +176,7 @@ export async function updateProject(data: {
       ...(data.teamId !== undefined && { teamId: data.teamId || null }),
       ...(data.defaultClientReviewerId !== undefined && { defaultClientReviewerId: data.defaultClientReviewerId }),
       ...(data.internalReviewRoleId !== undefined && { internalReviewRoleId: data.internalReviewRoleId }),
+      ...(data.internalReviewUserId !== undefined && { internalReviewUserId: data.internalReviewUserId }),
     },
   });
 
