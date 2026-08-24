@@ -3,7 +3,7 @@ FROM node:24-slim
 WORKDIR /app
 
 # Prisma schema + config must exist before npm install (postinstall runs prisma generate)
-COPY prisma/schema.prisma ./prisma/
+COPY prisma ./prisma
 COPY prisma.config.ts ./
 
 COPY package.json package-lock.json .npmrc ./
