@@ -15,4 +15,4 @@ COPY worker.ts ./
 COPY src/lib/push-core.ts ./src/lib/
 COPY src/generated ./src/generated
 
-CMD ["npx", "tsx", "worker.ts"]
+CMD ["node", "--import", "tsx", "worker.ts"]
