@@ -92,10 +92,30 @@ async function handlePushData(data, opts) {
 }
 
 self.addEventListener("push", (event) => {
-  if (!event.data) return;
-  const data = NizekSwLib.parsePushPayload(event.data.text());
-  if (!data) return;
-  event.waitUntil(handlePushData(data, {}));
+  // iOS aggressively terminates SWs. Always call waitUntil — even on parse
+  // failure — with a showNotification fallback so the SW stays alive long
+  // enough to avoid silent failures and the browser doesn't penalize us for
+  // receiving a push without showing a notification.
+  const work = (async () => {
+    try {
+      const raw = event.data ? event.data.text() : null;
+      const data = raw ? NizekSwLib.parsePushPayload(raw) : null;
+      if (data) {
+        await handlePushData(data, {});
+      } else {
+        await self.registration.showNotification("Nizek Project", {
+          body: "You have a new notification",
+          data: { url: "/dashboard" },
+        });
+      }
+    } catch (err) {
+      await self.registration.showNotification("Nizek Project", {
+        body: "You have a new notification",
+        data: { url: "/dashboard" },
+      });
+    }
+  })();
+  event.waitUntil(work);
 });
 
 // Simulated push from the page (diagnostics panel "Test banner" + E2E tests).

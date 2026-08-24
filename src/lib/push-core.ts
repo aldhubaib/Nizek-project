@@ -54,16 +54,18 @@ export function endpointHost(endpoint: string): string | null {
   }
 }
 
+const MAX_ATTEMPTS = 3;
+const BACKOFF_SCHEDULE = [500, 2000];
+
 /**
- * Runs `send` with a single retry (after `backoffMs`) when the failure is
- * transient. Returns the final outcome; never throws.
+ * Runs `send` with up to 2 retries (3 total attempts) using exponential
+ * backoff (500ms, 2s) when the failure is transient. Returns the final
+ * outcome; never throws.
  */
 export async function sendWithRetry(
   send: () => Promise<void>,
   opts: { backoffMs?: number } = {},
 ): Promise<{ ok: boolean; statusCode?: number; error?: string; attempts: number }> {
-  const backoffMs = opts.backoffMs ?? 500;
-
   const attempt = async (): Promise<{
     ok: boolean;
     statusCode?: number;
@@ -80,12 +82,15 @@ export async function sendWithRetry(
     }
   };
 
-  const first = await attempt();
-  if (first.ok || !isRetryableStatus(first.statusCode)) {
-    return { ...first, attempts: 1 };
+  let result = await attempt();
+  let attempts = 1;
+
+  while (!result.ok && isRetryableStatus(result.statusCode) && attempts < MAX_ATTEMPTS) {
+    const delay = opts.backoffMs ?? BACKOFF_SCHEDULE[attempts - 1] ?? 2000;
+    await new Promise((r) => setTimeout(r, delay));
+    result = await attempt();
+    attempts++;
   }
 
-  await new Promise((r) => setTimeout(r, backoffMs));
-  const second = await attempt();
-  return { ...second, attempts: 2 };
+  return { ...result, attempts };
 }

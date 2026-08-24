@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -7,7 +8,7 @@ import { prisma } from "@/lib/prisma";
  * System admins are not implicit (same rule as Equity): grant access explicitly
  * in Admin → Vault Access, including to yourself.
  */
-export async function canAccessProjectVault(
+export const canAccessProjectVault = cache(async function canAccessProjectVault(
   userId: string | null | undefined,
   projectId: string,
 ): Promise<boolean> {
@@ -16,16 +17,16 @@ export async function canAccessProjectVault(
     where: { userId, projectId },
   });
   return count > 0;
-}
+});
 
 /** Any vault grant at all — used for the global Vault nav entry. */
-export async function canAccessAnyVault(
+export const canAccessAnyVault = cache(async function canAccessAnyVault(
   userId: string | null | undefined,
 ): Promise<boolean> {
   if (!userId) return false;
   const count = await prisma.vaultPermission.count({ where: { userId } });
   return count > 0;
-}
+});
 
 export async function listVaultProjectIds(
   userId: string,

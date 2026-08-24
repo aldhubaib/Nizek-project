@@ -45,8 +45,6 @@ export function PushNotifier() {
         if (!pushSupported()) return;
 
         if (Notification.permission === "granted") {
-          // Already allowed — refresh the subscription silently each session so
-          // the server always has a working endpoint for this device.
           void syncPushSubscription(r);
         } else if (Notification.permission === "default") {
           const dismissedAt = Number(
@@ -59,6 +57,27 @@ export function PushNotifier() {
       })
       .catch(() => {});
   }, []);
+
+  // Re-sync the push subscription when the app returns to foreground after
+  // being hidden for >1 hour. iOS rotates endpoints when the PWA is suspended,
+  // so the server may hold a stale subscription otherwise.
+  useEffect(() => {
+    if (!registration || !pushSupported()) return;
+    let hiddenSince = 0;
+    function onVisibility() {
+      if (document.hidden) {
+        hiddenSince = Date.now();
+      } else if (
+        hiddenSince > 0 &&
+        Date.now() - hiddenSince > 60 * 60 * 1000 &&
+        Notification.permission === "granted"
+      ) {
+        void syncPushSubscription(registration!);
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [registration]);
 
   if (!showEnablePush) return null;
 

@@ -48,27 +48,24 @@ export default async function DashboardLayout({
   }
 
   const isClient = isClientUser(user);
+  const isAdmin = user?.systemRole === "ADMIN";
 
-  const [notificationSoundUrl, impersonation, branding] = await Promise.all([
-    getNotificationSoundUrl(),
-    getImpersonation(),
-    getBrandingMap(),
-  ]);
+  const [notificationSoundUrl, impersonation, branding, canAudit, canEquity, canVault] =
+    await Promise.all([
+      getNotificationSoundUrl(),
+      getImpersonation(),
+      getBrandingMap(),
+      isAdmin
+        ? true
+        : user
+          ? prisma.auditPermission.count({ where: { userId: user.id } }).then((n) => n > 0)
+          : false,
+      canAccessEquity(user?.id),
+      canAccessAnyVault(user?.id),
+    ]);
   const logoUrl = branding.webLogo
     ? brandingUrlWithBust(branding, "webLogo")
     : null;
-
-  // Audit module visibility: admins always, others need an AuditPermission grant.
-  const isAdmin = user?.systemRole === "ADMIN";
-  const canAudit =
-    isAdmin ||
-    (user
-      ? (await prisma.auditPermission.count({ where: { userId: user.id } })) > 0
-      : false);
-  // Equity module is private — granted per user (see equity-access.ts).
-  const canEquity = await canAccessEquity(user?.id);
-  // Vault is per-user per-project — nav shows if they have any grant.
-  const canVault = await canAccessAnyVault(user?.id);
 
   return (
     <DashboardShell

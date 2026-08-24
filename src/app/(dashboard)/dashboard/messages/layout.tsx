@@ -9,8 +9,7 @@ export default async function MessagesLayout({
 }: {
   children: ReactNode;
 }) {
-  const user = await requireUser();
-  const threads = await getInboxThreads();
+  const [user, threads] = await Promise.all([requireUser(), getInboxThreads()]);
   const isClient = isClientUser(user);
 
   // Normal page inside the dashboard shell (app sidebar stays visible). The

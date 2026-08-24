@@ -370,6 +370,13 @@ html.app-chrome-away .app-shell-chrome {
   transform: translate3d(0, -100%, 0);
   pointer-events: none;
 }
+/* Slide-over panels live in a portal; their headers must stay visible even
+   when the main page chrome auto-hides on scroll. */
+[data-slide-over] .app-top-bar {
+  transform: none !important;
+  pointer-events: auto !important;
+  margin-bottom: 0 !important;
+}
 html.app-chrome-away .app-top-bar:not(.sticky):not(.fixed):not(.absolute),
 html.app-chrome-away .app-top-bar-tall:not(.sticky):not(.fixed):not(.absolute) {
   margin-bottom: calc(-1 * var(--app-bar-height, 3rem));

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -10,10 +11,10 @@ import { prisma } from "@/lib/prisma";
  * can be listed and revoked — an admin who needs access grants it to themselves
  * from Admin → Equity Access, which leaves a record of who did it.
  */
-export async function canAccessEquity(
-  userId: string | null | undefined
+export const canAccessEquity = cache(async function canAccessEquity(
+  userId: string | null | undefined,
 ): Promise<boolean> {
   if (!userId) return false;
   const count = await prisma.equityPermission.count({ where: { userId } });
   return count > 0;
-}
+});

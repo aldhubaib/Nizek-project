@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processDeadlineReminders } from "@/lib/deadline-reminders";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const DELIVERY_LOG_RETENTION_DAYS = 30;
+
+async function prunePushDeliveryLogs(): Promise<number> {
+  const cutoff = new Date(Date.now() - DELIVERY_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await prisma.pushDeliveryLog.deleteMany({
+    where: { createdAt: { lt: cutoff } },
+  });
+  return count;
+}
 
 /** Daily cron: post deadline milestone reminders to project chat. */
 export async function GET(req: NextRequest) {
@@ -18,8 +29,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await processDeadlineReminders();
-    return NextResponse.json({ ok: true, ...result });
+    const [result, pruned] = await Promise.all([
+      processDeadlineReminders(),
+      prunePushDeliveryLogs().catch((err) => {
+        console.error("PushDeliveryLog prune failed:", err);
+        return 0;
+      }),
+    ]);
+    return NextResponse.json({ ok: true, ...result, prunedDeliveryLogs: pruned });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Deadline reminders failed";
     console.error("deadline-reminders cron failed:", err);

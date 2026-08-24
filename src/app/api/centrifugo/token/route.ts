@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 // to many channels in quick succession doesn't re-run the DB access check for
 // each one. Keyed by `${memberId}:${channel}`. Realtime auth tolerates a small
 // staleness window; anything longer than the TTL re-verifies.
-const ACCESS_TTL_MS = 20_000;
+const ACCESS_TTL_MS = 120_000;
 const accessCache = new Map<string, { allowed: boolean; expires: number }>();
 
 function getCachedAccess(key: string): boolean | undefined {
