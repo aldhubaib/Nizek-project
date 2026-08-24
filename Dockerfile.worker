@@ -14,5 +14,7 @@ RUN npm install --omit=dev
 COPY worker.ts ./
 COPY src/lib/push-core.ts ./src/lib/
 COPY src/generated ./src/generated
+COPY start-worker.sh ./
+RUN chmod +x start-worker.sh
 
-CMD ["node", "--import", "tsx", "worker.ts"]
+CMD ["./start-worker.sh"]
