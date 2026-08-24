@@ -144,7 +144,8 @@ export function KanbanBoard({
           useKanbanStore.getState().removeTask(taskId);
           return;
         }
-        const dto = updated as unknown as KanbanTask;
+        const dto = updated as unknown as KanbanTask & { projectId?: string };
+        if (dto.projectId && dto.projectId !== projectId) return;
         setTasks((prev: KanbanTask[]) => {
           const exists = prev.some((t) => t.id === taskId);
           return exists
@@ -155,7 +156,7 @@ export function KanbanBoard({
         // Best-effort; the fallback poll (when realtime is off) covers gaps.
       }
     },
-    [setTasks],
+    [setTasks, projectId],
   );
 
   const handleTaskEvent = useCallback(
