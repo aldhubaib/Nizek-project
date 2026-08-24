@@ -1,0 +1,16 @@
+FROM node:24-slim
+
+WORKDIR /app
+
+COPY package.json package-lock.json .npmrc ./
+RUN npm install --omit=dev
+
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+RUN npx prisma generate
+
+COPY worker.ts ./
+COPY src/lib/push-core.ts ./src/lib/
+COPY src/generated ./src/generated
+
+CMD ["npx", "tsx", "worker.ts"]
