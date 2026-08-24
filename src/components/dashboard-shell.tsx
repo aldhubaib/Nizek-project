@@ -84,7 +84,7 @@ export function DashboardShell({
     if (isDesktop && drawerOpen) setDrawerOpen(false);
   }, [isDesktop, drawerOpen]);
 
-  useHideHeaderOnScroll(true);
+  useHideHeaderOnScroll(false);
 
   const expanded = pinned || hovered;
 
