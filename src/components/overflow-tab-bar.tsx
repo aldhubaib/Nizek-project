@@ -67,7 +67,9 @@ function Pill({
           : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
       )}
     >
-      <span className="text-s font-medium leading-none">{tabLabel(item)}</span>
+      <span className="text-s font-medium leading-none" suppressHydrationWarning>
+        {tabLabel(item)}
+      </span>
     </button>
   );
 }
@@ -145,20 +147,12 @@ export function OverflowTabBar<T extends string>({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
-  const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== "undefined" &&
-    window.matchMedia("(max-width: 1023px)").matches,
+  // Keep the first paint identical on server and client. Reading `window` here
+  // (viewport, matchMedia) is a hydration mismatch.
+  const [isMobile, setIsMobile] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(() =>
+    items.length > 4 ? 4 : items.length,
   );
-  const [visibleCount, setVisibleCount] = useState(() => {
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia("(max-width: 1023px)").matches &&
-      mobileMaxVisible != null
-    ) {
-      return Math.min(mobileMaxVisible, items.length);
-    }
-    return items.length > 4 ? 4 : items.length;
-  });
 
   useLayoutEffect(() => {
     const mq = window.matchMedia("(max-width: 1023px)");
@@ -218,6 +212,7 @@ export function OverflowTabBar<T extends string>({
             key={item.id}
             data-measure-pill=""
             className={pillClassName}
+            suppressHydrationWarning
           >
             {tabLabel(item)}
           </span>
