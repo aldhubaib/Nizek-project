@@ -2,12 +2,12 @@ FROM node:24-slim
 
 WORKDIR /app
 
+# Prisma schema + config must exist before npm install (postinstall runs prisma generate)
+COPY prisma/schema.prisma ./prisma/
+COPY prisma.config.ts ./
+
 COPY package.json package-lock.json .npmrc ./
 RUN npm install --omit=dev
-
-COPY prisma ./prisma
-COPY prisma.config.ts ./
-RUN npx prisma generate
 
 COPY worker.ts ./
 COPY src/lib/push-core.ts ./src/lib/
