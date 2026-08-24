@@ -180,6 +180,26 @@ export async function broadcast(
   await apiCall("broadcast", { channels: unique, data });
 }
 
+/**
+ * Send multiple distinct publish commands in a single HTTP round-trip via
+ * Centrifugo's batch API. Each item has its own channel + data, unlike
+ * `broadcast` which sends the same data to multiple channels.
+ */
+export async function batchPublish(
+  items: Array<{ channel: string; data: unknown }>,
+): Promise<void> {
+  if (items.length === 0) return;
+  if (items.length === 1) {
+    await publish(items[0].channel, items[0].data);
+    return;
+  }
+  await apiCall("batch", {
+    commands: items.map((item) => ({
+      publish: { channel: item.channel, data: item.data },
+    })),
+  });
+}
+
 // ─── Presence ──────────────────────────────────────────────────────────────────
 
 type PresenceResponse = {

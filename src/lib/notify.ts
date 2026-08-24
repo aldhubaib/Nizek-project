@@ -1,11 +1,13 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { broadcast } from "@/lib/centrifugo";
+import { batchPublish } from "@/lib/centrifugo";
 import { userChannel, NOTIFICATION_NEW } from "@/lib/channels";
 import {
   filterRecipientsByPreferences,
   type PreferenceFlags,
 } from "@/lib/notification-prefs";
+import { enqueuePush } from "@/lib/push-queue";
+import type { PushPayload } from "@/lib/push-core";
 
 type NotifyInput = {
   recipientIds: string[];
@@ -118,10 +120,12 @@ export async function createAndPublishNotifications(
     })),
   });
 
-  // Each recipient gets a distinct row/id, so publish per recipient.
-  void Promise.all(
-    rows.map((n) =>
-      broadcast([userChannel(n.recipientId)], {
+  // Each recipient gets a distinct row/id — batch all publishes into one
+  // Centrifugo HTTP request instead of N individual calls.
+  void batchPublish(
+    rows.map((n) => ({
+      channel: userChannel(n.recipientId),
+      data: {
         type: NOTIFICATION_NEW,
         notification: {
           id: n.id,
@@ -133,10 +137,29 @@ export async function createAndPublishNotifications(
           read: n.read,
           createdAt: n.createdAt,
         },
-      }),
-    ),
+      },
+    })),
   );
 
+  return rows;
+}
+
+/**
+ * Create notification rows, broadcast to Centrifugo, AND enqueue push delivery
+ * to the background worker — all in one call. This is the primary entry point
+ * for production notification triggers (messages, mentions, rejections, etc.).
+ */
+export async function notifyAndPush(
+  input: NotifyInput,
+  pushPayload: Omit<PushPayload, "tag" | "type"> & { type: string },
+): Promise<CreatedNotification[]> {
+  const rows = await createAndPublishNotifications(input);
+  if (rows.length > 0) {
+    void enqueuePush(
+      rows.map((r) => r.recipientId),
+      { ...pushPayload, tag: input.tag ?? undefined },
+    );
+  }
   return rows;
 }
 

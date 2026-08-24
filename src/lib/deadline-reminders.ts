@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getActiveContract } from "@/lib/contract-rules";
 import { broadcast, projectChannel, userChannel } from "@/lib/centrifugo";
 import { createAndPublishNotifications } from "@/lib/notify";
-import { sendPush } from "@/lib/push";
+import { enqueuePush } from "@/lib/push-queue";
 import {
   isDeadlineReminderDay,
   milestoneLabel,
@@ -205,7 +205,7 @@ export async function sendDeadlineReminderForNote(options: {
       tag: pushTag,
     });
     if (rows.length > 0) {
-      void sendPush(
+      void enqueuePush(
         rows.map((r) => r.recipientId),
         { title, body: preview, url: linkUrl, tag: pushTag, type: "deadline" },
       );

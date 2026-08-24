@@ -14,7 +14,7 @@ import {
 import { publish, broadcast, broadcastTaskEvent, taskChannel, projectChannel, userChannel } from "@/lib/centrifugo";
 import { createAndPublishNotifications } from "@/lib/notify";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
-import { sendPush } from "@/lib/push";
+import { enqueuePush } from "@/lib/push-queue";
 import { isQuestionAnswerFilled, isReadinessQuestion, isWaitingOnClientAnswer } from "@/lib/task-readiness";
 import { requireUserOnProject } from "@/lib/project-mentions";
 
@@ -735,7 +735,7 @@ export async function declineTask(data: {
         threadKey: `task-${task.id}`,
       });
       if (rows.length > 0) {
-        void sendPush(
+        void enqueuePush(
           rows.map((r) => r.recipientId),
           { title, body: notifBody, url: linkUrl, tag: pushTag, type: "rejection" },
         );

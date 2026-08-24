@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
 import { publish, taskChannel } from "@/lib/centrifugo";
-import { sendPush } from "@/lib/push";
+import { enqueuePush } from "@/lib/push-queue";
 import { createAndPublishNotifications } from "@/lib/notify";
 
 export async function createComment(data: {
@@ -79,7 +79,7 @@ export async function createComment(data: {
         threadKey: `task-${data.taskId}`,
       });
       if (rows.length > 0) {
-        void sendPush(
+        void enqueuePush(
           rows.map((r) => r.recipientId),
           {
             title: `${comment.user.name ?? "Someone"} mentioned you`,

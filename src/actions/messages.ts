@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { hasProjectAccess } from "@/lib/project-access";
 import { getActiveContract } from "@/lib/contract-rules";
-import { sendPush } from "@/lib/push";
+import { enqueuePush } from "@/lib/push-queue";
 import {
   createAndPublishNotifications,
   unreadCountsFor,
@@ -1192,9 +1192,9 @@ export async function sendMessage(
         tag: pushTag,
         threadKey: threadId,
       });
-      // OS-level web push on top of the in-app bell.
+      // OS-level web push — enqueued to background worker.
       if (rows.length > 0) {
-        void sendPush(
+        void enqueuePush(
           rows.map((r) => r.recipientId),
           {
             title,
