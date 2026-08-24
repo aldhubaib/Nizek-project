@@ -1,6 +1,6 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
-import { cookies } from "next/headers";
+import { headers, cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth-server";
 import { cache } from "react";
 
 export const IMPERSONATE_COOKIE = "impersonate_user_id";
@@ -53,79 +53,28 @@ export async function acceptPendingInvitations(userId: string, email: string) {
   }
 }
 
-// The user actually signed in with Clerk — never affected by impersonation.
+/**
+ * Get the current Better Auth session. Returns null if not authenticated.
+ * Cached per-request via React cache().
+ */
+export const getSession = cache(async () => {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+  return session;
+});
+
 export const getRealUser = cache(async () => {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return null;
+  const session = await getSession();
+  if (!session?.user) return null;
 
-  let user = await prisma.user.findUnique({ where: { clerkId } });
-
-  if (!user) {
-    const clerkUser = await currentUser();
-    if (!clerkUser) return null;
-
-    const email = (clerkUser.emailAddresses[0]?.emailAddress ?? "").toLowerCase();
-    // Match invites against every email on the Clerk account — people are
-    // often invited on one address but sign up with another.
-    const allEmails = [...new Set(
-      clerkUser.emailAddresses.map((e) => e.emailAddress.toLowerCase()).filter(Boolean),
-    )];
-
-    const pendingInvite = await prisma.pendingTeamInvite.findFirst({
-      where: { email: { in: allEmails.length > 0 ? allEmails : [email] } },
-    });
-
-    const invitedName = pendingInvite
-      ? `${pendingInvite.firstName ?? ""} ${pendingInvite.lastName ?? ""}`.trim()
-      : "";
-    const clerkName = `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim();
-
-    try {
-      user = await prisma.user.upsert({
-        where: { clerkId },
-        update: {},
-        create: {
-          clerkId,
-          email,
-          name: invitedName || clerkName || null,
-          imageUrl: clerkUser.imageUrl,
-          ...(pendingInvite && { systemRole: pendingInvite.systemRole }),
-        },
-      });
-    } catch {
-      user = await prisma.user.findUnique({ where: { clerkId } });
-      if (!user) return null;
-    }
-
-    if (pendingInvite) {
-      await prisma.pendingTeamInvite
-        .deleteMany({ where: { email: { in: allEmails.length > 0 ? allEmails : [email] } } })
-        .catch(() => {});
-    }
-
-    const { assignUserToDefaultTeam, assignUserToInvitedTeam } = await import("@/actions/team");
-    assignUserToDefaultTeam(user.id, user.systemRole === "CLIENT").catch(() => {});
-    if (pendingInvite?.teamId) {
-      assignUserToInvitedTeam(user.id, pendingInvite.teamId).catch(() => {});
-    }
-
-    for (const em of allEmails.length > 0 ? allEmails : [user.email]) {
-      await acceptPendingInvitations(user.id, em);
-    }
-  }
-  // NOTE: For existing users we intentionally do NOT run invitation acceptance or
-  // pendingTeamInvite cleanup here — that used to run on every dashboard request.
-  // Invitations that arrive after signup are reconciled lazily in getProjects()
-  // (the projects list entry point) via acceptPendingInvitations().
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+  });
 
   return user;
 });
 
-// Effective user for the request. If a system admin has an active
-// "sign in as" cookie, this resolves to the impersonated user, so every
-// query/permission check in the app behaves exactly as it would for them.
-// The cookie is only honored when the real Clerk session belongs to an
-// admin, so a tampered cookie does nothing for regular users.
 export const getCurrentUser = cache(async () => {
   const real = await getRealUser();
   if (!real) return null;
@@ -139,8 +88,6 @@ export const getCurrentUser = cache(async () => {
   return target;
 });
 
-// Impersonation state for the banner: null unless an admin is actively
-// viewing the app as someone else.
 export const getImpersonation = cache(async () => {
   const [real, effective] = await Promise.all([getRealUser(), getCurrentUser()]);
   if (!real || !effective || real.id === effective.id) return null;
@@ -159,21 +106,17 @@ export async function requireUser() {
 }
 
 /**
- * True when the signed-in Clerk account has no custom profile photo yet.
- * Clerk always provides a default imageUrl, so we use hasImage — not imageUrl.
- * Skipped during admin impersonation so admins can still browse as that user.
+ * True when the user has no profile photo. We check our own DB field
+ * instead of relying on Clerk's hasImage.
  */
 export async function needsProfilePhoto(): Promise<boolean> {
   const impersonation = await getImpersonation();
   if (impersonation) return false;
-  const clerkUser = await currentUser();
-  if (!clerkUser) return false;
-  return !clerkUser.hasImage;
+  const user = await getRealUser();
+  if (!user) return false;
+  return !user.imageUrl;
 }
 
-// Wrapped in React cache() so repeated calls within a single request/render
-// (e.g. getProject + getTasksByProject + page loader all check membership)
-// hit the DB only once per projectId.
 export const requireProjectMember = cache(async (projectId: string) => {
   const user = await requireUser();
 

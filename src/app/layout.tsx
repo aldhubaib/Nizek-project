@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { ClerkProvider } from "@clerk/nextjs";
-import { dark } from "@clerk/themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdateNotifier } from "@/components/update-notifier";
 import { HomeScreenIconBanner } from "@/components/home-screen-icon-banner";
@@ -29,8 +27,6 @@ export const viewport: Viewport = {
   userScalable: false,
   viewportFit: "cover",
   themeColor: "rgba(14, 14, 16, 0.4)",
-  // Shrink the layout viewport when the soft keyboard opens (Android Chrome).
-  // iOS still needs the visualViewport frame hook in ThreadChat.
   interactiveWidget: "resizes-content",
 };
 
@@ -87,21 +83,15 @@ export default async function RootLayout({
     >
       <body className="min-h-full bg-background text-foreground">
         <div className="app-status-frost" aria-hidden />
-        <ClerkProvider
-          appearance={{ baseTheme: dark }}
-          afterSignOutUrl="/sign-in"
-          signInFallbackRedirectUrl="/dashboard"
-        >
-          <BrandingProvider initialLogos={logos}>
-            <DisablePinchZoom />
-            <TooltipProvider>{children}</TooltipProvider>
-            <UpdateNotifier
-              currentVersion={release.version}
-              releasedAt={release.releasedAt}
-            />
-            <HomeScreenIconBanner />
-          </BrandingProvider>
-        </ClerkProvider>
+        <BrandingProvider initialLogos={logos}>
+          <DisablePinchZoom />
+          <TooltipProvider>{children}</TooltipProvider>
+          <UpdateNotifier
+            currentVersion={release.version}
+            releasedAt={release.releasedAt}
+          />
+          <HomeScreenIconBanner />
+        </BrandingProvider>
       </body>
     </html>
   );

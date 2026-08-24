@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useUser, useClerk } from "@clerk/nextjs";
+import { useCurrentUser } from "@/components/current-user-provider";
+import { authClient } from "@/lib/auth-client";
 import { UserCog, LogOut, Loader2 } from "lucide-react";
 import {
   DropdownMenu,
@@ -22,23 +23,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/**
- * Custom account menu that replaces Clerk's branded <UserButton> popup.
- * Matches the app's design: avatar trigger, a "Manage account" entry (opens
- * Clerk's profile modal) and a "Sign out" action guarded by a confirm dialog.
- */
 export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
   const router = useRouter();
-  const { user } = useUser();
-  const { signOut } = useClerk();
+  const user = useCurrentUser();
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
-  const email = user?.primaryEmailAddress?.emailAddress ?? "";
-  const name = user?.fullName ?? email ?? "You";
+  const email = user?.email ?? "";
+  const name = user?.name ?? email ?? "You";
   const img = user?.imageUrl;
-  const initials = user
-    ? `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase() || "U"
+  const initials = user?.name
+    ? user.name
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
     : "U";
 
   const avatar = (size: string) =>
@@ -137,9 +137,11 @@ export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
               variant="destructive"
               className="gap-2"
               disabled={signingOut}
-              onClick={() => {
+              onClick={async () => {
                 setSigningOut(true);
-                void signOut({ redirectUrl: "/sign-in" });
+                await authClient.signOut({
+                  fetchOptions: { onSuccess: () => router.push("/sign-in") },
+                });
               }}
             >
               {signingOut ? (

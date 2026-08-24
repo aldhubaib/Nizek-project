@@ -2,10 +2,10 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SignOutButton, useUser } from "@clerk/nextjs";
 import { Camera, Loader2 } from "lucide-react";
 import { updateMyAvatar } from "@/actions/account";
 import { useAppLogo } from "@/components/branding-provider";
+import { authClient } from "@/lib/auth-client";
 
 export function SetupPhotoClient({
   name,
@@ -17,7 +17,6 @@ export function SetupPhotoClient({
   logoUrl: string | null;
 }) {
   const router = useRouter();
-  const { user } = useUser();
   const fileRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -57,8 +56,6 @@ export function SetupPhotoClient({
         setPreview(null);
         return;
       }
-      // Refresh Clerk so the next dashboard check sees hasImage: true.
-      await user?.reload();
       router.replace("/dashboard");
       router.refresh();
     } catch {
@@ -153,14 +150,17 @@ export function SetupPhotoClient({
           </button>
         </div>
 
-        <SignOutButton>
-          <button
-            type="button"
-            className="mt-8 text-s text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Sign out
-          </button>
-        </SignOutButton>
+        <button
+          type="button"
+          className="mt-8 text-s text-muted-foreground transition-colors hover:text-foreground"
+          onClick={async () => {
+            await authClient.signOut({
+              fetchOptions: { onSuccess: () => router.push("/sign-in") },
+            });
+          }}
+        >
+          Sign out
+        </button>
       </div>
     </div>
   );

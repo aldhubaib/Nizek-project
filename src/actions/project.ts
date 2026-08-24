@@ -383,13 +383,10 @@ export async function inviteMember(data: {
   ]);
 
   try {
-    await fetch("https://api.clerk.com/v1/allowlist_identifiers", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ identifier: data.email, notify: false }),
+    await prisma.allowedEmail.upsert({
+      where: { email: data.email },
+      update: {},
+      create: { email: data.email },
     });
   } catch {
     // Non-blocking

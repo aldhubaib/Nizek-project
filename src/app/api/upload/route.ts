@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth-server";
 import { uploadToR2, generateR2Key } from "@/lib/r2";
 import {
   MAX_PROXY_UPLOAD_BYTES,
@@ -8,16 +8,12 @@ import {
 
 export const runtime = "nodejs";
 
-// Same-origin upload fallback. The primary path is a presigned direct-to-R2 PUT
-// (see lib/upload.ts), but cross-origin PUTs fail on some mobile browsers / PWAs
-// (CORS preflight quirks). This route proxies the bytes through our own origin,
-// which sidesteps CORS entirely. Kept for images/attachments (bounded size).
-
 export async function POST(req: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) {
+  const session = await auth.api.getSession({ headers: req.headers });
+  if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const userId = session.user.id;
 
   let form: FormData;
   try {

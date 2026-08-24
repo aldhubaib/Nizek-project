@@ -28,3 +28,13 @@ export function sprintBoardColumn(status: string): SprintBoardColumn {
 export function isCurrentSprintStatus(status: string): boolean {
   return status === "PLANNED" || status === "NEXT" || status === "ACTIVE";
 }
+
+export function comparePlannedSprints(
+  a: { sortOrder: number; status: string; startDate: string | Date },
+  b: { sortOrder: number; status: string; startDate: string | Date },
+): number {
+  if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+  const nextFirst = Number(b.status === "NEXT") - Number(a.status === "NEXT");
+  if (nextFirst !== 0) return nextFirst;
+  return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+}

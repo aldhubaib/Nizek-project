@@ -1,30 +1,41 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionCookie } from "better-auth/cookies";
 
-const isPublicRoute = createRouteMatcher([
+const publicPaths = [
   "/",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/api/webhooks(.*)",
-  "/api/cron(.*)",
+  "/sign-in",
+  "/sign-up",
+  "/api/auth",
+  "/api/webhooks",
+  "/api/cron",
   "/api/health",
   "/api/version",
   "/manifest.json",
-]);
+];
 
-const isUploadRoute = createRouteMatcher(["/api/upload(.*)"]);
+const uploadPath = "/api/upload";
 
-export default clerkMiddleware(async (auth, request) => {
-  if (isUploadRoute(request)) return;
-  if (!isPublicRoute(request)) {
-    const { userId } = await auth();
-    if (!userId) {
+function isPublicRoute(pathname: string): boolean {
+  return publicPaths.some((p) => pathname === p || pathname.startsWith(p + "/") || pathname.startsWith(p + "("));
+}
+
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (pathname.startsWith(uploadPath)) return NextResponse.next();
+
+  if (!isPublicRoute(pathname)) {
+    const sessionCookie = getSessionCookie(request);
+    if (!sessionCookie) {
       console.warn(
-        `[auth] unauthenticated access to ${request.nextUrl.pathname} — redirecting to sign-in`,
+        `[auth] unauthenticated access to ${pathname} — redirecting to sign-in`,
       );
+      return NextResponse.redirect(new URL("/sign-in", request.url));
     }
-    await auth.protect();
   }
-});
+
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [

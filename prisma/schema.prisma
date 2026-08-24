@@ -83,16 +83,20 @@ enum EstimateAccuracy {
 // ─── Models ──────────────────────────────────────────────
 
 model User {
-  id         String     @id @default(cuid())
-  clerkId    String     @unique
-  email      String     @unique
-  name       String?
-  imageUrl   String?
-  systemRole SystemRole @default(DEVELOPER)
-  blocked    Boolean    @default(false)
+  id            String     @id @default(cuid())
+  clerkId       String?    @unique
+  email         String     @unique
+  emailVerified Boolean    @default(false)
+  name          String?
+  imageUrl      String?
+  systemRole    SystemRole @default(DEVELOPER)
+  blocked       Boolean    @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  authSessions AuthSession[]
+  accounts     Account[]
 
   teams          TeamMember[]
   projects       ProjectMember[]
@@ -308,6 +312,7 @@ model Sprint {
   status    SprintStatus @default(PLANNED)
   incompleteReason String?
   completedAt DateTime?
+  sortOrder Int @default(0)
 
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -2045,4 +2050,57 @@ model VaultActivity {
   createdAt DateTime @default(now())
 
   @@index([credentialId, createdAt])
+}
+
+// ─── Better Auth ────────────────────────────────────────
+
+model AuthSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([token])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId             String
+  providerId            String
+  issuer                String?
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([issuer, accountId])
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model AllowedEmail {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
 }

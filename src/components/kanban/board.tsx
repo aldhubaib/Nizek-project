@@ -17,7 +17,7 @@ import { KanbanColumn } from "./column";
 import { TaskCard } from "./task-card";
 import { useKanbanStore, type KanbanTask, type Stage } from "@/store/kanban";
 import { moveTask as moveTaskAction, declineTask, pollTaskUpdates, assignTaskToMe, getBoardTask } from "@/actions/task";
-import { useUser } from "@clerk/nextjs";
+import { useCurrentUser } from "@/components/current-user-provider";
 import type { TaskQuestion } from "./question-field";
 import { StageConfirmDialog, getCheckpoint } from "./stage-confirm-dialog";
 import { ProofOfWorkDialog } from "./proof-of-work-dialog";
@@ -122,7 +122,7 @@ export function KanbanBoard({
   const tasks = useKanbanStore((s) => s.tasks);
   const setTasks = useKanbanStore((s) => s.setTasks);
   const moveTask = useKanbanStore((s) => s.moveTask);
-  const { user } = useUser();
+  const user = useCurrentUser();
   const cent = useCentrifugo();
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
   const [pendingMove, setPendingMove] = useState<{ taskId: string; fromStage: Stage; toStage: Stage; order: number; assigneeName: string | null; assigneeAvatar: string | null } | null>(null);
@@ -336,7 +336,7 @@ export function KanbanBoard({
               ...t,
               assignee: {
                 id: currentUserId ?? "",
-                name: user?.fullName || user?.firstName || null,
+                name: user?.name || null,
                 imageUrl: user?.imageUrl ?? null,
               },
             }

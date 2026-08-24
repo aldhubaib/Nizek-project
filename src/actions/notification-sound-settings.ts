@@ -1,8 +1,8 @@
 "use server";
 
-import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { invalidateBrandingCache, NOTIFICATION_SOUND_SLOT } from "@/lib/branding";
 import { generateR2Key, uploadToR2, deleteFromR2 } from "@/lib/r2";
 import { publish } from "@/lib/centrifugo";
@@ -65,8 +65,8 @@ export async function getNotificationSound(): Promise<NotificationSoundDTO> {
  * a cached layout render or another replica served a stale URL.
  */
 export async function getActiveNotificationSoundUrl(): Promise<string | null> {
-  const { userId } = await auth();
-  if (!userId) return null;
+  const session = await getSession();
+  if (!session?.user) return null;
   const row = await prisma.brandingAsset.findUnique({
     where: { slot: NOTIFICATION_SOUND_SLOT },
     select: { url: true },

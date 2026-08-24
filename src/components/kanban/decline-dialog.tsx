@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useCurrentUser } from "@/components/current-user-provider";
 import { Button } from "@/components/ui/button";
 import { Undo2, Loader2, AlertTriangle, ArrowRight, Paperclip, X, FileText, User } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -41,7 +41,7 @@ interface Props {
 }
 
 export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm, onCancel }: Props) {
-  const { user } = useUser();
+  const user = useCurrentUser();
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
@@ -52,7 +52,7 @@ export function DeclineDialog({ fromStage, mentionName, mentionAvatar, onConfirm
     { capture: true },
   );
 
-  const me = user?.fullName || user?.firstName || "You";
+  const me = user?.name || "You";
   const meAvatar = user?.imageUrl || null;
   const toLabel = stageLabel(DECLINE_TARGETS[fromStage]) || "the previous stage";
 

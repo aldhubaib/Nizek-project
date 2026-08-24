@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition, type Dispatch
 import { useRouter } from "next/navigation";
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   closestCorners,
   pointerWithin,
@@ -13,8 +14,8 @@ import {
   useSensors,
   type CollisionDetection,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import { ClipboardCheck, MoreHorizontal, Search } from "lucide-react";
 import { SprintStatusControl } from "@/components/project/sprint-status-control";
 import { EstimateBadge, SprintTaskRow, TaskTypeCountSummary } from "@/components/project/sprint-task-row";
@@ -94,8 +95,13 @@ export function CompletedSprintsTab({
   const updateTask = useKanbanStore((s) => s.updateTask);
   const liveTasks = storeTasks.length > 0 ? storeTasks : initialTasks;
   const [reviewSprint, setReviewSprint] = useState<SprintDTO | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const canDrag = canManage && isProjectActive;
+  const activeSprint = useMemo(() => {
+    if (!activeId?.startsWith("sprint:")) return null;
+    return sprints.find((s) => s.id === activeId.slice("sprint:".length)) ?? null;
+  }, [activeId, sprints]);
 
   const closeReview = useCallback(() => {
     setReviewSprint(null);
@@ -161,8 +167,17 @@ export function CompletedSprintsTab({
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(String(event.active.id));
+  }
+
+  function handleDragCancel() {
+    setActiveId(null);
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
+    setActiveId(null);
     if (!over || !canDrag) return;
     const sprintId = String(active.id).startsWith("sprint:")
       ? String(active.id).slice("sprint:".length)
@@ -183,39 +198,42 @@ export function CompletedSprintsTab({
     const previous = sprint;
     setError(null);
 
-    if (column === "ACTIVE") {
-      applySprint({ ...sprint, status: "ACTIVE" });
+    // Defer so dnd-kit can unmount the overlay before this card changes columns.
+    window.setTimeout(() => {
+      if (column === "ACTIVE") {
+        applySprint({ ...sprint, status: "ACTIVE" });
+        startTransition(async () => {
+          try {
+            applySprint(await startSprint(sprint.id));
+            router.refresh();
+          } catch (err) {
+            applySprint(previous);
+            setError(err instanceof Error ? err.message : "Could not start sprint");
+          }
+        });
+        return;
+      }
+
+      if (column === "COMPLETED" && sprint.status === "ACTIVE") {
+        setError("Complete the sprint from the review or backlog first.");
+        return;
+      }
+
+      const optimisticStatus =
+        column === "COMPLETED"
+          ? (sprint.incompleteReason ? "PARTIALLY_COMPLETED" : "COMPLETED")
+          : column;
+      applySprint({ ...sprint, status: optimisticStatus });
       startTransition(async () => {
         try {
-          applySprint(await startSprint(sprint.id));
+          applySprint(await setSprintBoardStatus(sprint.id, column));
           router.refresh();
         } catch (err) {
           applySprint(previous);
-          setError(err instanceof Error ? err.message : "Could not start sprint");
+          setError(err instanceof Error ? err.message : "Could not move sprint");
         }
       });
-      return;
-    }
-
-    if (column === "COMPLETED" && sprint.status === "ACTIVE") {
-      setError("Complete the sprint from the review or backlog first.");
-      return;
-    }
-
-    const optimisticStatus =
-      column === "COMPLETED"
-        ? (sprint.incompleteReason ? "PARTIALLY_COMPLETED" : "COMPLETED")
-        : column;
-    applySprint({ ...sprint, status: optimisticStatus });
-    startTransition(async () => {
-      try {
-        applySprint(await setSprintBoardStatus(sprint.id, column));
-        router.refresh();
-      } catch (err) {
-        applySprint(previous);
-        setError(err instanceof Error ? err.message : "Could not move sprint");
-      }
-    });
+    }, 0);
   }
 
   async function confirmDelete(typed: string) {
@@ -267,6 +285,8 @@ export function CompletedSprintsTab({
       <DndContext
         sensors={sensors}
         collisionDetection={columnFirstCollision}
+        onDragStart={handleDragStart}
+        onDragCancel={handleDragCancel}
         onDragEnd={handleDragEnd}
       >
         <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-4">
@@ -305,6 +325,13 @@ export function CompletedSprintsTab({
             </SprintColumn>
           ))}
         </div>
+        <DragOverlay dropAnimation={null}>
+          {activeSprint ? (
+            <div className="rounded-lg border border-border/50 bg-card px-3 py-4 text-s font-semibold shadow-lg">
+              {activeSprint.name}
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
     {deletingSprint ? (
       <ConfirmDeleteDialog
@@ -400,21 +427,17 @@ function SprintBoardCard({
   onDelete: () => void;
 }) {
   const router = useRouter();
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: sprintDragId(sprint.id),
     disabled: !canDrag,
   });
-  const style = transform
-    ? { transform: CSS.Translate.toString(transform) }
-    : undefined;
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
       {...listeners}
       {...attributes}
-      className={cn(isDragging && "opacity-60")}
+      className={cn(isDragging && "opacity-40")}
     >
       <CollapsibleSection
         title={sprint.name}

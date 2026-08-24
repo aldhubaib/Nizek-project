@@ -10,7 +10,7 @@ import {
 } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import type { SprintStatus } from "@/generated/prisma/client";
-import { isClosedSprint, isCurrentSprintStatus, isUnstartedSprint, type SprintBoardColumn } from "@/lib/sprint-status";
+import { isClosedSprint, isCurrentSprintStatus, isUnstartedSprint, comparePlannedSprints, type SprintBoardColumn } from "@/lib/sprint-status";
 import { taskCode } from "@/lib/task-label";
 import { countWorkingDays } from "@/lib/working-days";
 import { logTaskActivity } from "@/lib/activity";
@@ -33,6 +33,7 @@ const SPRINT_SELECT = {
   status: true,
   incompleteReason: true,
   completedAt: true,
+  sortOrder: true,
   projectId: true,
   createdAt: true,
   updatedAt: true,
@@ -51,6 +52,7 @@ function serializeSprint(
     status: SprintStatus;
     incompleteReason: string | null;
     completedAt: Date | null;
+    sortOrder: number;
     projectId: string;
     createdAt: Date;
     updatedAt: Date;
@@ -66,6 +68,7 @@ function serializeSprint(
     status: sprint.status,
     incompleteReason: sprint.incompleteReason,
     completedAt: sprint.completedAt?.toISOString() ?? null,
+    sortOrder: sprint.sortOrder,
     projectId: sprint.projectId,
     createdAt: sprint.createdAt.toISOString(),
     updatedAt: sprint.updatedAt.toISOString(),
@@ -165,9 +168,17 @@ export async function listSprints(projectId: string): Promise<SprintDTO[]> {
   };
   return sprints
     .slice()
-    .sort((a, b) => rank[a.status] - rank[b.status] || (isClosedSprint(a.status)
-      ? (b.completedAt ?? b.updatedAt).getTime() - (a.completedAt ?? a.updatedAt).getTime()
-      : a.startDate.getTime() - b.startDate.getTime()))
+    .sort((a, b) => {
+      const byStatus = rank[a.status] - rank[b.status];
+      if (byStatus !== 0) return byStatus;
+      if (isUnstartedSprint(a.status) && isUnstartedSprint(b.status)) {
+        return comparePlannedSprints(a, b);
+      }
+      if (isClosedSprint(a.status)) {
+        return (b.completedAt ?? b.updatedAt).getTime() - (a.completedAt ?? a.updatedAt).getTime();
+      }
+      return a.startDate.getTime() - b.startDate.getTime();
+    })
     .map(serializeSprint);
 }
 
@@ -185,6 +196,11 @@ export async function createSprint(data: {
   const endDate = parseDay(data.endDate);
   if (endDate < startDate) throw new Error("End date must be on or after the start date");
 
+  const maxOrder = await prisma.sprint.aggregate({
+    where: { projectId: data.projectId, status: { in: ["PLANNED", "NEXT"] } },
+    _max: { sortOrder: true },
+  });
+
   const sprint = await prisma.sprint.create({
     data: {
       projectId: data.projectId,
@@ -192,12 +208,33 @@ export async function createSprint(data: {
       goal: data.goal?.trim() || null,
       startDate,
       endDate,
+      sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
     },
     select: SPRINT_SELECT,
   });
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
   return serializeSprint(sprint);
+}
+
+export async function reorderPlannedSprints(
+  projectId: string,
+  orderedIds: string[],
+): Promise<void> {
+  await requireSprintAction(projectId, "createPlanning");
+  const sprints = await prisma.sprint.findMany({
+    where: { projectId, id: { in: orderedIds }, status: { in: ["PLANNED", "NEXT"] } },
+    select: { id: true },
+  });
+  if (sprints.length !== orderedIds.length) {
+    throw new Error("Only planned sprints can be reordered");
+  }
+  await prisma.$transaction(
+    orderedIds.map((id, sortOrder) =>
+      prisma.sprint.update({ where: { id }, data: { sortOrder } }),
+    ),
+  );
+  revalidatePath(`/dashboard/projects/${projectId}`);
 }
 
 export async function updateSprint(data: {

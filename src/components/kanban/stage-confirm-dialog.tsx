@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { useUser } from "@clerk/nextjs";
+import { useCurrentUser } from "@/components/current-user-provider";
 import { ArrowRight, UserCheck, ShieldAlert } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Stage } from "@/store/kanban";
@@ -68,12 +68,12 @@ export function StageConfirmDialog({
   onConfirm,
   onCancel,
 }: Props) {
-  const { user } = useUser();
+  const user = useCurrentUser();
   const [confirming, setConfirming] = useState(false);
   const [selectedMinutes, setSelectedMinutes] = useState(0);
   const [estimateError, setEstimateError] = useState(false);
 
-  const me = user?.fullName || user?.firstName || "You";
+  const me = user?.name || "You";
   const meAvatar = user?.imageUrl || null;
 
   function handleConfirm() {

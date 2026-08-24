@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  comparePlannedSprints,
   isClosedSprint,
   isCurrentSprintStatus,
   isUnstartedSprint,
@@ -34,5 +35,12 @@ describe("sprintBoardColumn", () => {
     expect(isCurrentSprintStatus("ACTIVE")).toBe(true);
     expect(isCurrentSprintStatus("COMPLETED")).toBe(false);
     expect(isCurrentSprintStatus("SHIPPED")).toBe(false);
+  });
+
+  it("orders planned sprints by sortOrder, then Next, then start date", () => {
+    const a = { sortOrder: 1, status: "PLANNED", startDate: "2026-01-01" };
+    const b = { sortOrder: 0, status: "NEXT", startDate: "2026-06-01" };
+    expect(comparePlannedSprints(b, a)).toBeLessThan(0);
+    expect(comparePlannedSprints({ ...a, sortOrder: 0 }, { ...b, sortOrder: 0 })).toBeGreaterThan(0);
   });
 });

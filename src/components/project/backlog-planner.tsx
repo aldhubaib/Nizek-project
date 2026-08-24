@@ -22,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlertCircle, ClipboardCheck, Clock, Loader2, MoreHorizontal, Play, Plus } from "lucide-react";
+import { AlertCircle, ClipboardCheck, Clock, GripVertical, Loader2, MoreHorizontal, Play, Plus } from "lucide-react";
 import { SprintStatusControl } from "@/components/project/sprint-status-control";
 import { SprintTaskRow, TaskTypeCountSummary, formatMinutes } from "@/components/project/sprint-task-row";
 import { Button } from "@/components/ui/button";
@@ -45,16 +45,23 @@ import { cn } from "@/lib/utils";
 import {
   createSprint,
   deleteSprint,
+  reorderPlannedSprints,
   setTaskSprint,
   type SprintDTO,
 } from "@/actions/sprint";
 import { moveTask as moveTaskAction, updateTask as updateTaskAction } from "@/actions/task";
 import { isMissingDataTask } from "@/lib/task-readiness";
 import { promoteToBacklogBottom } from "@/lib/backlog-placement";
-import { isClosedSprint, isUnstartedSprint } from "@/lib/sprint-status";
+import { isClosedSprint, isUnstartedSprint, comparePlannedSprints } from "@/lib/sprint-status";
 
 const BACKLOG_ZONE = "backlog";
 const MISSING_ZONE = "missing-data";
+const PLANNED_GROUP = "planned-group";
+const SPRINT_BLOCK_PREFIX = "sprint-block:";
+
+function sprintBlockId(sprintId: string) {
+  return `${SPRINT_BLOCK_PREFIX}${sprintId}`;
+}
 
 function nextSprintName(sprints: SprintDTO[]): string {
   let max = 0;
@@ -427,7 +434,7 @@ export function BacklogPlanner({
   const plannedSprints = openSprints
     .filter((s) => isUnstartedSprint(s.status))
     .slice()
-    .sort((a, b) => Number(b.status === "NEXT") - Number(a.status === "NEXT"));
+    .sort(comparePlannedSprints);
   const completedSprintIds = useMemo(
     () => new Set(sprints.filter((s) => isClosedSprint(s.status)).map((s) => s.id)),
     [sprints],
@@ -614,13 +621,58 @@ export function BacklogPlanner({
   }
 
   function handleDragStart(event: DragStartEvent) {
+    if (String(event.active.id).startsWith(SPRINT_BLOCK_PREFIX)) {
+      setActiveTask(null);
+      return;
+    }
     setActiveTask(taskById.get(event.active.id as string) ?? null);
+  }
+
+  function reorderPlanned(activeId: string, overId: string | undefined) {
+    if (!overId) return;
+    const fromId = activeId.slice(SPRINT_BLOCK_PREFIX.length);
+    let toId = overId.startsWith(SPRINT_BLOCK_PREFIX)
+      ? overId.slice(SPRINT_BLOCK_PREFIX.length)
+      : overId.startsWith("sprint:")
+        ? overId.slice("sprint:".length)
+        : taskById.get(overId)?.sprintId ?? null;
+    if (!toId || toId === fromId) return;
+    const ids = plannedSprints.map((s) => s.id);
+    const oldIndex = ids.indexOf(fromId);
+    const newIndex = ids.indexOf(toId);
+    if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+    const nextIds = arrayMove(ids, oldIndex, newIndex);
+    const previous = plannedSprints;
+    setSprints((prev) => {
+      const order = new Map(nextIds.map((id, i) => [id, i]));
+      return prev.map((s) =>
+        order.has(s.id) ? { ...s, sortOrder: order.get(s.id)! } : s,
+      );
+    });
+    startTransition(async () => {
+      try {
+        await reorderPlannedSprints(projectId, nextIds);
+        router.refresh();
+      } catch (err) {
+        setSprints((prev) =>
+          prev.map((s) => previous.find((p) => p.id === s.id) ?? s),
+        );
+        setError(err instanceof Error ? err.message : "Could not reorder sprints");
+      }
+    });
   }
 
   function handleDragEnd(event: DragEndEvent) {
     setActiveTask(null);
     if (!canDrag) return;
-    const task = taskById.get(event.active.id as string);
+    const activeId = String(event.active.id);
+    if (activeId.startsWith(SPRINT_BLOCK_PREFIX)) {
+      if (canDrag && canCreateSprintPlanning) {
+        reorderPlanned(activeId, event.over?.id as string | undefined);
+      }
+      return;
+    }
+    const task = taskById.get(activeId);
     if (!task) return;
     const overId = event.over?.id as string | undefined;
     const zone = parseZone(overId, taskById, completedSprintIds);
@@ -662,7 +714,7 @@ export function BacklogPlanner({
           endDate: dates.endDate,
         });
         setSprints((prev) => {
-          const list = [created, ...prev.filter((s) => s.id !== created.id)];
+          const list = [...prev.filter((s) => s.id !== created.id), created];
           const rank: Record<SprintDTO["status"], number> = {
             ACTIVE: 0,
             NEXT: 1,
@@ -671,7 +723,14 @@ export function BacklogPlanner({
             PARTIALLY_COMPLETED: 3,
             SHIPPED: 4,
           };
-          return list.slice().sort((a, b) => rank[a.status] - rank[b.status]);
+          return list.slice().sort((a, b) => {
+            const byStatus = rank[a.status] - rank[b.status];
+            if (byStatus !== 0) return byStatus;
+            if (isUnstartedSprint(a.status) && isUnstartedSprint(b.status)) {
+              return comparePlannedSprints(a, b);
+            }
+            return 0;
+          });
         });
         router.refresh();
       } catch (err) {
@@ -706,23 +765,56 @@ export function BacklogPlanner({
     router.refresh();
   }
 
-  function SprintBlock({ sprint }: { sprint: SprintDTO }) {
+  function SprintBlock({
+    sprint,
+    reorderable = false,
+  }: {
+    sprint: SprintDTO;
+    reorderable?: boolean;
+  }) {
     const items = tasksForSprint(sprint.id);
     const isCollapsed = collapsed[sprint.id] ?? false;
-
-
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({
+      id: sprintBlockId(sprint.id),
+      disabled: !reorderable,
+    });
     const typeSummary = <TaskTypeCountSummary tasks={items} />;
 
     return (
+      <div
+        ref={setNodeRef}
+        style={{
+          transform: CSS.Transform.toString(transform),
+          transition,
+        }}
+        className={cn(isDragging && "opacity-60")}
+      >
       <CollapsibleSection
         title={sprint.name}
-
-
         extra={typeSummary}
         collapsed={isCollapsed}
         onToggle={() => setCollapsed((c) => ({ ...c, [sprint.id]: !isCollapsed }))}
         actions={
           <>
+            {reorderable ? (
+              <button
+                type="button"
+                aria-label={`Reorder ${sprint.name}`}
+                title="Drag to reorder"
+                className="grid size-8 shrink-0 cursor-grab place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"
+                {...attributes}
+                {...listeners}
+              >
+                <GripVertical className="size-4" />
+              </button>
+            ) : null}
             {!isUnstartedSprint(sprint.status) ? (
             <SprintStatusControl
               status={sprint.status}
@@ -794,6 +886,7 @@ export function BacklogPlanner({
           ))}
         </DropList>
       </CollapsibleSection>
+      </div>
     );
   }
 
@@ -832,9 +925,34 @@ export function BacklogPlanner({
 
         {activeSprint && <SprintBlock sprint={activeSprint} />}
 
-        {plannedSprints.map((sprint) => (
-          <SprintBlock key={sprint.id} sprint={sprint} />
-        ))}
+        {plannedSprints.length > 0 ? (
+          <CollapsibleSection
+            title="Planned"
+            count={plannedSprints.length}
+            collapsed={collapsed[PLANNED_GROUP] ?? false}
+            onToggle={() =>
+              setCollapsed((c) => ({
+                ...c,
+                [PLANNED_GROUP]: !(c[PLANNED_GROUP] ?? false),
+              }))
+            }
+          >
+            <SortableContext
+              items={plannedSprints.map((s) => sprintBlockId(s.id))}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="flex flex-col gap-3">
+                {plannedSprints.map((sprint) => (
+                  <SprintBlock
+                    key={sprint.id}
+                    sprint={sprint}
+                    reorderable={canDrag && canCreateSprintPlanning}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </CollapsibleSection>
+        ) : null}
 
         <CollapsibleSection
           title="Backlog"

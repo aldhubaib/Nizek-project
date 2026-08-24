@@ -1,6 +1,5 @@
 "use server";
 
-import { clerkClient } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, acceptPendingInvitations } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
@@ -167,7 +166,6 @@ export async function getTeamMembers() {
       name: p.project.name,
       role: p.role,
       roleName: p.projectRole?.name ?? p.role,
-      // For editing the project role straight from the admin Members page.
       memberId: p.id,
       roleId: p.roleId,
     })),
@@ -203,14 +201,6 @@ export async function updateUserAdmin(userId: string, isAdmin: boolean) {
   revalidatePath("/dashboard/team");
 }
 
-// Adds an address to the member's Clerk account and promotes it to primary,
-// rather than replacing what was there. Everyone here signs in with Google, and
-// Clerk refuses to delete an address that belongs to a connected account, so the
-// old one stays attached and their Google sign-in keeps working untouched.
-//
-// Email is the sign-in identity rather than a display field, so Clerk has to
-// accept the new address before the local row moves: a User.email that Clerk has
-// never heard of is worse than leaving the old address in place.
 export async function updateUserEmail(userId: string, email: string) {
   await requireAdmin();
 
@@ -229,82 +219,20 @@ export async function updateUserEmail(userId: string, email: string) {
   });
   if (taken) return { error: "Another member already uses this email" };
 
-  const client = await clerkClient();
-
-  // Accounts accumulate addresses — the Google one plus anything added here
-  // before — so the target may already be present as a secondary.
-  let existingAddressId: string | undefined;
-  try {
-    const clerkUser = await client.users.getUser(target.clerkId);
-    existingAddressId = clerkUser.emailAddresses.find(
-      (e) => e.emailAddress.toLowerCase() === next,
-    )?.id;
-  } catch {
-    return { error: "Could not reach Clerk to update the sign-in email" };
-  }
-
-  try {
-    if (existingAddressId) {
-      await client.emailAddresses.updateEmailAddress(existingAddressId, {
-        verified: true,
-        primary: true,
-      });
-    } else {
-      await client.emailAddresses.createEmailAddress({
-        userId: target.clerkId,
-        emailAddress: next,
-        verified: true,
-        primary: true,
-      });
-    }
-  } catch (err) {
-    return {
-      error: err instanceof Error ? err.message : "Clerk rejected the new email",
-    };
-  }
-
-  await prisma.user.update({ where: { id: userId }, data: { email: next } });
-
-  // Allowlist restrictions apply to sign-up rather than sign-in, so this covers
-  // the case where Clerk treats a first Google sign-in from the new address as a
-  // new account instead of linking it. The old entry is left in place; it guards
-  // an address that is still live. Best-effort, matching how inviteToTeam treats it.
-  try {
-    await fetch("https://api.clerk.com/v1/allowlist_identifiers", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ identifier: next, notify: false }),
-    });
-  } catch {
-    // Non-blocking
-  }
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { email: next } }),
+    prisma.allowedEmail.upsert({
+      where: { email: next },
+      update: {},
+      create: { email: next },
+    }),
+  ]);
 
   revalidatePath("/dashboard/team");
   return {};
 }
 
-interface ClerkUserLite {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  image_url: string | null;
-  email_addresses: { email_address: string }[];
-}
-
-// Invited people sometimes sign in with a different email than the one they
-// were invited on (e.g. invited on gmail, signed up with their work email), or
-// create their Clerk account without ever clicking the invite link. The local
-// email match can't see those, so their invites sit in the admin list forever.
-// This reconciler asks Clerk which invited emails already belong to an account
-// and consumes the matching invites: it links/creates the local user, accepts
-// their project invitations, and deletes used-up team invites.
-// Wrapped in cache() so the admin page (which loads several invite lists in
-// one request) only hits Clerk once.
 const reconcileSignedUpInvites = cache(async () => {
-  if (!process.env.CLERK_SECRET_KEY) return;
   try {
     const [invitations, teamInvites] = await Promise.all([
       prisma.invitation.findMany({ where: { status: "PENDING" }, select: { email: true } }),
@@ -315,86 +243,26 @@ const reconcileSignedUpInvites = cache(async () => {
     )];
     if (invitedEmails.length === 0) return;
 
-    // Emails that already have a local user are handled by the existing
-    // cleanup in the list functions — only ask Clerk about the rest.
     const localUsers = await prisma.user.findMany({
       where: {
         OR: invitedEmails.map((email) => ({
           email: { equals: email, mode: "insensitive" as const },
         })),
       },
-      select: { email: true },
+      select: { id: true, email: true },
     });
-    const localEmails = new Set(localUsers.map((u) => u.email.toLowerCase()));
-    const unknownEmails = invitedEmails.filter((e) => !localEmails.has(e));
-    if (unknownEmails.length === 0) return;
+    if (localUsers.length === 0) return;
 
-    // Clerk supports repeated email_address params; chunk to keep URLs sane.
-    const clerkUsers: ClerkUserLite[] = [];
-    for (let i = 0; i < unknownEmails.length; i += 20) {
-      const chunk = unknownEmails.slice(i, i + 20);
-      const params = chunk.map((e) => `email_address=${encodeURIComponent(e)}`).join("&");
-      const res = await fetch(`https://api.clerk.com/v1/users?${params}&limit=100`, {
-        headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (Array.isArray(data)) clerkUsers.push(...data);
+    for (const u of localUsers) {
+      await acceptPendingInvitations(u.id, u.email).catch(() => {});
     }
 
-    const invitedSet = new Set(invitedEmails);
-    for (const cu of clerkUsers) {
-      const accountEmails = (cu.email_addresses ?? [])
-        .map((e) => e.email_address?.toLowerCase())
-        .filter((e): e is string => !!e);
-      const matchedInvited = accountEmails.filter((e) => invitedSet.has(e));
-      if (matchedInvited.length === 0) continue;
-
-      let localUser = await prisma.user.findUnique({ where: { clerkId: cu.id } });
-      const teamInvite = await prisma.pendingTeamInvite.findFirst({
-        where: { email: { in: accountEmails } },
-      });
-      if (!localUser) {
-        // They signed up with Clerk but never landed in the app — materialize
-        // the same user row their first visit would create.
-        const invitedName = teamInvite
-          ? `${teamInvite.firstName ?? ""} ${teamInvite.lastName ?? ""}`.trim()
-          : "";
-        const clerkName = `${cu.first_name ?? ""} ${cu.last_name ?? ""}`.trim();
-        const primaryEmail = accountEmails[0];
-        if (!primaryEmail) continue;
-        try {
-          localUser = await prisma.user.upsert({
-            where: { clerkId: cu.id },
-            update: {},
-            create: {
-              clerkId: cu.id,
-              email: primaryEmail,
-              name: invitedName || clerkName || null,
-              imageUrl: cu.image_url,
-              ...(teamInvite && { systemRole: teamInvite.systemRole }),
-            },
-          });
-        } catch {
-          continue;
-        }
-        await assignUserToDefaultTeam(localUser.id, localUser.systemRole === "CLIENT").catch(() => {});
-      }
-
-      if (teamInvite?.teamId) {
-        await assignUserToInvitedTeam(localUser.id, teamInvite.teamId).catch(() => {});
-      }
-
-      for (const email of matchedInvited) {
-        await acceptPendingInvitations(localUser.id, email).catch(() => {});
-      }
-      await prisma.pendingTeamInvite
-        .deleteMany({ where: { email: { in: accountEmails } } })
-        .catch(() => {});
-    }
+    const existingEmails = localUsers.map((u) => u.email.toLowerCase());
+    await prisma.pendingTeamInvite
+      .deleteMany({ where: { email: { in: existingEmails } } })
+      .catch(() => {});
   } catch {
-    // Reconciliation is best-effort — never break the admin page over it.
+    // Reconciliation is best-effort
   }
 });
 
@@ -414,10 +282,6 @@ export async function getPendingInvitations() {
 
   if (invitations.length === 0) return [];
 
-  // Users who signed up without clicking the invite link never triggered
-  // acceptance, so their invitations sat in "pending" forever. If the invited
-  // email now belongs to an account, accept on their behalf: create the
-  // project membership (with the invited role) and mark the row ACCEPTED.
   const emails = [...new Set(invitations.map((i) => i.email.toLowerCase()))];
   const users = await prisma.user.findMany({
     where: {
@@ -445,7 +309,6 @@ export async function inviteToTeam(data: {
   firstName: string;
   lastName: string;
   teamId?: string;
-  /** Projects the invitee joins on first sign-in, each with its role. */
   projects?: { projectId: string; roleId: string }[];
 }) {
   const currentUser = await requireUser();
@@ -475,9 +338,6 @@ export async function inviteToTeam(data: {
       await inviteMember({ projectId: a.projectId, email, roleId: a.roleId });
     }
   } else {
-    // Pre-assign the project memberships: pending Invitation rows are accepted
-    // automatically on first sign-in (acceptPendingInvitations), so the member
-    // lands in each project with the chosen role.
     for (const a of assignments) {
       const pRole = await prisma.projectRole.findUnique({ where: { id: a.roleId } });
       if (!pRole) throw new Error("Invalid project role");
@@ -500,20 +360,11 @@ export async function inviteToTeam(data: {
       });
     }
 
-    // No invite email — the admin tells people to join directly. The allowlist
-    // entry is what lets them sign in with this address.
-    try {
-      await fetch("https://api.clerk.com/v1/allowlist_identifiers", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ identifier: email, notify: false }),
-      });
-    } catch {
-      // Non-blocking
-    }
+    await prisma.allowedEmail.upsert({
+      where: { email },
+      update: {},
+      create: { email },
+    });
   }
 
   revalidatePath("/dashboard/team");
@@ -529,8 +380,6 @@ export async function getPendingTeamInvites() {
 
   if (invites.length === 0) return [];
 
-  // Insensitive equals per email — `in` + insensitive mode is not reliably
-  // applied, which left invites visible for users who had already signed up.
   const existingUsers = await prisma.user.findMany({
     where: {
       OR: invites.map((i) => ({
@@ -576,27 +425,10 @@ export async function cancelTeamInvite(inviteId: string) {
   });
   if (!invite) throw new Error("Invite not found");
 
-  await prisma.pendingTeamInvite.delete({ where: { id: inviteId } });
-
-  try {
-    const res = await fetch("https://api.clerk.com/v1/allowlist_identifiers", {
-      headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const entry = data.find(
-        (item: { identifier: string }) => item.identifier === invite.email
-      );
-      if (entry) {
-        await fetch(`https://api.clerk.com/v1/allowlist_identifiers/${entry.id}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` },
-        });
-      }
-    }
-  } catch {
-    // Non-blocking
-  }
+  await prisma.$transaction([
+    prisma.pendingTeamInvite.delete({ where: { id: inviteId } }),
+    prisma.allowedEmail.deleteMany({ where: { email: invite.email } }),
+  ]);
 
   revalidatePath("/dashboard/team");
 }
@@ -729,8 +561,6 @@ export async function toggleBlockUser(
     }
 
     if (transfers && transfers.length > 0) {
-      // Flatten all per-project transfers into a single transaction instead of
-      // one round-trip transaction per project.
       const ops = transfers.flatMap((t) => [
         prisma.task.updateMany({
           where: { projectId: t.projectId, assigneeId: userId, archivedAt: null },
@@ -762,20 +592,8 @@ export async function toggleBlockUser(
     data: { blocked: newBlocked },
   });
 
-  try {
-    if (newBlocked) {
-      await fetch(`https://api.clerk.com/v1/users/${target.clerkId}/ban`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` },
-      });
-    } else {
-      await fetch(`https://api.clerk.com/v1/users/${target.clerkId}/unban`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` },
-      });
-    }
-  } catch {
-    // Non-blocking — DB state is the source of truth
+  if (newBlocked) {
+    await prisma.authSession.deleteMany({ where: { userId } });
   }
 
   revalidatePath("/dashboard/team");
@@ -842,7 +660,6 @@ export async function getAvailableUsersForTeam(teamId: string) {
 
 export { getPendingTeamInvites as getPendingInvitesForTeam };
 
-// Puts a freshly signed-up user into the team chosen on their invite.
 export async function assignUserToInvitedTeam(userId: string, teamId: string) {
   const team = await prisma.team.findUnique({ where: { id: teamId }, select: { id: true } });
   if (!team) return;
@@ -867,25 +684,5 @@ export async function assignUserToDefaultTeam(userId: string, isClient: boolean 
 
 export async function removeFromAllowlist(email: string) {
   await requireUser();
-
-  const res = await fetch("https://api.clerk.com/v1/allowlist_identifiers", {
-    headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` },
-  });
-
-  if (!res.ok) return;
-
-  const data = await res.json();
-  const entry = data.find(
-    (item: { identifier: string }) => item.identifier === email
-  );
-
-  if (entry) {
-    await fetch(
-      `https://api.clerk.com/v1/allowlist_identifiers/${entry.id}`,
-      {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` },
-      }
-    );
-  }
+  await prisma.allowedEmail.deleteMany({ where: { email: email.toLowerCase() } });
 }

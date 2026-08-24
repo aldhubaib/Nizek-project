@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth-server";
 import { presignPutUrl, generateR2Key } from "@/lib/r2";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/upload-limits";
 
 export const runtime = "nodejs";
 
-// Issues a presigned PUT URL for a direct browser -> R2 upload. The server no
-// longer proxies file bytes (removes the OOM risk from concurrent 50MB uploads).
 export async function POST(req: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) {
+  const session = await auth.api.getSession({ headers: req.headers });
+  if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const userId = session.user.id;
 
   let body: { filename?: string; contentType?: string; size?: number };
   try {

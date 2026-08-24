@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth-server";
 
 export const runtime = "nodejs";
 
-// Upload failure telemetry. The client beacons here when an attachment upload
-// finally fails (after retries/fallback), so server logs say WHY users' files
-// aren't uploading — device, size, and the exact error — instead of us
-// guessing from complaints. Log-only; nothing is stored.
-
 export async function POST(req: NextRequest) {
-  const { userId } = await auth();
-  if (!userId) return new NextResponse(null, { status: 204 });
+  const session = await auth.api.getSession({ headers: req.headers });
+  if (!session?.user) return new NextResponse(null, { status: 204 });
+  const userId = session.user.id;
 
   let data: unknown = null;
   try {
