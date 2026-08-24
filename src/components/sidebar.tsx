@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useAppLogo } from "@/components/branding-provider";
+import { useUnreadStore } from "@/store/unread";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
@@ -61,6 +62,7 @@ export function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const mark = useAppLogo(logoUrl);
+  const inboxUnread = useUnreadStore((s) => s.inboxUnread);
 
   const isActive = (href: string) => {
     if (href === "/dashboard")
@@ -145,7 +147,14 @@ export function Sidebar({
                   : "text-muted-foreground hover:bg-card/60 hover:text-muted-foreground"
               )}
             >
-              <item.icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+              <span className="relative shrink-0">
+                <item.icon className="w-4 h-4" strokeWidth={1.5} />
+                {item.name === "Inbox" && inboxUnread > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-primary px-0.5 text-[10px] font-bold leading-none text-primary-foreground">
+                    {inboxUnread > 9 ? "9+" : inboxUnread}
+                  </span>
+                )}
+              </span>
               {!collapsed && item.name}
             </Link>
           );

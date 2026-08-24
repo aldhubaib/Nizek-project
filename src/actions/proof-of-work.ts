@@ -7,6 +7,7 @@ import { taskCode } from "@/lib/task-label";
 import { moveTask } from "@/actions/task";
 import { ensureBypassConversation, postBypassInbox, postBypassToProjectChat } from "@/lib/deliver-proof-bypass";
 import type { ProofBypassPayload } from "@/lib/proof-bypass-payload";
+import { publish, projectChannel } from "@/lib/centrifugo";
 
 export type ProofVideoInput = {
   filename: string;
@@ -171,6 +172,13 @@ export async function requestProofBypass(taskId: string): Promise<ProofBypassSta
     const conversationId = await ensureBypassConversation(user.id, approverId, threadTitle);
     await postBypassInbox(conversationId, payload);
   }
+
+  await publish(projectChannel(task.projectId), {
+    type: "proof-bypass.requested",
+    passId: pass.id,
+    taskId: task.id,
+    requesterId: user.id,
+  });
 
   return { id: pass.id, status: "PENDING", approvedByName: null };
 }

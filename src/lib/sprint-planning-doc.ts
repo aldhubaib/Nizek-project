@@ -145,8 +145,8 @@ export function overlayPlanningTaskAssignees(
       const live = byId.get(task.id);
       const next = {
         ...task,
-        assignee: live?.assignee ?? null,
-        estimatedMinutes: live?.estimatedMinutes ?? task.estimatedMinutes,
+        assignee: live ? live.assignee : null,
+        estimatedMinutes: live ? live.estimatedMinutes : null,
         questions: live?.questions?.length ? live.questions : task.questions,
         unplanned: live?.unplanned ?? task.unplanned,
       };

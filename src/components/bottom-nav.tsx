@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -16,9 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getInboxUnreadCount } from "@/actions/messages";
-import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
-import { useChannel } from "@/components/realtime/hooks";
-import { userChannel, NOTIFICATION_READ, NOTIFICATION_READ_ALL, NOTIFICATION_NEW } from "@/lib/channels";
+import { useUnreadStore } from "@/store/unread";
 
 const NAV_ITEMS = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
@@ -59,8 +57,8 @@ export function BottomNav({
   onOpenMenu,
 }: BottomNavProps) {
   const pathname = usePathname();
-  const [inboxUnread, setInboxUnread] = useState(0);
-  const cent = useCentrifugo();
+  const inboxUnread = useUnreadStore((s) => s.inboxUnread);
+  const setInboxUnread = useUnreadStore((s) => s.setInboxUnread);
 
   useEffect(() => {
     const load = () => {
@@ -72,41 +70,7 @@ export function BottomNav({
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
-  }, []);
-
-  useChannel(cent && currentUserId ? userChannel(currentUserId) : null, (data) => {
-    const payload = data as {
-      type?: string;
-      inboxUnread?: number;
-      notification?: { linkUrl?: string | null };
-    };
-    if (payload.type === NOTIFICATION_READ_ALL) {
-      setInboxUnread(0);
-      return;
-    }
-    if (
-      payload.type === NOTIFICATION_READ &&
-      typeof payload.inboxUnread === "number"
-    ) {
-      setInboxUnread(Math.max(0, payload.inboxUnread));
-      return;
-    }
-    if (
-      payload.type === NOTIFICATION_NEW &&
-      payload.notification?.linkUrl?.startsWith("/dashboard/messages/")
-    ) {
-      setInboxUnread((c) => c + 1);
-      return;
-    }
-    if (
-      payload.type === NOTIFICATION_READ ||
-      payload.type === NOTIFICATION_NEW ||
-      payload.type === "notification" ||
-      payload.type === "notification.created"
-    ) {
-      getInboxUnreadCount().then(setInboxUnread).catch(() => {});
-    }
-  });
+  }, [setInboxUnread]);
 
   const canSeeTrash = canEquity || isAdmin;
   const allowed = NAV_ITEMS.filter((item) => {

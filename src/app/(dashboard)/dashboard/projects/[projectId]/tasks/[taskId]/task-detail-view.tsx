@@ -812,6 +812,7 @@ export function TaskDetailPage({
             taskTitle: initialTask.title,
             order: initialTask.order,
           }}
+          projectId={projectId}
           onSubmitted={() => {
             setShowProof(false);
             setActivityKey((k) => k + 1);

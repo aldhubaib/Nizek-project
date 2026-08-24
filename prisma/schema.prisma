@@ -562,6 +562,7 @@ model MeetingNote {
   author    User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
   taskId    String?
   task      Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  ydoc      Bytes?
 
   history         NoteHistory[]
   reminderLogs    DeadlineReminderLog[]

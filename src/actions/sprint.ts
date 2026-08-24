@@ -14,7 +14,7 @@ import { isClosedSprint, isCurrentSprintStatus, isUnstartedSprint, comparePlanne
 import { taskCode } from "@/lib/task-label";
 import { countWorkingDays } from "@/lib/working-days";
 import { logTaskActivity } from "@/lib/activity";
-import { broadcastTaskEvent } from "@/lib/centrifugo";
+import { broadcastTaskEvent, publish, projectChannel } from "@/lib/centrifugo";
 import {
   formatPlanningDate,
   planningDateIso,
@@ -269,6 +269,12 @@ export async function updateSprint(data: {
   });
 
   revalidatePath(`/dashboard/projects/${existing.projectId}`);
+  await publish(projectChannel(existing.projectId), {
+    type: "sprint.updated",
+    sprintId: data.sprintId,
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+  });
   return serializeSprint(sprint);
 }
 
@@ -365,6 +371,11 @@ export async function startSprint(sprintId: string): Promise<SprintDTO> {
       projectId: existing.projectId,
       sprintId,
       noteType: "SPRINT_PLANNING",
+    });
+    await publish(projectChannel(existing.projectId), {
+      type: "sprint.status-changed",
+      sprintId,
+      status: "ACTIVE",
     });
     return serializeSprint(sprint);
   } catch (err) {
@@ -469,6 +480,11 @@ export async function completeSprint(
     sprintId,
     noteType: "SPRINT_REVIEW",
   });
+  await publish(projectChannel(existing.projectId), {
+    type: "sprint.status-changed",
+    sprintId,
+    status,
+  });
   return serializeSprint(sprint);
 }
 
@@ -537,7 +553,7 @@ export async function setTaskSprint(
             estimatedMinutes: estimatedMinutes ?? null,
             unplannedInSprint: sprintStatus === "ACTIVE",
           }
-        : { assigneeId: null, unplannedInSprint: false }),
+        : { assigneeId: null, estimatedMinutes: null, unplannedInSprint: false }),
     },
     select: {
       id: true,
@@ -557,6 +573,12 @@ export async function setTaskSprint(
   }
 
   revalidatePath(`/dashboard/projects/${task.projectId}`);
+  await publish(projectChannel(task.projectId), {
+    type: sprintId ? "sprint.task-assigned" : "sprint.task-removed",
+    taskId: updated.id,
+    sprintId: sprintId ?? undefined,
+    previousSprintId: sprintId ? undefined : task.projectId,
+  });
   return {
     taskId: updated.id,
     sprintId: updated.sprintId,

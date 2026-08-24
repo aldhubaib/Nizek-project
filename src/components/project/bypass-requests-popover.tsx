@@ -9,6 +9,9 @@ import {
   type ProofBypassRequest,
 } from "@/actions/proof-of-work";
 import { BypassRequestList } from "@/components/project/bypass-request-list";
+import { useChannel } from "@/components/realtime/hooks";
+import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
+import { projectChannel } from "@/lib/channels";
 
 export function BypassRequestsPopover({
   projectId,
@@ -18,6 +21,7 @@ export function BypassRequestsPopover({
   currentUserId: string;
 }) {
   const router = useRouter();
+  const cent = useCentrifugo();
   const ref = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(0);
@@ -37,6 +41,35 @@ export function BypassRequestsPopover({
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useChannel(
+    cent?.enabled ? projectChannel(projectId) : null,
+    useCallback(
+      (data: unknown) => {
+        const ev = data as { type?: string; passId?: string; taskId?: string; requesterId?: string; deciderId?: string } | null;
+        if (!ev?.type?.startsWith("proof-bypass.")) return;
+        if (ev.requesterId === currentUserId || ev.deciderId === currentUserId) return;
+
+        if (ev.type === "proof-bypass.requested") {
+          setCount((c) => c + 1);
+          if (requests !== null) refresh();
+        } else if (ev.type === "proof-bypass.approved" || ev.type === "proof-bypass.rejected") {
+          setCount((c) => Math.max(0, c - 1));
+          setRequests((prev) =>
+            prev
+              ? prev.map((row) =>
+                  row.id === ev.passId
+                    ? { ...row, status: ev.type === "proof-bypass.approved" ? "APPROVED" : "REJECTED" }
+                    : row,
+                )
+              : prev,
+          );
+        }
+      },
+      [currentUserId, requests, refresh],
+    ),
+    refresh,
+  );
 
   useEffect(() => {
     if (!open) return;

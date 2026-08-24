@@ -120,7 +120,7 @@ export function DashboardShell({
       )}
 
       {/* Bell + ⋮ overlay the page's own header instead of stacking a second bar. */}
-      {!isDesktop && !onInbox && (
+      {!isDesktop && (
         <div className="app-shell-chrome fixed top-0 right-0 z-[100] flex app-top-bar items-center gap-xs bg-transparent pb-5">
           {headerActions}
         </div>
@@ -161,7 +161,7 @@ export function DashboardShell({
         } ${bottomNavVisible && !onInbox ? "app-has-bottom-nav" : ""}`}
       >
         <ClientRouteGuard enabled={isClient} />
-        {isDesktop && !onInbox && (
+        {isDesktop && (
           <div className="app-shell-chrome fixed top-3 right-l z-[100] flex items-center gap-xs">
             {headerActions}
           </div>

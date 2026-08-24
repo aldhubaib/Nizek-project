@@ -633,6 +633,7 @@ export function KanbanBoard({
       {pendingProof ? (
         <ProofOfWorkDialog
           target={pendingProof}
+          projectId={projectId}
           onSubmitted={() => setPendingProof(null)}
           onCancel={() => {
             setTasks(snapshotRef.current);

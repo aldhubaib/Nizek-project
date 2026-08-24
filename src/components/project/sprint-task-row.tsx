@@ -96,12 +96,13 @@ interface SprintTaskRowProps extends HTMLAttributes<HTMLElement> {
   as?: "button" | "div";
   missingData?: boolean;
   hideStatus?: boolean;
+  hideAssignee?: boolean;
   disableHoverBorder?: boolean;
 }
 
 export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
   function SprintTaskRow(
-    { task, extra, assigneeSlot, footer, as = "button", missingData, hideStatus, disableHoverBorder, className, ...props },
+    { task, extra, assigneeSlot, footer, as = "button", missingData, hideStatus, hideAssignee, disableHoverBorder, className, ...props },
     ref,
   ) {
     const initials =
@@ -130,7 +131,7 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
         <div className="flex shrink-0 items-center gap-2">
           {extra}
           {!hideStatus && <StatusBadge config={taskStageBadge(task.stage, showMissing)} />}
-          {assigneeSlot ?? (
+          {!hideAssignee && (assigneeSlot ?? (
             task.assignee ? (
               task.assignee.imageUrl ? (
                 <img
@@ -146,7 +147,7 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
             ) : (
               <EmptyAssigneeIcon />
             )
-          )}
+          ))}
         </div>
       </>
     );

@@ -16,8 +16,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { ClipboardCheck, MoreHorizontal, Search } from "lucide-react";
-import { SprintStatusControl } from "@/components/project/sprint-status-control";
+import { MoreHorizontal, Search } from "lucide-react";
 import { EstimateBadge, SprintTaskRow, TaskTypeCountSummary } from "@/components/project/sprint-task-row";
 import {
   deleteSprint,
@@ -95,6 +94,7 @@ export function CompletedSprintsTab({
   const updateTask = useKanbanStore((s) => s.updateTask);
   const liveTasks = storeTasks.length > 0 ? storeTasks : initialTasks;
   const [reviewSprint, setReviewSprint] = useState<SprintDTO | null>(null);
+  const [planningSprint, setPlanningSprint] = useState<SprintDTO | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const canDrag = canManage && isProjectActive;
@@ -105,6 +105,11 @@ export function CompletedSprintsTab({
 
   const closeReview = useCallback(() => {
     setReviewSprint(null);
+    router.refresh();
+  }, [router]);
+
+  const closePlanning = useCallback(() => {
+    setPlanningSprint(null);
     router.refresh();
   }, [router]);
 
@@ -317,6 +322,7 @@ export function CompletedSprintsTab({
                     onToggle={() =>
                       setCollapsed((c) => ({ ...c, [sprint.id]: !isCollapsed }))
                     }
+                    onPlan={() => setPlanningSprint(sprint)}
                     onReview={() => setReviewSprint(sprint)}
                     onDelete={() => setDeletingSprint(sprint)}
                   />
@@ -358,6 +364,23 @@ export function CompletedSprintsTab({
           initialTitle={`${reviewSprint.name} review`}
           sprintId={reviewSprint.id}
           onCancel={closeReview}
+          saveInHeader={false}
+          onCreated={() => {}}
+        />
+      </NoteSlideOver>
+    ) : null}
+    {planningSprint ? (
+      <NoteSlideOver
+        title={`${planningSprint.name} planning`}
+        onClose={closePlanning}
+      >
+        <NoteFullScreenCreate
+          projectId={projectId}
+          createTypes={["SPRINT_PLANNING"]}
+          initialTitle={`${planningSprint.name} planning`}
+          sprintId={planningSprint.id}
+          sprintStatus={planningSprint.status}
+          onCancel={closePlanning}
           saveInHeader={false}
           onCreated={() => {}}
         />
@@ -412,6 +435,7 @@ function SprintBoardCard({
   isProjectActive,
   projectId,
   onToggle,
+  onPlan,
   onReview,
   onDelete,
 }: {
@@ -423,6 +447,7 @@ function SprintBoardCard({
   isProjectActive: boolean;
   projectId: string;
   onToggle: () => void;
+  onPlan: () => void;
   onReview: () => void;
   onDelete: () => void;
 }) {
@@ -445,36 +470,30 @@ function SprintBoardCard({
         collapsed={collapsed}
         onToggle={onToggle}
         actions={
-          <>
-            <SprintStatusControl status={sprint.status} endDate={sprint.endDate} />
-            <button
-              type="button"
-              aria-label={`Open sprint review for ${sprint.name}`}
-              title="Sprint review"
-              onClick={onReview}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="Sprint options"
               className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
-              <ClipboardCheck className="size-4" />
-            </button>
-            {canManage && isProjectActive ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  aria-label="Sprint options"
-                  className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              <MoreHorizontal className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={onPlan}>
+                Sprint planning
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onReview}>
+                Sprint review
+              </DropdownMenuItem>
+              {canManage && isProjectActive ? (
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={onDelete}
                 >
-                  <MoreHorizontal className="size-4" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={onDelete}
-                  >
-                    Delete sprint
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : null}
-          </>
+                  Delete sprint
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
         }
       >
         {items.length === 0 ? (

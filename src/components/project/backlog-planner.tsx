@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition, useRef, type Dispatch, type SetStateAction } from "react";
-import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import {
@@ -22,9 +21,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlertCircle, ClipboardCheck, Clock, GripVertical, Loader2, MoreHorizontal, Play, Plus } from "lucide-react";
+import { AlertCircle, ClipboardCheck, GripVertical, MoreHorizontal, Play, Plus } from "lucide-react";
 import { SprintStatusControl } from "@/components/project/sprint-status-control";
-import { SprintTaskRow, TaskTypeCountSummary, formatMinutes } from "@/components/project/sprint-task-row";
+import { SprintTaskRow, TaskTypeCountSummary } from "@/components/project/sprint-task-row";
 import { Button } from "@/components/ui/button";
 import { AddButton } from "@/components/add-button";
 import { CollapsibleSection } from "@/components/project/collapsible-section";
@@ -49,10 +48,14 @@ import {
   setTaskSprint,
   type SprintDTO,
 } from "@/actions/sprint";
-import { moveTask as moveTaskAction, updateTask as updateTaskAction } from "@/actions/task";
+import { moveTask as moveTaskAction } from "@/actions/task";
 import { isMissingDataTask } from "@/lib/task-readiness";
 import { promoteToBacklogBottom } from "@/lib/backlog-placement";
 import { isClosedSprint, isUnstartedSprint, comparePlannedSprints } from "@/lib/sprint-status";
+
+import { useChannel } from "@/components/realtime/hooks";
+import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
+import { projectChannel } from "@/lib/channels";
 
 const BACKLOG_ZONE = "backlog";
 const MISSING_ZONE = "missing-data";
@@ -107,153 +110,14 @@ function parseZone(
   return isMissingDataTask(task) ? MISSING_ZONE : BACKLOG_ZONE;
 }
 
-function EstimateInput({ task }: { task: KanbanTask }) {
-  const router = useRouter();
-  const updateStoreTask = useKanbanStore((s) => s.updateTask);
-  const [open, setOpen] = useState(false);
-  const [localMinutes, setLocalMinutes] = useState(task.estimatedMinutes ?? null);
-  const [inputValue, setInputValue] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setLocalMinutes(task.estimatedMinutes ?? null);
-  }, [task.estimatedMinutes]);
-
-  function handleOpen(e: React.MouseEvent | React.KeyboardEvent) {
-    e.stopPropagation();
-    setInputValue(localMinutes ? String(localMinutes) : "");
-    setOpen(true);
-  }
-
-  async function handleSave() {
-    if (saving) return;
-    const minutes = parseInt(inputValue, 10);
-    if (isNaN(minutes) || minutes <= 0) return;
-    const previous = localMinutes;
-    setSaving(true);
-    setLocalMinutes(minutes);
-    updateStoreTask(task.id, { estimatedMinutes: minutes });
-    setOpen(false);
-    try {
-      await updateTaskAction({ taskId: task.id, estimatedMinutes: minutes });
-      router.refresh();
-    } catch {
-      setLocalMinutes(previous);
-      updateStoreTask(task.id, { estimatedMinutes: previous });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={handleOpen}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleOpen(e); }}
-        onPointerDown={(e) => e.stopPropagation()}
-        className={cn(
-          "inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold tabular-nums transition-colors",
-          localMinutes
-            ? "border-success/30 text-success hover:border-success/50"
-            : "border-dashed border-muted-foreground/40 text-muted-foreground/50 hover:border-foreground/40 hover:text-muted-foreground",
-        )}
-        title="Set estimate"
-      >
-        <Clock className="size-3.5" />
-        {localMinutes ? formatMinutes(localMinutes) : "Est"}
-      </div>
-
-      {open && createPortal(
-        <>
-          <div
-            className="fixed inset-0 z-[900] bg-overlay backdrop-blur-sm"
-            onClick={() => setOpen(false)}
-          />
-          <div className="fixed left-1/2 top-1/2 z-[901] w-full max-w-sm -translate-x-1/2 -translate-y-1/2">
-            <div className="rounded-xl border border-primary/30 bg-card shadow-2xl overflow-hidden">
-              <div className="px-5 pt-5 pb-4 space-y-4">
-                <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-surface/60 p-3">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/15 text-primary">
-                    <Clock className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      Task Estimation
-                    </div>
-                    <p className="text-s leading-relaxed text-muted-foreground">
-                      {task.title.split(/\s+/).length > 10
-                        ? task.title.split(/\s+/).slice(0, 10).join(" ") + "…"
-                        : task.title}
-                    </p>
-                  </div>
-                </div>
-
-                <p className="text-s leading-relaxed text-foreground">
-                  I acknowledge that I understand what this task requires to provide the correct solution and estimation.
-                </p>
-
-                <div className="space-y-2">
-                  <label className="text-s font-medium text-foreground">
-                    Estimation in minutes <span className="text-destructive">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min="1"
-                      value={inputValue}
-                      onChange={(e) => setInputValue(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSave(); } }}
-                      placeholder="e.g. 120"
-                      autoFocus
-                      className="w-full rounded-lg border border-primary/40 bg-background py-2.5 pl-3 pr-10 text-s text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-colors [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                    />
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                      min
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/30 px-5 py-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setOpen(false)}
-                  disabled={saving}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={!inputValue.trim() || saving}
-                >
-                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin me-1.5" />}
-                  Save Estimate
-                </Button>
-              </div>
-            </div>
-          </div>
-        </>,
-        document.body,
-      )}
-    </>
-  );
-}
-
 function TaskRow({
   task,
   projectId,
   disabled,
-  showEstimate = true,
 }: {
   task: KanbanTask;
   projectId: string;
   disabled?: boolean;
-  showEstimate?: boolean;
 }) {
   const router = useRouter();
   const {
@@ -279,7 +143,7 @@ function TaskRow({
     <SprintTaskRow
       ref={setNodeRef}
       task={task}
-      extra={showEstimate ? <EstimateInput task={task} /> : null}
+      hideAssignee
       style={style}
       {...attributes}
       {...listeners}
@@ -423,6 +287,19 @@ export function BacklogPlanner({
     });
   }, [initialTasks, setTasks]);
 
+  const cent = useCentrifugo();
+  useChannel(
+    cent?.enabled && isProjectActive ? projectChannel(projectId) : null,
+    useCallback(
+      (data: unknown) => {
+        const ev = data as { type?: string } | null;
+        if (!ev?.type?.startsWith("sprint.") && !ev?.type?.startsWith("task-")) return;
+        router.refresh();
+      },
+      [router],
+    ),
+  );
+
   const liveTasks = tasks.length > 0 ? tasks : initialTasks;
   const taskById = useMemo(() => new Map(liveTasks.map((t) => [t.id, t])), [liveTasks]);
 
@@ -519,6 +396,7 @@ export function BacklogPlanner({
         sprintName: null,
         sprintCount: nextSprintCount(task, null),
         assignee: null,
+        estimatedMinutes: null,
       });
       bumpCount(prevSprintId, -1);
       startTransition(async () => {
@@ -531,6 +409,7 @@ export function BacklogPlanner({
             sprintName: task.sprintName ?? null,
             sprintCount: prevSprintCount,
             assignee: task.assignee,
+            estimatedMinutes: task.estimatedMinutes,
           });
           bumpCount(prevSprintId, 1);
           setError(err instanceof Error ? err.message : "Could not move task");
@@ -981,7 +860,6 @@ export function BacklogPlanner({
                   task={task}
                   projectId={projectId}
                   disabled={!canDrag}
-                  showEstimate={false}
                 />
               ))}
             </DropList>
@@ -1007,7 +885,6 @@ export function BacklogPlanner({
                   task={task}
                   projectId={projectId}
                   disabled={!canDrag}
-                  showEstimate={false}
                 />
               ))}
             </DropList>

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
 import { notifyRequesterInMailbox } from "@/lib/deliver-proof-bypass";
 import type { ProofBypassPayload } from "@/lib/proof-bypass-payload";
+import { publish, projectChannel } from "@/lib/centrifugo";
 
 async function canApproveBypass(projectId: string, userId: string, isAdmin: boolean) {
   if (isAdmin) return true;
@@ -57,6 +58,12 @@ async function decide(passId: string, status: "APPROVED" | "REJECTED") {
     decidedByName: user.name ?? "Someone",
   };
   await notifyRequesterInMailbox(pass.id, payload, user.id);
+  await publish(projectChannel(pass.task.projectId), {
+    type: status === "APPROVED" ? "proof-bypass.approved" : "proof-bypass.rejected",
+    passId: pass.id,
+    taskId: pass.task.id,
+    deciderId: user.id,
+  });
   revalidatePath(`/dashboard/projects/${pass.task.projectId}/bypass-requests`);
 }
 

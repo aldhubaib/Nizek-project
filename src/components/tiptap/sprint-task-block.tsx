@@ -36,8 +36,8 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
   const questions = live?.questions?.length ? live.questions : task.questions ?? [];
   const rowTask = {
     ...task,
-    estimatedMinutes: task.estimatedMinutes ?? live?.estimatedMinutes ?? null,
-    assignee: task.assignee ?? live?.assignee ?? null,
+    estimatedMinutes: live ? live.estimatedMinutes : (task.estimatedMinutes ?? null),
+    assignee: live ? live.assignee : (task.assignee ?? null),
   };
 
   function patchTask(patch: Partial<SprintPlanningTask>) {

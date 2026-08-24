@@ -25,6 +25,7 @@ import {
   sprintReviewDocHtml,
 } from "@/lib/sprint-review-doc";
 import { isClosedSprint } from "@/lib/sprint-status";
+import { useCollaboration } from "@/components/realtime/use-collaboration";
 
 export { NOTES_CREATE_TYPES, type NoteType } from "@/components/project/note-types";
 
@@ -42,6 +43,7 @@ export function NoteFullScreenCreate({
   canEditSprintDoc,
   onCancel,
   saveInHeader = true,
+  currentUser,
 }: {
   projectId: string;
   onCreated: (note: Awaited<ReturnType<typeof getMeetingNote>>) => void;
@@ -59,6 +61,7 @@ export function NoteFullScreenCreate({
   onCancel?: () => void;
   /** Portal Save into the shell header. Turn off when this form sits under an overlay that covers that slot. */
   saveInHeader?: boolean;
+  currentUser?: { id: string; name: string | null; imageUrl: string | null } | null;
 }) {
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState("");
@@ -85,11 +88,15 @@ export function NoteFullScreenCreate({
   const planningLocked =
     (sprintPlanningIsLocked(sprintStatus, isAdmin) && isSprintPlanning) ||
     (isSprintDoc && canEditSprintDoc === false);
+
+  const { ydoc, provider: collabProvider, synced: collabSynced, enabled: collabEnabled } =
+    useCollaboration(isSprintDoc && noteId ? noteId : null);
+
   const { saveError: autoSaveError } = useNoteAutosave({
     noteId,
     title,
     content,
-    enabled: isSprintDoc && !planningLocked,
+    enabled: isSprintDoc && !planningLocked && !collabEnabled,
   });
   const planningError = saveError ?? autoSaveError;
 
@@ -343,6 +350,9 @@ export function NoteFullScreenCreate({
               projectId={projectId}
               sprintTasks={sprintTasks}
               onSprintStatusChange={setSprintStatus}
+              ydoc={ydoc}
+              collabProvider={collabProvider}
+              currentUser={currentUser}
               onSprintTaskPatch={(taskId, patch) => {
                 setSprintTasks((prev) =>
                   prev.map((item) => (item.id === taskId ? { ...item, ...patch } : item)),

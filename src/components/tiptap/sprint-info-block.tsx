@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Node, mergeAttributes } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from "@tiptap/react";
@@ -18,6 +18,9 @@ import {
   type SprintPlanningTask,
 } from "@/lib/sprint-planning-doc";
 import { countWorkingDays, endDateForWorkingDays } from "@/lib/working-days";
+import { useChannel } from "@/components/realtime/hooks";
+import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
+import { projectChannel } from "@/lib/channels";
 
 const cellInputClass =
   "w-full bg-transparent text-s text-foreground outline-none placeholder:text-muted-foreground/40 read-only:cursor-default disabled:cursor-default disabled:opacity-70";
@@ -94,6 +97,46 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
       window.removeEventListener("focus", load);
     };
   }, [sprintId, info?.variant]);
+
+  const cent = useCentrifugo();
+  const projectIdOpt = (extension.options as { projectId?: string }).projectId;
+  const loadRef = useRef<() => void>();
+  loadRef.current = () => {
+    if (!sprintId) return;
+    const review = info?.variant === "review";
+    const request = review ? getSprintReviewTasks(sprintId) : getSprintPlanningTasks(sprintId);
+    request
+      .then((data) => {
+        setStatus(data.status);
+        setSprintName(data.sprintName);
+        if ("activeSprintName" in data) setActiveSprintName(data.activeSprintName ?? null);
+        if ("tasks" in data) {
+          setTasks(data.tasks);
+          tasksRef.current = data.tasks;
+          return;
+        }
+        const all = [...data.completed, ...data.incomplete];
+        setTasks(all);
+        tasksRef.current = all;
+        setCounts({
+          completed: data.completed.length,
+          incomplete: data.incomplete.length,
+          unplanned: all.filter((task) => task.unplanned).length,
+        });
+      })
+      .catch(() => {});
+  };
+
+  useChannel(
+    cent?.enabled && projectIdOpt ? projectChannel(projectIdOpt) : null,
+    useCallback((data: unknown) => {
+      const ev = data as { type?: string } | null;
+      if (!ev?.type) return;
+      if (ev.type.startsWith("sprint.") || ev.type === "task-updated") {
+        loadRef.current?.();
+      }
+    }, []),
+  );
 
   useEffect(() => {
     function scan() {
@@ -520,6 +563,7 @@ function countSprintInfo(doc: { descendants: (fn: (node: { type: { name: string 
 }
 
 export const SprintInfoBlock = Node.create<{
+  projectId?: string;
   isAdmin?: boolean;
   getIsAdmin?: () => boolean;
   canStartSprint?: boolean;
@@ -535,6 +579,7 @@ export const SprintInfoBlock = Node.create<{
   draggable: false,
   addOptions() {
     return {
+      projectId: undefined,
       isAdmin: false,
       getIsAdmin: undefined,
       canStartSprint: false,

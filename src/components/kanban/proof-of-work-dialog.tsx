@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Film, Loader2, Plus, X } from "lucide-react";
 import { getProofBypassStatus, requestProofBypass, type ProofBypassStatus } from "@/actions/proof-of-work";
 import { enqueueProofUpload } from "@/lib/proof-outbox";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { Button } from "@/components/ui/button";
+import { useChannel } from "@/components/realtime/hooks";
+import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
+import { projectChannel } from "@/lib/channels";
 
 export type ProofMoveTarget = {
   taskId: string;
@@ -16,14 +19,17 @@ export type ProofMoveTarget = {
 
 export function ProofOfWorkDialog({
   target,
+  projectId,
   onSubmitted,
   onCancel,
 }: {
   target: ProofMoveTarget;
+  projectId?: string;
   onSubmitted: () => void;
   onCancel: () => void;
 }) {
   useScrollLock(true);
+  const cent = useCentrifugo();
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [bypass, setBypass] = useState<ProofBypassStatus | null>(null);
@@ -31,19 +37,21 @@ export function ProofOfWorkDialog({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    function apply(status: ProofBypassStatus | null) {
-      if (!cancelled) setBypass(status);
-    }
-    void getProofBypassStatus(target.taskId).then(apply);
-    const timer = window.setInterval(() => {
-      void getProofBypassStatus(target.taskId).then(apply);
-    }, 4000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
+    void getProofBypassStatus(target.taskId).then((status) => setBypass(status));
   }, [target.taskId]);
+
+  useChannel(
+    cent?.enabled && projectId ? projectChannel(projectId) : null,
+    useCallback(
+      (data: unknown) => {
+        const ev = data as { type?: string; taskId?: string } | null;
+        if (!ev?.type?.startsWith("proof-bypass.")) return;
+        if (ev.taskId !== target.taskId) return;
+        void getProofBypassStatus(target.taskId).then((status) => setBypass(status));
+      },
+      [target.taskId],
+    ),
+  );
 
   function addFiles(list: FileList | null) {
     if (!list) return;

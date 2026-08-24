@@ -11,6 +11,7 @@ import {
   markAllNotificationsRead,
   type NotificationDTO,
 } from "@/actions/notifications";
+import { getInboxUnreadCount } from "@/actions/messages";
 import { formatDistanceToNow } from "date-fns";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { useChannel } from "@/components/realtime/hooks";
@@ -22,6 +23,7 @@ import {
 } from "@/lib/channels";
 import { updateAppBadge } from "@/lib/app-badge";
 import { closePushBannersByTags } from "@/lib/close-push-banners";
+import { useUnreadStore } from "@/store/unread";
 
 const POLL_FALLBACK_INTERVAL = 60_000;
 
@@ -41,11 +43,13 @@ export function NotificationBell({ currentUserId }: Props) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
+  const { setNotificationUnread, setInboxUnread, incrementInbox } = useUnreadStore();
 
   // Keep the OS app-icon badge in lockstep with the unread count.
   useEffect(() => {
     updateAppBadge(count);
-  }, [count]);
+    setNotificationUnread(count);
+  }, [count, setNotificationUnread]);
 
   const refresh = useCallback(() => {
     Promise.all([getNotifications(30), getUnreadCount()])
@@ -60,16 +64,21 @@ export function NotificationBell({ currentUserId }: Props) {
     getUnreadCount().then(setCount).catch(() => {});
   }, []);
 
+  const refreshInboxUnread = useCallback(() => {
+    getInboxUnreadCount().then(setInboxUnread).catch(() => {});
+  }, [setInboxUnread]);
+
   const cent = useCentrifugo();
 
   // Event-driven when realtime is available: seed once, then rely on the user
   // channel. Only fall back to polling when Centrifugo isn't configured.
   useEffect(() => {
     fetchCount();
+    refreshInboxUnread();
     if (cent?.enabled) return;
     const id = setInterval(fetchCount, POLL_FALLBACK_INTERVAL);
     return () => clearInterval(id);
-  }, [fetchCount, cent?.enabled]);
+  }, [fetchCount, refreshInboxUnread, cent?.enabled]);
 
   // Reconcile once whenever the realtime connection (re)establishes: history
   // replay covers most missed events, but a fresh read after a gap guarantees
@@ -80,9 +89,10 @@ export function NotificationBell({ currentUserId }: Props) {
     if (now && !wasConnected.current) {
       if (open) refresh();
       else fetchCount();
+      refreshInboxUnread();
     }
     wasConnected.current = now;
-  }, [cent?.connected, open, refresh, fetchCount]);
+  }, [cent?.connected, open, refresh, fetchCount, refreshInboxUnread]);
 
   // Reconcile on focus / visibility so a device that was backgrounded (PWA) or
   // asleep catches up on read-state changes made elsewhere.
@@ -91,6 +101,7 @@ export function NotificationBell({ currentUserId }: Props) {
       if (document.hidden) return;
       if (open) refresh();
       else fetchCount();
+      refreshInboxUnread();
     };
     window.addEventListener("focus", reconcile);
     document.addEventListener("visibilitychange", reconcile);
@@ -98,51 +109,65 @@ export function NotificationBell({ currentUserId }: Props) {
       window.removeEventListener("focus", reconcile);
       document.removeEventListener("visibilitychange", reconcile);
     };
-  }, [open, refresh, fetchCount]);
+  }, [open, refresh, fetchCount, refreshInboxUnread]);
 
   // Payload-driven live updates: prepend on new, mark items + set count on read.
-  useChannel(cent && currentUserId ? userChannel(currentUserId) : null, (data) => {
-    const payload = data as
-      | {
-          type?: string;
-          notification?: NotificationDTO;
-          ids?: string[];
-          linkUrls?: string[];
-          unread?: number;
+  useChannel(
+    cent && currentUserId ? userChannel(currentUserId) : null,
+    (data) => {
+      const payload = data as
+        | {
+            type?: string;
+            notification?: NotificationDTO;
+            ids?: string[];
+            linkUrls?: string[];
+            unread?: number;
+            inboxUnread?: number;
+          }
+        | null;
+      if (!payload || typeof payload !== "object") return;
+
+      if (payload.type === NOTIFICATION_NEW && payload.notification) {
+        const incoming = payload.notification;
+        setItems((prev) => {
+          if (prev.some((x) => x.id === incoming.id)) return prev;
+          return [incoming, ...prev].slice(0, 30);
+        });
+        setCount((c) => c + 1);
+        if (incoming.linkUrl?.startsWith("/dashboard/messages/")) {
+          incrementInbox();
         }
-      | null;
-    if (!payload || typeof payload !== "object") return;
+        return;
+      }
 
-    if (payload.type === NOTIFICATION_NEW && payload.notification) {
-      const incoming = payload.notification;
-      setItems((prev) => {
-        if (prev.some((x) => x.id === incoming.id)) return prev;
-        return [incoming, ...prev].slice(0, 30);
-      });
-      setCount((c) => c + 1);
-      return;
-    }
+      if (payload.type === NOTIFICATION_READ) {
+        const ids = new Set(payload.ids ?? []);
+        const urls = new Set(payload.linkUrls ?? []);
+        setItems((prev) =>
+          prev.map((x) =>
+            ids.has(x.id) || (x.linkUrl && urls.has(x.linkUrl))
+              ? { ...x, read: true }
+              : x,
+          ),
+        );
+        if (typeof payload.unread === "number") setCount(Math.max(0, payload.unread));
+        if (typeof payload.inboxUnread === "number") setInboxUnread(payload.inboxUnread);
+        return;
+      }
 
-    if (payload.type === NOTIFICATION_READ) {
-      const ids = new Set(payload.ids ?? []);
-      const urls = new Set(payload.linkUrls ?? []);
-      setItems((prev) =>
-        prev.map((x) =>
-          ids.has(x.id) || (x.linkUrl && urls.has(x.linkUrl))
-            ? { ...x, read: true }
-            : x,
-        ),
-      );
-      if (typeof payload.unread === "number") setCount(Math.max(0, payload.unread));
-      return;
-    }
-
-    if (payload.type === NOTIFICATION_READ_ALL) {
-      setItems((prev) => prev.map((x) => ({ ...x, read: true })));
-      setCount(typeof payload.unread === "number" ? Math.max(0, payload.unread) : 0);
-      return;
-    }
-  });
+      if (payload.type === NOTIFICATION_READ_ALL) {
+        setItems((prev) => prev.map((x) => ({ ...x, read: true })));
+        setCount(typeof payload.unread === "number" ? Math.max(0, payload.unread) : 0);
+        setInboxUnread(0);
+        return;
+      }
+    },
+    // Stale recovery: refetch when history replay failed after reconnect
+    () => {
+      refresh();
+      refreshInboxUnread();
+    },
+  );
 
   useEffect(() => {
     if (!open) return;

@@ -4,6 +4,10 @@ import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
+import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
+import type { HocuspocusProvider } from "@hocuspocus/provider";
+import type * as Y from "yjs";
 import {
   useState,
   useEffect,
@@ -42,6 +46,19 @@ import { SprintInfoBlock } from "@/components/tiptap/sprint-info-block";
 import { SprintTaskBlock } from "@/components/tiptap/sprint-task-block";
 import { type SprintPlanningTask } from "@/lib/sprint-planning-doc";
 
+const CURSOR_COLORS = [
+  "#f87171", "#fb923c", "#facc15", "#4ade80", "#22d3ee",
+  "#818cf8", "#c084fc", "#f472b6", "#a78bfa", "#34d399",
+];
+
+function cursorColor(userId: string): string {
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) {
+    hash = ((hash << 5) - hash + userId.charCodeAt(i)) | 0;
+  }
+  return CURSOR_COLORS[Math.abs(hash) % CURSOR_COLORS.length];
+}
+
 export interface RichTextEditorProps {
   content: string;
   onChange: (html: string) => void;
@@ -55,6 +72,9 @@ export interface RichTextEditorProps {
   sprintTasks?: SprintPlanningTask[];
   onSprintTaskPatch?: (taskId: string, patch: Partial<SprintPlanningTask>) => void;
   onSprintStatusChange?: (status: string) => void;
+  ydoc?: Y.Doc | null;
+  collabProvider?: HocuspocusProvider | null;
+  currentUser?: { id: string; name: string | null; imageUrl: string | null } | null;
 }
 
 export function RichTextEditor({
@@ -70,6 +90,9 @@ export function RichTextEditor({
   sprintTasks = [],
   onSprintTaskPatch,
   onSprintStatusChange,
+  ydoc,
+  collabProvider,
+  currentUser,
 }: RichTextEditorProps) {
   const [slashMenu, setSlashMenu] = useState<{ x: number; y: number; query: string } | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
@@ -91,16 +114,20 @@ export function RichTextEditor({
   const canEndSprintRef = useRef(canEndSprint);
   canEndSprintRef.current = canEndSprint;
 
+  const isCollaborative = Boolean(ydoc && collabProvider);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        ...(isCollaborative ? { history: false } : {}),
       }),
       Placeholder.configure({ placeholder }),
       Image.configure({ inline: false }),
       NoteAnnotation,
       AttendanceBlock,
       SprintInfoBlock.configure({
+        projectId,
         isAdmin,
         getIsAdmin: () => isAdminRef.current,
         canStartSprint,
@@ -114,11 +141,29 @@ export function RichTextEditor({
         sprintTasks,
         onTasksPatched: (taskId, patch) => onSprintTaskPatchRef.current?.(taskId, patch),
       }),
+      ...(isCollaborative && ydoc
+        ? [
+            Collaboration.configure({ document: ydoc }),
+            ...(collabProvider && currentUser
+              ? [
+                  CollaborationCursor.configure({
+                    provider: collabProvider,
+                    user: {
+                      name: currentUser.name ?? "Anonymous",
+                      color: cursorColor(currentUser.id),
+                    },
+                  }),
+                ]
+              : []),
+          ]
+        : []),
     ],
     editable,
-    content,
+    ...(isCollaborative ? {} : { content }),
     onUpdate: ({ editor }) => {
-      onChange(editor.getHTML());
+      if (!isCollaborative) {
+        onChange(editor.getHTML());
+      }
       checkSlashCommand(editor);
     },
     editorProps: {
