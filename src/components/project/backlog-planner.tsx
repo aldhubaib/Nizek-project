@@ -950,26 +950,24 @@ export function BacklogPlanner({
         title={`${sprintDoc.sprint.name} ${sprintDoc.noteType === "SPRINT_REVIEW" ? "review" : "planning"}`}
         onClose={closeSprintDoc}
       >
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <NoteFullScreenCreate
-            projectId={projectId}
-            createTypes={[sprintDoc.noteType]}
-            initialTitle={`${sprintDoc.sprint.name} ${sprintDoc.noteType === "SPRINT_REVIEW" ? "review" : "planning"}`}
-            sprintId={sprintDoc.sprint.id}
-            sprintStatus={sprintDoc.sprint.status}
-            isAdmin={isAdmin}
-            canStartSprint={canStartSprint}
-            canEndSprint={canEndSprint}
-            canEditSprintDoc={
-              sprintDoc.noteType === "SPRINT_REVIEW" ? canEndSprint : canCreateSprintPlanning
-            }
-            onCancel={closeSprintDoc}
-            saveInHeader={false}
-            onCreated={(note) => {
-              onNoteCreated?.(note);
-            }}
-          />
-        </div>
+        <NoteFullScreenCreate
+          projectId={projectId}
+          createTypes={[sprintDoc.noteType]}
+          initialTitle={`${sprintDoc.sprint.name} ${sprintDoc.noteType === "SPRINT_REVIEW" ? "review" : "planning"}`}
+          sprintId={sprintDoc.sprint.id}
+          sprintStatus={sprintDoc.sprint.status}
+          isAdmin={isAdmin}
+          canStartSprint={canStartSprint}
+          canEndSprint={canEndSprint}
+          canEditSprintDoc={
+            sprintDoc.noteType === "SPRINT_REVIEW" ? canEndSprint : canCreateSprintPlanning
+          }
+          onCancel={closeSprintDoc}
+          saveInHeader={false}
+          onCreated={(note) => {
+            onNoteCreated?.(note);
+          }}
+        />
       </NoteSlideOver>
     ) : null}
     </>

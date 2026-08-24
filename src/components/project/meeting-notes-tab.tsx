@@ -1355,7 +1355,7 @@ export function NoteFullScreenDetail({
           )
         }
       >
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{body}</div>
+        {body}
         {dialogs}
       </NoteSlideOver>
     );

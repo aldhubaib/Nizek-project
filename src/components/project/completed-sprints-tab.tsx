@@ -261,17 +261,15 @@ export function CompletedSprintsTab({
         title={`${reviewSprint.name} review`}
         onClose={closeReview}
       >
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <NoteFullScreenCreate
-            projectId={projectId}
-            createTypes={["SPRINT_REVIEW"]}
-            initialTitle={`${reviewSprint.name} review`}
-            sprintId={reviewSprint.id}
-            onCancel={closeReview}
-            saveInHeader={false}
-            onCreated={() => {}}
-          />
-        </div>
+        <NoteFullScreenCreate
+          projectId={projectId}
+          createTypes={["SPRINT_REVIEW"]}
+          initialTitle={`${reviewSprint.name} review`}
+          sprintId={reviewSprint.id}
+          onCancel={closeReview}
+          saveInHeader={false}
+          onCreated={() => {}}
+        />
       </NoteSlideOver>
     ) : null}
     </div>

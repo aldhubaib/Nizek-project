@@ -56,7 +56,7 @@ export function NoteSlideOver({
           className,
         )}
       >
-        <header className="sticky top-0 z-10 flex app-top-bar shrink-0 items-center gap-xs border-b border-border px-2 sm:px-3">
+        <header className="z-10 flex app-top-bar shrink-0 items-center gap-xs border-b border-border px-2 sm:px-3">
           <button
             type="button"
             onClick={onClose}
@@ -68,7 +68,9 @@ export function NoteSlideOver({
           <div className="min-w-0 flex-1 truncate text-s font-semibold">{title}</div>
           {headerRight}
         </header>
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          {children}
+        </div>
       </div>
     </div>
   );
