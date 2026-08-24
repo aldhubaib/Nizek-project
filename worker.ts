@@ -9,6 +9,7 @@
  * competes with page renders.
  */
 
+import http from "node:http";
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
 import webpush from "web-push";
@@ -227,6 +228,17 @@ async function shutdown(signal: string) {
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
+
+// ─── Health endpoint (Railway requires an HTTP health check) ─────────────────
+
+const HEALTH_PORT = Number(process.env.PORT ?? 3001) || 3001;
+const healthServer = http.createServer((_req, res) => {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ status: "ok", service: "push-worker" }));
+});
+healthServer.listen(HEALTH_PORT, () => {
+  console.log(`[worker] health endpoint listening on :${HEALTH_PORT}`);
+});
 
 console.log(
   `[worker] push notification worker started (concurrency=${CONCURRENCY}, redis=${REDIS_URL.replace(/\/\/.*@/, "//***@")})`,
