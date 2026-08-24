@@ -9,10 +9,6 @@ html[data-scroll-locked],
 html[data-scroll-locked] body {
   overflow: hidden !important;
   overscroll-behavior: none !important;
-  touch-action: none !important;
-  position: fixed !important;
-  inset: 0 !important;
-  width: 100% !important;
 }
 
 @theme inline {

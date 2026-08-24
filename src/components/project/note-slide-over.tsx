@@ -68,7 +68,7 @@ export function NoteSlideOver({
           <div className="min-w-0 flex-1 truncate text-s font-semibold">{title}</div>
           {headerRight}
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {children}
         </div>
       </div>

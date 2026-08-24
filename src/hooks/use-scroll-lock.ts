@@ -2,7 +2,33 @@ import { useEffect } from "react";
 
 const ATTR = "data-scroll-locked";
 let refCount = 0;
-let savedScrollY = 0;
+
+function isInsideScrollable(el: EventTarget | null): boolean {
+  let node = el as HTMLElement | null;
+  while (node && node !== document.body) {
+    const { overflowY } = getComputedStyle(node);
+    if (
+      (overflowY === "auto" || overflowY === "scroll") &&
+      node.scrollHeight > node.clientHeight
+    ) {
+      return true;
+    }
+    node = node.parentElement;
+  }
+  return false;
+}
+
+function blockTouchMove(e: TouchEvent) {
+  if (!isInsideScrollable(e.target)) {
+    e.preventDefault();
+  }
+}
+
+function blockWheel(e: WheelEvent) {
+  if (!isInsideScrollable(e.target)) {
+    e.preventDefault();
+  }
+}
 
 export function useScrollLock(active: boolean) {
   useEffect(() => {
@@ -12,17 +38,17 @@ export function useScrollLock(active: boolean) {
     const html = document.documentElement;
 
     if (refCount === 1) {
-      savedScrollY = window.scrollY;
       html.setAttribute(ATTR, "");
-      document.body.style.top = `-${savedScrollY}px`;
+      document.addEventListener("touchmove", blockTouchMove, { passive: false });
+      document.addEventListener("wheel", blockWheel, { passive: false });
     }
 
     return () => {
       refCount--;
       if (refCount === 0) {
         html.removeAttribute(ATTR);
-        document.body.style.top = "";
-        window.scrollTo(0, savedScrollY);
+        document.removeEventListener("touchmove", blockTouchMove);
+        document.removeEventListener("wheel", blockWheel);
       }
     };
   }, [active]);
