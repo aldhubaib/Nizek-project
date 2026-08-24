@@ -17,13 +17,11 @@ import { createRole, updateRole, deleteRole } from "@/actions/role";
 import { cn } from "@/lib/utils";
 
 const ALL_STAGES = [
-  { id: "NEW_REQUEST", label: "New Request" },
+  { id: "BACKLOG", label: "Backlog" },
   { id: "CLARIFICATION", label: "Clarification" },
-  { id: "READY_FOR_DEV", label: "Ready for Dev" },
   { id: "IN_DEVELOPMENT", label: "In Development" },
   { id: "INTERNAL_REVIEW", label: "Internal Review" },
   { id: "CLIENT_REVIEW", label: "Client Review" },
-  { id: "READY_FOR_RELEASE", label: "Ready for Release" },
   { id: "DONE", label: "Done" },
 ];
 
@@ -454,9 +452,9 @@ function StagePermissionsTable({
     if (fromId === "INTERNAL_REVIEW" && toId === "CLIENT_REVIEW") {
       const enabling = !(stagePerms.transitions[fromId] ?? []).includes(toId);
       if (enabling) {
-        updated = { ...updated, [fromId]: [...new Set([...(updated[fromId] ?? []), "READY_FOR_RELEASE"])] };
+        updated = { ...updated, [fromId]: [...new Set([...(updated[fromId] ?? []), "DONE"])] };
       } else {
-        updated = { ...updated, [fromId]: (updated[fromId] ?? []).filter((s) => s !== "READY_FOR_RELEASE") };
+        updated = { ...updated, [fromId]: (updated[fromId] ?? []).filter((s) => s !== "DONE") };
       }
     }
     onChange({ ...stagePerms, transitions: updated });

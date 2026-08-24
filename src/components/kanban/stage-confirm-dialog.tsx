@@ -19,7 +19,7 @@ interface CheckpointConfig {
 }
 
 const CHECKPOINTS: Partial<Record<string, CheckpointConfig>> = {
-  "CLARIFICATION→READY_FOR_DEV": {
+  "CLARIFICATION→IN_DEVELOPMENT": {
     title: "Taking ownership",
     message: "By confirming, you acknowledge that you understand the requirements and are taking ownership of this task.",
     notice: "The task timer will start once you confirm.",
@@ -34,16 +34,16 @@ const CHECKPOINTS: Partial<Record<string, CheckpointConfig>> = {
     confirmLabel: "Confirm Tested",
     confirmColor: "bg-orange hover:bg-orange/80",
   },
-  "INTERNAL_REVIEW→READY_FOR_RELEASE": {
+  "INTERNAL_REVIEW→DONE": {
     title: "Skip Client Review",
     message: "You are skipping the client approval for this task. By confirming, you acknowledge that you will be held responsible for this action and verify the task is tested and ready for release.",
     notice: "This action bypasses the client review process.",
     confirmLabel: "I Accept Responsibility & Skip",
     confirmColor: "bg-orange hover:bg-orange/80",
   },
-  "CLIENT_REVIEW→READY_FOR_RELEASE": {
-    title: "Move to Ready for Release",
-    message: "By moving this to Ready for Release, you confirm that you have reviewed and approved the work.",
+  "CLIENT_REVIEW→DONE": {
+    title: "Mark as Done",
+    message: "By marking this as done, you confirm that you have reviewed and approved the work.",
     confirmLabel: "Approve",
     confirmColor: "bg-success hover:bg-success/80",
   },

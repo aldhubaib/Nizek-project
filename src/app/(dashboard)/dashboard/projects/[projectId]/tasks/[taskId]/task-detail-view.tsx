@@ -26,6 +26,8 @@ import { StageConfirmDialog, getCheckpoint } from "@/components/kanban/stage-con
 import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
 import { projectNoteUrl, isRoadmapNote } from "@/lib/project-note-url";
 import { cn } from "@/lib/utils";
+import { STAGES, TASK_TYPE_META } from "@/lib/constants";
+import type { Stage } from "@/generated/prisma/client";
 import { PageHeader } from "@/components/page-header";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
@@ -63,26 +65,6 @@ function formatDuration(from: Date, to: Date): string {
   return `${seconds}s`;
 }
 
-const TASK_TYPE_META: Record<string, { prefix: string; label: string; color: string }> = {
-  FEATURE: { prefix: "F", label: "Business Case", color: "text-primary" },
-  ENHANCEMENT: { prefix: "E", label: "Enhancement", color: "text-violet-400" },
-  BUG: { prefix: "B", label: "Internal Bug", color: "text-orange" },
-  REPORTED_BUG: { prefix: "RB", label: "Reported Bug", color: "text-destructive" },
-  DESIGN: { prefix: "D", label: "Design", color: "text-cyan-400" },
-};
-
-type Stage = "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "READY_FOR_RELEASE" | "DONE";
-
-const STAGES: { id: Stage; label: string; color: string }[] = [
-  { id: "NEW_REQUEST", label: "New Request", color: "bg-muted-foreground" },
-  { id: "CLARIFICATION", label: "Clarification", color: "bg-violet-500" },
-  { id: "READY_FOR_DEV", label: "Ready for Dev", color: "bg-primary" },
-  { id: "IN_DEVELOPMENT", label: "In Development", color: "bg-sky-500" },
-  { id: "INTERNAL_REVIEW", label: "Internal Review", color: "bg-orange" },
-  { id: "CLIENT_REVIEW", label: "Client Review", color: "bg-orange-500" },
-  { id: "READY_FOR_RELEASE", label: "Ready for Release", color: "bg-teal-500" },
-  { id: "DONE", label: "Done", color: "bg-success" },
-];
 
 interface QuestionWithType extends TaskQuestion {
   taskType: string;
@@ -289,7 +271,7 @@ export function TaskDetailPage({
         const msg = result.error ?? "";
         if (msg.startsWith("WIP_LIMIT:")) {
           const max = msg.replace("WIP_LIMIT:", "");
-          setMoveError([`Pipeline limit reached — this project allows up to ${max} active tasks across Ready for Dev, In Development, and Internal Review. Move an existing task past Internal Review before adding another.`]);
+          setMoveError([`Pipeline limit reached — this project allows up to ${max} active tasks across In Development and Internal Review. Move an existing task past Internal Review before adding another.`]);
         } else {
           setMoveError([msg || "Failed to change stage"]);
         }
@@ -381,7 +363,7 @@ export function TaskDetailPage({
           setMoveError(["An estimated time is required"]);
         } else if (msg.startsWith("WIP_LIMIT:")) {
           const max = msg.replace("WIP_LIMIT:", "");
-          setMoveError([`Pipeline limit reached — up to ${max} active tasks are allowed across Ready for Dev, In Development, and Internal Review. Move an existing task past Internal Review before adding another.`]);
+          setMoveError([`Pipeline limit reached — up to ${max} active tasks are allowed across In Development and Internal Review. Move an existing task past Internal Review before adding another.`]);
         } else {
           setMoveError([msg || "Failed to move task. Please try again."]);
         }
@@ -396,7 +378,7 @@ export function TaskDetailPage({
     }
   }
 
-  const showSkipButton = taskStage === "INTERNAL_REVIEW" && canSkipClientReview && initialTask.taskType !== "BUG";
+  const showSkipButton = taskStage === "INTERNAL_REVIEW" && canSkipClientReview && initialTask.taskType !== "BUG" && initialTask.taskType !== "REPORTED_BUG";
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 
   function handleSkipClientReview() {
@@ -408,12 +390,12 @@ export function TaskDetailPage({
     setMoveError(null);
     setShowSkipConfirm(false);
     try {
-      const result = await moveTaskAction({ taskId: initialTask.id, stage: "READY_FOR_RELEASE", order: initialTask.order });
+      const result = await moveTaskAction({ taskId: initialTask.id, stage: "DONE", order: initialTask.order });
       if (!result.success) {
         setMoveError([result.error || "Failed to skip. Please try again."]);
         return;
       }
-      setTaskStage("READY_FOR_RELEASE");
+      setTaskStage("DONE");
       setActivityKey((k) => k + 1);
     } catch (err) {
       setMoveError([(err as Error).message || "Failed to skip. Please try again."]);
@@ -577,8 +559,8 @@ export function TaskDetailPage({
               {attachedRoadmaps.length > 0 && (
                 <LinkedCountPopover
                   count={attachedRoadmaps.length}
-                  singular="Roadmap item"
-                  plural="Roadmap items"
+                  singular="Deadline item"
+                  plural="Deadline items"
                   icon={CalendarClock}
                   open={roadmapOpen}
                   onOpenChange={setRoadmapOpen}
@@ -818,7 +800,7 @@ export function TaskDetailPage({
                 className="inline-flex items-center gap-xs text-xs font-medium text-orange/80 hover:text-orange transition-colors disabled:opacity-50"
               >
                 <ChevronRight className="w-3 h-3" />
-                Skip Client Review → Ready for Release
+                Skip Client Review → Done
               </button>
             </div>
           )}
@@ -976,7 +958,7 @@ export function TaskDetailPage({
                   </div>
                   <div className="border-t border-border/30 pt-3 space-y-2">
                     {stageLogs
-                      .filter((l) => l.stage !== "NEW_REQUEST" && l.stage !== "CLARIFICATION")
+                      .filter((l) => l.stage !== "BACKLOG" && l.stage !== "CLARIFICATION")
                       .map((log, i) => {
                         const entered = new Date(log.enteredAt);
                         const exited = log.exitedAt ? new Date(log.exitedAt) : new Date();
@@ -999,7 +981,7 @@ export function TaskDetailPage({
               ) : (
                 <div className="flex flex-col items-center justify-center py-4 text-center">
                   <Clock className="w-6 h-6 text-muted-foreground/30 mb-1" />
-                  <p className="text-xs text-muted-foreground/60">Tracking starts at Ready for Dev</p>
+                  <p className="text-xs text-muted-foreground/60">Tracking starts at In Development</p>
                 </div>
               )}
               {(initialTask.estimatedMinutes || initialTask.estimateAccuracy) && (
@@ -1080,11 +1062,11 @@ export function TaskDetailPage({
               <Button size="sm" variant="ghost" onClick={() => setAttachRoadmapOpen(true)} className="h-7 text-s">
                 Attach
               </Button>
-              <AddButton label="New roadmap item" onClick={() => setRoadmapEditorOpen(true)} />
+              <AddButton label="New deadline item" onClick={() => setRoadmapEditorOpen(true)} />
             </div>
           </div>
           {attachedRoadmaps.length === 0 ? (
-            <p className="text-s text-muted-foreground/60 py-2">No roadmap items attached</p>
+            <p className="text-s text-muted-foreground/60 py-2">No deadline items attached</p>
           ) : (
             <div className="space-y-2">
               {attachedRoadmaps.map((note) => (
@@ -1129,7 +1111,7 @@ export function TaskDetailPage({
       })()}
 
       {showSkipConfirm && (() => {
-        const checkpoint = getCheckpoint("INTERNAL_REVIEW" as Stage, "READY_FOR_RELEASE" as Stage);
+        const checkpoint = getCheckpoint("INTERNAL_REVIEW" as Stage, "DONE" as Stage);
         return checkpoint ? (
           <StageConfirmDialog
             checkpoint={checkpoint}
@@ -1183,7 +1165,7 @@ export function TaskDetailPage({
         onClose={() => setAttachRoadmapOpen(false)}
         projectId={projectId}
         taskId={initialTask.id}
-        kind="roadmap"
+        kind="sprints"
         onAttached={() => { refreshNotes(); setActivityKey((k) => k + 1); }}
       />
     </div>

@@ -17,21 +17,17 @@ export const REJECTED_THRESHOLD = 2; // flag when declines > 2
 
 /** Stages a task actively moves through — where "stuck" is meaningful. */
 export const ACTIVE_STAGES = [
-  "READY_FOR_DEV",
   "IN_DEVELOPMENT",
   "INTERNAL_REVIEW",
   "CLIENT_REVIEW",
-  "READY_FOR_RELEASE",
 ] as const;
 
 export const STAGE_LABELS: Record<string, string> = {
-  NEW_REQUEST: "New Request",
+  BACKLOG: "Backlog",
   CLARIFICATION: "Clarification",
-  READY_FOR_DEV: "Ready for Dev",
   IN_DEVELOPMENT: "In Development",
   INTERNAL_REVIEW: "Internal Review",
   CLIENT_REVIEW: "Client Review",
-  READY_FOR_RELEASE: "Ready for Release",
   DONE: "Done",
 };
 

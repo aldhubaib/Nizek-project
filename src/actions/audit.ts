@@ -199,7 +199,7 @@ async function collectFlaggedItems(teamIds: string[]): Promise<SnapshotItem[]> {
       where: {
         question: { type: "client" },
         task: {
-          stage: { in: ["NEW_REQUEST", "CLARIFICATION"] },
+          stage: { in: ["BACKLOG", "CLARIFICATION"] },
           archivedAt: null,
           project: projectWhere,
         },
@@ -229,7 +229,7 @@ async function collectFlaggedItems(teamIds: string[]): Promise<SnapshotItem[]> {
     }),
     prisma.meetingNote.findMany({
       where: {
-        noteType: "DEADLINE",
+        noteType: { in: ["DEADLINE", "ROADMAP"] },
         completedAt: null,
         dueDate: { not: null, lt: now },
         project: projectWhere,

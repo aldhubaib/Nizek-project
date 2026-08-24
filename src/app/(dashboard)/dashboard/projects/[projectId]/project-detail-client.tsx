@@ -12,6 +12,7 @@ import { InviteMemberDialog } from "@/components/team/invite-member-dialog";
 import { ProjectSettingsOverlay } from "@/components/project/project-settings-overlay";
 import { PageOverflowItems } from "@/components/page-overflow-menu";
 import { VaultTab } from "@/components/vault/vault-tab";
+import { SprintTab } from "@/components/project/sprint-tab";
 import { createPortal } from "react-dom";
 import { getMeetingNotes } from "@/actions/meeting-note";
 import { getAssets } from "@/actions/asset";
@@ -251,7 +252,7 @@ export function ProjectDetailClient({
   useEffect(() => {
     const wantsNotes =
       activeTab === "notes" ||
-      activeTab === "roadmap" ||
+      activeTab === "sprints" ||
       Boolean(searchParams.get("noteId"));
     if (wantsNotes && notes === null) {
       startNotesTransition(async () => {
@@ -267,7 +268,7 @@ export function ProjectDetailClient({
     if (!noteId) return;
     const note = notes.find((n) => n.id === noteId);
     if (!note) return;
-    const tab = note.noteType === "DEADLINE" ? "roadmap" : "notes";
+    const tab = "notes";
     if (activeTab !== tab) setActiveTab(tab);
   }, [notes, searchParams, activeTab]);
 
@@ -324,17 +325,14 @@ export function ProjectDetailClient({
     window.history.replaceState(null, "", `?${params.toString()}`);
   }
 
-  const roadmapCount = notes
-    ? notes.filter((n) => n.noteType === "DEADLINE").length
-    : 0;
   const notesCount = notes
-    ? notes.filter((n) => n.noteType !== "DEADLINE").length
+    ? notes.length
     : project._count.meetingNotes;
   const assetsCount = assets ? assets.length : project._count.assets;
 
   const projectTabs: OverflowTabItem<string>[] = [
     { id: "board", label: "Board" },
-    { id: "roadmap", label: "Roadmap", count: roadmapCount },
+    { id: "sprints", label: "Sprints" },
     { id: "notes", label: "Notes", count: notesCount },
     { id: "assets", label: "Assets", count: assetsCount },
   ];
@@ -459,7 +457,7 @@ export function ProjectDetailClient({
           </div>
           <TabsList className="hidden">
             <TabsTrigger value="board" className={PROJECT_TAB_CLASS} />
-            <TabsTrigger value="roadmap" className={PROJECT_TAB_CLASS} />
+            <TabsTrigger value="sprints" className={PROJECT_TAB_CLASS} />
             <TabsTrigger value="notes" className={PROJECT_TAB_CLASS} />
             <TabsTrigger value="assets" className={PROJECT_TAB_CLASS} />
             {canManageTeam && <TabsTrigger value="team" className={PROJECT_TAB_CLASS} />}
@@ -490,7 +488,6 @@ export function ProjectDetailClient({
               currentUserId={currentUserId}
               allowedTaskTypes={allowedTaskTypes}
               activeContractType={activeContractType}
-              maxPipelineTasks={project.maxPipelineTasks}
             />
           </TabsContent>
 
@@ -515,25 +512,13 @@ export function ProjectDetailClient({
             ))}
           </TabsContent>
 
-          <TabsContent value="roadmap">
-            {activeTab === "roadmap" && (loadingNotes || !notes ? (
-              <TabSpinner />
-            ) : (
-              <MeetingNotesTab
-                notes={notes as unknown as MeetingNote[]}
+          <TabsContent value="sprints">
+            {activeTab === "sprints" && (
+              <SprintTab
                 projectId={project.id}
                 canEdit={canEdit}
-                currentUserId={currentUserId}
-                isSystemAdmin={isSystemAdmin}
-                isDeadlineTestProject={isDeadlineTestProject}
-                allowedTaskTypes={allowedTaskTypes ?? []}
-                activeContractType={activeContractType ?? null}
-                isActive={isActive}
-                section="roadmap"
-                onFullscreenChange={handleNoteFullscreen}
-                onNotesChange={handleNotesChange}
               />
-            ))}
+            )}
           </TabsContent>
 
           <TabsContent value="assets">

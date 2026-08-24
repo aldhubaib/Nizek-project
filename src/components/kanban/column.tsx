@@ -49,13 +49,13 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
     [upNextTasks, readyTasks, needsInputTasks]
   );
 
-  const STAGE_IDS = ["NEW_REQUEST", "CLARIFICATION", "READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW", "READY_FOR_RELEASE", "DONE"] as const;
+  const STAGE_IDS = ["BACKLOG", "CLARIFICATION", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW", "DONE"] as const;
   const isValidDropTarget = useMemo(() => {
     if (!dragFromStage) return false;
     const fromIdx = STAGE_IDS.indexOf(dragFromStage);
     const toIdx = STAGE_IDS.indexOf(stage.id);
     if (toIdx === fromIdx + 1) return true;
-    if (dragTaskType === "BUG" && dragFromStage === "INTERNAL_REVIEW" && stage.id === "READY_FOR_RELEASE") return true;
+    if (dragTaskType === "BUG" && dragFromStage === "INTERNAL_REVIEW" && stage.id === "DONE") return true;
     if (dragFromStage === "INTERNAL_REVIEW" && stage.id === "IN_DEVELOPMENT") return true;
     if (dragFromStage === "CLIENT_REVIEW" && stage.id === "INTERNAL_REVIEW") return true;
     return false;
@@ -81,9 +81,9 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
           <h3 className="text-s font-medium">{stage.label}</h3>
           <span className="text-s text-muted-foreground">{tasks.length}</span>
         </div>
-        {/* New tasks always enter the board at New Request, so only that
+        {/* New tasks always enter the board at Backlog, so only that
             column offers the add button. */}
-        {!disabled && canCreateTask && stage.id === "NEW_REQUEST" && (
+        {!disabled && canCreateTask && stage.id === "BACKLOG" && (
           <AddButton
             label="New task"
             onClick={() => router.push(`/dashboard/projects/${projectId}/tasks/new`)}

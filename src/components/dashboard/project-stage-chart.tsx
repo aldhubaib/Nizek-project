@@ -23,7 +23,7 @@ const GROUPS: { key: GroupKey; label: string; stages: string; bar: string; dot: 
   {
     key: "development",
     label: "Development",
-    stages: "Ready for Dev · In Development",
+    stages: "In Development",
     bar: "bg-primary",
     dot: "bg-primary",
     text: "text-primary",
@@ -31,7 +31,7 @@ const GROUPS: { key: GroupKey; label: string; stages: string; bar: string; dot: 
   {
     key: "review",
     label: "Review",
-    stages: "Internal Review · Client Review · Ready for Release",
+    stages: "Internal Review · Client Review",
     bar: "bg-orange",
     dot: "bg-orange",
     text: "text-orange",
@@ -95,9 +95,9 @@ export function ProjectStageChart({
           <p className="text-xs leading-relaxed text-muted-foreground">
             One bar per project you&apos;re on, showing where its open tasks sit across three
             groups: <strong className="text-violet-400">Clarification</strong>,{" "}
-            <strong className="text-primary">Development</strong> (Ready for Dev + In
+            <strong className="text-primary">Development</strong> (In
             Development) and <strong className="text-orange">Review</strong> (Internal
-            Review + Client Review + Ready for Release).
+            Review + Client Review).
           </p>
           <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
             Click any segment to open the project&apos;s breakdown with the tasks in that group.

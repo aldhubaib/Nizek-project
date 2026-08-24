@@ -15,6 +15,7 @@ import {
 import { KanbanColumn } from "./column";
 import { TaskCard } from "./task-card";
 import { useKanbanStore, type KanbanTask, type Stage } from "@/store/kanban";
+import { STAGES } from "@/lib/constants";
 import { moveTask as moveTaskAction, declineTask, pollTaskUpdates, assignTaskToMe, getBoardTask } from "@/actions/task";
 import { useUser } from "@clerk/nextjs";
 import type { TaskQuestion } from "./question-field";
@@ -30,16 +31,6 @@ interface QuestionWithType extends TaskQuestion {
 }
 import type { UserPermissions } from "@/app/(dashboard)/dashboard/projects/[projectId]/project-detail-client";
 
-const STAGES: { id: Stage; label: string; color: string }[] = [
-  { id: "NEW_REQUEST", label: "New Request", color: "bg-muted-foreground" },
-  { id: "CLARIFICATION", label: "Clarification", color: "bg-violet-500" },
-  { id: "READY_FOR_DEV", label: "Ready for Dev", color: "bg-primary" },
-  { id: "IN_DEVELOPMENT", label: "In Development", color: "bg-sky-500" },
-  { id: "INTERNAL_REVIEW", label: "Internal Review", color: "bg-orange" },
-  { id: "CLIENT_REVIEW", label: "Client Review", color: "bg-orange-500" },
-  { id: "READY_FOR_RELEASE", label: "Ready for Release", color: "bg-teal-500" },
-  { id: "DONE", label: "Done", color: "bg-success" },
-];
 
 export interface BoardProps {
   initialTasks: KanbanTask[];
@@ -51,10 +42,8 @@ export interface BoardProps {
   currentUserId?: string;
   allowedTaskTypes?: string[];
   activeContractType?: string | null;
-  maxPipelineTasks?: number;
 }
 
-const PIPELINE_STAGES: Stage[] = ["READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW"];
 
 const ASSIGN_TO_ME_CHECKPOINT = {
   title: "Taking ownership",
@@ -63,10 +52,6 @@ const ASSIGN_TO_ME_CHECKPOINT = {
   confirmColor: "bg-primary hover:bg-primary/90",
   assignToMe: true,
 } as const;
-
-function wipLimitMessage(max: number) {
-  return `Pipeline limit reached — this project allows up to ${max} active task${max === 1 ? "" : "s"} across Ready for Dev, In Development, and Internal Review. Move an existing task past Internal Review (or complete it) before adding another.`;
-}
 
 export function KanbanBoard({
   initialTasks,
@@ -78,7 +63,6 @@ export function KanbanBoard({
   currentUserId,
   allowedTaskTypes,
   activeContractType,
-  maxPipelineTasks = 3,
 }: BoardProps) {
   // Selector subscriptions so the board only re-renders on task changes, not on
   // unrelated store updates (e.g. commentRefreshKey).
@@ -208,7 +192,7 @@ export function KanbanBoard({
 
   // Same rule the server applies (src/lib/permissions.ts), so a drag the
   // board allows can't be one the save then rejects — including the bug lane
-  // where Internal Review forwards straight to Ready for Release.
+  // where Internal Review forwards straight to Done for bugs.
   const canMoveFromTo = useCallback(
     (from: Stage, to: Stage) =>
       isProjectActive &&
@@ -231,7 +215,7 @@ export function KanbanBoard({
       allowedTransitions: userPermissions.allowedTransitions ?? {},
     },
     "INTERNAL_REVIEW",
-    "READY_FOR_RELEASE",
+    "DONE",
   );
 
   // Claim a task by clicking its avatar — offered when the viewer can move it at
@@ -293,21 +277,9 @@ export function KanbanBoard({
     const fromIdx = STAGES.findIndex((s) => s.id === fromStage);
     const toIdx = STAGES.findIndex((s) => s.id === toStage);
     if (toIdx === fromIdx + 1) return true;
-    if (fromStage === "INTERNAL_REVIEW" && toStage === "READY_FOR_RELEASE") return true;
+    if (fromStage === "INTERNAL_REVIEW" && toStage === "DONE") return true;
     if (isDeclineMove(fromStage, toStage)) return true;
     return false;
-  }
-
-  const readyForDevIndex = STAGES.findIndex((s) => s.id === "READY_FOR_DEV");
-  function wouldExceedWip(fromStage: Stage, toStage: Stage) {
-    const fromIdx = STAGES.findIndex((s) => s.id === fromStage);
-    const enteringPipeline =
-      PIPELINE_STAGES.includes(toStage) &&
-      !PIPELINE_STAGES.includes(fromStage) &&
-      fromIdx < readyForDevIndex;
-    if (!enteringPipeline) return false;
-    const count = tasks.filter((t) => PIPELINE_STAGES.includes(t.stage)).length;
-    return count >= maxPipelineTasks;
   }
 
   const dragOriginRef = useRef<Stage | null>(null);
@@ -356,7 +328,7 @@ export function KanbanBoard({
     if (targetStage && targetStage !== activeTaskItem.stage) {
       let effectiveTarget = targetStage;
       if (fromStage === "INTERNAL_REVIEW" && targetStage === "CLIENT_REVIEW" && activeTaskItem.taskType === "BUG") {
-        effectiveTarget = "READY_FOR_RELEASE";
+        effectiveTarget = "DONE";
       }
       if (!canMoveFromTo(fromStage, effectiveTarget)) return;
       if (!isValidMove(fromStage, effectiveTarget)) return;
@@ -390,7 +362,7 @@ export function KanbanBoard({
     if (task.stage === fromStage && dropStage && dropStage !== fromStage) {
       let effectiveDrop = dropStage;
       if (fromStage === "INTERNAL_REVIEW" && dropStage === "CLIENT_REVIEW" && task.taskType === "BUG") {
-        effectiveDrop = "READY_FOR_RELEASE";
+        effectiveDrop = "DONE";
       }
       if (!canMoveFromTo(fromStage, effectiveDrop)) {
         setTasks(snapshotRef.current);
@@ -401,11 +373,6 @@ export function KanbanBoard({
       }
       if (!isValidMove(fromStage, effectiveDrop)) { setTasks(snapshotRef.current); return; }
       if (fromStage === "CLARIFICATION" && !canLeaveClarRef.current) { setTasks(snapshotRef.current); return; }
-      if (wouldExceedWip(fromStage, effectiveDrop)) {
-        setTasks(snapshotRef.current);
-        setPermissionError(wipLimitMessage(maxPipelineTasks));
-        return;
-      }
       targetStage = effectiveDrop;
       const tasksInTarget = tasks.filter((t) => t.stage === effectiveDrop);
       moveTask(activeId, effectiveDrop, tasksInTarget.length);
@@ -464,10 +431,7 @@ export function KanbanBoard({
           alert("Cannot move — higher priority tasks must be completed first.");
         }
       } else if (msg === "ESTIMATE_REQUIRED") {
-        alert("An estimated time is required before moving to Ready for Dev.");
-      } else if (msg.startsWith("WIP_LIMIT:")) {
-        const max = parseInt(msg.replace("WIP_LIMIT:", ""), 10) || maxPipelineTasks;
-        setPermissionError(wipLimitMessage(max));
+        alert("An estimated time is required before moving to In Development.");
       } else if (msg.includes("permission") || msg.includes("Permission")) {
         setPermissionError(msg);
       } else {

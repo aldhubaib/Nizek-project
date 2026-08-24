@@ -109,7 +109,7 @@ export function decodeDeadlineReminderPayload(
 }
 
 export function deadlineReminderNoteUrl(projectId: string, noteId: string): string {
-  return projectNoteUrl(projectId, noteId, { noteType: "DEADLINE" });
+  return projectNoteUrl(projectId, noteId, { noteType: "ROADMAP" });
 }
 
 export function deadlineReminderPreview(payload: DeadlineReminderPayload): string {

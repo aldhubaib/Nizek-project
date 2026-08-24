@@ -108,7 +108,7 @@ export async function getDashboardData(projectId: string) {
     byStage[t.stage] = (byStage[t.stage] ?? 0) + 1;
   }
   const doneTasks = byStage["DONE"] ?? 0;
-  const inProgress = totalTasks - (byStage["NEW_REQUEST"] ?? 0) - (byStage["CLARIFICATION"] ?? 0) - doneTasks;
+  const inProgress = totalTasks - (byStage["BACKLOG"] ?? 0) - (byStage["CLARIFICATION"] ?? 0) - doneTasks;
 
   // Contract countdown
   const activeContract = project?.contracts.find(
@@ -150,7 +150,7 @@ export async function getDashboardData(projectId: string) {
   }
 
   // Stalling tasks: currently in active stages, taking 2x+ average
-  const activeStages = ["READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW", "READY_FOR_RELEASE"];
+  const activeStages = ["IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW"];
   const activeTasks = tasks.filter((t) => activeStages.includes(t.stage) && t.startedAt);
 
   const currentStageLogs = await prisma.stageLog.findMany({
@@ -300,13 +300,11 @@ export async function getDashboardData(projectId: string) {
 }
 
 const STAGE_LABELS: Record<string, string> = {
-  NEW_REQUEST: "New Request",
+  BACKLOG: "Backlog",
   CLARIFICATION: "Clarification",
-  READY_FOR_DEV: "Ready for Dev",
   IN_DEVELOPMENT: "In Development",
   INTERNAL_REVIEW: "Internal Review",
   CLIENT_REVIEW: "Client Review",
-  READY_FOR_RELEASE: "Ready for Release",
   DONE: "Done",
 };
 
@@ -339,11 +337,9 @@ export async function getLongestInPipeline(stages?: string[], assigneeId?: strin
   const now = new Date();
 
   const activeStages = stages ?? [
-    "READY_FOR_DEV",
     "IN_DEVELOPMENT",
     "INTERNAL_REVIEW",
     "CLIENT_REVIEW",
-    "READY_FOR_RELEASE",
   ];
 
   const whereClause = user.systemRole === "ADMIN"
@@ -424,11 +420,9 @@ export async function getLongestInStageByAssignee(stages?: string[], thresholdDa
   const now = new Date();
 
   const activeStages = stages ?? [
-    "READY_FOR_DEV",
     "IN_DEVELOPMENT",
     "INTERNAL_REVIEW",
     "CLIENT_REVIEW",
-    "READY_FOR_RELEASE",
   ];
 
   const whereClause = user.systemRole === "ADMIN"
@@ -1007,10 +1001,8 @@ export async function getMyTasks() {
   const stageOrder = [
     "IN_DEVELOPMENT",
     "INTERNAL_REVIEW",
-    "READY_FOR_DEV",
     "CLIENT_REVIEW",
-    "READY_FOR_RELEASE",
-    "NEW_REQUEST",
+    "BACKLOG",
     "CLARIFICATION",
   ];
 
@@ -1041,7 +1033,7 @@ export async function getDevQueue() {
       where: {
         projectId: { in: projectIds },
         archivedAt: null,
-        stage: { in: ["READY_FOR_DEV", "IN_DEVELOPMENT"] },
+        stage: { in: ["IN_DEVELOPMENT"] },
         project: activeProjectFilter(),
       },
       select: {
@@ -1107,12 +1099,12 @@ export async function getDevQueue() {
     byStage[t.stage].push(t);
   }
 
-  const stageOrder = ["CLARIFICATION", "READY_FOR_DEV", "IN_DEVELOPMENT"];
+  const stageOrder = ["CLARIFICATION", "IN_DEVELOPMENT"];
   const stages = stageOrder
     .filter((s) => byStage[s]?.length)
     .map((s) => ({
       stage: s,
-      label: s === "CLARIFICATION" ? "Ready for Dev" : STAGE_LABELS[s] ?? s,
+      label: s === "CLARIFICATION" ? "Ready for Development" : STAGE_LABELS[s] ?? s,
       tasks: byStage[s],
     }));
 
@@ -1181,8 +1173,8 @@ export async function markAllMentionsRead(projectId: string) {
 }
 
 const FUNNEL_STAGES = [
-  "NEW_REQUEST", "SPEC_READY", "NEEDS_INPUT", "READY_FOR_DEV",
-  "IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW", "READY_FOR_RELEASE", "DONE",
+  "BACKLOG", "SPEC_READY", "NEEDS_INPUT",
+  "IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW", "DONE",
 ];
 
 function funnelProjectFilter(systemRole: string, userId: string) {
@@ -1324,13 +1316,11 @@ export async function getFunnelTasks() {
 }
 
 const STAGE_LABELS_MAP: Record<string, string> = {
-  NEW_REQUEST: "New Request",
+  BACKLOG: "Backlog",
   CLARIFICATION: "Clarification",
-  READY_FOR_DEV: "Ready for Dev",
   IN_DEVELOPMENT: "In Development",
   INTERNAL_REVIEW: "Internal Review",
   CLIENT_REVIEW: "Client Review",
-  READY_FOR_RELEASE: "Ready for Release",
   DONE: "Done",
 };
 
@@ -1354,7 +1344,7 @@ export async function getTasksNeedingClientInput(assigneeId?: string) {
     where: {
       question: { type: "client" },
       task: {
-        stage: { in: ["NEW_REQUEST", "CLARIFICATION"] },
+        stage: { in: ["BACKLOG", "CLARIFICATION"] },
         archivedAt: null,
         project: { ...whereClause, ...activeProjectFilter() },
         ...(assigneeId ? { assigneeId } : {}),
@@ -1525,7 +1515,7 @@ export async function getUpNextByProject() {
 
 /**
  * "Awaiting Development" card on the Dashboard tab: every open task sitting in
- * Clarification or Ready for Dev (i.e. cleared intake but not yet picked up by
+ * Clarification (i.e. cleared intake but not yet picked up by
  * development) across the projects the viewer can access. `mine` counts the
  * ones the viewer is responsible for (assignee or sticky developer).
  *
@@ -1538,7 +1528,7 @@ export async function getAwaitingDevelopment() {
 
   if (user.systemRole !== "DEVELOPER") return null;
 
-  const AWAITING_STAGES = ["CLARIFICATION", "READY_FOR_DEV"];
+  const AWAITING_STAGES = ["CLARIFICATION"];
 
   // Count only projects where the viewer is on the team as a developer:
   // their membership has no custom role, or a role that isn't Admin / Team
@@ -1646,8 +1636,8 @@ export async function getSupervisedProjects() {
 /**
  * "Tasks by stage" module on the Dashboard tab: for every project the viewer
  * is a member of, the open tasks bucketed into three groups —
- * Clarification, Development (Ready for Dev + In Development) and Review
- * (Internal Review + Client Review + Ready for Release).
+ * Clarification, Development (In Development) and Review
+ * (Internal Review + Client Review).
  *
  * Default "member" scope: the viewer's projects, visible to Developers,
  * PMs / Tech Leads, and anyone holding a Team Lead role. "all" scope (the
@@ -1676,11 +1666,9 @@ export async function getProjectStageDistribution(scope: "member" | "all" = "mem
 
   const STAGE_GROUP: Record<string, "clarification" | "development" | "review"> = {
     CLARIFICATION: "clarification",
-    READY_FOR_DEV: "development",
     IN_DEVELOPMENT: "development",
     INTERNAL_REVIEW: "review",
     CLIENT_REVIEW: "review",
-    READY_FOR_RELEASE: "review",
   };
 
   const tasks = await prisma.task.findMany({

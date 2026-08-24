@@ -32,27 +32,24 @@ interface Props {
 }
 
 const STAGE_META: Record<string, { label: string; color: string; dot: string }> = {
-  NEW_REQUEST:       { label: "New Request",       color: "bg-muted-foreground",    dot: "bg-muted-foreground" },
+  BACKLOG:           { label: "Backlog",           color: "bg-muted-foreground",    dot: "bg-muted-foreground" },
   SPEC_READY:        { label: "Spec Ready",        color: "bg-violet-400",  dot: "bg-violet-400" },
   NEEDS_INPUT:       { label: "Needs Input",       color: "bg-destructive",    dot: "bg-destructive" },
-  READY_FOR_DEV:     { label: "Ready for Dev",     color: "bg-primary",    dot: "bg-primary" },
+  CLARIFICATION:     { label: "Clarification",     color: "bg-violet-500",  dot: "bg-violet-500" },
   IN_DEVELOPMENT:    { label: "In Development",    color: "bg-sky-500",     dot: "bg-sky-500" },
   INTERNAL_REVIEW:   { label: "Internal Review",   color: "bg-orange",   dot: "bg-orange" },
   CLIENT_REVIEW:     { label: "Client Review",     color: "bg-orange-500",  dot: "bg-orange-500" },
-  READY_FOR_RELEASE: { label: "Ready for Release", color: "bg-teal-500",    dot: "bg-teal-500" },
   DONE:              { label: "Done",              color: "bg-success", dot: "bg-success" },
 };
 
 const STAGE_PILL: Record<string, string> = {
-  NEW_REQUEST: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
+  BACKLOG: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
   SPEC_READY: "bg-violet-400/10 text-violet-400 border-violet-400/20",
   NEEDS_INPUT: "bg-destructive/10 text-destructive border-destructive/20",
   CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  READY_FOR_DEV: "bg-primary/10 text-primary border-primary/20",
   IN_DEVELOPMENT: "bg-sky-500/10 text-sky-400 border-sky-500/20",
   INTERNAL_REVIEW: "bg-orange/10 text-orange border-orange/20",
   CLIENT_REVIEW: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  READY_FOR_RELEASE: "bg-teal-500/10 text-teal-400 border-teal-500/20",
   DONE: "bg-success/10 text-success border-success/20",
 };
 

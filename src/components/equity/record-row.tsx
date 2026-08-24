@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, memo, type ReactNode } from "react";
 import { ChevronRight, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
  * state, its date. Everything else waits inside. A record with nothing further
  * to show gets no arrow rather than an empty panel.
  */
-export function RecordRow({
+export const RecordRow = memo(function RecordRow({
   index,
   title,
   badges,
@@ -92,7 +92,7 @@ export function RecordRow({
       )}
     </div>
   );
-}
+});
 
 /** A pill on a record's line. Colour carries the state; the words repeat it. */
 export function RecordBadge({

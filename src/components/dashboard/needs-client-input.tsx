@@ -27,7 +27,7 @@ const TASK_TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string; la
 };
 
 const STAGE_COLORS: Record<string, string> = {
-  NEW_REQUEST: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
+  BACKLOG: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
   CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/20",
 };
 

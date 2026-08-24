@@ -38,7 +38,7 @@ function statusFor(daysUntil: number) {
 
 function DeadlineRow({ item }: { item: IncompleteDeadlineRow }) {
   const status = statusFor(item.daysUntil);
-  const href = `/dashboard/projects/${item.project.id}?tab=roadmap`;
+  const href = `/dashboard/projects/${item.project.id}?tab=sprints`;
 
   return (
     <Link
@@ -102,7 +102,7 @@ export function IncompleteDeadlines({ data }: { data: IncompleteDeadlineRow[] })
               className="mb-2 h-7 w-7 text-muted-foreground/20"
               strokeWidth={1.5}
             />
-            <p className="text-s text-muted-foreground">Nothing on the roadmap</p>
+            <p className="text-s text-muted-foreground">No deadlines found</p>
           </div>
         ) : (
           <div className="divide-y divide-border/50">

@@ -32,7 +32,7 @@ export async function createMeetingNote(data: {
   title: string;
   content: string;
   date: string;
-  noteType?: "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+  noteType?: "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "ROADMAP" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
   dueDate?: string;
   taskId?: string;
   roadmapStatus?: RoadmapStatus;
@@ -41,20 +41,21 @@ export async function createMeetingNote(data: {
   const { user, member } = await requireProjectMember(data.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot create notes");
 
+  const isRoadmapType = data.noteType === "DEADLINE" || data.noteType === "ROADMAP";
   const workingDays =
-    data.noteType === "DEADLINE" ? parseWorkingDays(data.workingDays) : null;
+    isRoadmapType ? parseWorkingDays(data.workingDays) : null;
 
   const roadmapStatus =
-    data.noteType === "DEADLINE" && data.roadmapStatus && isRoadmapStatus(data.roadmapStatus)
+    isRoadmapType && data.roadmapStatus && isRoadmapStatus(data.roadmapStatus)
       ? data.roadmapStatus
       : "PLANNED";
 
-  if (data.noteType === "DEADLINE") {
+  if (isRoadmapType) {
     if (roadmapStatus === "NEXT") {
       const nextCount = await prisma.meetingNote.count({
         where: {
           projectId: data.projectId,
-          noteType: "DEADLINE",
+          noteType: { in: ["DEADLINE", "ROADMAP"] },
           roadmapStatus: "NEXT",
         },
       });
@@ -120,7 +121,7 @@ export async function toggleDeadlineComplete(
 ): Promise<{ completedAt: Date | null; roadmapStatus: RoadmapStatus }> {
   const note = await prisma.meetingNote.findUnique({ where: { id: noteId } });
   if (!note) throw new Error("Note not found");
-  if (note.noteType !== "DEADLINE") throw new Error("Not a roadmap item");
+  if (note.noteType !== "DEADLINE" && note.noteType !== "ROADMAP") throw new Error("Not a roadmap item");
 
   await requireProjectMember(note.projectId);
 
@@ -156,7 +157,7 @@ export async function updateRoadmapStatus(
 
   const note = await prisma.meetingNote.findUnique({ where: { id: noteId } });
   if (!note) throw new Error("Note not found");
-  if (note.noteType !== "DEADLINE") throw new Error("Not a roadmap item");
+  if (note.noteType !== "DEADLINE" && note.noteType !== "ROADMAP") throw new Error("Not a roadmap item");
 
   const { user, member } = await requireProjectMember(note.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot edit notes");
@@ -165,7 +166,7 @@ export async function updateRoadmapStatus(
     const nextCount = await prisma.meetingNote.count({
       where: {
         projectId: note.projectId,
-        noteType: "DEADLINE",
+        noteType: { in: ["DEADLINE", "ROADMAP"] },
         roadmapStatus: "NEXT",
       },
     });
@@ -270,7 +271,7 @@ export async function updateMeetingNote(data: {
   const historyEntries: { field: string; oldValue: string | null; newValue: string | null; noteId: string; userId: string }[] = [];
 
   if (data.skipHistory) {
-    if (note.noteType === "DEADLINE") {
+    if (note.noteType === "DEADLINE" || note.noteType === "ROADMAP") {
       const scheduleError = roadmapScheduleError(
         note.roadmapStatus,
         data.dueDate !== undefined
@@ -380,7 +381,7 @@ export async function updateMeetingNote(data: {
     });
   }
 
-  if (note.noteType === "DEADLINE") {
+  if (note.noteType === "DEADLINE" || note.noteType === "ROADMAP") {
     const scheduleError = roadmapScheduleError(
       note.roadmapStatus,
       nextDueDate !== undefined ? nextDueDate : note.dueDate,
@@ -579,7 +580,7 @@ export async function getNoteWorkspace(noteId: string) {
     canCreateTask:
       member.role !== "CLIENT" &&
       isActive &&
-      (isSystemAdmin || canCreateInStage(perms, "NEW_REQUEST")),
+      (isSystemAdmin || canCreateInStage(perms, "BACKLOG")),
     allowedTaskTypes,
     activeContractType: activeContract?.contractType ?? null,
     isActive,
@@ -744,7 +745,7 @@ export async function searchProjectNotesForLink(
   projectId: string,
   taskId: string,
   query = "",
-  opts?: { kind?: "notes" | "roadmap" },
+  opts?: { kind?: "notes" | "sprints" },
 ) {
   await requireProjectMember(projectId);
   const q = query.trim();
@@ -755,10 +756,10 @@ export async function searchProjectNotesForLink(
       NOT: {
         OR: [{ taskId }, { taskLinks: { some: { taskId } } }],
       },
-      ...(kind === "roadmap"
-        ? { noteType: "DEADLINE" }
+      ...(kind === "sprints"
+        ? { noteType: { in: ["DEADLINE", "ROADMAP"] } }
         : kind === "notes"
-          ? { noteType: { not: "DEADLINE" } }
+          ? { noteType: { notIn: ["DEADLINE"] } }
           : {}),
       ...(q ? { title: { contains: q, mode: "insensitive" } } : {}),
     },
@@ -800,7 +801,7 @@ export async function createTaskFromNoteHighlight(data: {
   const { member } = await requireProjectMember(note.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot create tasks");
 
-  if (note.noteType === "DEADLINE") {
+  if (note.noteType === "DEADLINE" || note.noteType === "ROADMAP") {
     const status = normalizeRoadmapStatus(note.roadmapStatus, note.completedAt);
     const blocked = roadmapCreateTaskError(status);
     if (blocked) throw new Error(blocked);

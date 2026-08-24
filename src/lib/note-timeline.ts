@@ -141,7 +141,7 @@ export function buildNoteTimeline(input: {
     });
   }
 
-  if (input.noteType === "DEADLINE") {
+  if (input.noteType === "DEADLINE" || input.noteType === "ROADMAP") {
     for (const log of input.reminderLogs ?? []) {
       events.push({
         kind: "reminder",

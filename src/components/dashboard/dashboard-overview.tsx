@@ -16,7 +16,6 @@ type StageDistribution = Awaited<ReturnType<typeof getProjectStageDistribution>>
 
 const STAGE_STYLE: Record<string, { label: string; text: string; dot: string }> = {
   CLARIFICATION: { label: "Clarification", text: "text-violet-400", dot: "bg-violet-400" },
-  READY_FOR_DEV: { label: "Ready for Dev", text: "text-primary", dot: "bg-primary" },
 };
 
 function waitingLabel(enteredAt: Date | string | null): string {
@@ -160,7 +159,7 @@ export function DashboardOverview() {
     for (const list of map.values()) {
       list.sort((a, b) => Number(b.mine) - Number(a.mine));
     }
-    return ["CLARIFICATION", "READY_FOR_DEV"]
+    return ["CLARIFICATION"]
       .filter((s) => map.has(s))
       .map((s) => ({ stage: s, tasks: map.get(s)! }));
   }, [data]);
@@ -183,8 +182,7 @@ export function DashboardOverview() {
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   You are assigned to projects as a <strong className="text-foreground">Developer</strong> —
                   this card shows the work heading your way: every open task in{" "}
-                  <strong className="text-foreground">Clarification</strong> or{" "}
-                  <strong className="text-foreground">Ready for Dev</strong> on those projects.
+                  <strong className="text-foreground">Clarification</strong> on those projects.
                   Projects you supervise are not counted.
                 </p>
                 <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">

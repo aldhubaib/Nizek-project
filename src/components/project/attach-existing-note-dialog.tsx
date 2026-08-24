@@ -36,14 +36,14 @@ export function AttachExistingNoteDialog({
   projectId: string;
   taskId: string;
   onAttached: () => void;
-  kind?: "notes" | "roadmap";
+  kind?: "notes" | "sprints";
 }) {
   const [query, setQuery] = useState("");
   const [notes, setNotes] = useState<NoteRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [attaching, setAttaching] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const isRoadmap = kind === "roadmap";
+  const isRoadmap = kind === "sprints";
   const Icon = isRoadmap ? CalendarClock : FileText;
 
   useEffect(() => {

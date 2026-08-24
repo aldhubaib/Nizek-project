@@ -66,22 +66,7 @@ const CONTRACT_SELECT = {
 // creates Notification rows (inbox unread), and publishes live via Centrifugo.
 // Identity everywhere is User.id.
 
-export type ActionResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: string };
-
-async function safeAction<T>(
-  label: string,
-  fn: () => Promise<T>,
-): Promise<ActionResult<T>> {
-  try {
-    return { ok: true, data: await fn() };
-  } catch (err) {
-    const error = err instanceof Error ? err.message : "Something went wrong";
-    console.error(`[${label}]`, error);
-    return { ok: false, error };
-  }
-}
+import { type ActionResult, safeAction } from "@/lib/action-result";
 
 const MENTION_RE = /@\[([^\]]+)\]\(([^)]+)\)/g;
 

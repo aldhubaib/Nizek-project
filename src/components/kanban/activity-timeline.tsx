@@ -15,13 +15,11 @@ interface Activity {
 }
 
 const STAGE_LABEL: Record<string, string> = {
-  NEW_REQUEST: "New Request",
+  BACKLOG: "Backlog",
   CLARIFICATION: "Clarification",
-  READY_FOR_DEV: "Ready for Dev",
   IN_DEVELOPMENT: "In Development",
   INTERNAL_REVIEW: "Internal Review",
   CLIENT_REVIEW: "Client Review",
-  READY_FOR_RELEASE: "Ready for Release",
   DONE: "Done",
 };
 

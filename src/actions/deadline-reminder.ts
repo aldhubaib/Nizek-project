@@ -43,7 +43,7 @@ export async function getIncompleteDeadlines(): Promise<IncompleteDeadlineRow[]>
 
   const notes = await prisma.meetingNote.findMany({
     where: {
-      noteType: "DEADLINE",
+      noteType: { in: ["DEADLINE", "ROADMAP"] },
       completedAt: null,
       dueDate: { not: null },
       project: { ...projectScopeWhere(user), ...activeProjectFilter() },

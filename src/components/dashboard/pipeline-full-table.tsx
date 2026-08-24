@@ -18,11 +18,9 @@ interface PipelineTask {
 }
 
 const STAGE_COLORS: Record<string, string> = {
-  READY_FOR_DEV: "bg-primary/10 text-primary border-primary/20",
   IN_DEVELOPMENT: "bg-violet-500/10 text-violet-400 border-violet-500/20",
   INTERNAL_REVIEW: "bg-orange/10 text-orange border-orange/20",
   CLIENT_REVIEW: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-  READY_FOR_RELEASE: "bg-success/10 text-success border-success/20",
 };
 
 const TASK_TYPE_COLORS: Record<string, string> = {

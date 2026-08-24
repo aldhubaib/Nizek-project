@@ -95,7 +95,7 @@ export async function sendDeadlineReminderForNote(options: {
   });
 
   if (!note) return { ok: false, reason: "Note not found" };
-  if (note.noteType !== "DEADLINE") return { ok: false, reason: "Not a deadline note" };
+  if (note.noteType !== "DEADLINE" && note.noteType !== "ROADMAP") return { ok: false, reason: "Not a deadline note" };
   if (note.completedAt) return { ok: false, reason: "Deadline already completed" };
   if (!note.dueDate) return { ok: false, reason: "Missing due date" };
 
@@ -235,7 +235,7 @@ export async function processDeadlineReminders(): Promise<{
 }> {
   const notes = await prisma.meetingNote.findMany({
     where: {
-      noteType: "DEADLINE",
+      noteType: { in: ["DEADLINE", "ROADMAP"] },
       completedAt: null,
       dueDate: { not: null },
     },

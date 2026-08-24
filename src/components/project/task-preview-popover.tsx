@@ -26,24 +26,20 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 const STAGE_BADGE: Record<string, string> = {
-  NEW_REQUEST: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/30",
+  BACKLOG: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/30",
   CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/30",
-  READY_FOR_DEV: "bg-primary/10 text-primary border-primary/30",
   IN_DEVELOPMENT: "bg-sky-500/10 text-sky-400 border-sky-500/30",
   INTERNAL_REVIEW: "bg-orange/10 text-orange border-orange/30",
   CLIENT_REVIEW: "bg-orange-500/10 text-orange-400 border-orange-500/30",
-  READY_FOR_RELEASE: "bg-teal-500/10 text-teal-400 border-teal-500/30",
   DONE: "bg-success/10 text-success border-success/30",
 };
 
 const STAGE_DOT: Record<string, string> = {
-  NEW_REQUEST: "bg-muted-foreground",
+  BACKLOG: "bg-muted-foreground",
   CLARIFICATION: "bg-violet-400",
-  READY_FOR_DEV: "bg-primary",
   IN_DEVELOPMENT: "bg-sky-400",
   INTERNAL_REVIEW: "bg-orange",
   CLIENT_REVIEW: "bg-orange-400",
-  READY_FOR_RELEASE: "bg-teal-400",
   DONE: "bg-success",
 };
 

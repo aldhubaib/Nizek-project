@@ -26,6 +26,7 @@ import {
   ShieldX,
 } from "lucide-react";
 import { getDashboardData, markMentionRead, markAllMentionsRead } from "@/actions/dashboard";
+import { StatCard, Widget, TaskRow, EmptyState } from "./dashboard-widgets";
 import { cn } from "@/lib/utils";
 
 type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
@@ -43,35 +44,29 @@ interface Props {
 }
 
 const STAGE_LABELS: Record<string, string> = {
-  NEW_REQUEST: "New Request",
+  BACKLOG: "Backlog",
   CLARIFICATION: "Clarification",
-  READY_FOR_DEV: "Ready for Dev",
   IN_DEVELOPMENT: "In Development",
   INTERNAL_REVIEW: "Internal Review",
   CLIENT_REVIEW: "Client Review",
-  READY_FOR_RELEASE: "Ready for Release",
   DONE: "Done",
 };
 
 const STAGE_COLORS: Record<string, string> = {
-  NEW_REQUEST: "bg-muted-foreground",
+  BACKLOG: "bg-muted-foreground",
   CLARIFICATION: "bg-orange",
-  READY_FOR_DEV: "bg-primary",
   IN_DEVELOPMENT: "bg-violet-500",
   INTERNAL_REVIEW: "bg-orange-500",
   CLIENT_REVIEW: "bg-cyan-500",
-  READY_FOR_RELEASE: "bg-success",
   DONE: "bg-success",
 };
 
 const STAGE_HEX: Record<string, string> = {
-  NEW_REQUEST: "#71717a",
+  BACKLOG: "#71717a",
   CLARIFICATION: "#f59e0b",
-  READY_FOR_DEV: "#3b82f6",
   IN_DEVELOPMENT: "#8b5cf6",
   INTERNAL_REVIEW: "#f97316",
   CLIENT_REVIEW: "#22d3ee",
-  READY_FOR_RELEASE: "#10b981",
   DONE: "#22c55e",
 };
 
@@ -264,27 +259,6 @@ export function ProjectDashboard({ projectId, userRole, userId, tasks: kanbanTas
   );
 }
 
-function StatCard({
-  label,
-  value,
-  icon,
-  color,
-}: {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-  color: string;
-}) {
-  return (
-    <div className="app-card rounded-lg border border-border bg-card p-4">
-      <div className="flex items-center justify-between mb-2">
-        <span className={cn("opacity-70", color)}>{icon}</span>
-      </div>
-      <p className="text-l font-bold tracking-tight">{value}</p>
-      <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
-    </div>
-  );
-}
 
 function ContractCard({
   contract,
@@ -349,44 +323,6 @@ function ContractCard({
   );
 }
 
-function Widget({
-  title,
-  icon,
-  badge,
-  action,
-  children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  badge?: number;
-  action?: { label: string; onClick: () => void };
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="app-card rounded-lg border border-border bg-card overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">{icon}</span>
-          <h3 className="text-s font-semibold">{title}</h3>
-          {badge !== undefined && badge > 0 && (
-            <span className="ms-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-xs font-bold text-primary-foreground">
-              {badge}
-            </span>
-          )}
-        </div>
-        {action && (
-          <button
-            onClick={action.onClick}
-            className="text-xs text-primary hover:underline"
-          >
-            {action.label}
-          </button>
-        )}
-      </div>
-      <div className="p-4 max-h-[320px] overflow-y-auto">{children}</div>
-    </div>
-  );
-}
 
 function StagePipeline({
   pipeline,
@@ -396,13 +332,11 @@ function StagePipeline({
   total: number;
 }) {
   const stages = [
-    "NEW_REQUEST",
+    "BACKLOG",
     "CLARIFICATION",
-    "READY_FOR_DEV",
     "IN_DEVELOPMENT",
     "INTERNAL_REVIEW",
     "CLIENT_REVIEW",
-    "READY_FOR_RELEASE",
     "DONE",
   ];
 
@@ -612,12 +546,10 @@ function MyTasksList({ tasks, onNavigateToTask }: { tasks: DashboardData["myTask
 
   const stageOrder = [
     "IN_DEVELOPMENT",
-    "READY_FOR_DEV",
     "INTERNAL_REVIEW",
     "CLIENT_REVIEW",
-    "READY_FOR_RELEASE",
     "CLARIFICATION",
-    "NEW_REQUEST",
+    "BACKLOG",
     "DONE",
   ];
 
@@ -647,27 +579,6 @@ function MyTasksList({ tasks, onNavigateToTask }: { tasks: DashboardData["myTask
   );
 }
 
-function TaskRow({
-  task,
-  onClick,
-}: {
-  task: { id: string; title: string; taskNumber: number; taskType: string; priority: number | null };
-  onClick?: () => void;
-}) {
-  const Icon = TYPE_ICON[task.taskType] ?? Circle;
-  return (
-    <div className="flex items-center gap-2 py-1 text-s cursor-pointer rounded-md px-1 -mx-1 hover:bg-muted/50 transition-colors" onClick={onClick}>
-      <Icon className={cn("w-3.5 h-3.5 shrink-0", TYPE_COLOR[task.taskType] ?? "text-muted-foreground")} />
-      <span className="text-muted-foreground font-mono">#{task.taskNumber}</span>
-      <span className="truncate flex-1">{task.title}</span>
-      {task.priority !== null && (
-        <span className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded bg-muted text-xs font-bold">
-          P{task.priority}
-        </span>
-      )}
-    </div>
-  );
-}
 
 function StallingList({ tasks, onNavigateToTask }: { tasks: DashboardData["stallingTasks"]; onNavigateToTask?: (taskId: string) => void }) {
   if (tasks.length === 0) {
@@ -931,11 +842,3 @@ function RejectionsList({
   );
 }
 
-function EmptyState({ icon, message }: { icon: React.ReactNode; message: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-8 text-center">
-      <span className="text-muted-foreground/30 mb-2">{icon}</span>
-      <p className="text-s text-muted-foreground">{message}</p>
-    </div>
-  );
-}

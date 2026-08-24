@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
@@ -16,17 +17,35 @@ import { createAndPublishNotifications } from "@/lib/notify";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import { sendPush } from "@/lib/push";
 
+const CreateTaskSchema = z.object({
+  projectId: z.string().min(1),
+  title: z.string().min(1).max(500),
+  description: z.string().max(10000).optional(),
+  priority: z.number().int().min(0).max(999).optional(),
+  taskType: z.enum(["FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"]).optional(),
+  assigneeId: z.string().optional(),
+  answers: z.array(z.object({ questionId: z.string(), answer: z.string() })).optional(),
+});
+
+const UpdateTaskSchema = z.object({
+  taskId: z.string().min(1),
+  title: z.string().min(1).max(500).optional(),
+  description: z.string().max(10000).optional(),
+  priority: z.number().int().min(0).max(999).nullable().optional(),
+  assigneeId: z.string().nullable().optional(),
+  estimatedMinutes: z.number().int().min(0).nullable().optional(),
+  estimateAccuracy: z.enum(["WAY_OVER", "OVER", "ON_TRACK", "UNDER", "WAY_UNDER"]).nullable().optional(),
+});
+
 // ─── Stage → Role Track ─────────────────────────────────
 type RoleTrack = "pm" | "developer" | "client";
 
 const STAGE_ROLE_MAP: Record<string, RoleTrack> = {
-  NEW_REQUEST: "pm",
+  BACKLOG: "pm",
   CLARIFICATION: "pm",
-  READY_FOR_DEV: "developer",
   IN_DEVELOPMENT: "developer",
   INTERNAL_REVIEW: "pm",
   CLIENT_REVIEW: "client",
-  READY_FOR_RELEASE: "developer",
   DONE: "developer",
 };
 
@@ -70,7 +89,7 @@ async function resolveAutoAssignee(
   }
 }
 
-export async function createTask(data: {
+export async function createTask(raw: {
   projectId: string;
   title: string;
   description?: string;
@@ -79,6 +98,7 @@ export async function createTask(data: {
   assigneeId?: string;
   answers?: { questionId: string; answer: string }[];
 }) {
+  const data = CreateTaskSchema.parse(raw);
   const project = await prisma.project.findUnique({
     where: { id: data.projectId },
     include: { contracts: true },
@@ -93,7 +113,7 @@ export async function createTask(data: {
 
   if (!isAdmin) {
     const perms = getPermissionsFromRole(member.projectRole);
-    if (!canCreateInStage(perms, "NEW_REQUEST")) {
+    if (!canCreateInStage(perms, "BACKLOG")) {
       throw new Error("You do not have permission to create tasks");
     }
   }
@@ -106,7 +126,7 @@ export async function createTask(data: {
 
   const [maxOrder, maxTaskNumber] = await Promise.all([
     prisma.task.aggregate({
-      where: { projectId: data.projectId, stage: "NEW_REQUEST", archivedAt: null },
+      where: { projectId: data.projectId, stage: "BACKLOG", archivedAt: null },
       _max: { order: true },
     }),
     prisma.task.aggregate({
@@ -143,7 +163,7 @@ export async function createTask(data: {
       description: data.description,
       priority,
       taskType,
-      stage: "NEW_REQUEST",
+      stage: "BACKLOG",
       order: (maxOrder._max.order ?? 0) + 1,
       projectId: data.projectId,
       createdById: user.id,
@@ -170,13 +190,14 @@ export async function createTask(data: {
   return task;
 }
 
-export async function updateTask(data: {
+export async function updateTask(raw: {
   taskId: string;
   title?: string;
   description?: string;
   priority?: number | null;
   assigneeId?: string | null;
 }) {
+  const data = UpdateTaskSchema.parse(raw);
   const task = await prisma.task.findUnique({
     where: { id: data.taskId },
     include: { project: { include: { contracts: true } }, assignee: true },
@@ -317,7 +338,7 @@ export async function assignTaskToMe(
 
 export async function moveTask(data: {
   taskId: string;
-  stage: "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "READY_FOR_RELEASE" | "DONE";
+  stage: "BACKLOG" | "CLARIFICATION" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "DONE";
   order: number;
   estimatedMinutes?: number;
 }): Promise<{ success: true } | { success: false; error: string }> {
@@ -343,7 +364,7 @@ export async function moveTask(data: {
 
     const oldStage = task.stage;
 
-    if (!isAdmin && oldStage === "CLARIFICATION" && data.stage !== "CLARIFICATION" && data.stage !== "NEW_REQUEST") {
+    if (!isAdmin && oldStage === "CLARIFICATION" && data.stage !== "CLARIFICATION" && data.stage !== "BACKLOG") {
       const errors: string[] = [];
 
       if (task.priority == null) {
@@ -416,39 +437,12 @@ export async function moveTask(data: {
 
     let targetStage = data.stage;
     if (!isAdmin && task.taskType === "BUG" && targetStage === "CLIENT_REVIEW") {
-      targetStage = "READY_FOR_RELEASE";
+      targetStage = "DONE";
     }
 
-    // Pipeline WIP limit: block bringing a new task into the active pipeline
-    // (Ready for Dev, In Development, Internal Review) when it's already full.
-    // Moves within the pipeline, moves out of it, and declines back into it are
-    // never blocked — only fresh entries from an earlier stage count.
-    const PIPELINE_STAGES = ["READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW"];
-    const STAGE_SEQUENCE = ["NEW_REQUEST", "CLARIFICATION", "READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW", "READY_FOR_RELEASE", "DONE"];
-    const isEnteringPipeline =
-      PIPELINE_STAGES.includes(targetStage) &&
-      !PIPELINE_STAGES.includes(oldStage) &&
-      STAGE_SEQUENCE.indexOf(oldStage) < STAGE_SEQUENCE.indexOf("READY_FOR_DEV");
+    const STAGE_SEQUENCE = ["BACKLOG", "CLARIFICATION", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW", "DONE"];
 
-    if (isEnteringPipeline) {
-      const maxPipelineTasks = task.project.maxPipelineTasks ?? 3;
-      const pipelineCount = await prisma.task.count({
-        where: {
-          projectId: task.projectId,
-          stage: { in: PIPELINE_STAGES as any },
-          archivedAt: null,
-        },
-      });
-      if (pipelineCount >= maxPipelineTasks) {
-        return { success: false, error: `WIP_LIMIT:${maxPipelineTasks}` };
-      }
-    }
-
-    const isEnteringDev = oldStage !== "READY_FOR_DEV" && targetStage === "READY_FOR_DEV";
-
-    if (!isAdmin && isEnteringDev && !task.estimatedMinutes && !data.estimatedMinutes) {
-      return { success: false, error: "ESTIMATE_REQUIRED" };
-    }
+    const isEnteringDev = oldStage !== "IN_DEVELOPMENT" && targetStage === "IN_DEVELOPMENT";
 
     let estimateAccuracy: "WAY_OVER" | "OVER" | "ON_TRACK" | "UNDER" | "WAY_UNDER" | undefined;
     if (targetStage === "DONE" && oldStage !== "DONE" && task.startedAt && task.estimatedMinutes) {
@@ -521,13 +515,14 @@ export async function moveTask(data: {
       order: updated.order,
       userId: user.id,
     });
+    revalidatePath(`/dashboard/projects/${task.projectId}`);
     return { success: true };
   } catch (err) {
     return { success: false, error: (err as Error).message };
   }
 }
 
-const DECLINE_TARGETS: Record<string, "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "READY_FOR_RELEASE" | "DONE"> = {
+const DECLINE_TARGETS: Record<string, "BACKLOG" | "CLARIFICATION" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "DONE"> = {
   INTERNAL_REVIEW: "IN_DEVELOPMENT",
   CLIENT_REVIEW: "INTERNAL_REVIEW",
 };
@@ -852,10 +847,11 @@ export async function deleteTask(taskId: string) {
   broadcastTaskEvent(task.projectId, { type: "task-deleted", taskId, userId: user.id });
 }
 
-export async function getArchivedTasks(projectId: string) {
+export async function getArchivedTasks(projectId: string, opts?: { cursor?: string; limit?: number }) {
   await requireProjectMember(projectId);
+  const limit = opts?.limit ?? 50;
 
-  return prisma.task.findMany({
+  const tasks = await prisma.task.findMany({
     where: { projectId, archivedAt: { not: null } },
     include: {
       createdBy: { select: { id: true, name: true, imageUrl: true } },
@@ -863,7 +859,12 @@ export async function getArchivedTasks(projectId: string) {
       answers: true,
     },
     orderBy: { archivedAt: "desc" },
+    take: limit + 1,
+    ...(opts?.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
   });
+  const hasMore = tasks.length > limit;
+  const items = hasMore ? tasks.slice(0, limit) : tasks;
+  return { items, nextCursor: hasMore ? items[items.length - 1].id : null };
 }
 
 export async function restoreTask(taskId: string) {

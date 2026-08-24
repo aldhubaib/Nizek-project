@@ -189,7 +189,7 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
   // One shared minute clock drives all cards' live durations (re-render once/min
   // only while this card actually shows a duration).
   useMinuteTick(Boolean(task.startedAt || task.stageEnteredAt));
-  // The delivery clock (Ready for Dev → completed) freezes once the task hits
+  // The delivery clock (In Development → completed) freezes once the task hits
   // Done — the Done stage log's enteredAt is the completion moment.
   const totalTime =
     task.stage === "DONE"
@@ -321,7 +321,7 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
                 icon={Hourglass}
                 value={estimateTime}
                 label="Estimated time"
-                explanation="How long this task was expected to take when it entered Ready for Dev."
+                explanation="How long this task was expected to take when it entered In Development."
               />
             )}
             {totalTime && (
@@ -331,8 +331,8 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
                 label={task.stage === "DONE" ? "Delivery time" : "Delivery clock"}
                 explanation={
                   task.stage === "DONE"
-                    ? "Total time from Ready for Dev until the task was completed. Frozen — it no longer counts."
-                    : "Counts from the moment the task entered Ready for Dev until it reaches Done. Keeps running through development, reviews and rework — declines don't reset it."
+                    ? "Total time from In Development until the task was completed. Frozen — it no longer counts."
+                    : "Counts from the moment the task entered In Development until it reaches Done. Keeps running through development, reviews and rework — declines don't reset it."
                 }
               />
             )}

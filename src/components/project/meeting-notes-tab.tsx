@@ -48,13 +48,14 @@ import { normalizeRoadmapStatus, roadmapAllowsCreateTask, roadmapScheduleError, 
 import { addWorkingDays, formatWorkingDays, parseWorkingDays, startOfLocalDay, toDateInputValue } from "@/lib/working-days";
 import { cn } from "@/lib/utils";
 
-type NoteType = "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+type NoteType = "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "ROADMAP" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
 
 const NOTE_TYPE_CONFIG: Record<NoteType, { label: string; color: string; bgColor: string; icon: typeof FileText }> = {
   MEETING_NOTE: { label: "Meeting Note", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: FileText },
   DECISION: { label: "Decision", color: "text-orange", bgColor: "bg-orange/10 border-orange/20", icon: Gavel },
   CLARIFICATION: { label: "Clarification", color: "text-sky-400", bgColor: "bg-sky-500/10 border-sky-500/20", icon: MessageCircleQuestion },
-  DEADLINE: { label: "Roadmap", color: "text-destructive", bgColor: "bg-destructive/10 border-destructive/20", icon: CalendarClock },
+  DEADLINE: { label: "Deadline", color: "text-destructive", bgColor: "bg-destructive/10 border-destructive/20", icon: CalendarClock },
+  ROADMAP: { label: "Road Map", color: "text-teal-400", bgColor: "bg-teal-500/10 border-teal-500/20", icon: CalendarClock },
   FEATURE: { label: "Business Case", color: "text-primary", bgColor: "bg-primary/10 border-primary/20", icon: Sparkles },
   ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bgColor: "bg-violet-500/10 border-violet-500/20", icon: Wrench },
   BUG: { label: "Bug", color: "text-orange", bgColor: "bg-orange/10 border-orange/20", icon: Bug },
@@ -218,14 +219,13 @@ interface Props {
   allowedTaskTypes?: string[];
   activeContractType?: string | null;
   isActive?: boolean;
-  section?: "notes" | "roadmap";
+  section?: "notes";
   onFullscreenChange?: (open: boolean, goBack?: () => void) => void;
   onNotesChange?: (updater: (prev: MeetingNote[]) => MeetingNote[]) => void;
 }
 
-const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "CLARIFICATION", "DEADLINE", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
-const NOTES_CREATE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "CLARIFICATION"];
-const ROADMAP_CREATE_TYPES: NoteType[] = ["DEADLINE"];
+const ALL_NOTE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "CLARIFICATION", "ROADMAP", "FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
+const NOTES_CREATE_TYPES: NoteType[] = ["MEETING_NOTE", "DECISION", "CLARIFICATION", "ROADMAP"];
 
 export function MeetingNotesTab({
   notes: allNotes,
@@ -241,16 +241,10 @@ export function MeetingNotesTab({
   onFullscreenChange,
   onNotesChange,
 }: Props) {
-  const isRoadmap = section === "roadmap";
-  const tabKey = isRoadmap ? "roadmap" : "notes";
-  const createTypes = isRoadmap ? ROADMAP_CREATE_TYPES : NOTES_CREATE_TYPES;
-  const notes = useMemo(
-    () =>
-      allNotes.filter((n) =>
-        isRoadmap ? n.noteType === "DEADLINE" : n.noteType !== "DEADLINE",
-      ),
-    [allNotes, isRoadmap],
-  );
+  const isRoadmap = false;
+  const tabKey = "notes";
+  const createTypes = NOTES_CREATE_TYPES;
+  const notes = allNotes;
   const [filter, setFilter] = useState<NoteType | "ALL">("ALL");
   const [view, setView] = useState<"list" | "create" | "detail">("list");
   const [selectedNote, setSelectedNote] = useState<MeetingNote | null>(null);
@@ -531,7 +525,7 @@ export function MeetingNotesTab({
           {filtered.map((note) => {
             const cfg = NOTE_TYPE_CONFIG[(note.noteType as NoteType)] ?? NOTE_TYPE_CONFIG.MEETING_NOTE;
             const Icon = cfg?.icon ?? FileText;
-            const isDeadline = note.noteType === "DEADLINE";
+            const isDeadline = note.noteType === "DEADLINE" || note.noteType === "ROADMAP";
             const deadlineStatus =
               isDeadline && note.dueDate
                 ? getDeadlineStatus(note.dueDate, note.completedAt ?? null)
@@ -683,7 +677,7 @@ function NoteFullScreenCreate({
   const [typeError, setTypeError] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const isDeadline = noteType === "DEADLINE";
+  const isDeadline = noteType === "DEADLINE" || noteType === "ROADMAP";
 
   async function handleSave() {
     if (!noteType) { setTypeError(true); return; }
@@ -928,7 +922,7 @@ export function NoteFullScreenDetail({
 
   const config = NOTE_TYPE_CONFIG[(note.noteType as NoteType)] ?? NOTE_TYPE_CONFIG.MEETING_NOTE;
   const Icon = config?.icon ?? FileText;
-  const isDeadline = note.noteType === "DEADLINE";
+  const isDeadline = note.noteType === "DEADLINE" || note.noteType === "ROADMAP";
   const currentRoadmapStatus = normalizeRoadmapStatus(note.roadmapStatus, completedAt);
   const canCreateTaskFromNote =
     isActive &&

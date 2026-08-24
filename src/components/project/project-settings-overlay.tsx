@@ -13,6 +13,8 @@ import { ContractBadge } from "@/components/project/contract-badge";
 import { AddContractDialog } from "@/components/project/add-contract-dialog";
 import { EditContractDialog } from "@/components/project/edit-contract-dialog";
 import { cn } from "@/lib/utils";
+import { TASK_TYPE_META } from "@/lib/constants";
+import { STAGE_LABELS } from "@/types";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import { ClientChatPeopleManager } from "@/components/messages/client-chat-people";
@@ -80,7 +82,6 @@ export function ProjectSettingsOverlay({
   const [description, setDescription] = useState(project.description || "");
   const [teamId, setTeamId] = useState(project.team?.id || "");
   const [clientReviewerId, setClientReviewerId] = useState(project.defaultClientReviewerId || "");
-  const [maxPipelineTasks, setMaxPipelineTasks] = useState(String(project.maxPipelineTasks ?? 3));
   const [clientChatEnabled, setClientChatEnabled] = useState(!!project.clientChatEnabled);
   const [clientChatSaving, setClientChatSaving] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -143,7 +144,6 @@ export function ProjectSettingsOverlay({
     setSaving(true);
     setSaveError(null);
     try {
-      const parsedMax = parseInt(maxPipelineTasks, 10);
       await updateProject({
         projectId: project.id,
         name: name.trim(),
@@ -151,7 +151,6 @@ export function ProjectSettingsOverlay({
         // Empty string = "No team" — send null so the team can be cleared.
         teamId: teamId || null,
         defaultClientReviewerId: clientReviewerId || null,
-        ...(Number.isFinite(parsedMax) && parsedMax > 0 && { maxPipelineTasks: parsedMax }),
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -393,23 +392,6 @@ export function ProjectSettingsOverlay({
             )}
           </div>
 
-          {/* Pipeline Task Limit */}
-          <div className="space-y-2">
-            <Label htmlFor="proj-max-tasks" className="text-s font-semibold">Max Tasks in Pipeline</Label>
-            <p className="text-xs text-muted-foreground">
-              The most tasks allowed at once across <strong className="text-foreground">Ready for Dev</strong>, <strong className="text-foreground">In Development</strong>, and <strong className="text-foreground">Internal Review</strong>. New tasks can&apos;t enter until an existing one moves past Internal Review.
-            </p>
-            <Input
-              id="proj-max-tasks"
-              type="number"
-              min={1}
-              max={50}
-              value={maxPipelineTasks}
-              onChange={(e) => setMaxPipelineTasks(e.target.value)}
-              className="text-s w-28"
-            />
-          </div>
-
           {/* Contracts */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -577,25 +559,6 @@ function ContractList({ contracts, isAdmin, projectId, contractPrefixes = [] }: 
 
 /* ─── Archive Tab ─── */
 
-const TASK_TYPE_META: Record<string, { prefix: string; color: string }> = {
-  FEATURE: { prefix: "F", color: "text-primary" },
-  ENHANCEMENT: { prefix: "E", color: "text-violet-400" },
-  BUG: { prefix: "B", color: "text-orange" },
-  REPORTED_BUG: { prefix: "RB", color: "text-destructive" },
-  DESIGN: { prefix: "D", color: "text-cyan-400" },
-};
-
-const STAGE_LABELS: Record<string, string> = {
-  NEW_REQUEST: "New Request",
-  CLARIFICATION: "Clarification",
-  READY_FOR_DEV: "Ready for Dev",
-  IN_DEVELOPMENT: "In Development",
-  INTERNAL_REVIEW: "Internal Review",
-  CLIENT_REVIEW: "Client Review",
-  READY_FOR_RELEASE: "Ready for Release",
-  DONE: "Done",
-};
-
 interface ArchivedTask {
   id: string;
   taskNumber: number;
@@ -617,7 +580,7 @@ function ArchiveTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolea
 
   useEffect(() => {
     getArchivedTasks(projectId)
-      .then((data) => setTasks(data as ArchivedTask[]))
+      .then((result) => setTasks(result.items as ArchivedTask[]))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [projectId]);

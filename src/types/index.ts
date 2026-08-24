@@ -61,24 +61,20 @@ export function isProjectActive(project: ProjectWithContracts): boolean {
 }
 
 export const STAGE_ORDER: Stage[] = [
-  "NEW_REQUEST",
+  "BACKLOG",
   "CLARIFICATION",
-  "READY_FOR_DEV",
   "IN_DEVELOPMENT",
   "INTERNAL_REVIEW",
   "CLIENT_REVIEW",
-  "READY_FOR_RELEASE",
   "DONE",
 ];
 
 export const STAGE_LABELS: Record<Stage, string> = {
-  NEW_REQUEST: "New Request",
+  BACKLOG: "Backlog",
   CLARIFICATION: "Clarification",
-  READY_FOR_DEV: "Ready for Dev",
   IN_DEVELOPMENT: "In Development",
   INTERNAL_REVIEW: "Internal Review",
   CLIENT_REVIEW: "Client Review",
-  READY_FOR_RELEASE: "Ready for Release",
   DONE: "Done",
 };
 

@@ -39,35 +39,29 @@ interface Comment {
 type FilterMode = "all" | "comments" | "status";
 
 const STAGE_LABEL: Record<string, string> = {
-  NEW_REQUEST: "New Request",
+  BACKLOG: "Backlog",
   CLARIFICATION: "Clarification",
-  READY_FOR_DEV: "Ready for Dev",
   IN_DEVELOPMENT: "In Development",
   INTERNAL_REVIEW: "Internal Review",
   CLIENT_REVIEW: "Client Review",
-  READY_FOR_RELEASE: "Ready for Release",
   DONE: "Done",
 };
 
 const STAGE_DOT: Record<string, string> = {
-  NEW_REQUEST: "bg-muted-foreground",
+  BACKLOG: "bg-muted-foreground",
   CLARIFICATION: "bg-violet-500",
-  READY_FOR_DEV: "bg-primary",
   IN_DEVELOPMENT: "bg-sky-500",
   INTERNAL_REVIEW: "bg-orange",
   CLIENT_REVIEW: "bg-orange-500",
-  READY_FOR_RELEASE: "bg-teal-500",
   DONE: "bg-success",
 };
 
 const STAGE_BADGE: Record<string, string> = {
-  NEW_REQUEST: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
+  BACKLOG: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
   CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  READY_FOR_DEV: "bg-primary/10 text-primary border-primary/20",
   IN_DEVELOPMENT: "bg-sky-500/10 text-sky-400 border-sky-500/20",
   INTERNAL_REVIEW: "bg-orange/10 text-orange border-orange/20",
   CLIENT_REVIEW: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  READY_FOR_RELEASE: "bg-teal-500/10 text-teal-400 border-teal-500/20",
   DONE: "bg-success/10 text-success border-success/20",
 };
 

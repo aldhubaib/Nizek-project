@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useKanbanStore, type KanbanTask, type Stage } from "@/store/kanban";
+import { STAGES, TASK_TYPE_META } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 const ACCURACY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -47,13 +48,6 @@ function formatEstimate(minutes: number): string {
   return `${m}m`;
 }
 
-const TASK_TYPE_META: Record<string, { prefix: string; label: string; color: string }> = {
-  FEATURE: { prefix: "F", label: "Business Case", color: "text-primary" },
-  ENHANCEMENT: { prefix: "E", label: "Enhancement", color: "text-violet-400" },
-  BUG: { prefix: "B", label: "Internal Bug", color: "text-orange" },
-  REPORTED_BUG: { prefix: "RB", label: "Reported Bug", color: "text-destructive" },
-  DESIGN: { prefix: "D", label: "Design", color: "text-cyan-400" },
-};
 
 interface QuestionWithType extends TaskQuestion {
   taskType: string;
@@ -65,17 +59,6 @@ interface TaskAnswerWithQuestion {
   questionId: string;
   question: TaskQuestion;
 }
-
-const STAGES: { id: Stage; label: string; color: string }[] = [
-  { id: "NEW_REQUEST", label: "New Request", color: "bg-muted-foreground" },
-  { id: "CLARIFICATION", label: "Clarification", color: "bg-violet-500" },
-  { id: "READY_FOR_DEV", label: "Ready for Dev", color: "bg-primary" },
-  { id: "IN_DEVELOPMENT", label: "In Development", color: "bg-sky-500" },
-  { id: "INTERNAL_REVIEW", label: "Internal Review", color: "bg-orange" },
-  { id: "CLIENT_REVIEW", label: "Client Review", color: "bg-orange-500" },
-  { id: "READY_FOR_RELEASE", label: "Ready for Release", color: "bg-teal-500" },
-  { id: "DONE", label: "Done", color: "bg-success" },
-];
 
 function formatDuration(from: Date, to: Date): string {
   const ms = to.getTime() - from.getTime();
@@ -254,11 +237,11 @@ function AttachedNotesSection({
         onSelect={setViewingNote}
       />
       <AttachedLinkBlock
-        title="Roadmap"
+        title="Deadlines"
         icon={CalendarClock}
         items={attachedRoadmaps}
         loading={loading}
-        emptyText="No roadmap items attached"
+        emptyText="No deadline items attached"
         onAttach={() => setAttachRoadmapOpen(true)}
         onCreate={onCreateRoadmap}
         onSelect={setViewingNote}
@@ -294,7 +277,7 @@ function AttachedNotesSection({
         onClose={() => setAttachRoadmapOpen(false)}
         projectId={projectId}
         taskId={task.id}
-        kind="roadmap"
+        kind="sprints"
         onAttached={reload}
       />
     </>
@@ -541,7 +524,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
   const [deleting, setDeleting] = useState(false);
 
   const taskTypeMeta = TASK_TYPE_META[task.taskType] ?? TASK_TYPE_META.FEATURE;
-  const canDeleteTask = task.stage === "NEW_REQUEST" || task.stage === "CLARIFICATION";
+  const canDeleteTask = task.stage === "BACKLOG" || task.stage === "CLARIFICATION";
   const [editingAnswers, setEditingAnswers] = useState<Record<string, boolean>>({});
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingPriority, setEditingPriority] = useState(false);
@@ -1074,7 +1057,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
                   </div>
                   <div className="border-t border-border/30 pt-3 space-y-2">
                     {stageLogs
-                      .filter((l) => l.stage !== "NEW_REQUEST" && l.stage !== "CLARIFICATION")
+                      .filter((l) => l.stage !== "BACKLOG" && l.stage !== "CLARIFICATION")
                       .map((log, i) => {
                         const entered = new Date(log.enteredAt);
                         const exited = log.exitedAt ? new Date(log.exitedAt) : new Date();
@@ -1098,7 +1081,7 @@ export function TaskSidebar({ task, open, onClose, questions: allQuestions, proj
                 <div className="flex flex-col items-center justify-center py-6 text-center">
                   <Clock className="w-8 h-8 text-muted-foreground/30 mb-2" />
                   <p className="text-s text-muted-foreground">No time tracking yet</p>
-                  <p className="text-xs text-muted-foreground/60">Tracking starts when the task moves to Ready for Dev</p>
+                  <p className="text-xs text-muted-foreground/60">Tracking starts when the task moves to In Development</p>
                 </div>
               )}
               {(task.estimatedMinutes || task.estimateAccuracy) && (

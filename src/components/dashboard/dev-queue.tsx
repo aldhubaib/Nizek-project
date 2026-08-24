@@ -31,19 +31,16 @@ interface Props {
 
 const STAGE_COLORS: Record<string, string> = {
   CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  READY_FOR_DEV: "bg-primary/10 text-primary border-primary/20",
   IN_DEVELOPMENT: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
 };
 
 const STAGE_DOT: Record<string, string> = {
   CLARIFICATION: "bg-violet-400",
-  READY_FOR_DEV: "bg-primary",
   IN_DEVELOPMENT: "bg-indigo-400",
 };
 
 const STAGE_SHORT: Record<string, string> = {
   CLARIFICATION: "Clarification",
-  READY_FOR_DEV: "Ready",
   IN_DEVELOPMENT: "In Dev",
 };
 

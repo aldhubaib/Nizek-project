@@ -68,7 +68,7 @@ export default async function DeadlinesPage() {
         {data.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <CalendarClock className="mb-2 h-8 w-8 text-muted-foreground/20" />
-            <p className="text-s text-muted-foreground">Nothing on the roadmap</p>
+            <p className="text-s text-muted-foreground">No deadlines found</p>
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -78,7 +78,7 @@ export default async function DeadlinesPage() {
                 return (
                   <Link
                     key={item.id}
-                    href={`/dashboard/projects/${item.project.id}?tab=roadmap`}
+                    href={`/dashboard/projects/${item.project.id}?tab=sprints`}
                     className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-accent/20"
                   >
                     <div className="min-w-0 flex-1">

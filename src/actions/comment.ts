@@ -1,18 +1,32 @@
 "use server";
 
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
 import { publish, taskChannel } from "@/lib/centrifugo";
 import { sendPush } from "@/lib/push";
 import { createAndPublishNotifications } from "@/lib/notify";
 
-export async function createComment(data: {
+const CreateCommentSchema = z.object({
+  taskId: z.string().min(1),
+  content: z.string().min(1).max(10000),
+  mentionedUserIds: z.array(z.string()).optional(),
+  attachments: z.array(z.object({
+    filename: z.string(),
+    url: z.string().url(),
+    fileSize: z.number().optional(),
+    mimeType: z.string().optional(),
+  })).optional(),
+});
+
+export async function createComment(raw: {
   taskId: string;
   content: string;
   mentionedUserIds?: string[];
   attachments?: { filename: string; url: string; fileSize?: number; mimeType?: string }[];
 }): Promise<{ success: true; comment: Record<string, unknown> } | { success: false; error: string }> {
   try {
+    const data = CreateCommentSchema.parse(raw);
     const task = await prisma.task.findUnique({
       where: { id: data.taskId },
       select: { projectId: true, taskNumber: true, title: true },
@@ -119,7 +133,7 @@ export async function getComment(
   }
 }
 
-export async function getComments(taskId: string): Promise<{ success: true; comments: Record<string, unknown>[] } | { success: false; error: string }> {
+export async function getComments(taskId: string, opts?: { cursor?: string; limit?: number }): Promise<{ success: true; comments: Record<string, unknown>[]; nextCursor: string | null } | { success: false; error: string }> {
   try {
     const task = await prisma.task.findUnique({
       where: { id: taskId },
@@ -129,6 +143,7 @@ export async function getComments(taskId: string): Promise<{ success: true; comm
 
     await requireProjectMember(task.projectId);
 
+    const limit = opts?.limit ?? 30;
     const comments = await prisma.taskComment.findMany({
       where: { taskId },
       include: {
@@ -137,9 +152,15 @@ export async function getComments(taskId: string): Promise<{ success: true; comm
         attachments: { select: { id: true, filename: true, url: true, fileSize: true, mimeType: true } },
       },
       orderBy: { createdAt: "asc" },
+      take: limit + 1,
+      ...(opts?.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     });
 
-    return { success: true, comments: comments as unknown as Record<string, unknown>[] };
+    const hasMore = comments.length > limit;
+    const items = hasMore ? comments.slice(0, limit) : comments;
+    const nextCursor = hasMore ? items[items.length - 1].id : null;
+
+    return { success: true, comments: items as unknown as Record<string, unknown>[], nextCursor };
   } catch (err) {
     return { success: false, error: (err as Error).message };
   }

@@ -23,8 +23,8 @@ export function LazyDevTab() {
     startTransition(async () => {
       try {
         const [pipelineTasks, assigneeData, upNextData] = await Promise.all([
-          getLongestInPipeline(["READY_FOR_DEV", "IN_DEVELOPMENT"]),
-          getLongestInStageByAssignee(["READY_FOR_DEV", "IN_DEVELOPMENT"]),
+          getLongestInPipeline(["IN_DEVELOPMENT"]),
+          getLongestInStageByAssignee(["IN_DEVELOPMENT"]),
           getUpNextByProject(),
         ]);
         setData({ pipelineTasks, assigneeData, upNextData });

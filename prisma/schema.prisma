@@ -26,14 +26,18 @@ enum SystemRole {
 }
 
 enum Stage {
-  NEW_REQUEST
+  BACKLOG
   CLARIFICATION
-  READY_FOR_DEV
   IN_DEVELOPMENT
   INTERNAL_REVIEW
   CLIENT_REVIEW
-  READY_FOR_RELEASE
   DONE
+}
+
+enum SprintStatus {
+  PLANNING
+  ACTIVE
+  COMPLETED
 }
 
 enum TaskType {
@@ -190,6 +194,7 @@ model Project {
   invitations  Invitation[]
   messages     Message[]
   conversations Conversation[]
+  sprints      Sprint[]
   equityPortfolio EquityPortfolio?
   vaultCredentials VaultCredential[]
   vaultFolders     VaultFolder[]
@@ -308,6 +313,7 @@ model Task {
   notes      MeetingNote[]
   noteLinks  NoteTaskLink[]
   messages   Message[]
+  sprintItems SprintItem[]
 
   @@unique([projectId, taskNumber])
   @@index([projectId, stage])
@@ -330,6 +336,37 @@ model StageLog {
   task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([taskId, exitedAt])
+}
+
+model Sprint {
+  id          String       @id @default(cuid())
+  name        String
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status      SprintStatus @default(PLANNING)
+  workingDays Int?
+  startedAt   DateTime?
+  endedAt     DateTime?
+  dueDate     DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  items       SprintItem[]
+
+  @@index([projectId, status])
+}
+
+model SprintItem {
+  id        String        @id @default(cuid())
+  sprintId  String
+  sprint    Sprint        @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  taskId    String
+  task      Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  status    RoadmapStatus @default(PLANNED)
+  order     Int           @default(0)
+  createdAt DateTime      @default(now())
+
+  @@unique([sprintId, taskId])
+  @@index([sprintId, status])
 }
 
 model TaskComment {
@@ -400,6 +437,7 @@ enum NoteType {
   DECISION
   CLARIFICATION
   DEADLINE
+  ROADMAP
   FEATURE
   ENHANCEMENT
   BUG

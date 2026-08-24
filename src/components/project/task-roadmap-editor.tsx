@@ -34,7 +34,7 @@ export function TaskRoadmapEditor({
         title: title.trim(),
         content,
         date: new Date().toISOString().split("T")[0],
-        noteType: "DEADLINE",
+        noteType: "ROADMAP",
         roadmapStatus: "PLANNED",
         taskId: task.id,
       });

@@ -91,7 +91,7 @@ export default async function TaskDetailPage({ params, searchParams }: Props) {
       canSkipClientReview={
         user.systemRole === "ADMIN" ||
         (userPermissions.canMoveTask &&
-          (userPermissions.allowedTransitions?.["INTERNAL_REVIEW"] ?? []).includes("READY_FOR_RELEASE"))
+          (userPermissions.allowedTransitions?.["INTERNAL_REVIEW"] ?? []).includes("DONE"))
       }
       initialThreadId={threadId ?? null}
       backToNoteId={from === "note" ? (noteId ?? null) : null}

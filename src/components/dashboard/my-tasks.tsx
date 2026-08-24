@@ -29,23 +29,19 @@ interface Props {
 }
 
 const STAGE_COLORS: Record<string, string> = {
-  NEW_REQUEST: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
+  BACKLOG: "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
   CLARIFICATION: "bg-violet-500/10 text-violet-400 border-violet-500/20",
-  READY_FOR_DEV: "bg-primary/10 text-primary border-primary/20",
   IN_DEVELOPMENT: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
   INTERNAL_REVIEW: "bg-orange/10 text-orange border-orange/20",
   CLIENT_REVIEW: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-  READY_FOR_RELEASE: "bg-success/10 text-success border-success/20",
 };
 
 const STAGE_DOT: Record<string, string> = {
-  NEW_REQUEST: "bg-muted-foreground",
+  BACKLOG: "bg-muted-foreground",
   CLARIFICATION: "bg-violet-400",
-  READY_FOR_DEV: "bg-primary",
   IN_DEVELOPMENT: "bg-indigo-400",
   INTERNAL_REVIEW: "bg-orange",
   CLIENT_REVIEW: "bg-cyan-400",
-  READY_FOR_RELEASE: "bg-success",
 };
 
 const TYPE_ICONS: Record<string, { icon: typeof Sparkles; color: string }> = {

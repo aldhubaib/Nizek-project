@@ -32,12 +32,11 @@ export function canTransition(
   const allowed = permissions.allowedTransitions[fromStage];
   if (!allowed) return false;
   if (allowed.includes(toStage)) return true;
-  // Bugs skip Client Review and go straight to Ready for Release, so being
-  // allowed forward out of Internal Review covers that lane too. Checked here
-  // rather than trusting the stored role, which may predate the shortcut.
+  // Bugs skip Client Review and go straight to Done, so being allowed
+  // forward out of Internal Review covers that lane too.
   return (
     fromStage === "INTERNAL_REVIEW" &&
-    toStage === "READY_FOR_RELEASE" &&
+    toStage === "DONE" &&
     allowed.includes("CLIENT_REVIEW")
   );
 }
@@ -121,13 +120,11 @@ export function getPermissionsFromRole(role: {
 }
 
 const ALL_STAGE_IDS = [
-  "NEW_REQUEST",
+  "BACKLOG",
   "CLARIFICATION",
-  "READY_FOR_DEV",
   "IN_DEVELOPMENT",
   "INTERNAL_REVIEW",
   "CLIENT_REVIEW",
-  "READY_FOR_RELEASE",
   "DONE",
 ];
 

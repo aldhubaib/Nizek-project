@@ -104,9 +104,9 @@ export function OverallStageBar({
           <p className="text-xs leading-relaxed text-muted-foreground">
             One bar combining every open task across all your projects:{" "}
             <strong className="text-violet-400">Clarification</strong>,{" "}
-            <strong className="text-primary">Development</strong> (Ready for Dev + In
+            <strong className="text-primary">Development</strong> (In
             Development) and <strong className="text-orange">Review</strong> (Internal
-            Review + Client Review + Ready for Release). The number on each segment is its
+            Review + Client Review). The number on each segment is its
             task count.
           </p>
           <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">

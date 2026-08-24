@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type Stage = "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "READY_FOR_RELEASE" | "DONE";
+export type Stage = "BACKLOG" | "CLARIFICATION" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "DONE";
 export type TaskType = "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
 
 export type EstimateAccuracy = "WAY_OVER" | "OVER" | "ON_TRACK" | "UNDER" | "WAY_UNDER";

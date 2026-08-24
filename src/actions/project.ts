@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireUser, requireProjectMember, requireProjectRole, acceptPendingInvitations } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
@@ -11,6 +12,20 @@ import {
   syncClientConversationParticipants,
   CLIENT_CONVERSATION_KIND,
 } from "@/lib/client-chat";
+
+const CreateProjectSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  teamId: z.string().optional(),
+  contract: z.object({
+    label: z.string().max(200).optional(),
+    prefixId: z.string().optional(),
+    contractNumber: z.string().optional(),
+    contractType: z.enum(["FULL_TEAM", "PART_TEAM", "FIXED", "MAINTENANCE", "STARTUP"]).optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+  }),
+});
 
 async function requireMemberManagement(projectId: string) {
   const { user, member } = await requireProjectMember(projectId);
@@ -41,7 +56,7 @@ async function buildContractCode(prefixId: string, manualNumber?: string): Promi
   return { code: `${prefix.prefix}-${num}`, prefixId };
 }
 
-export async function createProject(data: {
+export async function createProject(raw: {
   name: string;
   description?: string;
   teamId?: string;
@@ -54,6 +69,7 @@ export async function createProject(data: {
     endDate?: string;
   };
 }) {
+  const data = CreateProjectSchema.parse(raw);
   const user = await requireUser();
 
   if (!data.contract.startDate || !data.contract.endDate) {
@@ -111,13 +127,12 @@ export async function getProjectOptions() {
   });
 }
 
-export async function getProjects() {
+export async function getProjects(opts?: { cursor?: string; limit?: number }) {
   const user = await requireUser();
-  // Reconcile any invitations that arrived after signup (moved out of the
-  // per-request getCurrentUser hot path). Best-effort; never blocks the list.
   await acceptPendingInvitations(user.id, user.email).catch(() => {});
   const where = user.systemRole === "ADMIN" ? {} : { members: { some: { userId: user.id } } };
-  return prisma.project.findMany({
+  const limit = opts?.limit ?? 20;
+  const projects = await prisma.project.findMany({
     where,
     include: {
       team: true,
@@ -126,7 +141,12 @@ export async function getProjects() {
       _count: { select: { tasks: true, meetingNotes: true, assets: true, members: true } },
     },
     orderBy: { createdAt: "desc" },
+    take: limit + 1,
+    ...(opts?.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
   });
+  const hasMore = projects.length > limit;
+  const items = hasMore ? projects.slice(0, limit) : projects;
+  return { items, nextCursor: hasMore ? items[items.length - 1].id : null };
 }
 
 export async function getProject(projectId: string) {
@@ -646,7 +666,8 @@ export async function addMemberToProject(data: {
   revalidatePath("/dashboard/messages");
 }
 
-export async function getAvailableUsers(projectId: string) {
+export async function getAvailableUsers(projectId: string, opts?: { search?: string; limit?: number }) {
+  const limit = opts?.limit ?? 20;
   const [existingMembers, existingInvites] = await Promise.all([
     prisma.projectMember.findMany({ where: { projectId }, select: { userId: true } }),
     prisma.invitation.findMany({ where: { projectId, status: "PENDING" }, select: { email: true } }),
@@ -654,11 +675,19 @@ export async function getAvailableUsers(projectId: string) {
   const memberIds = new Set(existingMembers.map((m) => m.userId));
   const invitedEmails = new Set(existingInvites.map((i) => i.email));
 
+  const searchFilter = opts?.search
+    ? { OR: [
+        { name: { contains: opts.search, mode: "insensitive" as const } },
+        { email: { contains: opts.search, mode: "insensitive" as const } },
+      ] }
+    : {};
+
   const [allUsers, pendingInvites] = await Promise.all([
     prisma.user.findMany({
-      where: { blocked: false },
+      where: { blocked: false, ...searchFilter },
       select: { id: true, name: true, email: true, imageUrl: true, systemRole: true },
       orderBy: { name: "asc" },
+      take: limit + memberIds.size,
     }),
     prisma.pendingTeamInvite.findMany({
       select: { id: true, email: true, systemRole: true },
@@ -668,6 +697,7 @@ export async function getAvailableUsers(projectId: string) {
 
   const users = allUsers
     .filter((u) => !memberIds.has(u.id))
+    .slice(0, limit)
     .map((u) => ({ ...u, isClient: u.systemRole === "CLIENT", pending: false as const }));
 
   const pendingUsers = pendingInvites

@@ -197,7 +197,7 @@ export function CreateTaskFromMessageDialog({
             Create task from message
           </DialogTitle>
           <p className="text-xs text-muted-foreground">
-            {payload.projectName} · New Request
+            {payload.projectName} · Backlog
           </p>
         </DialogHeader>
 

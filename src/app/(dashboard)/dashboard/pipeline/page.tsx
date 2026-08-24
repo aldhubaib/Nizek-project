@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/page-header";
 
 const STAGE_FILTERS: Record<string, string[]> = {
   product: ["INTERNAL_REVIEW", "CLIENT_REVIEW"],
-  dev: ["READY_FOR_DEV", "IN_DEVELOPMENT"],
+  dev: ["IN_DEVELOPMENT"],
 };
 
 export default async function PipelinePage({

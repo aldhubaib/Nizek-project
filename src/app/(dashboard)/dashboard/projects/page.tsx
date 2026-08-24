@@ -10,7 +10,7 @@ export default async function ProjectsPage() {
   const user = await requireUser();
   if (isClientUser(user)) redirect("/dashboard/messages");
 
-  const [projects, teams, contractPrefixes] = await Promise.all([
+  const [projectsResult, teams, contractPrefixes] = await Promise.all([
     getProjects(),
     getTeams(),
     getContractPrefixes(),
@@ -20,7 +20,7 @@ export default async function ProjectsPage() {
 
   return (
     <ProjectsPageClient
-      projects={JSON.parse(JSON.stringify(projects))}
+      projects={JSON.parse(JSON.stringify(projectsResult.items))}
       teams={JSON.parse(JSON.stringify(nonDefaultTeams))}
       contractPrefixes={JSON.parse(JSON.stringify(contractPrefixes))}
     />

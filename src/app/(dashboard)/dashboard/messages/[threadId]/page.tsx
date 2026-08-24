@@ -286,7 +286,7 @@ export default async function ThreadPage({
       ? getAdminPermissions()
       : getPermissionsFromRole(member.projectRole);
     canCreateTask =
-      isSystemAdmin || canCreateInStage(perms, "NEW_REQUEST");
+      isSystemAdmin || canCreateInStage(perms, "BACKLOG");
 
     const activeContract = getActiveContract(contractsForPerms);
     activeContractType = activeContract?.contractType ?? null;
