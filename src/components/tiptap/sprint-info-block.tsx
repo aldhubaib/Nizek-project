@@ -100,7 +100,7 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
 
   const cent = useCentrifugo();
   const projectIdOpt = (extension.options as { projectId?: string }).projectId;
-  const loadRef = useRef<() => void>();
+  const loadRef = useRef<(() => void) | undefined>(undefined);
   loadRef.current = () => {
     if (!sprintId) return;
     const review = info?.variant === "review";

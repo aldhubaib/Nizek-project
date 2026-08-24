@@ -53,6 +53,7 @@ import { normalizeRoadmapStatus, roadmapAllowsCreateTask, roadmapScheduleError, 
 import { formatWorkingDays, parseWorkingDays, toDateInputValue } from "@/lib/working-days";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
+import { useCollaboration } from "@/components/realtime/use-collaboration";
 
 function getDeadlineStatus(dueDate: Date | string, completedAt: Date | string | null) {
   if (completedAt) return outlineBadge("Completed", "text-success", "border-success/30");
@@ -721,11 +722,13 @@ export function NoteFullScreenDetail({
   const liveEdit =
     (isSprintPlanning && !planningLocked && canCreateSprintPlanning) ||
     (isSprintReview && canEndSprint);
+  const { ydoc, provider: collabProvider, enabled: collabEnabled } =
+    useCollaboration(isSprintDoc && liveEdit ? note.id : null);
   const { saveError: autoSaveError } = useNoteAutosave({
     noteId: note.id,
     title,
     content,
-    enabled: liveEdit,
+    enabled: liveEdit && !collabEnabled,
   });
 
   useEffect(() => {
@@ -1275,6 +1278,8 @@ export function NoteFullScreenDetail({
                 projectId={projectId}
                 sprintTasks={sprintTasks}
                 onSprintStatusChange={setSprintStatus}
+                ydoc={ydoc}
+                collabProvider={collabProvider}
                 onSprintTaskPatch={(taskId, patch) => {
                   setSprintTasks((prev) =>
                     prev.map((item) => (item.id === taskId ? { ...item, ...patch } : item)),

@@ -6,14 +6,16 @@
  * Shares the same Postgres as the Next.js app. Documents are loaded/saved from
  * the MeetingNote table. Auth verifies project access using better-auth session
  * tokens passed as WebSocket query params.
+ *
+ * NOTE: Requires the `ydoc` column on `MeetingNote`. Run the migration first:
+ *   prisma migrate dev --name add-ydoc-to-meeting-note
  */
 
-import { Server } from "@hocuspocus/server";
+import { Hocuspocus } from "@hocuspocus/server";
 import { Database } from "@hocuspocus/extension-database";
 import { PrismaClient } from "./src/generated/prisma/client.js";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
-import http from "node:http";
 
 const PORT = parseInt(process.env.COLLAB_PORT || "4500", 10);
 const DATABASE_URL = process.env.DATABASE_URL ?? "";
@@ -27,11 +29,11 @@ const pool = new Pool({ connectionString: DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-const server = Server.configure({
+const server = new Hocuspocus({
   port: PORT,
   address: "0.0.0.0",
 
-  async onAuthenticate({ token, documentName }) {
+  async onAuthenticate({ token, documentName }: { token: string; documentName: string }) {
     if (!token) throw new Error("Auth token required");
 
     const session = await prisma.authSession.findUnique({
@@ -67,45 +69,34 @@ const server = Server.configure({
 
   extensions: [
     new Database({
-      async fetch({ documentName }) {
+      async fetch({ documentName }: { documentName: string }) {
         const noteId = documentName.replace("note:", "");
-        const note = await prisma.meetingNote.findUnique({
-          where: { id: noteId },
-          select: { ydoc: true },
-        });
-        return note?.ydoc ?? null;
+        const note = await prisma.$queryRawUnsafe<Array<{ ydoc: Buffer | null }>>(
+          `SELECT ydoc FROM "MeetingNote" WHERE id = $1`,
+          noteId,
+        );
+        return note[0]?.ydoc ?? null;
       },
 
-      async store({ documentName, state }) {
+      async store({ documentName, state }: { documentName: string; state: Uint8Array }) {
         const noteId = documentName.replace("note:", "");
-        await prisma.meetingNote.update({
-          where: { id: noteId },
-          data: { ydoc: Buffer.from(state) },
-        });
+        await prisma.$executeRawUnsafe(
+          `UPDATE "MeetingNote" SET ydoc = $1 WHERE id = $2`,
+          Buffer.from(state),
+          noteId,
+        );
       },
     }),
   ],
 });
 
-const httpServer = http.createServer((_req, res) => {
-  if (_req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", connections: server.getConnectionsCount() }));
-    return;
-  }
-  res.writeHead(404);
-  res.end();
-});
-
-server.listen(httpServer);
-httpServer.listen(PORT, () => {
+server.listen().then(() => {
   console.log(`[collab] Hocuspocus server running on port ${PORT}`);
 });
 
 process.on("SIGTERM", async () => {
   console.log("[collab] Shutting down...");
   await server.destroy();
-  httpServer.close();
   await prisma.$disconnect();
   process.exit(0);
 });

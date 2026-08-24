@@ -1636,7 +1636,6 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         OR: [
           { noteCommentThread: { isNot: null } },
           { taskHighlightThread: { isNot: null } },
-          { messages: { some: { kind: "proof_bypass" } } },
         ],
         participants: { some: { memberId: user.id } },
       },

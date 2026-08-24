@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { DIRECT_CONVERSATION_KIND } from "@/lib/client-chat";
 import {
   encodeProofBypassBody,
   type ProofBypassPayload,
@@ -8,13 +7,31 @@ import {
 export async function ensureBypassConversation(
   requesterId: string,
   approverId: string,
-  title: string,
+  _title: string,
 ) {
+  const existing = await prisma.conversation.findFirst({
+    where: {
+      kind: "direct",
+      isGroup: false,
+      projectId: null,
+      noteCommentThread: null,
+      taskHighlightThread: null,
+      AND: [
+        { participants: { some: { memberId: requesterId } } },
+        { participants: { some: { memberId: approverId } } },
+      ],
+    },
+    select: { id: true, participants: { select: { memberId: true } } },
+  });
+
+  if (existing && existing.participants.length === 2) {
+    return existing.id;
+  }
+
   const convo = await prisma.conversation.create({
     data: {
       isGroup: false,
-      title: title.slice(0, 80),
-      kind: DIRECT_CONVERSATION_KIND,
+      kind: "direct",
       participants: {
         create: [{ memberId: requesterId }, { memberId: approverId }],
       },
@@ -65,19 +82,11 @@ export async function notifyRequesterInMailbox(
   payload: ProofBypassPayload,
   deciderId: string,
 ) {
-  const rows = await prisma.message.findMany({
-    where: { kind: "proof_bypass", body: { contains: passId } },
-    select: { conversationId: true },
-  });
-  const conversationIds = [
-    ...new Set(rows.map((row) => row.conversationId).filter((id): id is string => Boolean(id))),
-  ];
-  for (const conversationId of conversationIds) {
-    const member = await prisma.conversationParticipant.findUnique({
-      where: { conversationId_memberId: { conversationId, memberId: deciderId } },
-    });
-    if (!member) continue;
-    await postBypassInbox(conversationId, payload);
-  }
+  const conversationId = await ensureBypassConversation(
+    payload.requesterId,
+    deciderId,
+    "",
+  );
+  await postBypassInbox(conversationId, payload);
   await postBypassToProjectChat(payload, [payload.requesterId]);
 }
