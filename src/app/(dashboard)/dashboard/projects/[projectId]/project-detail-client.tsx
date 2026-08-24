@@ -385,7 +385,7 @@ export function ProjectDetailClient({
   const projectTabs: OverflowTabItem<string>[] = [
     { id: "board", label: "Backlog" },
     { id: "sprints", label: "Active sprint" },
-    { id: "completed", label: "Completed sprints" },
+    { id: "completed", label: "All sprints" },
     { id: "notes", label: "Notes", count: notesCount },
     { id: "assets", label: "Assets", count: assetsCount },
   ];

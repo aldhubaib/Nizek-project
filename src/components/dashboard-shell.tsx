@@ -20,6 +20,7 @@ import { ClientRouteGuard } from "@/components/client-route-guard";
 import { useHideHeaderOnScroll } from "@/hooks/use-hide-header-on-scroll";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { ProofUploadToast } from "@/components/kanban/proof-upload-toast";
+import { SessionKeepAlive } from "@/components/session-keep-alive";
 
 const DESKTOP_BREAKPOINT = 1024;
 
@@ -138,7 +139,8 @@ export function DashboardShell({
       {/* Mobile drawer */}
       {!isDesktop && (
         <div
-          className={`fixed top-0 left-0 w-[220px] h-screen bg-sidebar border-r border-sidebar-border z-[600] transition-transform duration-200 ease-out ${
+          {...(drawerOpen ? { "data-scroll-lock-root": "" } : {})}
+          className={`fixed top-0 left-0 w-[220px] h-screen overflow-y-auto overscroll-contain bg-sidebar border-r border-sidebar-border z-[600] transition-transform duration-200 ease-out ${
             drawerOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
@@ -182,6 +184,7 @@ export function DashboardShell({
         />
       )}
       <ProofUploadToast />
+      <SessionKeepAlive />
       <NotificationSound currentUserId={currentUserId} soundUrl={notificationSoundUrl} />
       <NotificationSync currentUserId={currentUserId} />
       <PushNotifier />

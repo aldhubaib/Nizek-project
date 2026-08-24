@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, Copy, Check, RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
+import { isStaleChunkError } from "@/lib/stale-chunk";
+
+const STALE_RELOAD_KEY = "nizek-stale-chunk-reload";
 
 interface ErrorDisplayProps {
   error: Error & { digest?: string };
@@ -35,8 +38,34 @@ function formatErrorReport(error: Error & { digest?: string }, context?: string)
 export function ErrorDisplay({ error, reset, context }: ErrorDisplayProps) {
   const [copied, setCopied] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const staleChunk = isStaleChunkError(error);
+  const [reloading, setReloading] = useState(staleChunk);
+
+  useEffect(() => {
+    if (!staleChunk || typeof window === "undefined") return;
+    try {
+      if (sessionStorage.getItem(STALE_RELOAD_KEY) === "1") {
+        sessionStorage.removeItem(STALE_RELOAD_KEY);
+        setReloading(false);
+        return;
+      }
+      sessionStorage.setItem(STALE_RELOAD_KEY, "1");
+    } catch {
+      setReloading(false);
+      return;
+    }
+    window.location.reload();
+  }, [staleChunk]);
 
   const report = formatErrorReport(error, context);
+
+  function handleRetry() {
+    if (staleChunk && typeof window !== "undefined") {
+      window.location.reload();
+      return;
+    }
+    reset?.();
+  }
 
   async function handleCopy() {
     try {
@@ -57,6 +86,8 @@ export function ErrorDisplay({ error, reset, context }: ErrorDisplayProps) {
     }
   }
 
+  if (reloading) return null;
+
   return (
     <div className="flex items-center justify-center min-h-[60vh] px-4">
       <div className="w-full max-w-lg">
@@ -72,7 +103,9 @@ export function ErrorDisplay({ error, reset, context }: ErrorDisplayProps) {
           Something went wrong
         </h1>
         <p className="text-center text-s text-muted-foreground mb-6 max-w-sm mx-auto">
-          An unexpected error occurred. Copy the error details below and share them so we can fix it.
+          {staleChunk
+            ? "The app reloaded with an outdated script. Refreshing usually fixes it."
+            : "An unexpected error occurred. Copy the error details below and share them so we can fix it."}
         </p>
 
         {/* Error summary card */}
@@ -144,11 +177,11 @@ export function ErrorDisplay({ error, reset, context }: ErrorDisplayProps) {
         <div className="flex items-center justify-center gap-2">
           {reset && (
             <button
-              onClick={reset}
+              onClick={handleRetry}
               className="inline-flex items-center gap-xs rounded-lg bg-primary text-primary-foreground text-s font-medium px-4 py-2 hover:opacity-90 transition-opacity"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              Try Again
+              {staleChunk ? "Reload" : "Try Again"}
             </button>
           )}
           <button

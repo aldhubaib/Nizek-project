@@ -41,12 +41,16 @@ export function NoteSlideOver({
   }, [mounted, onClose]);
 
   const ui = (
-    <div data-slide-over className="fixed inset-0 z-[200] flex justify-end overflow-hidden overscroll-none">
+    <div
+      data-slide-over
+      data-scroll-lock-root
+      className="fixed inset-0 z-[200] flex justify-end overflow-hidden overscroll-none"
+    >
       <button
         type="button"
         aria-label="Close note"
         onClick={onClose}
-        className="absolute inset-0 hidden touch-none bg-overlay lg:block"
+        className="absolute inset-0 touch-none bg-overlay"
       />
       <div
         className={cn(

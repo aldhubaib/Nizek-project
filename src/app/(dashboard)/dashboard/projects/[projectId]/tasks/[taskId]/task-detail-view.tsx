@@ -223,10 +223,17 @@ export function TaskDetailPage({
   const nextStage = currentStageIndex < STAGES.length - 1 ? STAGES[currentStageIndex + 1] : null;
   const clarificationIndex = STAGES.findIndex((s) => s.id === "CLARIFICATION");
   const isPostClarification = currentStageIndex > clarificationIndex;
+  const isReady = computeIsReadyForTransition(questions, answers);
+  const missingData = taskStage === "NEW_REQUEST" && !isReady;
 
   useEffect(() => {
     if (editingTitle) titleInputRef.current?.focus();
   }, [editingTitle]);
+
+  useEffect(() => {
+    const qs = allQuestions.filter((q) => q.taskType === initialTask.taskType);
+    syncTaskReadiness(initialTask.id, computeIsReadyForTransition(qs, answersRef.current));
+  }, [allQuestions, initialTask.id, initialTask.taskType]);
 
   useEffect(() => {
     if (!showAdminStages) return;
@@ -491,7 +498,7 @@ export function TaskDetailPage({
   );
 
   return (
-    <div className={embedded ? "min-h-0 flex-1 overflow-y-auto overscroll-contain" : "min-h-screen"}>
+    <div className={cn(!embedded && "min-h-screen")}>
       {embedded ? (
         <div className="flex justify-end px-app pt-3">{actionsMenu}</div>
       ) : (
@@ -645,12 +652,12 @@ export function TaskDetailPage({
                   className="cursor-pointer disabled:opacity-50"
                 >
                   <StatusBadge
-                    config={taskStageBadge(taskStage)}
+                    config={taskStageBadge(taskStage, missingData)}
                   />
                 </button>
               ) : (
                 <StatusBadge
-                  config={taskStageBadge(taskStage)}
+                  config={taskStageBadge(taskStage, missingData)}
                 />
               )}
             </div>
@@ -708,8 +715,8 @@ export function TaskDetailPage({
                   return (
                     <div key={q.id} className="relative group space-y-1.5">
                       <label className="text-s font-medium text-muted-foreground px-1">
-                        {i + 1}. {q.question}
-                        {(q.mandatory || q.required) && <span className="text-destructive ms-0.5">*</span>}
+                        {i + 1}.                         {q.question}
+                        {q.type !== "client" && <span className="text-destructive ms-0.5">*</span>}
                       </label>
                       <div className="relative rounded-md border border-border bg-field px-3 py-3">
                         {!isPostClarification && (
@@ -876,7 +883,7 @@ export function TaskDetailPage({
           <div className="flex items-center gap-2 text-s text-muted-foreground">
             Current status:
             <StatusBadge
-              config={taskStageBadge(taskStage)}
+              config={taskStageBadge(taskStage, missingData)}
             />
           </div>
 

@@ -9,6 +9,7 @@ import { uploadFileToR2 } from "@/lib/upload";
 import { useChannel } from "@/components/realtime/hooks";
 import { taskChannel } from "@/lib/channels";
 import { usePasteFiles } from "@/hooks/use-paste-files";
+import { useScrollLock } from "@/hooks/use-scroll-lock";
 
 interface MentionUser {
   id: string;
@@ -74,6 +75,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  useScrollLock(Boolean(lightboxUrl));
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mentionListRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -544,13 +546,13 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
 
       {/* Image lightbox */}
       {lightboxUrl && (
-        <>
+        <div data-scroll-lock-root className="fixed inset-0 z-[950]">
           <div
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[950]"
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             onClick={() => setLightboxUrl(null)}
           />
           <div
-            className="fixed inset-4 z-[951] flex items-center justify-center"
+            className="absolute inset-4 z-[1] flex items-center justify-center"
             onClick={() => setLightboxUrl(null)}
           >
             <div className="relative max-w-full max-h-full">
@@ -578,7 +580,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
               </a>
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

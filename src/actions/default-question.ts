@@ -37,7 +37,7 @@ export async function addDefaultQuestion(data: {
       options: data.options ? JSON.stringify(data.options) : null,
       multiple: data.type === "select" ? (data.multiple ?? false) : false,
       mandatory: data.mandatory ?? false,
-      required: data.required ?? false,
+      required: data.required ?? true,
       order: (maxOrder._max.order ?? 0) + 1,
       taskType,
     },

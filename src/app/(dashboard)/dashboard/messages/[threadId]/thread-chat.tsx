@@ -75,6 +75,7 @@ import {
   type CreateTaskFromMessagePayload,
 } from "@/components/messages/create-task-from-message";
 import { useVisualViewportFrame } from "@/hooks/use-visual-viewport-frame";
+import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import {
   isThreadMuted,
@@ -1196,6 +1197,7 @@ export function ThreadChat({
   const [view, setView] = useState<"chat" | "files" | "important">("chat");
   const [searchOpen, setSearchOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
+  useScrollLock(searchOpen || peopleOpen || view === "files" || view === "important");
   const [importantList, setImportantList] = useState<ImportantMessageDTO[]>([]);
   const [importantLoading, setImportantLoading] = useState(false);
   const pendingFocusRef = useRef<string | null>(focusMessageId ?? null);
@@ -3339,7 +3341,10 @@ export function ThreadChat({
         />
       )}
       {searchOpen && (
-        <div className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80">
+        <div
+          data-scroll-lock-root
+          className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80"
+        >
           <div className="flex app-top-bar-tall shrink-0 items-center gap-2 border-b border-border/60 px-3">
             <Button
               variant="ghost"
@@ -3375,7 +3380,7 @@ export function ThreadChat({
               )}
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {!sq && (
               <div className="px-6 py-10 text-center text-s text-muted-foreground">
                 Search for messages in this conversation.
@@ -3416,7 +3421,10 @@ export function ThreadChat({
         </div>
       )}
       {view === "files" && (
-        <div className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80">
+        <div
+          data-scroll-lock-root
+          className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80"
+        >
           <FilesPanel
             messages={messages.filter((m) => m.attachments.length > 0)}
             onClose={() => setView("chat")}
@@ -3424,7 +3432,10 @@ export function ThreadChat({
         </div>
       )}
       {view === "important" && (
-        <div className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80">
+        <div
+          data-scroll-lock-root
+          className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80"
+        >
           <div className="flex app-top-bar-tall shrink-0 items-center gap-2 border-b border-border/60 px-3">
             <Button
               variant="ghost"
@@ -3437,7 +3448,7 @@ export function ThreadChat({
             </Button>
             <span className="page-name text-foreground">Important</span>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {importantLoading && (
               <div className="flex justify-center py-10">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -3479,7 +3490,10 @@ export function ThreadChat({
       )}
 
       {peopleOpen && isClientRoom && target.projectId && (
-        <div className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80">
+        <div
+          data-scroll-lock-root
+          className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80"
+        >
           <div className="flex app-top-bar-tall shrink-0 items-center gap-2 border-b border-border/60 px-3">
             <Button
               variant="ghost"
@@ -3492,7 +3506,7 @@ export function ThreadChat({
             </Button>
             <span className="page-name text-foreground">People</span>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
             <ClientChatPeopleManager
               projectId={target.projectId}
               enabled

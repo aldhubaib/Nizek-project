@@ -29,6 +29,14 @@ export function isWaitingOnClientAnswer(
   }
 }
 
+/**
+ * Spec fields that decide Backlog vs Missing Data.
+ * Every non-client question must be answered; client questions never block this split.
+ */
+export function isReadinessQuestion(q: { type: string }): boolean {
+  return q.type !== "client";
+}
+
 /** Unassigned NEW_REQUEST work that still has unanswered spec questions. */
 export function isMissingDataTask(task: {
   stage: string;
@@ -42,7 +50,7 @@ export function computeIsReadyForTransition(
   questions: { id: string; type: string; required?: boolean }[],
   answers: Record<string, string>,
 ): boolean {
-  const specQs = questions.filter((q) => q.type !== "client" && q.required !== false);
+  const specQs = questions.filter(isReadinessQuestion);
   const allAnswered = specQs.every((q) => isQuestionAnswerFilled(q.type, answers[q.id]));
   const waitingOnClient = questions.some((q) => isWaitingOnClientAnswer(q.type, answers[q.id]));
   return allAnswered && !waitingOnClient;

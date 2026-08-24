@@ -37,6 +37,15 @@ export function PushNotifier() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
+    // A controlling SW on localhost can keep Turbopack chunks around after a
+    // rebuild ("module factory is not available"). Push belongs in production.
+    if (process.env.NODE_ENV !== "production") {
+      void navigator.serviceWorker.getRegistrations().then((regs) => {
+        for (const reg of regs) void reg.unregister();
+      });
+      return;
+    }
+
     navigator.serviceWorker
       .register("/sw.js")
       .then((r) => {

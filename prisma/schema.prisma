@@ -38,9 +38,11 @@ enum Stage {
 
 enum SprintStatus {
   PLANNED
+  NEXT
   ACTIVE
   COMPLETED
   PARTIALLY_COMPLETED
+  SHIPPED
 }
 
 enum TaskType {

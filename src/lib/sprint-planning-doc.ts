@@ -24,7 +24,7 @@ export function formatPlanningDate(value: Date | string) {
 }
 
 export function sprintPlanningIsLocked(status: string | undefined, isAdmin: boolean) {
-  return Boolean(status) && status !== "PLANNED" && !isAdmin;
+  return Boolean(status) && status !== "PLANNED" && status !== "NEXT" && !isAdmin;
 }
 
 export function planningDateIso(value: Date | string): string {
@@ -200,6 +200,23 @@ export function sprintPlanningTasksMissingRequired(html: string): boolean {
   const tags = html.match(/<div\b[^>]*data-type="sprint-task"[^>]*>/gi) ?? [];
   if (tags.length === 0) return false;
   return tags.some((tag) => attrMissing(tag, "decision") || attrMissing(tag, "risk"));
+}
+
+export function sprintStartBlockedReason(opts: {
+  activeSprintName?: string | null;
+  infoIncomplete: boolean;
+  missingEstimates: boolean;
+  missingAssignees: boolean;
+  docIncomplete: boolean;
+}): string | null {
+  if (opts.activeSprintName) {
+    return `Finish "${opts.activeSprintName}" before starting this sprint.`;
+  }
+  if (opts.infoIncomplete) return "Fill in every Sprint Information field.";
+  if (opts.missingEstimates) return "Add an estimate to every task.";
+  if (opts.missingAssignees) return "Assign every task.";
+  if (opts.docIncomplete) return "Fill in Decision and Risk for every task.";
+  return null;
 }
 
 export function sprintPlanningTasksMissingRisk(html: string): boolean {

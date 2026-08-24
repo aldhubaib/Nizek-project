@@ -15,7 +15,7 @@ import { publish, broadcast, broadcastTaskEvent, taskChannel, projectChannel, us
 import { createAndPublishNotifications } from "@/lib/notify";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import { sendPush } from "@/lib/push";
-import { isQuestionAnswerFilled, isWaitingOnClientAnswer } from "@/lib/task-readiness";
+import { isQuestionAnswerFilled, isReadinessQuestion, isWaitingOnClientAnswer } from "@/lib/task-readiness";
 import { requireUserOnProject } from "@/lib/project-mentions";
 
 // ─── Stage → Role Track ─────────────────────────────────
@@ -381,7 +381,7 @@ export async function moveTask(data: {
       const errors: string[] = [];
 
       const specQuestions = await prisma.defaultQuestion.findMany({
-        where: { taskType: task.taskType, type: { not: "client" }, required: true },
+        where: { taskType: task.taskType, type: { not: "client" } },
         select: { id: true, question: true, type: true },
       });
 
@@ -978,8 +978,7 @@ function fieldsByType(
 ): Map<string, { id: string; type: string }[]> {
   const byType = new Map<string, { id: string; type: string }[]>();
   for (const q of questions) {
-    if (q.type === "client") continue;
-    if (q.required === false) continue;
+    if (!isReadinessQuestion(q)) continue;
     const list = byType.get(q.taskType) ?? [];
     list.push({ id: q.id, type: q.type });
     byType.set(q.taskType, list);
@@ -1022,7 +1021,7 @@ function mapBoardTask(
     sprintCount:
       (task._count.sprintSnapshots ?? 0) +
       ((task.sprintId &&
-        ["PLANNED", "ACTIVE"].includes(
+        ["PLANNED", "NEXT", "ACTIVE"].includes(
           (task.sprint as { status?: string } | null)?.status ?? "",
         ))
         ? 1

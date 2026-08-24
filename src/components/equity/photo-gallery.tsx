@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useScrollLock } from "@/hooks/use-scroll-lock";
 
 export type GalleryPhoto = { id: string; url: string; caption: string | null };
 
@@ -142,10 +143,13 @@ function PhotoLightbox({
     return () => window.removeEventListener("keydown", onKey);
   }, [index, hasPrev, hasNext, onIndex, onClose]);
 
+  useScrollLock(true);
+
   // Straight onto the body: the report sits inside scrolling, stacking panels,
   // and a viewer that covers the page has to escape all of them.
   return createPortal(
     <div
+      data-scroll-lock-root
       className="fixed inset-0 z-[200] flex flex-col bg-black/90"
       onClick={onClose}
     >

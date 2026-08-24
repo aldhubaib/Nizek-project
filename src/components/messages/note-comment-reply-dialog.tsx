@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { Loader2 } from "lucide-react";
 import {
   deleteMeetingNote,
@@ -66,8 +65,6 @@ export function NoteCommentReplyDialog({
       cancelled = true;
     };
   }, [open, noteId]);
-
-  useScrollLock(open);
 
   useEffect(() => {
     if (!open || note) return;

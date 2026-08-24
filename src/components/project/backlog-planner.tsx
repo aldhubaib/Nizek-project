@@ -51,7 +51,7 @@ import {
 import { moveTask as moveTaskAction, updateTask as updateTaskAction } from "@/actions/task";
 import { isMissingDataTask } from "@/lib/task-readiness";
 import { promoteToBacklogBottom } from "@/lib/backlog-placement";
-import { isClosedSprint } from "@/lib/sprint-status";
+import { isClosedSprint, isUnstartedSprint } from "@/lib/sprint-status";
 
 const BACKLOG_ZONE = "backlog";
 const MISSING_ZONE = "missing-data";
@@ -424,7 +424,10 @@ export function BacklogPlanner({
     [sprints],
   );
   const activeSprint = openSprints.find((s) => s.status === "ACTIVE") ?? null;
-  const plannedSprints = openSprints.filter((s) => s.status === "PLANNED");
+  const plannedSprints = openSprints
+    .filter((s) => isUnstartedSprint(s.status))
+    .slice()
+    .sort((a, b) => Number(b.status === "NEXT") - Number(a.status === "NEXT"));
   const completedSprintIds = useMemo(
     () => new Set(sprints.filter((s) => isClosedSprint(s.status)).map((s) => s.id)),
     [sprints],
@@ -662,9 +665,11 @@ export function BacklogPlanner({
           const list = [created, ...prev.filter((s) => s.id !== created.id)];
           const rank: Record<SprintDTO["status"], number> = {
             ACTIVE: 0,
-            PLANNED: 1,
-            COMPLETED: 2,
-            PARTIALLY_COMPLETED: 2,
+            NEXT: 1,
+            PLANNED: 2,
+            COMPLETED: 3,
+            PARTIALLY_COMPLETED: 3,
+            SHIPPED: 4,
           };
           return list.slice().sort((a, b) => rank[a.status] - rank[b.status]);
         });
@@ -718,7 +723,7 @@ export function BacklogPlanner({
         onToggle={() => setCollapsed((c) => ({ ...c, [sprint.id]: !isCollapsed }))}
         actions={
           <>
-            {sprint.status !== "PLANNED" ? (
+            {!isUnstartedSprint(sprint.status) ? (
             <SprintStatusControl
               status={sprint.status}
               endDate={sprint.endDate}
@@ -736,7 +741,7 @@ export function BacklogPlanner({
                 <Play className="size-4" />
               </button>
             ) : null}
-            {canEndSprint && isProjectActive && sprint.status !== "PLANNED" ? (
+            {canEndSprint && isProjectActive && !isUnstartedSprint(sprint.status) ? (
               <button
                 type="button"
                 aria-label={`Open sprint review for ${sprint.name}`}

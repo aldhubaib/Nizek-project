@@ -87,7 +87,11 @@ export default async function RootLayout({
     >
       <body className="min-h-full bg-background text-foreground">
         <div className="app-status-frost" aria-hidden />
-        <ClerkProvider appearance={{ baseTheme: dark }}>
+        <ClerkProvider
+          appearance={{ baseTheme: dark }}
+          afterSignOutUrl="/sign-in"
+          signInFallbackRedirectUrl="/dashboard"
+        >
           <BrandingProvider initialLogos={logos}>
             <DisablePinchZoom />
             <TooltipProvider>{children}</TooltipProvider>

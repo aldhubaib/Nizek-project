@@ -309,7 +309,7 @@ export async function updateMeetingNote(data: {
         user.systemRole === "ADMIN"
           ? getAdminPermissions()
           : getPermissionsFromRole(member.projectRole);
-      if (sprint && sprint.status !== "PLANNED" && !perms.isAdmin) {
+      if (sprint && sprint.status !== "PLANNED" && sprint.status !== "NEXT" && !perms.isAdmin) {
         throw new Error("Sprint planning is locked after the sprint starts. Only an admin can edit it.");
       }
     }

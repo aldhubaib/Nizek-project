@@ -1,11 +1,31 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition, type Dispatch, type SetStateAction, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import {
+  DndContext,
+  PointerSensor,
+  closestCorners,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { ClipboardCheck, MoreHorizontal, Search } from "lucide-react";
 import { SprintStatusControl } from "@/components/project/sprint-status-control";
 import { EstimateBadge, SprintTaskRow, TaskTypeCountSummary } from "@/components/project/sprint-task-row";
-import { deleteSprint, getSprintSnapshots, type SprintDTO, type SprintSnapshotTask } from "@/actions/sprint";
+import {
+  deleteSprint,
+  getSprintSnapshots,
+  setSprintBoardStatus,
+  startSprint,
+  type SprintDTO,
+  type SprintSnapshotTask,
+} from "@/actions/sprint";
 import { CollapsibleSection } from "@/components/project/collapsible-section";
 import {
   DropdownMenu,
@@ -15,11 +35,33 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ConfirmDeleteDialog } from "@/components/equity/confirm-delete-dialog";
 import { Input } from "@/components/ui/input";
-import { isClosedSprint } from "@/lib/sprint-status";
+import {
+  SPRINT_BOARD_COLUMNS,
+  isClosedSprint,
+  sprintBoardColumn,
+  type SprintBoardColumn,
+} from "@/lib/sprint-status";
 import { cn } from "@/lib/utils";
 import { useKanbanStore, type KanbanTask } from "@/store/kanban";
 import { NoteSlideOver } from "@/components/project/note-slide-over";
 import { NoteFullScreenCreate } from "@/components/project/note-full-screen-create";
+
+const COLUMN_IDS = new Set<string>(SPRINT_BOARD_COLUMNS.map((c) => c.id));
+
+const COLUMN_COLOR: Record<SprintBoardColumn, string> = {
+  PLANNED: "bg-muted-foreground",
+  NEXT: "bg-cyan",
+  ACTIVE: "bg-sky",
+  COMPLETED: "bg-orange",
+  SHIPPED: "bg-success",
+};
+
+const columnFirstCollision: CollisionDetection = (args) => {
+  const pointerHits = pointerWithin(args);
+  const columnHit = pointerHits.find((hit) => COLUMN_IDS.has(String(hit.id)));
+  if (columnHit) return [columnHit];
+  return closestCorners(args);
+};
 
 interface Props {
   projectId: string;
@@ -28,6 +70,10 @@ interface Props {
   initialTasks: KanbanTask[];
   canManage: boolean;
   isProjectActive: boolean;
+}
+
+function sprintDragId(id: string) {
+  return `sprint:${id}`;
 }
 
 export function CompletedSprintsTab({
@@ -48,39 +94,45 @@ export function CompletedSprintsTab({
   const updateTask = useKanbanStore((s) => s.updateTask);
   const liveTasks = storeTasks.length > 0 ? storeTasks : initialTasks;
   const [reviewSprint, setReviewSprint] = useState<SprintDTO | null>(null);
+  const [, startTransition] = useTransition();
+  const canDrag = canManage && isProjectActive;
+
   const closeReview = useCallback(() => {
     setReviewSprint(null);
     router.refresh();
   }, [router]);
 
-  const completed = useMemo(
-    () =>
-      sprints
-        .filter((s) => isClosedSprint(s.status))
-        .slice()
-        .sort((a, b) => {
-          const aAt = new Date(a.completedAt ?? a.updatedAt ?? a.endDate).getTime();
-          const bAt = new Date(b.completedAt ?? b.updatedAt ?? b.endDate).getTime();
-          return bAt - aAt;
-        }),
-    [sprints],
-  );
+  const closedCount = sprints.filter((s) => isClosedSprint(s.status)).length;
 
   useEffect(() => {
-    if (completed.length > 0 && snapshots === null) {
+    if (closedCount > 0 && snapshots === null) {
       getSprintSnapshots(projectId).then(setSnapshots);
     }
-  }, [completed.length, projectId, snapshots]);
+  }, [closedCount, projectId, snapshots]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return completed;
-    return completed.filter(
+    if (!q) return sprints;
+    return sprints.filter(
       (sprint) =>
         sprint.name.toLowerCase().includes(q) ||
         (sprint.incompleteReason ?? "").toLowerCase().includes(q),
     );
-  }, [completed, query]);
+  }, [sprints, query]);
+
+  const byColumn = useMemo(() => {
+    const groups: Record<SprintBoardColumn, SprintDTO[]> = {
+      PLANNED: [],
+      NEXT: [],
+      ACTIVE: [],
+      COMPLETED: [],
+      SHIPPED: [],
+    };
+    for (const sprint of filtered) {
+      groups[sprintBoardColumn(sprint.status)].push(sprint);
+    }
+    return groups;
+  }, [filtered]);
 
   function tasksForSprint(sprintId: string): SprintSnapshotTask[] {
     if (snapshots && snapshots[sprintId]) {
@@ -100,6 +152,70 @@ export function CompletedSprintsTab({
         incompleteReason: null,
         assignee: t.assignee ?? null,
       }));
+  }
+
+  function applySprint(next: SprintDTO) {
+    onSprintsChange((prev) => prev.map((s) => (s.id === next.id ? { ...s, ...next } : s)));
+    window.dispatchEvent(new CustomEvent("sprint-status-changed", { detail: next }));
+  }
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || !canDrag) return;
+    const sprintId = String(active.id).startsWith("sprint:")
+      ? String(active.id).slice("sprint:".length)
+      : "";
+    const sprint = sprints.find((s) => s.id === sprintId);
+    if (!sprint) return;
+
+    let columnId = String(over.id);
+    if (columnId.startsWith("sprint:")) {
+      const other = sprints.find((s) => s.id === columnId.slice("sprint:".length));
+      if (!other) return;
+      columnId = sprintBoardColumn(other.status);
+    }
+    if (!COLUMN_IDS.has(columnId)) return;
+    const column = columnId as SprintBoardColumn;
+    if (sprintBoardColumn(sprint.status) === column) return;
+
+    const previous = sprint;
+    setError(null);
+
+    if (column === "ACTIVE") {
+      applySprint({ ...sprint, status: "ACTIVE" });
+      startTransition(async () => {
+        try {
+          applySprint(await startSprint(sprint.id));
+          router.refresh();
+        } catch (err) {
+          applySprint(previous);
+          setError(err instanceof Error ? err.message : "Could not start sprint");
+        }
+      });
+      return;
+    }
+
+    if (column === "COMPLETED" && sprint.status === "ACTIVE") {
+      setError("Complete the sprint from the review or backlog first.");
+      return;
+    }
+
+    const optimisticStatus =
+      column === "COMPLETED"
+        ? (sprint.incompleteReason ? "PARTIALLY_COMPLETED" : "COMPLETED")
+        : column;
+    applySprint({ ...sprint, status: optimisticStatus });
+    startTransition(async () => {
+      try {
+        applySprint(await setSprintBoardStatus(sprint.id, column));
+        router.refresh();
+      } catch (err) {
+        applySprint(previous);
+        setError(err instanceof Error ? err.message : "Could not move sprint");
+      }
+    });
   }
 
   async function confirmDelete(typed: string) {
@@ -122,12 +238,12 @@ export function CompletedSprintsTab({
     router.refresh();
   }
 
-  if (completed.length === 0) {
+  if (sprints.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-center">
-        <p className="text-s text-muted-foreground">No completed sprints</p>
+        <p className="text-s text-muted-foreground">No sprints yet</p>
         <p className="text-xs text-muted-foreground">
-          Complete a sprint from the Backlog to see it here.
+          Create a sprint from the Backlog to see it here.
         </p>
       </div>
     );
@@ -140,108 +256,56 @@ export function CompletedSprintsTab({
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search completed sprints"
+          placeholder="Search sprints"
           className="pl-8"
-          aria-label="Search completed sprints"
+          aria-label="Search sprints"
         />
       </div>
 
       {error ? <p className="text-s text-destructive">{error}</p> : null}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-8">
-        {filtered.length === 0 ? (
-          <p className="px-2 py-10 text-center text-s text-muted-foreground">
-            No sprints match "{query.trim()}".
-          </p>
-        ) : (
-          filtered.map((sprint) => {
-            const items = tasksForSprint(sprint.id);
-            const isCollapsed = collapsed[sprint.id] ?? true;
-
-            const typeSummary = <TaskTypeCountSummary tasks={items} />;
-
-            return (
-              <CollapsibleSection
-                key={sprint.id}
-                title={sprint.name}
-                extra={typeSummary}
-                collapsed={isCollapsed}
-                onToggle={() =>
-                  setCollapsed((c) => ({ ...c, [sprint.id]: !isCollapsed }))
-                }
-                actions={
-                  <>
-                    <SprintStatusControl
-                      status={sprint.status}
-                      endDate={sprint.endDate}
-                    />
-                    <button
-                      type="button"
-                      aria-label={`Open sprint review for ${sprint.name}`}
-                      title="Sprint review"
-                      onClick={() => setReviewSprint(sprint)}
-                      className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    >
-                      <ClipboardCheck className="size-4" />
-                    </button>
-                    {canManage && isProjectActive ? (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        aria-label="Sprint options"
-                        className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      >
-                        <MoreHorizontal className="size-4" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onClick={() => setDeletingSprint(sprint)}
-                        >
-                          Delete sprint
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    ) : null}
-                  </>
-                }
-              >
-                {items.length === 0 ? (
-                  <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-                    No tasks recorded for this sprint.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {items.map((task) => (
-                      <div key={task.id} className="space-y-1.5">
-                        <SprintTaskRow
-                          task={task}
-                          missingData={false}
-                          extra={
-                            task.estimatedMinutes != null && task.estimatedMinutes > 0 ? (
-                              <EstimateBadge minutes={task.estimatedMinutes} />
-                            ) : null
-                          }
-                          onClick={() =>
-                            router.push(`/dashboard/projects/${projectId}/tasks/${task.taskId}`)
-                          }
-                        />
-                        {task.incompleteReason ? (
-                          <p className="rounded-lg border border-border/60 bg-surface/60 px-3 py-2 text-s leading-relaxed text-muted-foreground">
-                            <span className="mb-0.5 block text-xs font-medium uppercase tracking-wider">
-                              Incomplete because
-                            </span>
-                            <span className="text-foreground">{task.incompleteReason}</span>
-                          </p>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CollapsibleSection>
-            );
-          })
-        )}
-      </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={columnFirstCollision}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-4">
+          {SPRINT_BOARD_COLUMNS.map((column) => (
+            <SprintColumn
+              key={column.id}
+              column={column}
+              sprints={byColumn[column.id]}
+              emptyLabel={
+                query.trim()
+                  ? `No sprints match "${query.trim()}".`
+                  : "Drop a sprint here."
+              }
+            >
+              {byColumn[column.id].map((sprint) => {
+                const items = tasksForSprint(sprint.id);
+                const isCollapsed = collapsed[sprint.id] ?? true;
+                return (
+                  <SprintBoardCard
+                    key={sprint.id}
+                    sprint={sprint}
+                    items={items}
+                    collapsed={isCollapsed}
+                    canDrag={canDrag}
+                    canManage={canManage}
+                    isProjectActive={isProjectActive}
+                    projectId={projectId}
+                    onToggle={() =>
+                      setCollapsed((c) => ({ ...c, [sprint.id]: !isCollapsed }))
+                    }
+                    onReview={() => setReviewSprint(sprint)}
+                    onDelete={() => setDeletingSprint(sprint)}
+                  />
+                );
+              })}
+            </SprintColumn>
+          ))}
+        </div>
+      </DndContext>
     {deletingSprint ? (
       <ConfirmDeleteDialog
         key={deletingSprint.id}
@@ -272,6 +336,157 @@ export function CompletedSprintsTab({
         />
       </NoteSlideOver>
     ) : null}
+    </div>
+  );
+}
+
+function SprintColumn({
+  column,
+  sprints,
+  emptyLabel,
+  children,
+}: {
+  column: (typeof SPRINT_BOARD_COLUMNS)[number];
+  sprints: SprintDTO[];
+  emptyLabel: string;
+  children: ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex w-[min(100%,18rem)] shrink-0 flex-col rounded-lg border border-border/50 bg-muted/30 lg:min-h-0 lg:flex-1 lg:basis-0",
+        isOver && "border-success/60 bg-success/5",
+      )}
+    >
+      <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2.5">
+        <div className={cn("h-2.5 w-2.5 rounded-full", COLUMN_COLOR[column.id])} />
+        <h3 className="text-s font-medium">{column.label}</h3>
+        <span className="text-s text-muted-foreground">{sprints.length}</span>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
+        {sprints.length === 0 ? (
+          <p className="px-1 py-6 text-center text-xs text-muted-foreground">{emptyLabel}</p>
+        ) : (
+          children
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SprintBoardCard({
+  sprint,
+  items,
+  collapsed,
+  canDrag,
+  canManage,
+  isProjectActive,
+  projectId,
+  onToggle,
+  onReview,
+  onDelete,
+}: {
+  sprint: SprintDTO;
+  items: SprintSnapshotTask[];
+  collapsed: boolean;
+  canDrag: boolean;
+  canManage: boolean;
+  isProjectActive: boolean;
+  projectId: string;
+  onToggle: () => void;
+  onReview: () => void;
+  onDelete: () => void;
+}) {
+  const router = useRouter();
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: sprintDragId(sprint.id),
+    disabled: !canDrag,
+  });
+  const style = transform
+    ? { transform: CSS.Translate.toString(transform) }
+    : undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className={cn(isDragging && "opacity-60")}
+    >
+      <CollapsibleSection
+        title={sprint.name}
+        extra={<TaskTypeCountSummary tasks={items} />}
+        collapsed={collapsed}
+        onToggle={onToggle}
+        actions={
+          <>
+            <SprintStatusControl status={sprint.status} endDate={sprint.endDate} />
+            <button
+              type="button"
+              aria-label={`Open sprint review for ${sprint.name}`}
+              title="Sprint review"
+              onClick={onReview}
+              className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ClipboardCheck className="size-4" />
+            </button>
+            {canManage && isProjectActive ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label="Sprint options"
+                  className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <MoreHorizontal className="size-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={onDelete}
+                  >
+                    Delete sprint
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+          </>
+        }
+      >
+        {items.length === 0 ? (
+          <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+            No tasks recorded for this sprint.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {items.map((task) => (
+              <div key={task.id} className="space-y-1.5">
+                <SprintTaskRow
+                  task={task}
+                  missingData={false}
+                  extra={
+                    task.estimatedMinutes != null && task.estimatedMinutes > 0 ? (
+                      <EstimateBadge minutes={task.estimatedMinutes} />
+                    ) : null
+                  }
+                  onClick={() =>
+                    router.push(`/dashboard/projects/${projectId}/tasks/${task.taskId}`)
+                  }
+                />
+                {task.incompleteReason ? (
+                  <p className="rounded-lg border border-border/60 bg-surface/60 px-3 py-2 text-s leading-relaxed text-muted-foreground">
+                    <span className="mb-0.5 block text-xs font-medium uppercase tracking-wider">
+                      Incomplete because
+                    </span>
+                    <span className="text-foreground">{task.incompleteReason}</span>
+                  </p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </CollapsibleSection>
     </div>
   );
 }

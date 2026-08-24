@@ -71,9 +71,11 @@ export function stageLabel(stage: string | null | undefined, missingData = false
 
 export const SPRINT_STATUS_BADGE: Record<string, { label: string; color: string; bg: string }> = {
   PLANNED: outlineBadge("Planned", "text-muted-foreground", "border-muted-foreground/30"),
-  ACTIVE: outlineBadge("Active", "text-success", "border-success/30"),
+  NEXT: outlineBadge("Next", "text-cyan", "border-cyan/30"),
+  ACTIVE: outlineBadge("In progress", "text-success", "border-success/30"),
   COMPLETED: outlineBadge("Completed", "text-success", "border-success/30"),
   PARTIALLY_COMPLETED: outlineBadge("Partially completed", "text-orange", "border-orange/30"),
+  SHIPPED: outlineBadge("Shipped", "text-success", "border-success/30"),
 };
 
 export function sprintStatusBadge(status: string) {
@@ -85,7 +87,14 @@ export function sprintStatusBadge(status: string) {
 
 export function sprintTabForStatus(status: string): "board" | "sprints" | "completed" {
   if (status === "ACTIVE") return "sprints";
-  if (status === "COMPLETED" || status === "PARTIALLY_COMPLETED") return "completed";
+  if (
+    status === "COMPLETED" ||
+    status === "PARTIALLY_COMPLETED" ||
+    status === "SHIPPED" ||
+    status === "NEXT"
+  ) {
+    return "completed";
+  }
   return "board";
 }
 

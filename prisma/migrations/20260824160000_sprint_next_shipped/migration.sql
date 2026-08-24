@@ -1,0 +1,2 @@
+ALTER TYPE "SprintStatus" ADD VALUE 'NEXT';
+ALTER TYPE "SprintStatus" ADD VALUE 'SHIPPED';

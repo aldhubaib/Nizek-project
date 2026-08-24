@@ -280,7 +280,7 @@ export function DefaultQuestionsManager({ questions }: Props) {
   const [newMultiple, setNewMultiple] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newMandatory, setNewMandatory] = useState(false);
-  const [newRequired, setNewRequired] = useState(false);
+  const [newRequired, setNewRequired] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [editOptions, setEditOptions] = useState("");
@@ -338,7 +338,7 @@ export function DefaultQuestionsManager({ questions }: Props) {
       setNewType("text");
       setNewMultiple(false);
       setNewMandatory(false);
-      setNewRequired(false);
+      setNewRequired(true);
     } catch (err) {
       console.error(err);
     } finally {

@@ -10,7 +10,7 @@ import {
 } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import type { SprintStatus } from "@/generated/prisma/client";
-import { isClosedSprint } from "@/lib/sprint-status";
+import { isClosedSprint, isCurrentSprintStatus, isUnstartedSprint, type SprintBoardColumn } from "@/lib/sprint-status";
 import { taskCode } from "@/lib/task-label";
 import { countWorkingDays } from "@/lib/working-days";
 import { logTaskActivity } from "@/lib/activity";
@@ -110,7 +110,7 @@ async function requireSprintAction(projectId: string, action: SprintAction) {
 }
 
 function assertCanEditStartedPlanning(isAdmin: boolean, status: string | undefined) {
-  if (status && status !== "PLANNED" && !isAdmin) {
+  if (status && !isUnstartedSprint(status) && !isAdmin) {
     throw new Error("Sprint planning is locked after the sprint starts. Only an admin can edit it.");
   }
 }
@@ -157,9 +157,11 @@ export async function listSprints(projectId: string): Promise<SprintDTO[]> {
   });
   const rank: Record<SprintStatus, number> = {
     ACTIVE: 0,
-    PLANNED: 1,
-    COMPLETED: 2,
-    PARTIALLY_COMPLETED: 2,
+    NEXT: 1,
+    PLANNED: 2,
+    COMPLETED: 3,
+    PARTIALLY_COMPLETED: 3,
+    SHIPPED: 4,
   };
   return sprints
     .slice()
@@ -233,11 +235,61 @@ export async function updateSprint(data: {
   return serializeSprint(sprint);
 }
 
+export async function setSprintBoardStatus(
+  sprintId: string,
+  column: SprintBoardColumn,
+): Promise<SprintDTO> {
+  const existing = await prisma.sprint.findUnique({ where: { id: sprintId } });
+  if (!existing) throw new Error("Sprint not found");
+  await requireSprintEditor(existing.projectId);
+
+  const from = existing.status;
+  let next: SprintStatus | null = null;
+
+  if (column === "PLANNED" || column === "NEXT") {
+    if (!isUnstartedSprint(from)) {
+      throw new Error("Only unstarted sprints can move between Planned and Next");
+    }
+    next = column;
+  } else if (column === "SHIPPED") {
+    if (from !== "COMPLETED" && from !== "PARTIALLY_COMPLETED" && from !== "SHIPPED") {
+      throw new Error("Ship a sprint after it is completed");
+    }
+    next = "SHIPPED";
+  } else if (column === "COMPLETED") {
+    if (from !== "SHIPPED" && from !== "COMPLETED" && from !== "PARTIALLY_COMPLETED") {
+      throw new Error("Complete the active sprint before moving it here");
+    }
+    next = from === "PARTIALLY_COMPLETED" || existing.incompleteReason
+      ? "PARTIALLY_COMPLETED"
+      : "COMPLETED";
+  } else {
+    throw new Error("Start the sprint to move it to In Progress");
+  }
+
+  if (!next) throw new Error("Could not move sprint");
+  if (next === from) {
+    const current = await prisma.sprint.findUniqueOrThrow({
+      where: { id: sprintId },
+      select: SPRINT_SELECT,
+    });
+    return serializeSprint(current);
+  }
+
+  const sprint = await prisma.sprint.update({
+    where: { id: sprintId },
+    data: { status: next },
+    select: SPRINT_SELECT,
+  });
+  revalidatePath(`/dashboard/projects/${existing.projectId}`);
+  return serializeSprint(sprint);
+}
+
 export async function startSprint(sprintId: string): Promise<SprintDTO> {
   const existing = await prisma.sprint.findUnique({ where: { id: sprintId } });
   if (!existing) throw new Error("Sprint not found");
   await requireSprintAction(existing.projectId, "start");
-  if (existing.status !== "PLANNED") throw new Error("Only a planned sprint can be started");
+  if (!isUnstartedSprint(existing.status)) throw new Error("Only a planned sprint can be started");
 
   const otherActive = await prisma.sprint.findFirst({
     where: { projectId: existing.projectId, status: "ACTIVE" },
@@ -494,7 +546,7 @@ export async function getSprintSnapshots(
   await requireProjectMember(projectId);
 
   const completedSprints = await prisma.sprint.findMany({
-    where: { projectId, status: { in: ["COMPLETED", "PARTIALLY_COMPLETED"] } },
+    where: { projectId, status: { in: ["COMPLETED", "PARTIALLY_COMPLETED", "SHIPPED"] } },
     select: { id: true },
   });
 
@@ -556,6 +608,7 @@ export async function getSprintPlanningTasks(sprintId: string): Promise<{
   status: string;
   tasks: SprintPlanningTask[];
   info: SprintPlanningInfo;
+  activeSprintName: string | null;
 }> {
   const sprint = await prisma.sprint.findUnique({
     where: { id: sprintId },
@@ -577,6 +630,11 @@ export async function getSprintPlanningTasks(sprintId: string): Promise<{
   if (!sprint) throw new Error("Sprint not found");
   await requireProjectMember(sprint.projectId);
 
+  const otherActive = await prisma.sprint.findFirst({
+    where: { projectId: sprint.projectId, status: "ACTIVE", id: { not: sprintId } },
+    select: { name: true },
+  });
+
   const questions = await prisma.defaultQuestion.findMany({
     orderBy: { order: "asc" },
   });
@@ -593,7 +651,7 @@ export async function getSprintPlanningTasks(sprintId: string): Promise<{
       estimatedMinutes: task.estimatedMinutes,
       sprintCount:
         (task._count.sprintSnapshots ?? 0) +
-        (task.sprint && ["PLANNED", "ACTIVE"].includes(task.sprint.status) ? 1 : 0),
+        (task.sprint && isCurrentSprintStatus(task.sprint.status) ? 1 : 0),
       assignee: task.assignee,
       unplanned: task.unplannedInSprint,
       questions: typed.map((q) => ({
@@ -607,6 +665,7 @@ export async function getSprintPlanningTasks(sprintId: string): Promise<{
     sprintName: sprint.name,
     status: sprint.status,
     tasks,
+    activeSprintName: otherActive?.name ?? null,
     info: {
       sprintId: sprint.id,
       sprintName: sprint.name,

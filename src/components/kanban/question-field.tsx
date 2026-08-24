@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
+import { useScrollLock } from "@/hooks/use-scroll-lock";
 
 function Lightbox({
   images,
@@ -43,8 +44,14 @@ function Lightbox({
     return () => window.removeEventListener("keydown", handleKey);
   }, [currentIndex, hasPrev, hasNext, onClose, onChange]);
 
+  useScrollLock(true);
+
   return (
-    <div className="fixed inset-0 z-[200] flex flex-col bg-black/90" onClick={onClose}>
+    <div
+      data-scroll-lock-root
+      className="fixed inset-0 z-[200] flex flex-col bg-black/90"
+      onClick={onClose}
+    >
       {/* Top bar */}
       <div
         className="flex items-center justify-between px-5 py-3 shrink-0"

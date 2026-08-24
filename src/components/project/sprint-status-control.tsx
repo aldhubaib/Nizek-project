@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, CircleDashed, Play } from "lucide-react";
+import { CheckCircle2, CircleDashed, Play, Ship } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isClosedSprint } from "@/lib/sprint-status";
 
@@ -38,6 +38,18 @@ export function SprintStatusControl({
 }: Props) {
   const iconBtn =
     "grid size-8 shrink-0 place-items-center rounded-lg transition-colors disabled:pointer-events-none disabled:opacity-40";
+
+  if (status === "SHIPPED") {
+    return (
+      <span
+        className={cn(iconBtn, "text-success")}
+        title="Shipped"
+        aria-label="Shipped"
+      >
+        <Ship className="size-4" />
+      </span>
+    );
+  }
 
   if (isClosedSprint(status)) {
     const partial = status === "PARTIALLY_COMPLETED";
@@ -89,7 +101,10 @@ export function SprintStatusControl({
 
   if (!onStart) {
     return (
-      <span className={cn(iconBtn, "text-muted-foreground")} title="Planned">
+      <span
+        className={cn(iconBtn, "text-muted-foreground")}
+        title={status === "NEXT" ? "Next" : "Planned"}
+      >
         <Play className="size-4" />
       </span>
     );

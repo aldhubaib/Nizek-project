@@ -67,7 +67,17 @@ async function fetchVersionJson(): Promise<unknown | null> {
   return res.json();
 }
 
+async function touchClerkSession() {
+  try {
+    const clerk = (window as unknown as { Clerk?: { session?: { touch: () => Promise<unknown> } } }).Clerk;
+    if (clerk?.session) await clerk.session.touch();
+  } catch {
+    // Best-effort: if Clerk isn't available the reload still proceeds.
+  }
+}
+
 async function hardNavigate(target: AppRelease) {
+  await touchClerkSession();
   await clearAppCaches();
   window.location.replace(withCacheBust(window.location.href, target.version));
 }

@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
 import { stageLabel, outlineBadge } from "@/lib/task-label";
 import { usePasteFiles } from "@/hooks/use-paste-files";
+import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { ClientChatPeopleManager } from "@/components/messages/client-chat-people";
 
 interface Team {
@@ -98,6 +99,7 @@ export function ProjectSettingsOverlay({
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<"general" | "archive">("general");
+  useScrollLock(true);
 
   useEffect(() => {
     void getRoles()
@@ -195,7 +197,7 @@ export function ProjectSettingsOverlay({
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-background flex flex-col">
+    <div data-scroll-lock-root className="fixed inset-0 z-[9999] flex flex-col bg-background">
       <div className="flex app-top-bar items-center justify-between border-b border-border shrink-0">
         <div className="flex items-center gap-3">
           <button onClick={onClose} className="flex items-center gap-xs text-muted-foreground hover:text-foreground transition-colors text-s">
@@ -234,7 +236,7 @@ export function ProjectSettingsOverlay({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {activeTab === "archive" ? (
           <ArchiveTab projectId={project.id} isAdmin={isAdmin} />
         ) : (

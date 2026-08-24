@@ -16,6 +16,12 @@ const isUploadRoute = createRouteMatcher(["/api/upload(.*)"]);
 export default clerkMiddleware(async (auth, request) => {
   if (isUploadRoute(request)) return;
   if (!isPublicRoute(request)) {
+    const { userId } = await auth();
+    if (!userId) {
+      console.warn(
+        `[auth] unauthenticated access to ${request.nextUrl.pathname} — redirecting to sign-in`,
+      );
+    }
     await auth.protect();
   }
 });

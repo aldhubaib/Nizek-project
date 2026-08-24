@@ -84,6 +84,7 @@ export function Lightbox({
 
   return (
     <div
+      data-scroll-lock-root
       className="fixed inset-0 z-50 flex flex-col bg-black/90 backdrop-blur-sm"
       onClick={onClose}
       role="dialog"
@@ -408,7 +409,7 @@ export function FilesPanel({
           </button>
         ))}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
         {items.length === 0 ? (
           <div className="py-16 text-center text-s text-muted-foreground">
             No {filter === "all" ? "files" : filter + "s"} shared yet.

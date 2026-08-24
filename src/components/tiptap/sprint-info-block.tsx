@@ -13,6 +13,7 @@ import { useKanbanStore } from "@/store/kanban";
 import {
   formatPlanningDate,
   normalizeSprintPlanningInfo,
+  sprintStartBlockedReason,
   type SprintPlanningInfo,
   type SprintPlanningTask,
 } from "@/lib/sprint-planning-doc";
@@ -46,6 +47,10 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
   const [tasks, setTasks] = useState<SprintPlanningTask[]>([]);
   const [counts, setCounts] = useState({ completed: 0, incomplete: 0, unplanned: 0 });
   const [docIncomplete, setDocIncomplete] = useState(false);
+  const [missingEstimates, setMissingEstimates] = useState(false);
+  const [missingAssignees, setMissingAssignees] = useState(false);
+  const [activeSprintName, setActiveSprintName] = useState<string | null>(null);
+  const tasksRef = useRef<SprintPlanningTask[]>([]);
   const [, startTransition] = useTransition();
   const persistTimer = useRef<number | null>(null);
   const workingDaysTimer = useRef<number | null>(null);
@@ -63,12 +68,17 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
           if (cancelled) return;
           setStatus(data.status);
           setSprintName(data.sprintName);
+          if ("activeSprintName" in data) {
+            setActiveSprintName(data.activeSprintName ?? null);
+          }
           if ("tasks" in data) {
             setTasks(data.tasks);
+            tasksRef.current = data.tasks;
             return;
           }
           const all = [...data.completed, ...data.incomplete];
           setTasks(all);
+          tasksRef.current = all;
           setCounts({
             completed: data.completed.length,
             incomplete: data.incomplete.length,
@@ -88,12 +98,18 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
   useEffect(() => {
     function scan() {
       let missing = false;
+      let missingEst = false;
+      let missingAsg = false;
       let completed = 0;
       let incomplete = 0;
       let unplanned = 0;
       const review = info?.variant === "review";
+      const liveById = new Map(tasksRef.current.map((task) => [task.id, task]));
       editor.state.doc.descendants((node) => {
         if (node.type.name !== "sprintTask") return;
+        const task = node.attrs.task as SprintPlanningTask | null;
+        if (!task?.id) return;
+        const live = liveById.get(task.id);
         if (review) {
           if (node.attrs.variant === "incomplete") {
             incomplete += 1;
@@ -101,14 +117,17 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
           } else if (node.attrs.variant === "completed") {
             completed += 1;
           }
-          const task = node.attrs.task as { unplanned?: boolean } | null;
-          if (task?.unplanned) unplanned += 1;
+          if (task.unplanned || live?.unplanned) unplanned += 1;
           return;
         }
         if (!String(node.attrs.decision ?? "").trim()) missing = true;
         if (!String(node.attrs.risk ?? "").trim()) missing = true;
+        if (!(task.estimatedMinutes || live?.estimatedMinutes)) missingEst = true;
+        if (!(task.assignee || live?.assignee)) missingAsg = true;
       });
       setDocIncomplete(missing);
+      setMissingEstimates(missingEst);
+      setMissingAssignees(missingAsg);
       if (review) setCounts({ completed, incomplete, unplanned });
     }
     scan();
@@ -116,7 +135,7 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
     return () => {
       editor.off("update", scan);
     };
-  }, [editor, info?.variant]);
+  }, [editor, info?.variant, tasks]);
 
   if (!info) return null;
 
@@ -132,7 +151,7 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
   };
   const allowStart = sprintOpts.getCanStartSprint?.() ?? sprintOpts.canStartSprint ?? sprintOpts.getIsAdmin?.() ?? sprintOpts.isAdmin ?? false;
   const allowEnd = sprintOpts.getCanEndSprint?.() ?? sprintOpts.canEndSprint ?? sprintOpts.getIsAdmin?.() ?? sprintOpts.isAdmin ?? false;
-  const canStart = allowStart && !isReview && Boolean(info.sprintId) && status === "PLANNED";
+  const canStart = allowStart && !isReview && Boolean(info.sprintId) && (status === "PLANNED" || status === "NEXT");
   const canEnd = allowEnd && isReview && Boolean(info.sprintId) && status === "ACTIVE";
   const documentDateEmpty = !info.documentDateIso;
   const startEmpty = !info.startIso;
@@ -140,19 +159,15 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
   const workingDaysEmpty =
     info.workingDays === "" || info.workingDays == null || Number(info.workingDays) < 1;
   const infoIncomplete = documentDateEmpty || startEmpty || endEmpty || workingDaysEmpty;
-  const missingEstimates = tasks.some((task) => !task.estimatedMinutes);
-  const missingAssignees = tasks.some((task) => !task.assignee);
   const startBlockedReason = !canStart
     ? null
-    : infoIncomplete
-      ? "Fill in every Sprint Information field."
-      : missingEstimates
-        ? "Add an estimate to every task."
-        : missingAssignees
-          ? "Assign every task."
-          : docIncomplete
-            ? "Fill in Decision and Risk for every task."
-            : null;
+    : sprintStartBlockedReason({
+        activeSprintName,
+        infoIncomplete,
+        missingEstimates,
+        missingAssignees,
+        docIncomplete,
+      });
   const startBlocked = Boolean(startBlockedReason);
   const endBlockedReason = !canEnd
     ? null
@@ -224,28 +239,30 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
       const data = await getSprintPlanningTasks(info.sprintId);
       setStatus(data.status);
       setSprintName(data.sprintName);
-      if (data.status !== "PLANNED") return;
-      if (infoIncomplete) {
-        setError("Fill in every Sprint Information field.");
-        return;
-      }
-      if (data.tasks.some((task) => !task.estimatedMinutes)) {
-        setError("Add an estimate to every task before starting the sprint.");
-        return;
-      }
-      if (data.tasks.some((task) => !task.assignee)) {
-        setError("Assign every task before starting the sprint.");
-        return;
-      }
-      let missingRequired = false;
-      editor.state.doc.descendants((node) => {
-        if (node.type.name !== "sprintTask") return;
-        const decision = String(node.attrs.decision ?? "").trim();
-        const risk = String(node.attrs.risk ?? "").trim();
-        if (!decision || !risk) missingRequired = true;
+      setActiveSprintName(data.activeSprintName);
+      setTasks(data.tasks);
+      tasksRef.current = data.tasks;
+      if (data.status !== "PLANNED" && data.status !== "NEXT") return;
+      const reason = sprintStartBlockedReason({
+        activeSprintName: data.activeSprintName,
+        infoIncomplete,
+        missingEstimates: data.tasks.some((task) => !task.estimatedMinutes),
+        missingAssignees: data.tasks.some((task) => !task.assignee),
+        docIncomplete: (() => {
+          let missingRequired = false;
+          editor.state.doc.descendants((node) => {
+            if (node.type.name !== "sprintTask") return;
+            const task = node.attrs.task as SprintPlanningTask | null;
+            if (!task?.id) return;
+            const decision = String(node.attrs.decision ?? "").trim();
+            const risk = String(node.attrs.risk ?? "").trim();
+            if (!decision || !risk) missingRequired = true;
+          });
+          return missingRequired;
+        })(),
       });
-      if (missingRequired) {
-        setError("Fill in Decision and Risk for every sprint task.");
+      if (reason) {
+        setError(reason);
         return;
       }
       setConfirmOpen(true);
@@ -365,7 +382,7 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
       className="not-prose my-10"
     >
       {canStart ? (
-        <div className="mb-8">
+        <div className="mb-8 space-y-2">
           <Button
             type="button"
             size="sm"
@@ -376,6 +393,9 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
             <Play className="size-3.5" />
             {starting ? "Starting…" : "Start sprint"}
           </Button>
+          {startBlockedReason ? (
+            <p className="text-s text-muted-foreground">{startBlockedReason}</p>
+          ) : null}
         </div>
       ) : null}
       {canEnd ? (
