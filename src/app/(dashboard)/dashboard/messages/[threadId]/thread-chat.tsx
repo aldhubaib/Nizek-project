@@ -872,7 +872,7 @@ const MessageRow = memo(function MessageRow({
             )}
           </div>
         )}
-        <div className={cn("relative flex max-w-[70%] flex-col gap-xs", mine && "items-end")}>
+        <div className={cn("relative flex min-w-0 max-w-[70%] flex-col gap-xs", mine ? "items-end" : "items-start")}>
           {selected && (
             <div
               className={cn(
@@ -902,15 +902,30 @@ const MessageRow = memo(function MessageRow({
           {(replied || m.body || (m.task && showTaskCard) || editing) && (() => {
             const notice = (!!m.task && showTaskCard) || m.kind === "rejection";
             const blue = mine && !notice;
-            const replyOnly =
-              Boolean(replied) && !m.body && !editing && !(m.task && showTaskCard);
+            const hasBubble = Boolean(m.body || (m.task && showTaskCard) || editing);
             return (
+            <div
+              className={cn(
+                "flex min-w-0 max-w-full flex-col gap-1",
+                mine ? "items-end" : "items-start",
+              )}
+            >
+              {replied && (
+                <ReplyContext
+                  authorLabel={
+                    replied.authorId === currentMemberId ? "You" : replied.authorName
+                  }
+                  body={replied.body}
+                  attachments={replied.attachments}
+                  mine={mine}
+                  onClick={() => scrollToMessage(m.replyToId!)}
+                />
+              )}
+              {hasBubble && (
             <div className="group relative">
               <div
                 className={cn(
-                  "flex max-w-full flex-col text-s leading-relaxed",
-                  replied ? "gap-1.5" : "gap-xs",
-                  replied && "min-w-[13.5rem]",
+                  "flex max-w-full flex-col gap-xs text-s leading-relaxed",
                   notice
                     ? "min-w-64 rounded-xl border border-border/60 bg-surface-2/80 p-2.5 text-foreground"
                     : "rounded-2xl px-3.5 py-2",
@@ -920,17 +935,6 @@ const MessageRow = memo(function MessageRow({
                       : "rounded-bl-md bg-surface-2 text-foreground"),
                 )}
               >
-                {replied && (
-                  <ReplyContext
-                    authorLabel={
-                      replied.authorId === currentMemberId ? "You" : replied.authorName
-                    }
-                    body={replied.body}
-                    attachments={replied.attachments}
-                    mine={blue}
-                    onClick={() => scrollToMessage(m.replyToId!)}
-                  />
-                )}
                 {m.task && showTaskCard && (
                   <Link
                     href={`/dashboard/projects/${m.task.projectId}/tasks/${m.task.id}`}
@@ -1028,21 +1032,24 @@ const MessageRow = memo(function MessageRow({
                     </div>
                   ))
                 )}
-                {replyOnly && imageAtts.length === 0 && fileAtts.length === 0 && (
-                  <div className="flex justify-end">
-                    <MessageMeta
-                      createdAt={m.createdAt}
-                      edited={m.edited}
-                      mine={mine}
-                      blue={blue}
-                      peerLastReadAt={peerLastReadAt}
-                      important={m.important}
-                    />
-                  </div>
-                )}
               </div>
               {/* Desktop only — WhatsApp hover ⋮. Mobile uses selection header. */}
               <MessageCaret mine={mine} {...actionHandlers} />
+            </div>
+              )}
+              {replied &&
+                !hasBubble &&
+                imageAtts.length === 0 &&
+                fileAtts.length === 0 && (
+                  <MessageMeta
+                    createdAt={m.createdAt}
+                    edited={m.edited}
+                    mine={mine}
+                    blue={false}
+                    peerLastReadAt={peerLastReadAt}
+                    important={m.important}
+                  />
+                )}
             </div>
             );
           })()}
@@ -3714,12 +3721,7 @@ function OutboxBubble({
           </div>
         )}
         {(entry.body || replied) && (
-          <div
-            className={cn(
-              "flex max-w-full flex-col rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-s leading-relaxed text-primary-foreground opacity-90",
-              replied ? "min-w-[13.5rem] gap-1.5" : "gap-2",
-            )}
-          >
+          <div className="flex min-w-0 max-w-full flex-col items-end gap-1">
             {replied && (
               <ReplyContext
                 authorLabel={
@@ -3731,7 +3733,7 @@ function OutboxBubble({
               />
             )}
             {entry.body && (
-              <div className="flex items-end gap-2">
+              <div className="flex max-w-full items-end gap-2 rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-s leading-relaxed text-primary-foreground opacity-90">
                 <span className="whitespace-pre-wrap break-words">{entry.body}</span>
                 <Clock className="ml-1 h-3 w-3 shrink-0 translate-y-0.5 opacity-70" />
               </div>

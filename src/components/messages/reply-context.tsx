@@ -75,7 +75,6 @@ export function ReplyContext({
   authorLabel: string;
   body?: string;
   attachments?: MessageAttachment[];
-  /** Outgoing blue bubble — dark navy nested block. */
   mine?: boolean;
   variant?: "bubble" | "composer";
   onClick?: () => void;
@@ -87,21 +86,20 @@ export function ReplyContext({
     attachments,
   );
   const composer = variant === "composer";
-  const nestedMine = mine && !composer;
   const FileIcon = isVoice ? Mic : FileText;
 
   const bodyBlock = (
     <>
-      <span className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-px">
-        <span className="truncate text-[11px] font-semibold leading-tight text-primary">
+      <span
+        className={cn(
+          "flex min-w-0 flex-col justify-center gap-0.5",
+          composer && "flex-1",
+        )}
+      >
+        <span className="truncate text-xs font-semibold text-primary">
           {authorLabel}
         </span>
-        <span
-          className={cn(
-            "flex min-w-0 items-center gap-1 text-[12px] leading-snug",
-            nestedMine ? "text-primary-foreground/70" : "text-muted-foreground",
-          )}
-        >
+        <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
           {kind === "file" && (
             <FileIcon className="h-3 w-3 shrink-0 opacity-80" />
           )}
@@ -109,7 +107,7 @@ export function ReplyContext({
         </span>
       </span>
       {thumb && (
-        <span className="relative size-11 shrink-0 overflow-hidden rounded-md bg-black/40">
+        <span className="relative size-11 shrink-0 overflow-hidden rounded-md bg-surface-2">
           {isVideo ? (
             <video
               src={`${thumb.url}#t=0.1`}
@@ -133,13 +131,9 @@ export function ReplyContext({
   );
 
   const boxClass = cn(
-    "flex w-full min-w-0 max-w-full items-stretch gap-2 overflow-hidden rounded-[10px] text-left",
-    "border-l-[3px] border-l-primary",
-    thumb ? "p-1 pl-2.5" : "px-2.5 py-1.5",
-    nestedMine
-      ? "bg-[hsl(220_32%_12%)]"
-      : "border-y border-r border-border/50 bg-surface",
-    composer && "min-h-[44px]",
+    "flex max-w-full items-stretch gap-2 overflow-hidden rounded-[10px] border border-border/60 border-l-2 border-l-primary bg-surface p-1.5 pl-2.5 text-left",
+    composer ? "w-full" : "w-max",
+    !composer && (mine ? "self-end" : "self-start"),
     onDismiss && "pr-1",
     className,
   );
@@ -153,12 +147,17 @@ export function ReplyContext({
             e.stopPropagation();
             onClick();
           }}
-          className="flex min-w-0 flex-1 items-stretch gap-2 text-left transition-colors hover:brightness-110"
+          className={cn(
+            "flex min-w-0 items-stretch gap-2 text-left transition-colors hover:bg-surface-2",
+            composer && "flex-1",
+          )}
         >
           {bodyBlock}
         </button>
       ) : (
-        <span className="flex min-w-0 flex-1 items-stretch gap-2">{bodyBlock}</span>
+        <span className={cn("flex min-w-0 items-stretch gap-2", composer && "flex-1")}>
+          {bodyBlock}
+        </span>
       )}
       {onDismiss && (
         <button
