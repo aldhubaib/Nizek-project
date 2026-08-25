@@ -173,6 +173,7 @@ export function DashboardShell({
             canVault={canVault}
             isClient={isClient}
             logoUrl={logoUrl}
+            onNavigate={() => setDrawerOpen(false)}
           />
         </div>
       )}

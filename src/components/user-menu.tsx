@@ -23,7 +23,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
+export function UserMenu({
+  collapsed = false,
+  onNavigate,
+}: {
+  collapsed?: boolean;
+  onNavigate?: () => void;
+}) {
   const router = useRouter();
   const user = useCurrentUser();
   const [signOutOpen, setSignOutOpen] = useState(false);
@@ -60,6 +66,11 @@ export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
       </span>
     );
 
+  const goToAccount = () => {
+    onNavigate?.();
+    router.push("/dashboard/account");
+  };
+
   return (
     <>
       <DropdownMenu>
@@ -83,8 +94,16 @@ export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
             </span>
           )}
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="start" className="w-56">
-          <div className="flex items-center gap-s px-1.5 py-1.5">
+        <DropdownMenuContent
+          side="top"
+          align="start"
+          className="w-56"
+          positionerClassName="z-[700]"
+        >
+          <DropdownMenuItem
+            className="h-auto cursor-pointer items-start gap-s py-1.5"
+            onClick={goToAccount}
+          >
             {avatar("h-8 w-8")}
             <div className="min-w-0">
               <div className="truncate text-s font-medium text-foreground">
@@ -96,11 +115,11 @@ export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
                 </div>
               )}
             </div>
-          </div>
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            className="gap-s"
-            onClick={() => router.push("/dashboard/account")}
+            className="cursor-pointer gap-s"
+            onClick={goToAccount}
           >
             <UserCog className="h-4 w-4" />
             Manage account
@@ -109,7 +128,10 @@ export function UserMenu({ collapsed = false }: { collapsed?: boolean }) {
           <DropdownMenuItem
             variant="destructive"
             className="gap-s"
-            onClick={() => setSignOutOpen(true)}
+            onClick={() => {
+              onNavigate?.();
+              setSignOutOpen(true);
+            }}
           >
             <LogOut className="h-4 w-4" />
             Sign out
