@@ -3,7 +3,7 @@ import { isClientUser } from "@/lib/client-chat";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageHeader, PageName } from "@/components/page-header";
-import { DashboardClient } from "./dashboard-client";
+import { DashboardClient } from "../dashboard-client";
 
 export default async function DashboardPage() {
   const user = await requireUser();

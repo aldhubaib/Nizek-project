@@ -1,10 +1,25 @@
 import type { ReactNode } from "react";
+import { Suspense } from "react";
 import { requireUser } from "@/lib/auth";
 import { getInboxThreads } from "@/actions/messages";
 import { isClientUser } from "@/lib/client-chat";
 import { ThreadSidebar, MessagesMain } from "./messages-client";
+import { InboxSkeleton } from "@/components/route-skeletons";
 
-export default async function MessagesLayout({
+export default function MessagesLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  // Sync wrapper so the inbox skeleton paints immediately while threads load.
+  return (
+    <Suspense fallback={<InboxSkeleton />}>
+      <MessagesLayoutInner>{children}</MessagesLayoutInner>
+    </Suspense>
+  );
+}
+
+async function MessagesLayoutInner({
   children,
 }: {
   children: ReactNode;

@@ -54,3 +54,60 @@ test("sw-lib decision logic behaves identically in this engine", async ({
     silent: false,
   });
 });
+
+test("sw-lib cache classification stays conservative", async ({ page }) => {
+  await page.goto("/");
+
+  const results = await page.evaluate(async () => {
+    type SwLib = {
+      classifyRequest: (
+        req: {
+          method?: string;
+          url: string;
+          cache?: string;
+          mode?: string;
+          headers?: Record<string, string>;
+        },
+        origin: string,
+      ) => string | null;
+    };
+    const src = await (await fetch("/sw-lib.js")).text();
+    (0, eval)(src);
+    const lib = (window as unknown as { NizekSwLib: SwLib }).NizekSwLib;
+    const origin = location.origin;
+    return {
+      staticAsset: lib.classifyRequest(
+        { url: `${origin}/_next/static/chunks/a.js` },
+        origin,
+      ),
+      dashboardNav: lib.classifyRequest(
+        {
+          url: `${origin}/dashboard`,
+          mode: "navigate",
+          headers: { "Sec-Fetch-Dest": "document" },
+        },
+        origin,
+      ),
+      apiVersion: lib.classifyRequest({ url: `${origin}/api/version` }, origin),
+      serverAction: lib.classifyRequest(
+        { url: `${origin}/dashboard`, headers: { "Next-Action": "1" } },
+        origin,
+      ),
+      post: lib.classifyRequest(
+        { method: "POST", url: `${origin}/dashboard` },
+        origin,
+      ),
+      sound: lib.classifyRequest(
+        { url: `${origin}/files/notification_sound/x.mp3` },
+        origin,
+      ),
+    };
+  });
+
+  expect(results.staticAsset).toBe("static");
+  expect(results.dashboardNav).toBe("navigation");
+  expect(results.apiVersion).toBeNull();
+  expect(results.serverAction).toBeNull();
+  expect(results.post).toBeNull();
+  expect(results.sound).toBe("sound");
+});

@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import dynamic from "next/dynamic";
+import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { NotificationSound } from "@/components/notification-sound";
-import { PushNotifier } from "@/components/push-notifier";
-import { InstallPrompt } from "@/components/install-prompt";
-import { OfflineNotice } from "@/components/offline-notice";
+import { bootstrapServiceWorker } from "@/lib/service-worker-register";
+import "@/lib/install-prompt-capture";
 import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
 import { NotificationRealtimeProvider } from "@/components/realtime/notification-realtime-provider";
 import { PAGE_HEADER_ACTIONS_SLOT } from "@/components/page-header-actions";
@@ -21,6 +21,19 @@ import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { ProofUploadToast } from "@/components/kanban/proof-upload-toast";
 
 const DESKTOP_BREAKPOINT = 1024;
+
+const PushNotifier = dynamic(
+  () => import("@/components/push-notifier").then((m) => ({ default: m.PushNotifier })),
+  { ssr: false },
+);
+const InstallPrompt = dynamic(
+  () => import("@/components/install-prompt").then((m) => ({ default: m.InstallPrompt })),
+  { ssr: false },
+);
+const OfflineNotice = dynamic(
+  () => import("@/components/offline-notice").then((m) => ({ default: m.OfflineNotice })),
+  { ssr: false },
+);
 
 export function DashboardShell({
   children,
@@ -48,6 +61,7 @@ export function DashboardShell({
   const [hovered, setHovered] = useState(false);
   const [isDesktop, setIsDesktop] = useState(true);
   useScrollLock(drawerOpen && !isDesktop);
+  const router = useRouter();
   const pathname = usePathname();
   const onInbox = pathname.startsWith("/dashboard/messages");
   // Inside an open chat thread the composer owns the bottom edge, so the
@@ -82,6 +96,19 @@ export function DashboardShell({
   }, [isDesktop, drawerOpen]);
 
   useHideHeaderOnScroll(true);
+
+  useEffect(() => {
+    bootstrapServiceWorker();
+  }, []);
+
+  useEffect(() => {
+    router.prefetch("/dashboard");
+    router.prefetch("/dashboard/messages");
+    router.prefetch("/dashboard/projects");
+    if (canVault) router.prefetch("/dashboard/vault");
+    if (canEquity) router.prefetch("/dashboard/equity");
+    router.prefetch("/dashboard/settings");
+  }, [router, canVault, canEquity]);
 
   const expanded = pinned || hovered;
 
@@ -173,7 +200,6 @@ export function DashboardShell({
           canEquity={canEquity}
           canVault={canVault}
           isClient={isClient}
-          currentUserId={currentUserId}
           hidden={!bottomNavVisible}
           onOpenMenu={() => setDrawerOpen(true)}
         />

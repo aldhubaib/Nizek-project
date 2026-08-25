@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const swLib = require("../../public/sw-lib.js") as {
+  CACHE_NAMES: { sound: string; static: string; assets: string; navigation: string };
   parsePushPayload: (raw: string | null | undefined) => {
     title: string;
     body: string;
@@ -19,7 +20,42 @@ const swLib = require("../../public/sw-lib.js") as {
     clients: { focused?: boolean; visibilityState?: string }[] | null,
   ) => boolean;
   notificationOptionsFor: (data: Record<string, unknown>) => Record<string, unknown>;
+  classifyRequest: (
+    req: {
+      method?: string;
+      url: string;
+      cache?: string;
+      mode?: string;
+      headers?: Record<string, string> | { get: (name: string) => string | null };
+    },
+    selfOrigin?: string,
+  ) => "sound" | "static" | "asset" | "navigation" | null;
+  isCacheableResponse: (
+    res: { ok?: boolean; status?: number; redirected?: boolean; type?: string } | null,
+    strategy?: string,
+  ) => boolean;
+  knownCacheNames: () => string[];
 };
+
+const ORIGIN = "https://app.nizek.test";
+
+function req(
+  url: string,
+  init: {
+    method?: string;
+    cache?: string;
+    mode?: string;
+    headers?: Record<string, string>;
+  } = {},
+) {
+  return {
+    method: init.method ?? "GET",
+    url,
+    cache: init.cache,
+    mode: init.mode,
+    headers: init.headers ?? {},
+  };
+}
 
 describe("parsePushPayload", () => {
   it("parses a full payload", () => {
@@ -123,5 +159,120 @@ describe("notificationOptionsFor", () => {
     const opts = swLib.notificationOptionsFor({ body: "hi" });
     expect(opts.tag).toBeUndefined();
     expect(opts.renotify).toBe(false);
+  });
+});
+
+describe("classifyRequest (PWA cache strategy)", () => {
+  it("keeps notification-sound URLs as cache-first sound, including cross-origin", () => {
+    expect(
+      swLib.classifyRequest(
+        req("https://cdn.example.com/files/notification_sound/chime.mp3"),
+        ORIGIN,
+      ),
+    ).toBe("sound");
+  });
+
+  it("skips range requests for notification sounds", () => {
+    expect(
+      swLib.classifyRequest(
+        req(`${ORIGIN}/notification_sound/a.mp3`, { headers: { Range: "bytes=0-1" } }),
+        ORIGIN,
+      ),
+    ).toBeNull();
+  });
+
+  it("cache-firsts hashed Next static assets", () => {
+    expect(
+      swLib.classifyRequest(req(`${ORIGIN}/_next/static/chunks/app-123.js`), ORIGIN),
+    ).toBe("static");
+  });
+
+  it("uses stale-while-revalidate for icons, images, and the manifest", () => {
+    expect(swLib.classifyRequest(req(`${ORIGIN}/manifest.json`), ORIGIN)).toBe("asset");
+    expect(swLib.classifyRequest(req(`${ORIGIN}/favicon.ico`), ORIGIN)).toBe("asset");
+    expect(swLib.classifyRequest(req(`${ORIGIN}/pwa-icons/v1/icon-192.png`), ORIGIN)).toBe(
+      "asset",
+    );
+    expect(swLib.classifyRequest(req(`${ORIGIN}/logo.svg`), ORIGIN)).toBe("asset");
+  });
+
+  it("network-firsts dashboard document and RSC navigations", () => {
+    expect(
+      swLib.classifyRequest(
+        req(`${ORIGIN}/dashboard`, {
+          mode: "navigate",
+          headers: { "Sec-Fetch-Dest": "document", Accept: "text/html" },
+        }),
+        ORIGIN,
+      ),
+    ).toBe("navigation");
+    expect(
+      swLib.classifyRequest(
+        req(`${ORIGIN}/dashboard/projects?_rsc=abc`, { headers: { RSC: "1" } }),
+        ORIGIN,
+      ),
+    ).toBe("navigation");
+  });
+
+  it("does not intercept mutations, server actions, auth, APIs, or uploads", () => {
+    expect(
+      swLib.classifyRequest(req(`${ORIGIN}/dashboard`, { method: "POST" }), ORIGIN),
+    ).toBeNull();
+    expect(
+      swLib.classifyRequest(
+        req(`${ORIGIN}/dashboard`, { method: "PUT" }),
+        ORIGIN,
+      ),
+    ).toBeNull();
+    expect(
+      swLib.classifyRequest(
+        req(`${ORIGIN}/dashboard`, { headers: { "Next-Action": "abc" } }),
+        ORIGIN,
+      ),
+    ).toBeNull();
+    expect(swLib.classifyRequest(req(`${ORIGIN}/api/auth/session`), ORIGIN)).toBeNull();
+    expect(swLib.classifyRequest(req(`${ORIGIN}/api/version`), ORIGIN)).toBeNull();
+    expect(swLib.classifyRequest(req(`${ORIGIN}/api/push`), ORIGIN)).toBeNull();
+    expect(swLib.classifyRequest(req(`${ORIGIN}/api/upload/presign`), ORIGIN)).toBeNull();
+    expect(swLib.classifyRequest(req(`${ORIGIN}/sign-in`), ORIGIN)).toBeNull();
+    expect(
+      swLib.classifyRequest(req(`${ORIGIN}/favicon.ico`, { cache: "no-store" }), ORIGIN),
+    ).toBeNull();
+    expect(swLib.classifyRequest(req(`${ORIGIN}/sw.js`), ORIGIN)).toBeNull();
+    expect(swLib.classifyRequest(req(`${ORIGIN}/_next/image?url=/x`), ORIGIN)).toBeNull();
+  });
+
+  it("does not intercept cross-origin app requests", () => {
+    expect(
+      swLib.classifyRequest(req("https://other.test/_next/static/a.js"), ORIGIN),
+    ).toBeNull();
+  });
+});
+
+describe("isCacheableResponse", () => {
+  it("rejects redirects, errors, and partial content", () => {
+    expect(swLib.isCacheableResponse({ ok: true, redirected: true, type: "basic" })).toBe(
+      false,
+    );
+    expect(swLib.isCacheableResponse({ ok: false, status: 401, type: "basic" })).toBe(
+      false,
+    );
+    expect(swLib.isCacheableResponse({ ok: true, status: 206, type: "basic" })).toBe(
+      false,
+    );
+  });
+
+  it("accepts basic 200s and opaque sound responses", () => {
+    expect(swLib.isCacheableResponse({ ok: true, status: 200, type: "basic" })).toBe(true);
+    expect(
+      swLib.isCacheableResponse({ ok: false, status: 0, type: "opaque" }, "sound"),
+    ).toBe(true);
+  });
+});
+
+describe("knownCacheNames", () => {
+  it("keeps the notification-sound cache name stable", () => {
+    expect(swLib.CACHE_NAMES.sound).toBe("notif-sound-v1");
+    expect(swLib.knownCacheNames()).toContain("notif-sound-v1");
   });
 });

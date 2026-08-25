@@ -8,7 +8,7 @@ import {
   listEquityMetrics,
   listEquityRoles,
 } from "@/actions/equity";
-import { EquityPageClient } from "./equity-page-client";
+import { EquityPageClient } from "../equity-page-client";
 
 export default async function EquityPage() {
   const user = await requireUser();

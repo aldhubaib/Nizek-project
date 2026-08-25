@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AppNavLink } from "@/components/app-nav-link";
 import { UserMenu } from "@/components/user-menu";
 import {
   LayoutDashboard,
@@ -137,7 +137,7 @@ export function Sidebar({
           .map((item) => {
           const active = isActive(item.href);
           const linkContent = (
-            <Link
+            <AppNavLink
               href={item.href}
               className={cn(
                 "flex w-full items-center gap-s rounded-full text-xs font-medium leading-none no-underline transition-colors",
@@ -156,7 +156,7 @@ export function Sidebar({
                 )}
               </span>
               {!collapsed && item.name}
-            </Link>
+            </AppNavLink>
           );
 
           if (collapsed) {

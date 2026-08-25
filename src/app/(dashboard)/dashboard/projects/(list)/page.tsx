@@ -4,7 +4,7 @@ import { getContractPrefixes } from "@/actions/contract-prefix";
 import { requireUser } from "@/lib/auth";
 import { isClientUser } from "@/lib/client-chat";
 import { redirect } from "next/navigation";
-import { ProjectsPageClient } from "./projects-page-client";
+import { ProjectsPageClient } from "../projects-page-client";
 
 export default async function ProjectsPage() {
   const user = await requireUser();

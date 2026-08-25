@@ -15,6 +15,7 @@ const ROUTES = {
   "/index.html": path.join(__dirname, "index.html"),
   "/sw.js": path.join(ROOT, "public/sw.js"),
   "/sw-lib.js": path.join(ROOT, "public/sw-lib.js"),
+  "/offline.html": path.join(ROOT, "public/offline.html"),
 };
 
 const TYPES = { ".html": "text/html", ".js": "application/javascript" };

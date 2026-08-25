@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AppNavLink } from "@/components/app-nav-link";
 import {
   LayoutDashboard,
   Inbox,
@@ -35,7 +35,6 @@ interface BottomNavProps {
   canEquity?: boolean;
   canVault?: boolean;
   isClient?: boolean;
-  currentUserId?: string;
   hidden?: boolean;
   onOpenMenu: () => void;
 }
@@ -50,7 +49,6 @@ export function BottomNav({
   canEquity = false,
   canVault = false,
   isClient = false,
-  currentUserId,
   hidden = false,
   onOpenMenu,
 }: BottomNavProps) {
@@ -94,7 +92,7 @@ export function BottomNav({
           const active = isActive(item.href);
           const showBadge = item.name === "Inbox" && inboxUnread > 0;
           return (
-            <Link
+            <AppNavLink
               key={item.name}
               href={item.href}
               className={cn(
@@ -123,7 +121,7 @@ export function BottomNav({
               >
                 {item.name}
               </span>
-            </Link>
+            </AppNavLink>
           );
         })}
         <button

@@ -9,7 +9,7 @@ import { isProjectAccessError } from "@/lib/project-access";
 import { canAccessProjectVault } from "@/lib/vault-access";
 import { isClientUser } from "@/lib/client-chat";
 import { notFound, redirect } from "next/navigation";
-import { ProjectDetailClient } from "./project-detail-client";
+import { ProjectDetailClient } from "../project-detail-client";
 import type { KanbanTask } from "@/store/kanban";
 
 interface Props {

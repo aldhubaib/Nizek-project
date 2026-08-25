@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Download, Share, Plus, X } from "lucide-react";
+import {
+  consumeDeferredInstallPrompt,
+  getDeferredInstallPrompt,
+  subscribeInstallPrompt,
+  type BeforeInstallPromptEvent,
+} from "@/lib/install-prompt-capture";
 
 const DISMISSED_KEY = "nizek-install-dismissed-at";
 const DISMISS_DAYS = 30;
-
-type BeforeInstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
 
 function recentlyDismissed(): boolean {
   const at = Number(localStorage.getItem(DISMISSED_KEY) ?? 0);
@@ -30,19 +31,28 @@ function isStandalone(): boolean {
  * fires that event) it shows the manual "Add to Home Screen" instructions.
  */
 export function InstallPrompt() {
-  const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
+  const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(() =>
+    typeof window === "undefined" ? null : getDeferredInstallPrompt(),
+  );
   const [showIosHint, setShowIosHint] = useState(false);
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(() => {
+    if (typeof window === "undefined") return false;
+    if (isStandalone() || recentlyDismissed()) return false;
+    return getDeferredInstallPrompt() != null;
+  });
 
   useEffect(() => {
     if (isStandalone() || recentlyDismissed()) return;
 
-    const onBeforeInstall = (e: Event) => {
-      e.preventDefault();
-      setDeferred(e as BeforeInstallPromptEvent);
+    const unsubscribe = subscribeInstallPrompt((event) => {
+      if (!event) {
+        setVisible(false);
+        setDeferred(null);
+        return;
+      }
+      setDeferred(event);
       setVisible(true);
-    };
-    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    });
 
     const onInstalled = () => {
       setVisible(false);
@@ -61,7 +71,7 @@ export function InstallPrompt() {
     }
 
     return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      unsubscribe();
       window.removeEventListener("appinstalled", onInstalled);
     };
   }, []);
@@ -72,9 +82,11 @@ export function InstallPrompt() {
   }, []);
 
   const install = useCallback(async () => {
-    if (!deferred) return;
-    await deferred.prompt();
-    await deferred.userChoice;
+    const event = deferred ?? consumeDeferredInstallPrompt();
+    if (!event) return;
+    await event.prompt();
+    await event.userChoice;
+    consumeDeferredInstallPrompt();
     setDeferred(null);
     setVisible(false);
   }, [deferred]);
