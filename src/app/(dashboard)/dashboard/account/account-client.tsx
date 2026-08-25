@@ -174,7 +174,7 @@ export function AccountClient({
           This is how others will see you.
         </div>
 
-        <div className="mt-5 flex flex-col items-center gap-4">
+        <div className="mt-5 flex justify-center">
           <div className="relative">
             {imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -212,23 +212,28 @@ export function AccountClient({
               }}
             />
           </div>
+        </div>
 
-          <div className="w-full max-w-xs">
-            <div className="mb-1.5 text-center text-s font-medium text-muted-foreground">
-              Name
-            </div>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onBlur={saveName}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                if (e.key === "Escape") setName(savedName);
-              }}
-              placeholder="Your name"
-              className="h-10 text-center"
-            />
-          </div>
+        <div className="mx-auto mt-4 w-full max-w-xs">
+          <label
+            htmlFor="account-name"
+            className="mb-1.5 block text-center text-s font-medium text-muted-foreground"
+          >
+            Name
+          </label>
+          <Input
+            id="account-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={saveName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              if (e.key === "Escape") setName(savedName);
+            }}
+            placeholder="Your name"
+            autoComplete="name"
+            className="block h-10 w-full text-center"
+          />
         </div>
       </section>
 

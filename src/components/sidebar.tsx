@@ -143,7 +143,7 @@ export function Sidebar({
               href={item.href}
               onClick={onNavigate}
               className={cn(
-                "flex w-full items-center gap-s rounded-full text-xs font-medium leading-none no-underline transition-colors",
+                "flex w-full items-center gap-s rounded-full text-s font-medium leading-none no-underline transition-colors",
                 collapsed ? "justify-center px-0 py-s" : "px-s py-s",
                 active
                   ? "bg-card text-foreground"
