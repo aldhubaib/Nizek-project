@@ -36,14 +36,10 @@ import {
   type ImportantMessageDTO,
 } from "@/actions/messages";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
-import { useChannel, usePresence } from "@/components/realtime/hooks";
-import {
-  userChannel,
-  globalPresenceChannel,
-  NOTIFICATION_READ,
-  NOTIFICATION_READ_ALL,
-} from "@/lib/channels";
-import { inboxThreadIdsFromReadPayload } from "@/lib/notification-read";
+import { usePresence } from "@/components/realtime/hooks";
+import { globalPresenceChannel } from "@/lib/channels";
+import { useNotificationStore } from "@/store/notifications";
+import { prefetchInboxThread } from "@/lib/thread-cache";
 
 function formatRelative(iso: string) {
   if (!iso) return "";
@@ -301,6 +297,14 @@ export function ThreadSidebar({
 
   const cent = useCentrifugo();
   const online = usePresence(cent ? globalPresenceChannel() : null);
+  const currentMemberId = cent?.memberId ?? "";
+  const threadUnread = useNotificationStore((s) => s.threadUnread);
+  const threadPreviews = useNotificationStore((s) => s.threadPreviews);
+  const lastInboxThreadId = useNotificationStore((s) => s.lastInboxThreadId);
+  const inboxResync = useNotificationStore((s) => s.inboxResync);
+  const hydrateInboxThreads = useNotificationStore((s) => s.hydrateInboxThreads);
+  const replaceInboxThreads = useNotificationStore((s) => s.replaceInboxThreads);
+  const clearThreadUnread = useNotificationStore((s) => s.clearThreadUnread);
 
   // Local copy so realtime inbox events can patch rows in place. Server truth
   // (the `threads` prop) wins on navigation / RSC re-render. Reset via the
@@ -315,22 +319,14 @@ export function ThreadSidebar({
   const [prevThreads, setPrevThreads] = useState(threads);
   if (prevThreads !== threads) {
     setPrevThreads(threads);
-    // Opening a thread is a client navigation inside this layout — the
-    // server `threads` snapshot can still have unread. Keep the open row
-    // cleared so the badge never flashes back.
-    setLiveThreads(
-      activeThreadId
-        ? threads.map((t) =>
-            t.id === activeThreadId && t.unread > 0 ? { ...t, unread: 0 } : t,
-          )
-        : threads,
-    );
+    setLiveThreads(threads);
   }
 
   // Instant: the unread pill disappears the moment the user opens the thread,
   // without waiting for markThreadRead or a Centrifugo round-trip.
   useEffect(() => {
     if (!activeThreadId) return;
+    clearThreadUnread(activeThreadId);
     setLiveThreads((prev) => {
       const idx = prev.findIndex((t) => t.id === activeThreadId);
       if (idx === -1 || prev[idx].unread === 0) return prev;
@@ -338,14 +334,28 @@ export function ThreadSidebar({
       next[idx] = { ...next[idx], unread: 0 };
       return next;
     });
-  }, [activeThreadId]);
+  }, [activeThreadId, clearThreadUnread]);
 
-  // Reconcile the whole list after a realtime coverage gap: the user channel
-  // reconnected but its history replay failed (backgrounded longer than the
-  // replay window), or the tab was hidden long enough for the WebSocket to
-  // have been dropped. Without this, DMs sent meanwhile only appear after a
-  // manual refresh.
+  useEffect(() => {
+    hydrateInboxThreads(threads, activeThreadId);
+  }, [threads, activeThreadId, hydrateInboxThreads]);
+
   const hiddenAtRef = useRef<number | null>(null);
+  const lastResync = useRef(inboxResync);
+  const pendingReplace = useRef(false);
+  useEffect(() => {
+    if (inboxResync === lastResync.current) return;
+    lastResync.current = inboxResync;
+    pendingReplace.current = true;
+    router.refresh();
+  }, [inboxResync, router]);
+
+  useEffect(() => {
+    if (!pendingReplace.current) return;
+    pendingReplace.current = false;
+    replaceInboxThreads(threads, activeThreadId);
+  }, [threads, activeThreadId, replaceInboxThreads]);
+
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === "hidden") {
@@ -361,87 +371,11 @@ export function ThreadSidebar({
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [router]);
 
-  // Live inbox: patch the affected row from the event delta instead of
-  // refetching the whole RSC tree. Falls back to a refresh only when the target
-  // row isn't present yet (e.g. a brand-new conversation/thread).
-  useChannel(
-    cent ? userChannel(cent.memberId) : null,
-    (data) => {
-    const d = data as
-      | {
-          type?: string;
-          conversationId?: string | null;
-          projectId?: string | null;
-          taskId?: string | null;
-          authorId?: string;
-          lastAuthor?: string;
-          lastMessage?: string;
-          lastAt?: string;
-          tags?: string[];
-          linkUrls?: string[];
-        }
-      | null;
-    if (!d) return;
-
-    if (d.type === NOTIFICATION_READ_ALL) {
-      setLiveThreads((prev) =>
-        prev.some((t) => t.unread > 0)
-          ? prev.map((t) => (t.unread > 0 ? { ...t, unread: 0 } : t))
-          : prev,
-      );
-      return;
-    }
-
-    if (d.type === NOTIFICATION_READ) {
-      const ids = new Set(inboxThreadIdsFromReadPayload(d));
-      if (ids.size === 0) return;
-      setLiveThreads((prev) => {
-        let changed = false;
-        const next = prev.map((t) => {
-          if (!ids.has(t.id) || t.unread === 0) return t;
-          changed = true;
-          return { ...t, unread: 0 };
-        });
-        return changed ? next : prev;
-      });
-      return;
-    }
-
-    if (d.type !== "inbox") return;
-
-    const rowId = d.conversationId
-      ? `conv-${d.conversationId}`
-      : d.projectId
-        ? `project-${d.projectId}`
-        : null;
-    if (!rowId) return;
-
-    const isSelf = d.authorId != null && cent != null && d.authorId === cent.memberId;
-    const isViewing = pathname === `/dashboard/messages/${rowId}`;
-
-    setLiveThreads((prev) => {
-      const idx = prev.findIndex((t) => t.id === rowId);
-      if (idx === -1) {
-        // Unknown thread (first message of a new conversation) — reconcile once.
-        router.refresh();
-        return prev;
-      }
-      const next = [...prev];
-      const row = { ...next[idx] };
-      if (d.lastMessage != null) row.lastMessage = d.lastMessage;
-      if (d.lastAuthor != null) row.lastAuthor = d.lastAuthor;
-      if (d.lastAt) row.lastAt = d.lastAt;
-      // Task-comment notifications are cleared on the task page, not by
-      // opening this thread — keep them out of the badge so it matches what
-      // the server counts (and what opening the thread clears).
-      if (!isSelf && !isViewing && !d.taskId) row.unread = (row.unread ?? 0) + 1;
-      next[idx] = row;
-      return next;
-    });
-    },
-    // Reconnected but missed events couldn't be replayed — refetch the list.
-    () => router.refresh(),
-  );
+  useEffect(() => {
+    if (!lastInboxThreadId) return;
+    if (liveThreads.some((t) => t.id === lastInboxThreadId)) return;
+    router.refresh();
+  }, [lastInboxThreadId, liveThreads, router]);
 
   useEffect(() => {
     function onThreadCreated(e: Event) {
@@ -515,6 +449,24 @@ export function ThreadSidebar({
 
   const allRows = useMemo(() => {
     return liveThreads
+      .map((t) => {
+        const preview = threadPreviews[t.id];
+        const unread =
+          t.id === activeThreadId
+            ? 0
+            : (threadUnread[t.id] ?? t.unread);
+        const previewNewer =
+          preview &&
+          (!t.lastAt ||
+            new Date(preview.lastAt).getTime() >= new Date(t.lastAt).getTime());
+        return {
+          ...t,
+          unread,
+          lastMessage: previewNewer ? preview.lastMessage : t.lastMessage,
+          lastAuthor: previewNewer ? preview.lastAuthor : t.lastAuthor,
+          lastAt: previewNewer ? preview.lastAt : t.lastAt,
+        };
+      })
       .filter((t) =>
         tab === "all" || tab === "important" ? true : t.kind === tab,
       )
@@ -529,7 +481,7 @@ export function ThreadSidebar({
         const tb = b.lastAt ? new Date(b.lastAt).getTime() : 0;
         return tb - ta;
       });
-  }, [liveThreads, tab, q]);
+  }, [liveThreads, tab, q, threadPreviews, threadUnread, activeThreadId]);
 
   // Inactive projects collapse into their own section (like Falak's archived).
   const rows = useMemo(() => allRows.filter((t) => !t.inactive), [allRows]);
@@ -701,6 +653,7 @@ export function ThreadSidebar({
               onToggle={() => toggleGroup("project")}
               pathname={pathname}
               online={online}
+              currentMemberId={currentMemberId}
             />
             <ThreadGroup
               label="Direct"
@@ -710,6 +663,7 @@ export function ThreadSidebar({
               onToggle={() => toggleGroup("direct")}
               pathname={pathname}
               online={online}
+              currentMemberId={currentMemberId}
             />
             <ThreadGroup
               label="Clients"
@@ -719,6 +673,7 @@ export function ThreadSidebar({
               onToggle={() => toggleGroup("client")}
               pathname={pathname}
               online={online}
+              currentMemberId={currentMemberId}
             />
           </>
         ) : (
@@ -731,6 +686,7 @@ export function ThreadSidebar({
                   thread.kind === "direct" &&
                   thread.peerMemberIds.some((id) => online.has(id))
                 }
+                currentMemberId={currentMemberId}
               />
             </li>
           ))
@@ -745,6 +701,7 @@ export function ThreadSidebar({
             onToggle={() => toggleGroup("inactive")}
             pathname={pathname}
             online={online}
+            currentMemberId={currentMemberId}
           />
         )}
           </>
@@ -769,6 +726,7 @@ function ThreadGroup({
   onToggle,
   pathname,
   online,
+  currentMemberId,
 }: {
   label: string;
   icon: LucideIcon;
@@ -777,6 +735,7 @@ function ThreadGroup({
   onToggle: () => void;
   pathname: string;
   online: Set<string>;
+  currentMemberId: string;
 }) {
   if (threads.length === 0) return null;
   const unread = unreadTotal(threads);
@@ -814,6 +773,7 @@ function ThreadGroup({
                   thread.kind === "direct" &&
                   thread.peerMemberIds.some((id) => online.has(id))
                 }
+                currentMemberId={currentMemberId}
               />
             </li>
           ))}
@@ -863,14 +823,23 @@ function ThreadRow({
   thread,
   active,
   isOnline,
+  currentMemberId,
 }: {
   thread: InboxThread;
   active: boolean;
   isOnline: boolean;
+  currentMemberId: string;
 }) {
+  const prefetch = () => {
+    if (active) return;
+    prefetchInboxThread(thread, currentMemberId);
+  };
   return (
     <Link
       href={`/dashboard/messages/${thread.id}`}
+      onPointerEnter={prefetch}
+      onFocus={prefetch}
+      onTouchStart={prefetch}
       className={cn(
         // WhatsApp-like row: tall touch target (~72–80px), large avatar, roomy padding.
         "flex min-h-[76px] items-center gap-m border-b border-border/30 px-app py-3.5 transition-colors active:bg-surface/70 hover:bg-surface/60 max-lg:min-h-[80px] max-lg:gap-4 max-lg:py-4 lg:min-h-[68px] lg:py-3",

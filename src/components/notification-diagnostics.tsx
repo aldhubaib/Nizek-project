@@ -22,6 +22,7 @@ import {
   isNotificationSoundEnabled,
   playNotificationSound,
 } from "@/lib/notification-sound";
+import { useNotificationStore } from "@/store/notifications";
 
 type CheckState = "ok" | "warn" | "fail";
 
@@ -72,6 +73,8 @@ export function NotificationDiagnostics() {
   const [soundOn, setSoundOn] = useState(true);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const lastSound = useNotificationStore((s) => s.lastSound);
+  const lastEvent = useNotificationStore((s) => s.lastEvent);
 
   const refresh = useCallback(async () => {
     if (typeof window !== "undefined" && "Notification" in window) {
@@ -227,6 +230,20 @@ export function NotificationDiagnostics() {
                     : "Audio isn't available in this browser."
             }
           />
+          {lastSound && (
+            <CheckRow
+              state={lastSound.played ? "ok" : "warn"}
+              label={`Last in-app sound: ${lastSound.played ? "played" : "skipped"}`}
+              detail={`${lastSound.reason}${lastSound.linkUrl ? ` · ${lastSound.linkUrl}` : ""} · ${formatDistanceToNow(new Date(lastSound.at), { addSuffix: true })}`}
+            />
+          )}
+          {lastEvent && (
+            <CheckRow
+              state="ok"
+              label={`Last realtime event: ${lastEvent.type}`}
+              detail={`${lastEvent.summary} · ${formatDistanceToNow(new Date(lastEvent.at), { addSuffix: true })}`}
+            />
+          )}
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button

@@ -19,6 +19,8 @@ type NotifyInput = {
   tag?: string | null;
   /** Thread identity ("task-{id}" | "conv-{id}" | "project-{id}") for mute filtering. */
   threadKey?: string | null;
+  /** Message author — forwarded on `notification.new` so clients can skip self-chimes. */
+  authorId?: string | null;
 };
 
 export type CreatedNotification = {
@@ -127,6 +129,7 @@ export async function createAndPublishNotifications(
       channel: userChannel(n.recipientId),
       data: {
         type: NOTIFICATION_NEW,
+        authorId: input.authorId ?? undefined,
         notification: {
           id: n.id,
           type: n.type,

@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 /**
- * The shell owns a single ⋮ next to the notification bell. Pages register
+ * The shell owns a single ⋮ in the top-right chrome. Pages register
  * items into it instead of drawing their own menu trigger — so project
  * settings, note actions, and equity actions all land in the same place.
  *

@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -15,7 +14,6 @@ import {
   Trash,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getInboxUnreadCount } from "@/actions/messages";
 import { useUnreadStore } from "@/store/unread";
 
 const NAV_ITEMS = [
@@ -58,19 +56,6 @@ export function BottomNav({
 }: BottomNavProps) {
   const pathname = usePathname();
   const inboxUnread = useUnreadStore((s) => s.inboxUnread);
-  const setInboxUnread = useUnreadStore((s) => s.setInboxUnread);
-
-  useEffect(() => {
-    const load = () => {
-      getInboxUnreadCount().then(setInboxUnread).catch(() => {});
-    };
-    load();
-    const onVis = () => {
-      if (document.visibilityState === "visible") load();
-    };
-    document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
-  }, [setInboxUnread]);
 
   const canSeeTrash = canEquity || isAdmin;
   const allowed = NAV_ITEMS.filter((item) => {

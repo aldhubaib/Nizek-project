@@ -92,7 +92,7 @@ export function PortfolioMenu({
 
   return (
     <>
-      {/* Sits in the shell's shared ⋮ beside the notification bell. */}
+      {/* Sits in the shell's shared ⋮ in the top-right chrome. */}
       <PageOverflowItems id="portfolio-menu">
             <DropdownMenuItem
               onClick={() =>

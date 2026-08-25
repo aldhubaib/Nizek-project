@@ -1,26 +1,19 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
-import { usePathname } from "next/navigation";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { useChannel } from "@/components/realtime/hooks";
 import {
-  userChannel,
   globalPresenceChannel,
   NOTIFICATION_SOUND_EVENT,
 } from "@/lib/channels";
 import { getActiveNotificationSoundUrl } from "@/actions/notification-sound-settings";
 import { getMyNotificationPreferences } from "@/actions/notification-preferences";
 import {
-  playNotificationSound,
   primeNotificationAudio,
   setCustomNotificationSound,
   setNotificationSoundEnabled,
 } from "@/lib/notification-sound";
-import {
-  shouldPlayNotificationSound,
-  type SoundEventPayload,
-} from "@/lib/notification-sound-policy";
 
 interface Props {
   currentUserId?: string;
@@ -28,14 +21,12 @@ interface Props {
 }
 
 /**
- * Plays a chime for `notification.new` events while the app is focused and the
- * user isn't already viewing the linked thread. Backgrounded/closed states are
- * covered by OS push instead (the service worker only suppresses banners for
- * focused-visible clients). Mounted once app-wide, including the inbox route.
+ * Keeps the custom sound URL + audio unlock ready. Playback itself is owned by
+ * `NotificationRealtimeProvider` so a chime fires exactly once per
+ * `notification.new`. Backgrounded/closed states are covered by OS push.
  */
-export function NotificationSound({ currentUserId, soundUrl }: Props) {
+export function NotificationSound({ soundUrl }: Props) {
   const cent = useCentrifugo();
-  const pathname = usePathname();
 
   // Seed with the server-rendered URL immediately so the first notification uses
   // the right sound even before the fresh refetch below resolves.
@@ -82,20 +73,6 @@ export function NotificationSound({ currentUserId, soundUrl }: Props) {
     if (!payload || payload.type !== NOTIFICATION_SOUND_EVENT) return;
     setCustomNotificationSound(payload.url ?? null);
   });
-
-  useChannel(
-    cent && currentUserId ? userChannel(currentUserId) : null,
-    (data) => {
-      const payload = data as SoundEventPayload | null;
-      const play = shouldPlayNotificationSound(payload, {
-        currentUserId,
-        appFocused:
-          document.visibilityState === "visible" && document.hasFocus(),
-        pathname,
-      });
-      if (play) playNotificationSound();
-    },
-  );
 
   return null;
 }

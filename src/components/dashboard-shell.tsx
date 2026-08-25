@@ -4,13 +4,12 @@ import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
-import { NotificationBell } from "@/components/notification-bell";
 import { NotificationSound } from "@/components/notification-sound";
-import { NotificationSync } from "@/components/notification-sync";
 import { PushNotifier } from "@/components/push-notifier";
 import { InstallPrompt } from "@/components/install-prompt";
 import { OfflineNotice } from "@/components/offline-notice";
 import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
+import { NotificationRealtimeProvider } from "@/components/realtime/notification-realtime-provider";
 import { PAGE_HEADER_ACTIONS_SLOT } from "@/components/page-header-actions";
 import {
   PageOverflowMenu,
@@ -50,8 +49,6 @@ export function DashboardShell({
   const [isDesktop, setIsDesktop] = useState(true);
   useScrollLock(drawerOpen && !isDesktop);
   const pathname = usePathname();
-  // The inbox has its own header — hide the global notification bell there so
-  // it doesn't float over the conversation.
   const onInbox = pathname.startsWith("/dashboard/messages");
   // Inside an open chat thread the composer owns the bottom edge, so the
   // bottom navigation gets out of the way (WhatsApp behavior).
@@ -91,7 +88,6 @@ export function DashboardShell({
   const headerActions = (
     <>
       <div id={PAGE_HEADER_ACTIONS_SLOT} className="flex items-center gap-xs" />
-      <NotificationBell currentUserId={currentUserId} />
       <PageOverflowMenu />
     </>
   );
@@ -119,7 +115,7 @@ export function DashboardShell({
         </div>
       )}
 
-      {/* Bell + ⋮ overlay the page's own header instead of stacking a second bar. */}
+      {/* Page actions + ⋮ overlay the page's own header instead of stacking a second bar. */}
       {!isDesktop && (
         <div className="app-shell-chrome fixed top-0 right-0 z-[100] flex app-top-bar items-center gap-xs bg-transparent pb-5">
           {headerActions}
@@ -184,7 +180,6 @@ export function DashboardShell({
       )}
       <ProofUploadToast />
       <NotificationSound currentUserId={currentUserId} soundUrl={notificationSoundUrl} />
-      <NotificationSync currentUserId={currentUserId} />
       <PushNotifier />
       <InstallPrompt />
       <OfflineNotice />
@@ -195,7 +190,11 @@ export function DashboardShell({
   // Chat/inbox realtime runs over a single shared Centrifugo WebSocket for the
   // whole dashboard session. Pusher (board/task events) is untouched.
   return currentUserId ? (
-    <CentrifugoProvider memberId={currentUserId}>{shell}</CentrifugoProvider>
+    <CentrifugoProvider memberId={currentUserId}>
+      <NotificationRealtimeProvider currentUserId={currentUserId}>
+        {shell}
+      </NotificationRealtimeProvider>
+    </CentrifugoProvider>
   ) : (
     shell
   );

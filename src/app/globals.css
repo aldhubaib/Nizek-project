@@ -192,8 +192,8 @@ html[data-scroll-locked] body {
 }
 
 /* Outside @layer so safe-area padding is not overridden by Tailwind utilities.
-   Bottom gutter for title→content lives on PageHeader (pb-5). The shell bell
-   overlay uses the same pb-5 so the bell sits on the title's line; it stays
+   Bottom gutter for title→content lives on PageHeader (pb-5). The shell
+   overlay uses the same pb-5 so the ⋮ sits on the title's line; it stays
    bg-transparent so that extra padding does not paint a hanging box. */
 .app-top-bar {
   --app-bar-height: calc(3rem + env(safe-area-inset-top, 0px));
@@ -268,10 +268,10 @@ span.page-name {
   font-size: var(--text-l);
 }
 
-/* Room for the fixed bell / ⋮ overlay on page title bars.
+/* Room for the fixed ⋮ overlay on page title bars.
    Title + overlay must share one box: 32px control row + pb-5 (1.25rem).
-   The bell button is 32px; the title is ~20px. If the header is shorter,
-   items-center drops the bell below the title. */
+   The ⋮ button is 32px; the title is ~20px. If the header is shorter,
+   items-center drops the overlay below the title. */
 header.app-top-bar,
 .app-shell-chrome.app-top-bar {
   --app-bar-height: calc(4rem + env(safe-area-inset-top, 0px));

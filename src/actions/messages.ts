@@ -1192,6 +1192,7 @@ export async function sendMessage(
         linkUrl: url,
         tag: pushTag,
         threadKey: threadId,
+        authorId: user.id,
       });
       // OS-level web push — enqueued to background worker.
       if (rows.length > 0) {

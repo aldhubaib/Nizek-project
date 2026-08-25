@@ -123,6 +123,13 @@ const ProofBypassCard = dynamic(
 import { closePushBannersByTags } from "@/lib/close-push-banners";
 import { threadPushTag } from "@/lib/notification-read";
 import { updateAppBadge } from "@/lib/app-badge";
+import { mergeThreadMessages } from "@/lib/merge-thread-messages";
+import {
+  peekThreadCache,
+  putThreadCache,
+  threadIdFromTarget,
+} from "@/lib/thread-cache";
+import { useNotificationStore } from "@/store/notifications";
 import { firstUnreadMessageId, formatUnreadSeparator } from "@/lib/chat-unread";
 import {
   ALL_MENTION_ID,
@@ -891,7 +898,74 @@ const MessageRow = memo(function MessageRow({
           {showAuthor && (
             <div className="px-1 text-xs text-muted-foreground">{m.authorName}</div>
           )}
-          {(m.body || replied || (m.task && showTaskCard) || editing) && (() => {
+          {replied && (() => {
+            const attachments = replied.attachments ?? [];
+            const replyImage = attachments.find((a) => a.isImage) ?? null;
+            const replyVideo = !replyImage
+              ? attachments.find((a) => a.contentType?.startsWith("video/")) ?? null
+              : null;
+            const replyFile = !replyImage && !replyVideo ? (attachments[0] ?? null) : null;
+            const replyThumb = replyImage ?? replyVideo;
+            let bodyText = replied.body;
+            if (!bodyText) {
+              if (replyImage) bodyText = "";
+              else if (replyVideo) bodyText = "";
+              else if (replyFile) bodyText = "";
+              else bodyText = "";
+            } else if (bodyText.length > 120) {
+              bodyText = `${bodyText.slice(0, 120)}…`;
+            }
+            return (
+              <button
+                type="button"
+                onClick={() => scrollToMessage(m.replyToId!)}
+                className={cn(
+                  "flex max-w-full items-stretch gap-2 overflow-hidden rounded-lg border border-border/60 border-l-2 border-l-primary bg-surface p-1.5 pl-2.5 text-left text-xs shadow-sm",
+                  mine ? "self-end rounded-br-sm" : "self-start rounded-bl-sm",
+                )}
+              >
+                <span className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-0.5">
+                  <span className="text-[11px] font-semibold text-primary">
+                    {replied.authorId === currentMemberId ? "You" : replied.authorName}
+                  </span>
+                  <span className="flex min-w-0 items-center gap-1 text-muted-foreground">
+                    {replyVideo && !replied.body && (
+                      <>
+                        <span className="shrink-0 text-foreground/80">Video</span>
+                        <span className="line-clamp-2 min-w-0 break-words">{replyVideo.name}</span>
+                      </>
+                    )}
+                    {replyFile && !replyImage && !replyVideo && !replied.body && (
+                      <>
+                        <FileText className="h-3 w-3 shrink-0" />
+                        <span className="shrink-0 text-foreground/80">File</span>
+                        <span className="line-clamp-2 min-w-0 break-words">{replyFile.name}</span>
+                      </>
+                    )}
+                    {(bodyText || (!replyVideo && !replyFile)) && (
+                      <span className="line-clamp-2 min-w-0 break-words">{bodyText || "Attachment"}</span>
+                    )}
+                  </span>
+                </span>
+                {replyThumb && (
+                  <span className="relative size-10 shrink-0 overflow-hidden rounded-md bg-surface-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={replyThumb.url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                    {replyVideo && (
+                      <span className="absolute inset-0 grid place-items-center bg-black/40">
+                        <Play className="h-3.5 w-3.5 fill-white text-white" />
+                      </span>
+                    )}
+                  </span>
+                )}
+              </button>
+            );
+          })()}
+          {(m.body || (m.task && showTaskCard) || editing) && (() => {
             const notice = (!!m.task && showTaskCard) || m.kind === "rejection";
             const blue = mine && !notice;
             return (
@@ -925,37 +999,6 @@ const MessageRow = memo(function MessageRow({
                     <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   </Link>
                 )}
-                {replied && (() => {
-                  const replyImage = replied.attachments?.find((a) => a.isImage);
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => scrollToMessage(m.replyToId!)}
-                      className="-mx-1 flex items-stretch gap-2 rounded-lg border border-border/40 bg-background/80 text-left text-s backdrop-blur-sm"
-                    >
-                      <div className="flex min-w-0 flex-1 flex-col gap-0.5 px-2.5 py-1.5">
-                        <span className="text-xs font-semibold text-foreground">
-                          {replied.authorId === currentMemberId ? "You" : replied.authorName}
-                        </span>
-                        <span className="line-clamp-2 text-muted-foreground">
-                          {replied.body
-                            ? replied.body.length > 120
-                              ? `${replied.body.slice(0, 120)}…`
-                              : replied.body
-                            : replyImage ? "Photo" : "Attachment"}
-                        </span>
-                      </div>
-                      {replyImage && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={replyImage.url}
-                          alt=""
-                          className="h-12 w-12 shrink-0 rounded-r-lg object-cover"
-                        />
-                      )}
-                    </button>
-                  );
-                })()}
                 {editing ? (
                   <div className="flex flex-col gap-2">
                     <textarea
@@ -1172,27 +1215,57 @@ export function ThreadChat({
   /** Scroll to this message after open (inbox Important tab). */
   focusMessageId?: string;
 }) {
+  const threadKey = threadIdFromTarget(target);
+  const cached = threadKey ? peekThreadCache(threadKey) : null;
+  const restoreFromCache = Boolean(
+    cached &&
+      Date.now() - cached.updatedAt < 30 * 60 * 1000 &&
+      (cached.snapshot.messages.length > 0 || cached.scrollTop != null),
+  );
+
   const frameRef = useVisualViewportFrame<HTMLDivElement>();
   const pickFilesRef = useRef<(files: FileList | File[] | null) => void>(() => {});
   usePasteFiles((files) => pickFilesRef.current(files), {
     ref: frameRef,
     capture: true,
   });
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
-  const [hasMore, setHasMore] = useState(hasMoreOlder);
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    restoreFromCache
+      ? mergeThreadMessages(cached!.snapshot.messages, initialMessages)
+      : initialMessages,
+  );
+  const [hasMore, setHasMore] = useState(
+    restoreFromCache
+      ? cached!.snapshot.hasMoreOlder || hasMoreOlder
+      : hasMoreOlder,
+  );
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const openUnreadCount = initialUnreadCount;
-  const openLastReadAt = initialLastReadAt;
+  const openUnreadCount = restoreFromCache ? 0 : initialUnreadCount;
+  const openLastReadAt = restoreFromCache
+    ? cached!.snapshot.lastReadAt
+    : initialLastReadAt;
   const seekingUnread = openUnreadCount > 0 && !focusMessageId;
-  const skipAutoScrollRef = useRef(seekingUnread);
-  const nearBottomRef = useRef(!seekingUnread);
+  const skipAutoScrollRef = useRef(seekingUnread || restoreFromCache);
+  const nearBottomRef = useRef(
+    restoreFromCache ? cached!.nearBottom : !seekingUnread,
+  );
   const didInitialPinRef = useRef(false);
   const unreadSeekLoadsRef = useRef(0);
-  const [threadOpened, setThreadOpened] = useState(!seekingUnread);
+  const [threadOpened, setThreadOpened] = useState(!seekingUnread || restoreFromCache);
   const [unreadSeekExhausted, setUnreadSeekExhausted] = useState(false);
-  const [nearBottom, setNearBottom] = useState(!seekingUnread);
+  const [nearBottom, setNearBottom] = useState(
+    restoreFromCache ? cached!.nearBottom : !seekingUnread,
+  );
   const [newBelow, setNewBelow] = useState(0);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(() => {
+    if (restoreFromCache && cached?.draft) return cached.draft;
+    if (!threadKey) return "";
+    try {
+      return sessionStorage.getItem(`nizek-chat-draft:${threadKey}`) ?? "";
+    } catch {
+      return "";
+    }
+  });
   const [pending, setPending] = useState<PendingFile[]>([]);
   const [fileError, setFileError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -1227,13 +1300,6 @@ export function ThreadChat({
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Thread mute: server-stored, all devices. Muted threads produce no
   // notification row, push, or chime — the thread itself still updates live.
-  const threadKey = target.conversationId
-    ? `conv-${target.conversationId}`
-    : target.taskId
-      ? `task-${target.taskId}`
-      : target.projectId
-        ? `project-${target.projectId}`
-        : null;
   // This thread's pending sends, held by the app-wide outbox manager.
   const outbox = useThreadOutbox(threadKey);
   const [muted, setMuted] = useState(false);
@@ -1275,8 +1341,8 @@ export function ThreadChat({
   const [prevInitial, setPrevInitial] = useState(initialMessages);
   if (prevInitial !== initialMessages) {
     setPrevInitial(initialMessages);
-    setMessages(initialMessages);
-    setHasMore(hasMoreOlder);
+    setMessages(mergeThreadMessages(messages, initialMessages));
+    setHasMore(hasMore || hasMoreOlder);
   }
 
   const [prevPeerRead, setPrevPeerRead] = useState(initialPeerLastReadAt);
@@ -1315,6 +1381,55 @@ export function ThreadChat({
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
     };
   }, [draft, threadKey]);
+
+  const cacheSnapshot = {
+    channel,
+    presenceChannel,
+    target,
+    title,
+    subtitle,
+    currentMemberId,
+    messages,
+    hasMoreOlder: hasMore,
+    memberNames,
+    peerMemberIds,
+    mentionables,
+    inactive,
+    readOnly,
+    canCreateTask,
+    allowedTaskTypes,
+    activeContractType,
+    projectName,
+    peerLastReadAt,
+    lastReadAt: openLastReadAt,
+    unreadCount: openUnreadCount,
+    isClientRoom,
+  };
+  const cacheSnapshotRef = useRef(cacheSnapshot);
+  cacheSnapshotRef.current = cacheSnapshot;
+
+  useEffect(() => {
+    if (!threadKey) return;
+    putThreadCache(threadKey, {
+      snapshot: cacheSnapshotRef.current,
+      draft,
+      nearBottom: nearBottomRef.current,
+      scrollTop: scrollerRef.current?.scrollTop ?? null,
+      opened: true,
+    });
+  }, [threadKey, messages, draft, hasMore, title, subtitle]);
+
+  useEffect(() => {
+    if (!threadKey) return;
+    return () => {
+      putThreadCache(threadKey, {
+        snapshot: cacheSnapshotRef.current,
+        nearBottom: nearBottomRef.current,
+        scrollTop: scrollerRef.current?.scrollTop ?? null,
+        opened: true,
+      });
+    };
+  }, [threadKey]);
 
   // Fetch the previous page (older messages) and prepend it, keeping the
   // viewport anchored so the list doesn't jump.
@@ -1436,17 +1551,21 @@ export function ThreadChat({
   // and (debounced) when messages arrive while the user is watching.
   const markRead = useCallback(() => {
     if (document.visibilityState !== "visible") return;
+    if (threadKey) {
+      useNotificationStore.getState().clearThreadUnread(threadKey);
+    }
     const tag = threadPushTag(target);
     if (tag) void closePushBannersByTags([tag]);
     void markThreadRead(target)
       .then((counts) => {
         if (counts && typeof counts.unread === "number") {
+          useNotificationStore.getState().reconcileCounts(counts);
           updateAppBadge(Math.max(0, counts.unread));
         }
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.taskId, target.projectId, target.conversationId]);
+  }, [target.taskId, target.projectId, target.conversationId, threadKey]);
 
   const hiddenAtRef = useRef<number | null>(null);
   useEffect(() => {
@@ -1661,6 +1780,22 @@ export function ThreadChat({
   useLayoutEffect(() => {
     if (didInitialPinRef.current) return;
     if (pendingFocusRef.current) return;
+    if (restoreFromCache && scrollerRef.current) {
+      const el = scrollerRef.current;
+      if (cached?.nearBottom) {
+        el.scrollTop = el.scrollHeight;
+        nearBottomRef.current = true;
+        setNearBottom(true);
+      } else if (typeof cached?.scrollTop === "number") {
+        el.scrollTop = cached.scrollTop;
+        nearBottomRef.current = false;
+        setNearBottom(false);
+      }
+      didInitialPinRef.current = true;
+      setThreadOpened(true);
+      skipAutoScrollRef.current = true;
+      return;
+    }
     if (openUnreadCount > 0) {
       if (readyForUnreadLine) {
         finishOpen("unread");
@@ -1672,7 +1807,7 @@ export function ThreadChat({
       return;
     }
     finishOpen("bottom");
-  }, [messages.length, firstUnreadId, crossedReadBoundary, readyForUnreadLine, openUnreadCount, finishOpen]);
+  }, [messages.length, firstUnreadId, crossedReadBoundary, readyForUnreadLine, openUnreadCount, finishOpen, restoreFromCache, cached]);
 
   useEffect(() => {
     if (didInitialPinRef.current) return;
@@ -2914,7 +3049,20 @@ export function ThreadChat({
             </div>
           )}
           {replyingTo && (() => {
-            const replyImage = replyingTo.attachments?.find((a) => a.isImage);
+            const attachments = replyingTo.attachments ?? [];
+            const replyImage = attachments.find((a) => a.isImage) ?? null;
+            const replyVideo = !replyImage
+              ? attachments.find((a) => a.contentType?.startsWith("video/")) ?? null
+              : null;
+            const replyFile = !replyImage && !replyVideo ? (attachments[0] ?? null) : null;
+            const replyThumb = replyImage ?? replyVideo;
+            let previewText = replyingTo.body;
+            if (!previewText) {
+              if (replyVideo) previewText = `Video ${replyVideo.name}`;
+              else if (replyFile) previewText = `File ${replyFile.name}`;
+              else if (replyImage) previewText = "Photo";
+              else previewText = "Attachment";
+            }
             return (
               <div className="mb-2 flex items-start gap-2 rounded-t-2xl border border-b-0 border-border/60 bg-surface/60 px-3 py-2">
                 <Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
@@ -2923,16 +3071,23 @@ export function ThreadChat({
                     Replying to {replyingTo.authorId === currentMemberId ? "yourself" : replyingTo.authorName}
                   </div>
                   <div className="line-clamp-1 text-s text-muted-foreground">
-                    {replyingTo.body || (replyImage ? "Photo" : "Attachment")}
+                    {previewText}
                   </div>
                 </div>
-                {replyImage && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={replyImage.url}
-                    alt=""
-                    className="h-10 w-10 shrink-0 rounded-md object-cover"
-                  />
+                {replyThumb && (
+                  <span className="relative size-10 shrink-0 overflow-hidden rounded-md bg-surface-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={replyThumb.url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                    {replyVideo && (
+                      <span className="absolute inset-0 grid place-items-center bg-black/40">
+                        <Play className="h-3.5 w-3.5 fill-white text-white" />
+                      </span>
+                    )}
+                  </span>
                 )}
                 <button
                   type="button"

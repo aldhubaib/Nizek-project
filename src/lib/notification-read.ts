@@ -24,6 +24,33 @@ export function inboxThreadIdsFromReadPayload(payload: {
   return [...ids];
 }
 
+/** Inbox row id (`conv-…` / `project-…`) for a notification link, if any. */
+export function inboxThreadIdFromLinkUrl(
+  linkUrl: string | null | undefined,
+): string | null {
+  if (!linkUrl) return null;
+  return inboxThreadIdsFromReadPayload({ linkUrls: [linkUrl] })[0] ?? null;
+}
+
+export function isInboxMessageLink(
+  linkUrl: string | null | undefined,
+): boolean {
+  return inboxThreadIdFromLinkUrl(linkUrl) != null;
+}
+
+/** Thread id from a live `inbox` delta (covers older payloads that omit `threadId`). */
+export function threadIdFromInboxDelta(payload: {
+  threadId?: string | null;
+  conversationId?: string | null;
+  projectId?: string | null;
+  taskId?: string | null;
+}): string | null {
+  if (payload.threadId) return payload.threadId;
+  if (payload.conversationId) return `conv-${payload.conversationId}`;
+  if (payload.projectId && !payload.taskId) return `project-${payload.projectId}`;
+  return null;
+}
+
 function safePathname(url: string): string {
   try {
     return new URL(url).pathname;

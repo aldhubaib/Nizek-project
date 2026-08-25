@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  decideNotificationSound,
   isViewingLink,
   shouldPlayNotificationSound,
 } from "@/lib/notification-sound-policy";
@@ -74,13 +75,45 @@ describe("shouldPlayNotificationSound", () => {
     expect(shouldPlayNotificationSound({}, focusedCtx)).toBe(false);
   });
 
-  it("chimes for notifications without a link (no thread to be viewing)", () => {
+  it("stays silent for self-authored notification.new", () => {
     expect(
       shouldPlayNotificationSound(
-        { type: NOTIFICATION_NEW, notification: {} },
+        {
+          type: NOTIFICATION_NEW,
+          authorId: "me",
+          notification: { linkUrl: "/dashboard/messages/conv-1" },
+        },
         focusedCtx,
       ),
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      decideNotificationSound(
+        {
+          type: NOTIFICATION_NEW,
+          authorId: "me",
+          notification: { linkUrl: "/dashboard/messages/conv-1" },
+        },
+        focusedCtx,
+      ).reason,
+    ).toBe("self-authored");
+  });
+
+  it("stays silent when the user disabled in-app sound", () => {
+    expect(
+      decideNotificationSound(
+        { type: NOTIFICATION_NEW, notification: { linkUrl: "/x" } },
+        { ...focusedCtx, soundEnabled: false },
+      ),
+    ).toEqual({ play: false, reason: "sound-disabled" });
+  });
+
+  it("records played when every gate passes", () => {
+    expect(
+      decideNotificationSound(
+        { type: NOTIFICATION_NEW, notification: { linkUrl: "/dashboard/messages/conv-1" } },
+        focusedCtx,
+      ),
+    ).toEqual({ play: true, reason: "played" });
   });
 });
 

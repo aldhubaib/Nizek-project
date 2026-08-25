@@ -15,7 +15,23 @@ export interface SoundContext {
   appFocused: boolean;
   /** Current location.pathname, used to skip the chime for the open thread. */
   pathname: string;
+  /** Per-device / server-synced preference. Defaults to enabled. */
+  soundEnabled?: boolean;
 }
+
+export type SoundDecisionReason =
+  | "played"
+  | "invalid-payload"
+  | "not-notification-new"
+  | "app-not-focused"
+  | "viewing-thread"
+  | "self-authored"
+  | "sound-disabled";
+
+export type SoundDecision = {
+  play: boolean;
+  reason: SoundDecisionReason;
+};
 
 /**
  * WhatsApp behavior:
@@ -27,20 +43,46 @@ export interface SoundContext {
  *   notification sound) covers that case since the service worker only
  *   suppresses banners for focused-visible clients.
  * - No chime when the user is already looking at the thread the notification
- *   links to.
+ *   links to, or when the current user authored it.
  */
+export function decideNotificationSound(
+  payload: SoundEventPayload | null | undefined,
+  ctx: SoundContext,
+): SoundDecision {
+  if (!payload || typeof payload !== "object") {
+    return { play: false, reason: "invalid-payload" };
+  }
+  if (payload.type !== NOTIFICATION_NEW) {
+    return { play: false, reason: "not-notification-new" };
+  }
+  if (!ctx.appFocused) {
+    return { play: false, reason: "app-not-focused" };
+  }
+  if (
+    ctx.currentUserId &&
+    payload.authorId &&
+    payload.authorId === ctx.currentUserId
+  ) {
+    return { play: false, reason: "self-authored" };
+  }
+
+  const linkUrl = payload.notification?.linkUrl;
+  if (linkUrl && isViewingLink(ctx.pathname, linkUrl)) {
+    return { play: false, reason: "viewing-thread" };
+  }
+
+  if (ctx.soundEnabled === false) {
+    return { play: false, reason: "sound-disabled" };
+  }
+
+  return { play: true, reason: "played" };
+}
+
 export function shouldPlayNotificationSound(
   payload: SoundEventPayload | null | undefined,
   ctx: SoundContext,
 ): boolean {
-  if (!payload || typeof payload !== "object") return false;
-  if (payload.type !== NOTIFICATION_NEW) return false;
-  if (!ctx.appFocused) return false;
-
-  const linkUrl = payload.notification?.linkUrl;
-  if (linkUrl && isViewingLink(ctx.pathname, linkUrl)) return false;
-
-  return true;
+  return decideNotificationSound(payload, ctx).play;
 }
 
 /** True when the current pathname is the page the notification links to. */
