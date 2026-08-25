@@ -90,6 +90,7 @@ import {
   FilesPanel,
 } from "@/components/messages/chat-attachments";
 import { LinkPreviewCard } from "@/components/messages/link-preview";
+import { ReplyContext } from "@/components/messages/reply-context";
 import { firstUrl } from "@/lib/link-preview";
 import {
   enqueueOutboxMessage,
@@ -898,81 +899,18 @@ const MessageRow = memo(function MessageRow({
           {showAuthor && (
             <div className="px-1 text-xs text-muted-foreground">{m.authorName}</div>
           )}
-          {replied && (() => {
-            const attachments = replied.attachments ?? [];
-            const replyImage = attachments.find((a) => a.isImage) ?? null;
-            const replyVideo = !replyImage
-              ? attachments.find((a) => a.contentType?.startsWith("video/")) ?? null
-              : null;
-            const replyFile = !replyImage && !replyVideo ? (attachments[0] ?? null) : null;
-            const replyThumb = replyImage ?? replyVideo;
-            let bodyText = replied.body;
-            if (!bodyText) {
-              if (replyImage) bodyText = "";
-              else if (replyVideo) bodyText = "";
-              else if (replyFile) bodyText = "";
-              else bodyText = "";
-            } else if (bodyText.length > 120) {
-              bodyText = `${bodyText.slice(0, 120)}…`;
-            }
-            return (
-              <button
-                type="button"
-                onClick={() => scrollToMessage(m.replyToId!)}
-                className={cn(
-                  "flex max-w-full items-stretch gap-2 overflow-hidden rounded-lg border border-border/60 border-l-2 border-l-primary bg-surface p-1.5 pl-2.5 text-left text-xs shadow-sm",
-                  mine ? "self-end rounded-br-sm" : "self-start rounded-bl-sm",
-                )}
-              >
-                <span className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-0.5">
-                  <span className="text-[11px] font-semibold text-primary">
-                    {replied.authorId === currentMemberId ? "You" : replied.authorName}
-                  </span>
-                  <span className="flex min-w-0 items-center gap-1 text-muted-foreground">
-                    {replyVideo && !replied.body && (
-                      <>
-                        <span className="shrink-0 text-foreground/80">Video</span>
-                        <span className="line-clamp-2 min-w-0 break-words">{replyVideo.name}</span>
-                      </>
-                    )}
-                    {replyFile && !replyImage && !replyVideo && !replied.body && (
-                      <>
-                        <FileText className="h-3 w-3 shrink-0" />
-                        <span className="shrink-0 text-foreground/80">File</span>
-                        <span className="line-clamp-2 min-w-0 break-words">{replyFile.name}</span>
-                      </>
-                    )}
-                    {(bodyText || (!replyVideo && !replyFile)) && (
-                      <span className="line-clamp-2 min-w-0 break-words">{bodyText || "Attachment"}</span>
-                    )}
-                  </span>
-                </span>
-                {replyThumb && (
-                  <span className="relative size-10 shrink-0 overflow-hidden rounded-md bg-surface-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={replyThumb.url}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                    {replyVideo && (
-                      <span className="absolute inset-0 grid place-items-center bg-black/40">
-                        <Play className="h-3.5 w-3.5 fill-white text-white" />
-                      </span>
-                    )}
-                  </span>
-                )}
-              </button>
-            );
-          })()}
-          {(m.body || (m.task && showTaskCard) || editing) && (() => {
+          {(replied || m.body || (m.task && showTaskCard) || editing) && (() => {
             const notice = (!!m.task && showTaskCard) || m.kind === "rejection";
             const blue = mine && !notice;
+            const replyOnly =
+              Boolean(replied) && !m.body && !editing && !(m.task && showTaskCard);
             return (
             <div className="group relative">
               <div
                 className={cn(
-                  "flex max-w-full flex-col gap-xs text-s leading-relaxed",
+                  "flex max-w-full flex-col text-s leading-relaxed",
+                  replied ? "gap-1.5" : "gap-xs",
+                  replied && "min-w-[13.5rem]",
                   notice
                     ? "min-w-64 rounded-xl border border-border/60 bg-surface-2/80 p-2.5 text-foreground"
                     : "rounded-2xl px-3.5 py-2",
@@ -982,6 +920,17 @@ const MessageRow = memo(function MessageRow({
                       : "rounded-bl-md bg-surface-2 text-foreground"),
                 )}
               >
+                {replied && (
+                  <ReplyContext
+                    authorLabel={
+                      replied.authorId === currentMemberId ? "You" : replied.authorName
+                    }
+                    body={replied.body}
+                    attachments={replied.attachments}
+                    mine={blue}
+                    onClick={() => scrollToMessage(m.replyToId!)}
+                  />
+                )}
                 {m.task && showTaskCard && (
                   <Link
                     href={`/dashboard/projects/${m.task.projectId}/tasks/${m.task.id}`}
@@ -1078,6 +1027,18 @@ const MessageRow = memo(function MessageRow({
                       />
                     </div>
                   ))
+                )}
+                {replyOnly && imageAtts.length === 0 && fileAtts.length === 0 && (
+                  <div className="flex justify-end">
+                    <MessageMeta
+                      createdAt={m.createdAt}
+                      edited={m.edited}
+                      mine={mine}
+                      blue={blue}
+                      peerLastReadAt={peerLastReadAt}
+                      important={m.important}
+                    />
+                  </div>
                 )}
               </div>
               {/* Desktop only — WhatsApp hover ⋮. Mobile uses selection header. */}
@@ -2878,7 +2839,7 @@ export function ThreadChat({
                   onEditDraftChange={setEditDraft}
                   onSaveEdit={onSaveEdit}
                   onCancelEdit={onCancelEdit}
-                  scrollToMessage={scrollToMessage}
+                  scrollToMessage={jumpToMessage}
                   openImage={openImage}
                   memberNames={peopleNames}
                 />
@@ -2889,6 +2850,8 @@ export function ThreadChat({
               <OutboxBubble
                 key={o.tempId}
                 entry={o}
+                replied={o.replyToId ? byId.get(o.replyToId) : null}
+                currentMemberId={currentMemberId}
                 onRetry={() => retryOutboxEntry(o.tempId)}
                 onDiscard={() => discardOutboxEntry(o.tempId)}
               />
@@ -3048,58 +3011,20 @@ export function ThreadChat({
               </div>
             </div>
           )}
-          {replyingTo && (() => {
-            const attachments = replyingTo.attachments ?? [];
-            const replyImage = attachments.find((a) => a.isImage) ?? null;
-            const replyVideo = !replyImage
-              ? attachments.find((a) => a.contentType?.startsWith("video/")) ?? null
-              : null;
-            const replyFile = !replyImage && !replyVideo ? (attachments[0] ?? null) : null;
-            const replyThumb = replyImage ?? replyVideo;
-            let previewText = replyingTo.body;
-            if (!previewText) {
-              if (replyVideo) previewText = `Video ${replyVideo.name}`;
-              else if (replyFile) previewText = `File ${replyFile.name}`;
-              else if (replyImage) previewText = "Photo";
-              else previewText = "Attachment";
-            }
-            return (
-              <div className="mb-2 flex items-start gap-2 rounded-t-2xl border border-b-0 border-border/60 bg-surface/60 px-3 py-2">
-                <Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-semibold text-primary">
-                    Replying to {replyingTo.authorId === currentMemberId ? "yourself" : replyingTo.authorName}
-                  </div>
-                  <div className="line-clamp-1 text-s text-muted-foreground">
-                    {previewText}
-                  </div>
-                </div>
-                {replyThumb && (
-                  <span className="relative size-10 shrink-0 overflow-hidden rounded-md bg-surface-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={replyThumb.url}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                    {replyVideo && (
-                      <span className="absolute inset-0 grid place-items-center bg-black/40">
-                        <Play className="h-3.5 w-3.5 fill-white text-white" />
-                      </span>
-                    )}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setReplyTo(null)}
-                  className="grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
-                  aria-label="Cancel reply"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            );
-          })()}
+          {replyingTo && (
+            <div className="mb-2">
+              <ReplyContext
+                variant="composer"
+                authorLabel={
+                  replyingTo.authorId === currentMemberId ? "You" : replyingTo.authorName
+                }
+                body={replyingTo.body}
+                attachments={replyingTo.attachments}
+                onClick={() => jumpToMessage(replyingTo.id)}
+                onDismiss={() => setReplyTo(null)}
+              />
+            </div>
+          )}
           {pending.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
               {pending.map((p) => (
@@ -3720,10 +3645,14 @@ export function ThreadChat({
 // "mine" bubble with per-file progress — the WhatsApp send experience.
 function OutboxBubble({
   entry,
+  replied,
+  currentMemberId,
   onRetry,
   onDiscard,
 }: {
   entry: OutboxEntry;
+  replied: ChatMessage | null | undefined;
+  currentMemberId: string;
   onRetry: () => void;
   onDiscard: () => void;
 }) {
@@ -3784,10 +3713,29 @@ function OutboxBubble({
             })}
           </div>
         )}
-        {entry.body && (
-          <div className="flex max-w-full items-end gap-2 rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-s leading-relaxed text-primary-foreground opacity-90">
-            <span className="whitespace-pre-wrap break-words">{entry.body}</span>
-            <Clock className="ml-1 h-3 w-3 shrink-0 translate-y-0.5 opacity-70" />
+        {(entry.body || replied) && (
+          <div
+            className={cn(
+              "flex max-w-full flex-col rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-s leading-relaxed text-primary-foreground opacity-90",
+              replied ? "min-w-[13.5rem] gap-1.5" : "gap-2",
+            )}
+          >
+            {replied && (
+              <ReplyContext
+                authorLabel={
+                  replied.authorId === currentMemberId ? "You" : replied.authorName
+                }
+                body={replied.body}
+                attachments={replied.attachments}
+                mine
+              />
+            )}
+            {entry.body && (
+              <div className="flex items-end gap-2">
+                <span className="whitespace-pre-wrap break-words">{entry.body}</span>
+                <Clock className="ml-1 h-3 w-3 shrink-0 translate-y-0.5 opacity-70" />
+              </div>
+            )}
           </div>
         )}
         {entry.body &&
