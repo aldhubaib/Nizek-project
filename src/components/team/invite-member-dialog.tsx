@@ -366,6 +366,9 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="colleague@company.com"
               />
+              <p className="text-xs text-muted-foreground">
+                Adds this email to the allowlist. They can then sign in with Google — any domain is allowed.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Role</Label>
@@ -390,7 +393,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
                 Cancel
               </Button>
               <Button type="submit" disabled={loading || !inviteEmail.trim() || !inviteRoleId}>
-                {loading ? "Sending..." : "Send Invite"}
+                {loading ? "Adding..." : "Allow Sign In"}
               </Button>
             </div>
           </form>

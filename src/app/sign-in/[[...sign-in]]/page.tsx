@@ -31,11 +31,18 @@ async function loadGallery(): Promise<{
   }
 }
 
-export default async function SignInPage() {
-  const { photos, logoUrl } = await loadGallery();
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const [{ photos, logoUrl }, { error }] = await Promise.all([
+    loadGallery(),
+    searchParams,
+  ]);
   return (
     <AuthLayout photos={photos} logoUrl={logoUrl}>
-      <GoogleSignIn />
+      <GoogleSignIn initialError={error} />
     </AuthLayout>
   );
 }

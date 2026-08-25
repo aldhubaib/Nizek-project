@@ -1,7 +1,8 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireUser, acceptPendingInvitations } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
+import { applyPendingInvite, logPendingInviteError, removeFromAllowlistIfUnused } from "@/lib/pending-invite";
 import { revalidatePath } from "next/cache";
 import { cache } from "react";
 import type { SystemRole, TeamRole } from "@/generated/prisma/client";
@@ -254,15 +255,18 @@ const reconcileSignedUpInvites = cache(async () => {
     if (localUsers.length === 0) return;
 
     for (const u of localUsers) {
-      await acceptPendingInvitations(u.id, u.email).catch(() => {});
+      try {
+        await applyPendingInvite(u.id, u.email);
+      } catch (error) {
+        logPendingInviteError("Admin list reconciliation failed", {
+          userId: u.id,
+          email: u.email,
+          error,
+        });
+      }
     }
-
-    const existingEmails = localUsers.map((u) => u.email.toLowerCase());
-    await prisma.pendingTeamInvite
-      .deleteMany({ where: { email: { in: existingEmails } } })
-      .catch(() => {});
-  } catch {
-    // Reconciliation is best-effort
+  } catch (error) {
+    logPendingInviteError("Failed to load reconciliation candidates", { error });
   }
 });
 
@@ -279,26 +283,6 @@ export async function getPendingInvitations() {
     },
     orderBy: { createdAt: "desc" },
   });
-
-  if (invitations.length === 0) return [];
-
-  const emails = [...new Set(invitations.map((i) => i.email.toLowerCase()))];
-  const users = await prisma.user.findMany({
-    where: {
-      OR: emails.map((email) => ({
-        email: { equals: email, mode: "insensitive" as const },
-      })),
-    },
-    select: { id: true, email: true },
-  });
-
-  if (users.length > 0) {
-    await Promise.all(
-      users.map((u) => acceptPendingInvitations(u.id, u.email).catch(() => {})),
-    );
-    const existingEmails = new Set(users.map((u) => u.email.toLowerCase()));
-    return invitations.filter((i) => !existingEmails.has(i.email.toLowerCase()));
-  }
 
   return invitations;
 }
@@ -330,6 +314,12 @@ export async function inviteToTeam(data: {
     create: { email, systemRole: data.systemRole, firstName, lastName, teamId },
   });
 
+  await prisma.allowedEmail.upsert({
+    where: { email },
+    update: {},
+    create: { email },
+  });
+
   const assignments = (data.projects ?? []).filter((p) => p.projectId && p.roleId);
 
   if (data.systemRole === "CLIENT" && assignments.length > 0) {
@@ -359,12 +349,6 @@ export async function inviteToTeam(data: {
         },
       });
     }
-
-    await prisma.allowedEmail.upsert({
-      where: { email },
-      update: {},
-      create: { email },
-    });
   }
 
   revalidatePath("/dashboard/team");
@@ -378,24 +362,7 @@ export async function getPendingTeamInvites() {
     orderBy: { createdAt: "desc" },
   });
 
-  if (invites.length === 0) return [];
-
-  const existingUsers = await prisma.user.findMany({
-    where: {
-      OR: invites.map((i) => ({
-        email: { equals: i.email, mode: "insensitive" as const },
-      })),
-    },
-    select: { email: true },
-  });
-  const existingEmails = new Set(existingUsers.map((u) => u.email.toLowerCase()));
-
-  const staleIds = invites.filter((i) => existingEmails.has(i.email.toLowerCase())).map((i) => i.id);
-  if (staleIds.length > 0) {
-    prisma.pendingTeamInvite.deleteMany({ where: { id: { in: staleIds } } }).catch(() => {});
-  }
-
-  return invites.filter((i) => !existingEmails.has(i.email.toLowerCase()));
+  return invites;
 }
 
 export async function getProjectsWithRoles() {
@@ -425,52 +392,8 @@ export async function cancelTeamInvite(inviteId: string) {
   });
   if (!invite) throw new Error("Invite not found");
 
-  await prisma.$transaction([
-    prisma.pendingTeamInvite.delete({ where: { id: inviteId } }),
-    prisma.allowedEmail.deleteMany({ where: { email: invite.email } }),
-  ]);
-
-  revalidatePath("/dashboard/team");
-}
-
-export async function resendTeamInvite(inviteId: string) {
-  const currentUser = await requireUser();
-  if (currentUser.systemRole !== "ADMIN") {
-    throw new Error("Only admins can resend invitations");
-  }
-
-  const invite = await prisma.pendingTeamInvite.findUnique({
-    where: { id: inviteId },
-  });
-  if (!invite) throw new Error("Invite not found");
-
-  const { Resend } = await import("resend");
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://amused-wonder-production-c7e9.up.railway.app";
-  const inviterName = currentUser.name || currentUser.email;
-  const roleLabel = invite.systemRole.replace("_", " ");
-
-  const resend = new Resend(process.env.RESEND_API_KEY);
-  await resend.emails.send({
-    from: "Nizek Project <onboarding@resend.dev>",
-    to: invite.email,
-    subject: "Reminder: You've been invited to Nizek Project",
-    html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-        <div style="background: #1a1a2e; border-radius: 12px; padding: 32px; color: #e0e0e0;">
-          <h2 style="margin: 0 0 8px; color: #ffffff; font-size: 20px;">Reminder: You're invited!</h2>
-          <p style="margin: 0 0 24px; color: #a0a0b0; font-size: 14px; line-height: 1.5;">
-            <strong style="color: #ffffff;">${inviterName}</strong> invited you to join
-            <strong style="color: #4ade80;">Nizek Project</strong> as
-            <strong style="color: #c084fc;">${roleLabel}</strong>.
-          </p>
-          <a href="${appUrl}/sign-in"
-             style="display: inline-block; background: #4ade80; color: #0a0a0a; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
-            Get Started
-          </a>
-        </div>
-      </div>
-    `,
-  });
+  await prisma.pendingTeamInvite.delete({ where: { id: inviteId } });
+  await removeFromAllowlistIfUnused(invite.email);
 
   revalidatePath("/dashboard/team");
 }
@@ -680,9 +603,4 @@ export async function assignUserToDefaultTeam(userId: string, isClient: boolean 
     update: {},
     create: { userId, teamId: defaultTeam.id, role: "MEMBER" },
   });
-}
-
-export async function removeFromAllowlist(email: string) {
-  await requireUser();
-  await prisma.allowedEmail.deleteMany({ where: { email: email.toLowerCase() } });
 }

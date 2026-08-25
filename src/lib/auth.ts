@@ -2,56 +2,11 @@ import { headers, cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth-server";
 import { cache } from "react";
+import { applyPendingInvite, logPendingInviteError } from "@/lib/pending-invite";
+
+export { acceptPendingInvitations, applyPendingInvite } from "@/lib/pending-invite";
 
 export const IMPERSONATE_COOKIE = "impersonate_user_id";
-
-export async function acceptPendingInvitations(userId: string, email: string) {
-  const pending = await prisma.invitation.findMany({
-    where: { email: { equals: email, mode: "insensitive" }, status: "PENDING" },
-  });
-  if (pending.length === 0) return;
-
-  const existingMembers = await prisma.projectMember.findMany({
-    where: {
-      userId,
-      projectId: { in: pending.map((inv) => inv.projectId) },
-    },
-    select: { projectId: true },
-  });
-  const memberSet = new Set(existingMembers.map((m) => m.projectId));
-
-  const newMembers = pending.filter((inv) => !memberSet.has(inv.projectId));
-
-  await prisma.$transaction([
-    ...(newMembers.length > 0
-      ? [prisma.projectMember.createMany({
-          data: newMembers.map((inv) => ({
-            userId,
-            projectId: inv.projectId,
-            role: inv.role,
-            roleId: inv.roleId,
-          })),
-          skipDuplicates: true,
-        })]
-      : []),
-    prisma.invitation.updateMany({
-      where: { id: { in: pending.map((inv) => inv.id) } },
-      data: { status: "ACCEPTED" },
-    }),
-  ]);
-
-  if (newMembers.length > 0) {
-    const { syncClientConversationParticipants } = await import("@/lib/client-chat");
-    const projectIds = [...new Set(newMembers.map((m) => m.projectId))];
-    const enabled = await prisma.project.findMany({
-      where: { id: { in: projectIds }, clientChatEnabled: true },
-      select: { id: true },
-    });
-    await Promise.all(
-      enabled.map((p) => syncClientConversationParticipants(p.id).catch(() => {})),
-    );
-  }
-}
 
 /**
  * Get the current Better Auth session. Returns null if not authenticated.
@@ -71,6 +26,20 @@ export const getRealUser = cache(async () => {
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
   });
+  if (!user) return null;
+
+  try {
+    const { userMutated } = await applyPendingInvite(user.id, user.email);
+    if (userMutated) {
+      return prisma.user.findUnique({ where: { id: user.id } });
+    }
+  } catch (error) {
+    logPendingInviteError("Reconciliation on session failed; will retry next request", {
+      userId: user.id,
+      email: user.email,
+      error,
+    });
+  }
 
   return user;
 });

@@ -4,9 +4,17 @@ import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Loader2 } from "lucide-react";
 
-export function GoogleSignIn() {
+function messageForAuthError(code: string | null | undefined) {
+  if (!code) return null;
+  if (code === "not_allowed" || code === "FORBIDDEN" || code === "unable_to_create_user" || code === "auth_failed") {
+    return "This Google account is not approved to sign in. Ask an admin to add your email first.";
+  }
+  return "Sign-in failed. Please try again.";
+}
+
+export function GoogleSignIn({ initialError }: { initialError?: string | null }) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => messageForAuthError(initialError));
 
   const handleSignIn = async () => {
     setLoading(true);
@@ -15,7 +23,7 @@ export function GoogleSignIn() {
       await authClient.signIn.social({
         provider: "google",
         callbackURL: "/dashboard",
-        errorCallbackURL: "/sign-in?error=auth_failed",
+        errorCallbackURL: "/sign-in",
       });
     } catch (err) {
       setError(

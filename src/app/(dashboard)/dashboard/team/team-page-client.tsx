@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Mail, Clock, FolderKanban, Search, X, Ban, RotateCw, Trash2, ShieldCheck, Shield, AlertTriangle, ArrowRightLeft, ChevronDown, Check, Eye, Pencil } from "lucide-react";
+import { Users, Mail, Clock, FolderKanban, Search, X, Ban, Trash2, ShieldCheck, Shield, AlertTriangle, ArrowRightLeft, ChevronDown, Check, Eye, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddButton } from "@/components/add-button";
 import { formatDistanceToNow } from "date-fns";
-import { updateUserAdmin, updateUserEmail, inviteToTeam, toggleBlockUser, cancelTeamInvite, resendTeamInvite, getUserTaskSummary } from "@/actions/team";
+import { updateUserAdmin, updateUserEmail, inviteToTeam, toggleBlockUser, cancelTeamInvite, getUserTaskSummary } from "@/actions/team";
 import { updateMemberRole, removeMember } from "@/actions/project";
 import { startImpersonation } from "@/actions/impersonation";
 
@@ -243,19 +243,8 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
     }
   }
 
-  async function handleResendInvite(inviteId: string) {
-    setActionLoading(inviteId);
-    try {
-      await resendTeamInvite(inviteId);
-    } catch (err) {
-      alert((err as Error).message);
-    } finally {
-      setActionLoading(null);
-    }
-  }
-
   async function handleCancelInvite(inviteId: string) {
-    if (!confirm("Cancel this invitation?")) return;
+    if (!confirm("Remove this email from the allowlist?")) return;
     setActionLoading(inviteId);
     try {
       await cancelTeamInvite(inviteId);
@@ -331,7 +320,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
         </div>
         {isAdmin && (
           <AddButton
-            label="Invite Member"
+            label="Add Member"
             onClick={() => setShowInvite(true)}
           />
         )}
@@ -342,7 +331,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay">
           <div className="w-full max-w-sm rounded-xl border border-border bg-sidebar p-5 shadow-xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-s font-semibold text-foreground">Invite Member</h3>
+              <h3 className="text-s font-semibold text-foreground">Add Member</h3>
               <button
                 onClick={() => setShowInvite(false)}
                 className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-card transition-colors text-muted-foreground"
@@ -481,6 +470,9 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                   Admins have full access. Assign project roles when adding members to projects.
                 </p>
               </div>
+              <p className="text-xs text-muted-foreground/60">
+                No invitation email is sent. Once added, they can sign in with Google using this address — any domain is allowed.
+              </p>
               <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
@@ -494,7 +486,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                   disabled={inviting || !inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim() || inviteProjects.some((p) => !p.projectId || !p.roleId)}
                   className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-s font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
-                  {inviting ? "Sending..." : "Send Invite"}
+                  {inviting ? "Adding..." : "Allow Sign In"}
                 </button>
               </div>
             </form>
@@ -806,7 +798,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
       {/* Pending Invitations */}
       {(filteredTeamInvites.length > 0 || filteredInvitations.length > 0) && (
         <div>
-          <h2 className="text-s font-semibold text-foreground mb-3">Pending Invitations</h2>
+          <h2 className="text-s font-semibold text-foreground mb-3">Awaiting Sign In</h2>
           <div className="space-y-1">
             {filteredTeamInvites.map((inv) => (
               <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors">
@@ -823,17 +815,13 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                       <span className="text-xs px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground">{inv.team.name}</span>
                     )}
                     <span className="text-xs text-muted-foreground/50">
-                      Invited {formatDistanceToNow(new Date(inv.createdAt), { addSuffix: true })}
+                      Added {formatDistanceToNow(new Date(inv.createdAt), { addSuffix: true })}
                     </span>
                   </div>
                 </div>
                 {isAdmin && (
                   <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => handleResendInvite(inv.id)} disabled={actionLoading === inv.id} title="Resend invitation"
-                      className="w-7 h-7 rounded-md flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50">
-                      <RotateCw className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => handleCancelInvite(inv.id)} disabled={actionLoading === inv.id} title="Cancel invitation"
+                    <button onClick={() => handleCancelInvite(inv.id)} disabled={actionLoading === inv.id} title="Remove from allowlist"
                       className="w-7 h-7 rounded-md flex items-center justify-center bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -857,7 +845,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                       {inv.projectRole?.name ?? inv.role}
                     </span>
                     <span className="text-xs text-muted-foreground/50">
-                      Invited {formatDistanceToNow(new Date(inv.createdAt), { addSuffix: true })}
+                      Added {formatDistanceToNow(new Date(inv.createdAt), { addSuffix: true })}
                     </span>
                   </div>
                 </div>

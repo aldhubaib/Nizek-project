@@ -9,8 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Trash2, Shield, RefreshCw, X, Clock, Mail, UserPlus, Users, AlertTriangle, ArrowRightLeft, Film } from "lucide-react";
-import { removeMember, updateMemberRole, resendInvitation, cancelInvitation, updateMemberInvitePerms } from "@/actions/project";
+import { Trash2, Shield, X, Clock, Mail, UserPlus, Users, AlertTriangle, ArrowRightLeft, Film } from "lucide-react";
+import { removeMember, updateMemberRole, cancelInvitation, updateMemberInvitePerms } from "@/actions/project";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { outlineBadge } from "@/lib/task-label";
 
@@ -77,7 +77,6 @@ export function MemberList({
   canManageMembers = false,
 }: Props) {
   const isAdmin = currentUserRole === "ADMIN" || canManageMembers;
-  const [resendingId, setResendingId] = useState<string | null>(null);
   const [transferState, setTransferState] = useState<TransferState | null>(null);
   const [removing, setRemoving] = useState(false);
   const [permOverrides, setPermOverrides] = useState<
@@ -137,17 +136,6 @@ export function MemberList({
       alert((err as Error).message || "Failed to transfer tasks");
     } finally {
       setRemoving(false);
-    }
-  }
-
-  async function handleResend(invitationId: string) {
-    setResendingId(invitationId);
-    try {
-      await resendInvitation({ projectId, invitationId });
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setResendingId(null);
     }
   }
 
@@ -351,7 +339,7 @@ export function MemberList({
           <div className="flex items-center gap-2 mb-3">
             <Clock className="w-3.5 h-3.5 text-muted-foreground/50" />
             <span className="text-xs font-medium text-muted-foreground/70">
-              Pending Invitations
+              Awaiting Sign In
             </span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -377,7 +365,7 @@ export function MemberList({
                           {expired ? (
                             <StatusBadge config={outlineBadge("Expired", "text-destructive", "border-destructive/30")} />
                           ) : (
-                            <StatusBadge config={outlineBadge("Waiting", "text-orange", "border-orange/30")} icon={Clock} />
+                            <StatusBadge config={outlineBadge("Added", "text-orange", "border-orange/30")} icon={Clock} />
                           )}
                           <span className="text-xs text-muted-foreground/50">
                             {new Date(inv.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
@@ -390,7 +378,7 @@ export function MemberList({
                         variant="ghost"
                         size="icon-sm"
                         onClick={() => handleCancelInvite(inv.id)}
-                        title="Cancel invitation"
+                        title="Remove from allowlist"
                         className="text-muted-foreground/40 hover:text-destructive shrink-0 -mt-0.5 -me-1"
                       >
                         <X className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -400,18 +388,6 @@ export function MemberList({
 
                   <div className="flex items-center justify-between">
                     <StatusBadge config={outlineBadge(roleName, "text-muted-foreground", "border-border")} icon={Shield} />
-                    {isAdmin && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleResend(inv.id)}
-                        disabled={resendingId === inv.id}
-                        className="text-xs text-muted-foreground hover:text-foreground h-6 px-2"
-                      >
-                        <RefreshCw className={`w-3 h-3 me-1 ${resendingId === inv.id ? "animate-spin" : ""}`} strokeWidth={1.5} />
-                        Resend
-                      </Button>
-                    )}
                   </div>
                 </div>
               );
