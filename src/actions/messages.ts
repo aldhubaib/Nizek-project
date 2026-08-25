@@ -41,6 +41,7 @@ import {
   proofBypassPreview,
   type ProofBypassPayload,
 } from "@/lib/proof-bypass-payload";
+import { revalidatePath } from "next/cache";
 import { plainTextExcerpt } from "@/lib/html-annotate";
 import { ALL_MENTION_ID, ALL_MENTION_NAME } from "@/lib/mentions";
 import {
@@ -1881,6 +1882,8 @@ export async function getOrCreateDirectConversation(
       },
       select: { id: true },
     });
+
+    revalidatePath("/dashboard/messages");
 
     return `conv-${conv.id}`;
   });

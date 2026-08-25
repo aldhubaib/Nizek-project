@@ -142,11 +142,22 @@ function NewMessageDialog({
     );
   }, [members, search]);
 
-  function selectMember(memberId: string) {
+  function selectMember(member: MessageableMember) {
     startTransition(async () => {
-      const result = await getOrCreateDirectConversation(memberId);
+      const result = await getOrCreateDirectConversation(member.id);
       if (result.ok) {
         onOpenChange(false);
+        window.dispatchEvent(
+          new CustomEvent("inbox:thread-created", {
+            detail: {
+              threadId: result.data,
+              name: member.name ?? member.email,
+              subtitle: member.name ? member.email : "",
+              peerImageUrl: member.imageUrl,
+              peerMemberIds: [member.id],
+            },
+          }),
+        );
         router.push(`/dashboard/messages/${result.data}`);
       }
     });
@@ -185,7 +196,7 @@ function NewMessageDialog({
                 type="button"
                 disabled={pending}
                 className="flex w-full items-center gap-3 py-3 text-start transition-colors hover:bg-surface/60 disabled:opacity-50"
-                onClick={() => selectMember(m.id)}
+                onClick={() => selectMember(m)}
               >
                 {m.imageUrl ? (
                   <Image
@@ -431,6 +442,76 @@ export function ThreadSidebar({
     // Reconnected but missed events couldn't be replayed — refetch the list.
     () => router.refresh(),
   );
+
+  useEffect(() => {
+    function onThreadCreated(e: Event) {
+      const d = (e as CustomEvent).detail as {
+        threadId: string;
+        name: string;
+        subtitle: string;
+        peerImageUrl: string | null;
+        peerMemberIds: string[];
+      } | null;
+      if (!d) return;
+      setLiveThreads((prev) => {
+        if (prev.some((t) => t.id === d.threadId)) return prev;
+        const initials = (d.name ?? "?")
+          .split(" ")
+          .map((w) => w[0])
+          .join("")
+          .slice(0, 2);
+        const thread: InboxThread = {
+          id: d.threadId,
+          kind: "direct",
+          name: d.name,
+          subtitle: d.subtitle,
+          projectId: null,
+          conversationId: d.threadId.replace("conv-", ""),
+          logoUrl: null,
+          peerImageUrl: d.peerImageUrl,
+          peerMemberIds: d.peerMemberIds,
+          lastMessage: "",
+          lastAuthor: "",
+          lastAt: new Date().toISOString(),
+          unread: 0,
+          avatar: "#6366f1",
+          initials,
+          inactive: false,
+        };
+        return [thread, ...prev];
+      });
+    }
+
+    function onMessageEnqueued(e: Event) {
+      const d = (e as CustomEvent).detail as {
+        threadKey: string;
+        body: string;
+        createdAt: string;
+      } | null;
+      if (!d) return;
+      const preview = d.body.replace(/<[^>]+>/g, "").trim().slice(0, 120) || "";
+      setLiveThreads((prev) => {
+        const idx = prev.findIndex((t) => t.id === d.threadKey);
+        if (idx === -1) return prev;
+        const updated = {
+          ...prev[idx],
+          lastMessage: preview,
+          lastAuthor: "You",
+          lastAt: d.createdAt,
+        };
+        const next = [...prev];
+        next.splice(idx, 1);
+        return [updated, ...next];
+      });
+    }
+
+    window.addEventListener("inbox:thread-created", onThreadCreated);
+    window.addEventListener("inbox:message-enqueued", onMessageEnqueued);
+    return () => {
+      window.removeEventListener("inbox:thread-created", onThreadCreated);
+      window.removeEventListener("inbox:message-enqueued", onMessageEnqueued);
+    };
+  }, []);
 
   const allRows = useMemo(() => {
     return liveThreads

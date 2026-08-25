@@ -61,15 +61,6 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user) => {
-          const allowed = await prisma.allowedEmail.findUnique({
-            where: { email: user.email.toLowerCase() },
-          });
-          if (!allowed) {
-            const { APIError } = await import("better-auth/api");
-            throw new APIError("FORBIDDEN", {
-              message: "Access is restricted to approved accounts only.",
-            });
-          }
           return { data: { ...user, email: user.email.toLowerCase() } };
         },
       },

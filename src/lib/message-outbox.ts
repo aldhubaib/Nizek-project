@@ -138,6 +138,19 @@ export function enqueueOutboxMessage(input: {
     errorMessage: null,
   };
   setEntries([...entries, entry]);
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent("inbox:message-enqueued", {
+        detail: {
+          threadKey: input.threadKey,
+          body: input.body,
+          createdAt: entry.createdAt,
+        },
+      }),
+    );
+  }
+
   if (files.length > 0) startUploads(entry.tempId);
   else deliver(entry.tempId);
 }

@@ -11,7 +11,7 @@
  *   prisma migrate dev --name add-ydoc-to-meeting-note
  */
 
-import { Hocuspocus } from "@hocuspocus/server";
+import { Server } from "@hocuspocus/server";
 import { Database } from "@hocuspocus/extension-database";
 import { PrismaClient } from "./src/generated/prisma/client.js";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -29,11 +29,11 @@ const pool = new Pool({ connectionString: DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-const server = new Hocuspocus({
+const server = new Server({
   port: PORT,
   address: "0.0.0.0",
 
-  async onAuthenticate({ token, documentName }: { token: string; documentName: string }) {
+  async onAuthenticate({ token, documentName }) {
     if (!token) throw new Error("Auth token required");
 
     const session = await prisma.authSession.findUnique({
@@ -69,28 +69,27 @@ const server = new Hocuspocus({
 
   extensions: [
     new Database({
-      async fetch({ documentName }: { documentName: string }) {
+      async fetch({ documentName }) {
         const noteId = documentName.replace("note:", "");
-        const note = await prisma.$queryRawUnsafe<Array<{ ydoc: Buffer | null }>>(
-          `SELECT ydoc FROM "MeetingNote" WHERE id = $1`,
-          noteId,
-        );
-        return note[0]?.ydoc ?? null;
+        const note = await prisma.meetingNote.findUnique({
+          where: { id: noteId },
+          select: { ydoc: true },
+        });
+        return note?.ydoc ?? null;
       },
 
-      async store({ documentName, state }: { documentName: string; state: Uint8Array }) {
+      async store({ documentName, state }) {
         const noteId = documentName.replace("note:", "");
-        await prisma.$executeRawUnsafe(
-          `UPDATE "MeetingNote" SET ydoc = $1 WHERE id = $2`,
-          Buffer.from(state),
-          noteId,
-        );
+        await prisma.meetingNote.update({
+          where: { id: noteId },
+          data: { ydoc: Buffer.from(state) },
+        });
       },
     }),
   ],
 });
 
-server.listen().then(() => {
+server.listen(PORT).then(() => {
   console.log(`[collab] Hocuspocus server running on port ${PORT}`);
 });
 

@@ -381,7 +381,11 @@ export async function moveTask(data: {
       const errors: string[] = [];
 
       const specQuestions = await prisma.defaultQuestion.findMany({
-        where: { taskType: task.taskType, type: { not: "client" } },
+        where: {
+          taskType: task.taskType,
+          type: { not: "client" },
+          OR: [{ required: true }, { mandatory: true }],
+        },
         select: { id: true, question: true, type: true },
       });
 
@@ -974,7 +978,7 @@ type BoardTaskRow = {
 };
 
 function fieldsByType(
-  questions: { id: string; taskType: string; type: string; required?: boolean }[],
+  questions: { id: string; taskType: string; type: string; required?: boolean; mandatory?: boolean }[],
 ): Map<string, { id: string; type: string }[]> {
   const byType = new Map<string, { id: string; type: string }[]>();
   for (const q of questions) {
@@ -1039,7 +1043,7 @@ export async function getTasksByProject(projectId: string) {
       orderBy: { order: "asc" },
     }),
     prisma.defaultQuestion.findMany({
-      select: { id: true, taskType: true, type: true, required: true },
+      select: { id: true, taskType: true, type: true, required: true, mandatory: true },
     }),
     prisma.taskActivity.findMany({
       where: { action: "declined", task: { projectId } },
@@ -1083,7 +1087,7 @@ export async function getBoardTask(taskId: string, expectedProjectId?: string) {
   const [specQuestions, declineCounts] = await Promise.all([
     prisma.defaultQuestion.findMany({
       where: { taskType: task.taskType },
-      select: { id: true, taskType: true, type: true, required: true },
+      select: { id: true, taskType: true, type: true, required: true, mandatory: true },
     }),
     prisma.taskActivity.findMany({
       where: { action: "declined", taskId },
