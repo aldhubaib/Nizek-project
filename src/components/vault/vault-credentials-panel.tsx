@@ -97,6 +97,7 @@ export function VaultCredentialsPanel({
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
   const [showPassword, setShowPassword] = useState(false);
+  const [revealingEdit, setRevealingEdit] = useState(false);
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyFor, setHistoryFor] = useState<VaultCredentialDTO | null>(null);
@@ -178,7 +179,28 @@ export function VaultCredentialsPanel({
     });
     setError(null);
     setShowPassword(false);
+    setRevealingEdit(false);
     setEditorOpen(true);
+    if (c.hasPassword || c.hasNotes) {
+      Promise.allSettled([
+        c.hasPassword ? revealVaultSecret(c.id, "password") : null,
+        c.hasNotes ? revealVaultSecret(c.id, "notes") : null,
+      ].filter(Boolean) as Promise<Awaited<ReturnType<typeof revealVaultSecret>>>[]).then(
+        (results) => {
+          const pwResult = c.hasPassword ? results[0] : null;
+          const notesResult = c.hasNotes ? results[c.hasPassword ? 1 : 0] : null;
+          setForm((f) => ({
+            ...f,
+            ...(pwResult?.status === "fulfilled" && pwResult.value.ok
+              ? { password: pwResult.value.data.value ?? "" }
+              : {}),
+            ...(notesResult?.status === "fulfilled" && notesResult.value.ok
+              ? { notes: notesResult.value.data.value ?? "" }
+              : {}),
+          }));
+        },
+      );
+    }
     if (!projectId) {
       listVaultFolders(c.projectId)
         .then(setFolders)
@@ -611,12 +633,32 @@ export function VaultCredentialsPanel({
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword((v) => !v)}
+                  disabled={revealingEdit}
+                  onClick={async () => {
+                    if (showPassword) {
+                      setShowPassword(false);
+                      return;
+                    }
+                    if (editing && !form.password) {
+                      setRevealingEdit(true);
+                      try {
+                        const res = await revealVaultSecret(editing.id, "password");
+                        if (res.ok && res.data.value) {
+                          setForm((f) => ({ ...f, password: res.data.value! }));
+                        }
+                      } catch { /* ignore */ } finally {
+                        setRevealingEdit(false);
+                      }
+                    }
+                    setShowPassword(true);
+                  }}
                   className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   title={showPassword ? "Hide password" : "Show password"}
                 >
-                  {showPassword ? (
+                  {revealingEdit ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : showPassword ? (
                     <EyeOff className="h-3.5 w-3.5" />
                   ) : (
                     <Eye className="h-3.5 w-3.5" />

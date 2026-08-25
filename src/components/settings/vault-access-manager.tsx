@@ -54,6 +54,21 @@ export function VaultAccessManager() {
     });
   };
 
+  const toggleAll = (userId: string) => {
+    const current = grants.get(userId) ?? [];
+    const allSelected = projects.length > 0 && current.length === projects.length;
+    const next = allSelected ? [] : projects.map((p) => p.id);
+
+    setGrants((prev) => {
+      const copy = new Map(prev);
+      copy.set(userId, next);
+      return copy;
+    });
+    startSaving(async () => {
+      await setUserVaultProjects(userId, next);
+    });
+  };
+
   const filtered = members.filter((m) => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
@@ -129,6 +144,20 @@ export function VaultAccessManager() {
                   </div>
 
                   <div className="flex max-w-md flex-wrap gap-xs">
+                    {projects.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleAll(m.id)}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors",
+                          userProjects.length === projects.length
+                            ? "border-green-500/40 bg-green-500/15 text-green-400"
+                            : "border-dashed border-muted-foreground/40 text-muted-foreground hover:bg-accent/20",
+                        )}
+                      >
+                        All
+                      </button>
+                    )}
                     {projects.map((p) => {
                       const on = userProjects.includes(p.id);
                       return (
