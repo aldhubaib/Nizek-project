@@ -925,34 +925,37 @@ const MessageRow = memo(function MessageRow({
                     <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   </Link>
                 )}
-                {replied && (
-                  <button
-                    type="button"
-                    onClick={() => scrollToMessage(m.replyToId!)}
-                    className={cn(
-                      "-mx-1 flex flex-col gap-0.5 rounded-md border-l-2 px-2 py-1 text-left text-s",
-                      blue
-                        ? "border-primary-foreground/60 bg-primary-foreground/10 text-primary-foreground/90"
-                        : "border-primary/70 bg-primary/10 text-foreground/80",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "text-xs font-semibold",
-                        blue ? "text-primary-foreground" : "text-primary",
-                      )}
+                {replied && (() => {
+                  const replyImage = replied.attachments?.find((a) => a.isImage);
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => scrollToMessage(m.replyToId!)}
+                      className="-mx-1 flex items-stretch gap-2 rounded-lg border border-border/40 bg-background/80 text-left text-s backdrop-blur-sm"
                     >
-                      {replied.authorId === currentMemberId ? "You" : replied.authorName}
-                    </span>
-                    <span className="line-clamp-2 opacity-90">
-                      {replied.body
-                        ? replied.body.length > 120
-                          ? `${replied.body.slice(0, 120)}…`
-                          : replied.body
-                        : "Attachment"}
-                    </span>
-                  </button>
-                )}
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5 px-2.5 py-1.5">
+                        <span className="text-xs font-semibold text-foreground">
+                          {replied.authorId === currentMemberId ? "You" : replied.authorName}
+                        </span>
+                        <span className="line-clamp-2 text-muted-foreground">
+                          {replied.body
+                            ? replied.body.length > 120
+                              ? `${replied.body.slice(0, 120)}…`
+                              : replied.body
+                            : replyImage ? "Photo" : "Attachment"}
+                        </span>
+                      </div>
+                      {replyImage && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={replyImage.url}
+                          alt=""
+                          className="h-12 w-12 shrink-0 rounded-r-lg object-cover"
+                        />
+                      )}
+                    </button>
+                  );
+                })()}
                 {editing ? (
                   <div className="flex flex-col gap-2">
                     <textarea
@@ -2910,27 +2913,38 @@ export function ThreadChat({
               </div>
             </div>
           )}
-          {replyingTo && (
-            <div className="mb-2 flex items-start gap-2 rounded-t-2xl border border-b-0 border-border/60 bg-surface/60 px-3 py-2">
-              <Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-semibold text-primary">
-                  Replying to {replyingTo.authorId === currentMemberId ? "yourself" : replyingTo.authorName}
+          {replyingTo && (() => {
+            const replyImage = replyingTo.attachments?.find((a) => a.isImage);
+            return (
+              <div className="mb-2 flex items-start gap-2 rounded-t-2xl border border-b-0 border-border/60 bg-surface/60 px-3 py-2">
+                <Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold text-primary">
+                    Replying to {replyingTo.authorId === currentMemberId ? "yourself" : replyingTo.authorName}
+                  </div>
+                  <div className="line-clamp-1 text-s text-muted-foreground">
+                    {replyingTo.body || (replyImage ? "Photo" : "Attachment")}
+                  </div>
                 </div>
-                <div className="line-clamp-1 text-s text-muted-foreground">
-                  {replyingTo.body || "Attachment"}
-                </div>
+                {replyImage && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={replyImage.url}
+                    alt=""
+                    className="h-10 w-10 shrink-0 rounded-md object-cover"
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={() => setReplyTo(null)}
+                  className="grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
+                  aria-label="Cancel reply"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setReplyTo(null)}
-                className="grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
-                aria-label="Cancel reply"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
+            );
+          })()}
           {pending.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
               {pending.map((p) => (
