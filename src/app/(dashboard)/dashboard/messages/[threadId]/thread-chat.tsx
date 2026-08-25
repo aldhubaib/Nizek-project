@@ -2678,7 +2678,7 @@ export function ThreadChat({
 
       {/* Messages */}
       <div className="relative min-h-0 flex-1">
-        <div ref={scrollerRef} className="app-scroll-under-tall h-full overflow-y-auto px-app pb-4 lg:px-8">
+        <div ref={scrollerRef} data-scroll-lock-root className="app-scroll-under-tall h-full overflow-y-auto px-app pb-4 lg:px-8">
           <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-xs">
             <div ref={topSentinelRef} className="h-px w-full" aria-hidden />
             {hasMore && (

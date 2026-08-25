@@ -631,6 +631,7 @@ export function ThreadSidebar({
 
       {/* Bottom padding clears the mobile bottom navigation bar. */}
       <ul
+        data-scroll-lock-root
         className="min-h-0 flex-1 overflow-y-auto max-lg:pb-[calc(4rem+env(safe-area-inset-bottom))]"
         style={{ paddingTop: chromeH }}
       >
