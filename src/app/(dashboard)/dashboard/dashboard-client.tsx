@@ -15,6 +15,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { taskCode, TASK_STAGE_DOT, taskStageBadge } from "@/lib/task-label";
 import { TaskTypeBadge, formatMinutes } from "@/components/project/sprint-task-row";
 import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
 
 interface MyTask {
   id: string;
@@ -67,38 +68,41 @@ interface Props {
   projects: ProjectSummary[];
   activeSprints: ActiveSprint[];
   upcomingDeadlines: Deadline[];
+  /** Server render time — keeps day/progress math identical on hydrate. */
+  nowIso: string;
 }
 
 /* ── helpers ── */
 
-function daysLeft(iso: string): number {
-  const diff = new Date(iso).getTime() - Date.now();
+function daysLeft(iso: string, nowMs: number): number {
+  const diff = new Date(iso).getTime() - nowMs;
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
-function daysLeftLabel(iso: string): string {
-  const d = daysLeft(iso);
+function daysLeftLabel(iso: string, nowMs: number): string {
+  const d = daysLeft(iso, nowMs);
   if (d < 0) return `${Math.abs(d)}d overdue`;
   if (d === 0) return "Due today";
   if (d === 1) return "Tomorrow";
   return `${d}d`;
 }
 
-function daysLeftColor(iso: string): string {
-  const d = daysLeft(iso);
+function daysLeftColor(iso: string, nowMs: number): string {
+  const d = daysLeft(iso, nowMs);
   if (d < 0) return "text-destructive";
   if (d <= 2) return "text-orange";
   if (d <= 7) return "text-orange";
   return "text-success";
 }
 
-function sprintProgress(startIso: string, endIso: string): number {
+const RING_C = 88;
+
+function sprintProgress(startIso: string, endIso: string, nowMs: number): number {
   const start = new Date(startIso).getTime();
   const end = new Date(endIso).getTime();
-  const now = Date.now();
-  if (now <= start) return 0;
-  if (now >= end) return 100;
-  return ((now - start) / (end - start)) * 100;
+  if (nowMs <= start) return 0;
+  if (nowMs >= end) return 100;
+  return Math.round(((nowMs - start) / (end - start)) * 100);
 }
 
 function getGreeting(): string {
@@ -202,10 +206,12 @@ function DonutChart({
 
 /* ── sprint mini cards (horizontal) ── */
 
-function SprintMiniCard({ sprint }: { sprint: ActiveSprint }) {
-  const pct = sprintProgress(sprint.startDate, sprint.endDate);
-  const left = daysLeft(sprint.endDate);
+function SprintMiniCard({ sprint, nowMs }: { sprint: ActiveSprint; nowMs: number }) {
+  const pct = sprintProgress(sprint.startDate, sprint.endDate, nowMs);
+  const left = daysLeft(sprint.endDate, nowMs);
   const urgent = left <= 2;
+  const dash = ((pct / 100) * RING_C).toFixed(2);
+  const gap = (RING_C - (pct / 100) * RING_C).toFixed(2);
 
   return (
     <Link
@@ -216,8 +222,8 @@ function SprintMiniCard({ sprint }: { sprint: ActiveSprint }) {
         <span className="truncate text-s font-semibold text-foreground">
           {sprint.projectName}
         </span>
-        <span className={cn("shrink-0 text-xs font-semibold tabular-nums", daysLeftColor(sprint.endDate))}>
-          {daysLeftLabel(sprint.endDate)}
+        <span className={cn("shrink-0 text-xs font-semibold tabular-nums", daysLeftColor(sprint.endDate, nowMs))}>
+          {daysLeftLabel(sprint.endDate, nowMs)}
         </span>
       </div>
       <div className="flex items-center gap-3">
@@ -228,7 +234,7 @@ function SprintMiniCard({ sprint }: { sprint: ActiveSprint }) {
             cx={18} cy={18} r={14} fill="none"
             stroke={urgent ? "#f97316" : "#22c55e"}
             strokeWidth={3}
-            strokeDasharray={`${(pct / 100) * 87.96} ${87.96 - (pct / 100) * 87.96}`}
+            strokeDasharray={`${dash} ${gap}`}
             strokeLinecap="round"
             className="transition-all duration-500"
           />
@@ -280,8 +286,13 @@ export function DashboardClient({
   projects,
   activeSprints,
   upcomingDeadlines,
+  nowIso,
 }: Props) {
-  const greeting = getGreeting();
+  const nowMs = new Date(nowIso).getTime();
+  const [greeting, setGreeting] = useState("Hello");
+  useEffect(() => {
+    setGreeting(getGreeting());
+  }, []);
   const totalTasks = myTasks.length;
   const inDev = stageBreakdown["IN_DEVELOPMENT"] ?? 0;
   const inReview = (stageBreakdown["INTERNAL_REVIEW"] ?? 0) + (stageBreakdown["CLIENT_REVIEW"] ?? 0);
@@ -326,7 +337,7 @@ export function DashboardClient({
           {activeSprints.length > 0 ? (
             <div className="grid gap-3 sm:grid-cols-2">
               {activeSprints.slice(0, 6).map((s) => (
-                <SprintMiniCard key={s.id} sprint={s} />
+                <SprintMiniCard key={s.id} sprint={s} nowMs={nowMs} />
               ))}
               {activeSprints.length > 6 && (
                 <p className="col-span-full text-xs text-muted-foreground">
@@ -407,8 +418,8 @@ export function DashboardClient({
                       <p className="truncate text-s text-foreground">{dl.title}</p>
                       <p className="text-xs text-muted-foreground">{dl.projectName}</p>
                     </div>
-                    <span className={cn("shrink-0 text-xs font-semibold tabular-nums", daysLeftColor(dl.dueDate))}>
-                      {daysLeftLabel(dl.dueDate)}
+                    <span className={cn("shrink-0 text-xs font-semibold tabular-nums", daysLeftColor(dl.dueDate, nowMs))}>
+                      {daysLeftLabel(dl.dueDate, nowMs)}
                     </span>
                   </Link>
                 ))}

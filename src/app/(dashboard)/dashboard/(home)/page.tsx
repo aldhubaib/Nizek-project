@@ -136,6 +136,7 @@ export default async function DashboardPage() {
       <DashboardClient
         userName={user.name || "there"}
         unreadCount={unreadCount}
+        nowIso={now.toISOString()}
         myTasks={myTasks.map((t) => ({
           ...t,
           taskType: t.taskType as string,
