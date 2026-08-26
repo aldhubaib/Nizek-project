@@ -200,9 +200,10 @@ export function NoteFullScreenCreate({
 
   useEffect(() => {
     if (!sprintId || !isSprintPlanning) return;
+    const id = sprintId;
     let cancelled = false;
     function refresh() {
-      getSprintPlanningTasks(sprintId)
+      getSprintPlanningTasks(id)
         .then((data) => {
           if (cancelled) return;
           setSprintStatus(data.status);

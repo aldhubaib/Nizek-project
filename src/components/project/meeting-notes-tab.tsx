@@ -736,11 +736,11 @@ export function NoteFullScreenDetail({
 
   useEffect(() => {
     if (!isSprintPlanning) return;
-    const sprintId = sprintIdFromPlanningHtml(note.content);
-    if (!sprintId) return;
+    const planningSprintId = sprintIdFromPlanningHtml(note.content);
+    if (!planningSprintId) return;
     let cancelled = false;
     function load() {
-      getSprintPlanningTasks(sprintId)
+      getSprintPlanningTasks(planningSprintId)
         .then((data) => {
           if (cancelled) return;
           setSprintTasks(data.tasks);

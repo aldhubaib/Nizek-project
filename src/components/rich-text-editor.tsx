@@ -67,7 +67,8 @@ function syncSprintTasksIntoEditor(editor: Editor, tasks: SprintPlanningTask[]) 
 
   const existing = new Set<string>();
   let lastTaskEnd: number | null = null;
-  let placeholder: { from: number; to: number } | null = null;
+  let placeholderFrom: number | null = null;
+  let placeholderTo: number | null = null;
   editor.state.doc.descendants((node, pos) => {
     if (node.type.name === "sprintTask") {
       const id = (node.attrs.task as SprintPlanningTask | null)?.id;
@@ -78,7 +79,8 @@ function syncSprintTasksIntoEditor(editor: Editor, tasks: SprintPlanningTask[]) 
       node.type.name === "paragraph" &&
       node.textContent.includes("No tasks in this sprint yet.")
     ) {
-      placeholder = { from: pos, to: pos + node.nodeSize };
+      placeholderFrom = pos;
+      placeholderTo = pos + node.nodeSize;
     }
   });
 
@@ -86,10 +88,10 @@ function syncSprintTasksIntoEditor(editor: Editor, tasks: SprintPlanningTask[]) 
   if (missing.length === 0) return;
 
   let tr = editor.state.tr;
-  if (placeholder) {
-    tr = tr.delete(placeholder.from, placeholder.to);
-    if (lastTaskEnd != null && lastTaskEnd > placeholder.from) {
-      lastTaskEnd -= placeholder.to - placeholder.from;
+  if (placeholderFrom != null && placeholderTo != null) {
+    tr = tr.delete(placeholderFrom, placeholderTo);
+    if (lastTaskEnd != null && lastTaskEnd > placeholderFrom) {
+      lastTaskEnd -= placeholderTo - placeholderFrom;
     }
   }
 
