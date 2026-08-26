@@ -81,6 +81,7 @@ export interface BoardProps {
 const BOARD_ROW =
   "flex h-full min-h-0 min-w-0 flex-1 flex-row gap-4 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-2";
 
+const ASSIGN_TO_ME_CHECKPOINT = {
   title: "Taking ownership",
   message: "By confirming, this task will be assigned to you and you take ownership of it.",
   confirmLabel: "Assign to Me",
