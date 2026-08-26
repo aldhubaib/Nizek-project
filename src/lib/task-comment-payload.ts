@@ -3,9 +3,9 @@ const PAYLOAD_PREFIX = "<!--task-comment:";
 export type TaskCommentPayload = {
   taskId: string;
   projectId: string;
-  threadId: string;
+  threadId?: string;
   taskTitle: string;
-  quoteText: string;
+  quoteText?: string;
   comment: string;
 };
 
@@ -38,9 +38,10 @@ export function isTaskCommentMessage(kind: string): boolean {
 export function taskCommentUrl(
   projectId: string,
   taskId: string,
-  threadId: string,
+  threadId?: string,
 ): string {
-  return `/dashboard/projects/${projectId}/tasks/${taskId}?threadId=${threadId}`;
+  const base = `/dashboard/projects/${projectId}/tasks/${taskId}`;
+  return threadId ? `${base}?threadId=${threadId}` : base;
 }
 
 export function taskCommentPreview(payload: TaskCommentPayload): string {

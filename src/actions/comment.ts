@@ -5,6 +5,8 @@ import { requireProjectMember } from "@/lib/auth";
 import { publish, taskChannel } from "@/lib/centrifugo";
 import { enqueuePush } from "@/lib/push-queue";
 import { createAndPublishNotifications } from "@/lib/notify";
+import { sendMessage } from "@/actions/messages";
+import { encodeTaskCommentBody } from "@/lib/task-comment-payload";
 
 export async function createComment(data: {
   taskId: string;
@@ -64,9 +66,40 @@ export async function createComment(data: {
     const mentionRecipients = mentionedUserIds.filter(
       (id) => id !== user.id,
     );
-    if (mentionRecipients.length) {
-      // Feed the notification bell (Notification table) so task-comment
-      // mentions live alongside chat/DM notifications.
+
+    const mentionTokens = comment.mentions.map(
+      (m) => `@[${m.user.name ?? "Someone"}](${m.user.id})`,
+    );
+
+    // Mirror into the project channel. Best-effort: the task comment stays
+    // even if chat post fails (inactive contract, client role, etc.).
+    let postedToChannel = false;
+    try {
+      const posted = await sendMessage({
+        projectId: task.projectId,
+        body: encodeTaskCommentBody(
+          {
+            taskId: data.taskId,
+            projectId: task.projectId,
+            taskTitle: `#${task.taskNumber} ${task.title}`,
+            comment: data.content,
+          },
+          mentionTokens,
+        ),
+        kind: "task_comment",
+        attachments: data.attachments,
+      });
+      postedToChannel = posted.ok;
+      if (!posted.ok) {
+        console.error("[task comment chat]", posted.error);
+      }
+    } catch (err) {
+      console.error("[task comment chat]", err);
+    }
+
+    // Mentions are notified by sendMessage when the comment lands in the
+    // project channel. If that post fails, fall back to a task-page mention.
+    if (mentionRecipients.length && !postedToChannel) {
       const snippet = data.content.replace(/\s+/g, " ").trim().slice(0, 140);
       const pushTag = `thread-task-${data.taskId}`;
       const rows = await createAndPublishNotifications({

@@ -65,7 +65,12 @@ export function ProofBypassCard({
       else await rejectProofBypass(payload.passId);
       setStatus(action === "approve" ? "APPROVED" : "REJECTED");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update request");
+      const raw = err instanceof Error ? err.message : "";
+      setError(
+        /minified react error|server components render|#441/i.test(raw)
+          ? "Could not update this request. Try again."
+          : raw || "Could not update request",
+      );
     } finally {
       setBusy(false);
     }

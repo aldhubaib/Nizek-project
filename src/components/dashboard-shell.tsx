@@ -121,7 +121,7 @@ export function DashboardShell({
 
   const shell = (
     <PageOverflowMenuProvider>
-      <div className="flex min-h-screen">
+      <div className={`flex min-h-screen ${onInbox ? "h-dvh overflow-hidden" : ""}`}>
       {/* Desktop sidebar — pushes content, not overlay */}
       {isDesktop && (
         <div
@@ -180,9 +180,11 @@ export function DashboardShell({
 
       {/* Main content — pushed by sidebar, rounded corner */}
       <main
-        className={`flex-1 min-w-0 bg-background relative z-10 ${
+        className={`relative z-10 min-h-0 min-w-0 flex-1 bg-background ${
           isDesktop ? "rounded-l-2xl" : ""
-        } ${bottomNavVisible && !onInbox ? "app-has-bottom-nav" : ""}`}
+        } ${onInbox ? "overflow-hidden" : ""} ${
+          bottomNavVisible && !onInbox ? "app-has-bottom-nav" : ""
+        }`}
       >
         <ClientRouteGuard enabled={isClient} />
         {isDesktop && (

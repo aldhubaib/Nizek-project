@@ -84,7 +84,7 @@ export function MessagesMain({ children }: { children: React.ReactNode }) {
   return (
     <main
       className={cn(
-        "min-w-0 flex-1 flex-col",
+        "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
         onThread ? "flex" : "hidden lg:flex",
       )}
     >

@@ -241,6 +241,7 @@ function isFeedCardKind(kind?: string) {
     kind === "deadline_reminder" ||
     kind === "note_activity" ||
     kind === "note_comment" ||
+    kind === "task_comment" ||
     kind === "proof_bypass" ||
     kind === "rejection"
   );
@@ -726,7 +727,7 @@ const MessageRow = memo(function MessageRow({
     swiped.current = false;
   };
 
-  if (m.noteActivity || m.noteComment || m.deadlineReminder || m.proofBypass || m.kind === "proof_bypass" || m.kind === "rejection") {
+  if (m.noteActivity || m.noteComment || m.taskComment || m.deadlineReminder || m.proofBypass || m.kind === "proof_bypass" || m.kind === "rejection") {
     const authorLabel = chatPostAuthorLabel(m.authorId, m.authorName);
     return (
       <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
@@ -757,6 +758,8 @@ const MessageRow = memo(function MessageRow({
               <DeadlineReminderCard payload={m.deadlineReminder} createdAt={m.createdAt} />
             ) : m.noteActivity ? (
               <NoteActivityCard payload={m.noteActivity} createdAt={m.createdAt} />
+            ) : m.taskComment ? (
+              <TaskCommentCard payload={m.taskComment} createdAt={m.createdAt} />
             ) : m.kind === "rejection" ? (
               <TaskRejectionCard
                 title={m.task?.title ?? "Task"}
@@ -780,35 +783,30 @@ const MessageRow = memo(function MessageRow({
             ) : (
               <NoteCommentCard payload={m.noteComment!} createdAt={m.createdAt} />
             )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (m.taskComment) {
-    return (
-      <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
-        {showDay && (
-          <div className="my-2 flex items-center justify-center">
-            <span className="rounded-full bg-surface px-3 py-1 text-xs font-medium text-muted-foreground">
-              {formatDay(m.createdAt)}
-            </span>
-          </div>
-        )}
-        <div
-          className={cn(
-            "flex gap-2",
-            mine ? "justify-end" : "justify-start",
-            newGroup && !showDay && notFirst && "mt-3",
-          )}
-        >
-          {!mine && <div className="w-8 shrink-0" aria-hidden />}
-          <div className="flex min-w-0 w-full max-w-[420px] flex-col gap-1">
-            {showAuthor && (
-              <div className="px-1 text-xs text-muted-foreground">{m.authorName}</div>
+            {imageAtts.length > 0 && (
+              <div className="flex max-w-full flex-wrap gap-xs justify-start">
+                {imageAtts.map((a) => (
+                  <AttachmentBubble
+                    key={a.id}
+                    attachment={a}
+                    mine={false}
+                    onOpenImage={openImage}
+                  />
+                ))}
+              </div>
             )}
-            <TaskCommentCard payload={m.taskComment} createdAt={m.createdAt} />
+            {fileAtts.length > 0 && (
+              <div className="flex max-w-full flex-wrap gap-xs justify-start">
+                {fileAtts.map((a) => (
+                  <AttachmentBubble
+                    key={a.id}
+                    attachment={a}
+                    mine={false}
+                    onOpenImage={openImage}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2782,9 +2780,13 @@ export function ThreadChat({
         </DropdownMenu>
       </div>
 
-      {/* Messages */}
+      {/* Messages — absolute fill so this pane scrolls instead of growing the page. */}
       <div className="relative min-h-0 flex-1">
-        <div ref={scrollerRef} data-scroll-lock-root className="app-scroll-under-tall h-full overflow-y-auto px-app pb-4 lg:px-8">
+        <div
+          ref={scrollerRef}
+          data-scroll-lock-root
+          className="app-scroll-under-tall absolute inset-0 overflow-y-auto overscroll-contain px-app pb-4 lg:px-8"
+        >
           <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-xs">
             <div ref={topSentinelRef} className="h-px w-full" aria-hidden />
             {hasMore && (
@@ -3856,21 +3858,19 @@ function ActionsMenuContent({
   );
 }
 
+const messageCaretTriggerClass =
+  "hidden size-8 place-items-center bg-transparent text-white opacity-0 shadow-none outline-none transition-opacity hover:bg-transparent hover:text-white focus-visible:opacity-100 group-hover:opacity-100 data-[popup-open]:opacity-100 lg:grid";
+
 /** Desktop hover ⋮ only — mobile uses the selection header instead. */
 function MessageCaret({
-  mine,
+  mine: _mine,
   ...handlers
 }: { mine: boolean } & MessageActionHandlers) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Message actions"
-        className={cn(
-          "absolute top-1 hidden size-8 place-items-center rounded-full opacity-0 shadow-sm backdrop-blur transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[popup-open]:opacity-100 lg:grid",
-          mine
-            ? "right-1 bg-primary/80 text-primary-foreground hover:bg-primary"
-            : "right-1 bg-background/90 text-muted-foreground hover:bg-background hover:text-foreground",
-        )}
+        className={cn("absolute top-1 right-1", messageCaretTriggerClass)}
       >
         <MoreVertical className="h-4 w-4" />
       </DropdownMenuTrigger>
@@ -3885,7 +3885,7 @@ function FileCaretMenu(handlers: MessageActionHandlers) {
       <DropdownMenuTrigger
         onClick={(e) => e.stopPropagation()}
         aria-label="Message actions"
-        className="hidden size-8 place-items-center rounded-full bg-surface-2 text-muted-foreground opacity-0 shadow-sm backdrop-blur transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 data-[popup-open]:opacity-100 lg:grid"
+        className={messageCaretTriggerClass}
       >
         <MoreVertical className="h-4 w-4" />
       </DropdownMenuTrigger>

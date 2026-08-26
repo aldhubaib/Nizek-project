@@ -57,7 +57,7 @@ export function TaskCommentCard({
             className="flex w-full items-center gap-2 rounded-lg border border-orange/30 bg-orange/5 px-3 py-2.5 text-s font-medium text-orange transition-colors hover:bg-orange/10"
           >
             <span className="min-w-0 flex-1 truncate text-left text-foreground">
-              Open task · reply on the highlight
+              {payload.threadId ? "Open task · reply on the highlight" : "Open task"}
             </span>
             <ArrowUpRight className="size-3.5 shrink-0" />
           </button>
