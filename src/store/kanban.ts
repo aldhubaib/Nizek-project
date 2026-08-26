@@ -31,23 +31,41 @@ export interface KanbanTask {
 }
 
 interface KanbanState {
+  projectId: string | null;
   tasks: KanbanTask[];
   commentRefreshKey: number;
-  setTasks: (tasks: KanbanTask[] | ((prev: KanbanTask[]) => KanbanTask[])) => void;
+  setTasks: (
+    tasks: KanbanTask[] | ((prev: KanbanTask[]) => KanbanTask[]),
+    forProjectId?: string,
+  ) => void;
   moveTask: (taskId: string, toStage: Stage, toOrder: number) => void;
-  addTask: (task: KanbanTask) => void;
+  addTask: (task: KanbanTask, forProjectId?: string) => void;
   updateTask: (taskId: string, data: Partial<KanbanTask>) => void;
   removeTask: (taskId: string) => void;
   triggerCommentRefresh: () => void;
 }
 
 export const useKanbanStore = create<KanbanState>((set) => ({
+  projectId: null,
   tasks: [],
   commentRefreshKey: 0,
-  setTasks: (tasks) =>
-    set((state) => ({
-      tasks: typeof tasks === "function" ? tasks(state.tasks) : tasks,
-    })),
+  setTasks: (tasks, forProjectId) =>
+    set((state) => {
+      // A late poll/patch from a previous project must not merge into the new one.
+      if (
+        forProjectId != null &&
+        state.projectId != null &&
+        forProjectId !== state.projectId
+      ) {
+        if (typeof tasks === "function") return state;
+        return { projectId: forProjectId, tasks };
+      }
+      const next = typeof tasks === "function" ? tasks(state.tasks) : tasks;
+      return {
+        tasks: next,
+        projectId: forProjectId ?? state.projectId,
+      };
+    }),
 
   moveTask: (taskId, toStage, toOrder) =>
     set((state) => ({
@@ -56,8 +74,11 @@ export const useKanbanStore = create<KanbanState>((set) => ({
       ),
     })),
 
-  addTask: (task) =>
-    set((state) => ({ tasks: [...state.tasks, task] })),
+  addTask: (task, forProjectId) =>
+    set((state) => {
+      if (forProjectId != null && state.projectId !== forProjectId) return state;
+      return { tasks: [...state.tasks, task] };
+    }),
 
   updateTask: (taskId, data) =>
     set((state) => ({

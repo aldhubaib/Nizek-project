@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useTransition, type Dispatch, type SetStateAction } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useTransition, type Dispatch, type SetStateAction } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OverflowTabBar, type OverflowTabItem } from "@/components/overflow-tab-bar";
@@ -25,7 +25,7 @@ import { listProjectVaultCredentials, type VaultCredentialDTO } from "@/actions/
 import { listSprints, type SprintDTO } from "@/actions/sprint";
 
 import type { TaskQuestion } from "@/components/kanban/question-field";
-import type { KanbanTask } from "@/store/kanban";
+import { useKanbanStore, type KanbanTask } from "@/store/kanban";
 import Link from "next/link";
 import { Users, KeyRound, Settings, Loader2, ArrowLeft, Check } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
@@ -253,6 +253,18 @@ export function ProjectDetailClient({
   } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const noteBackRef = useRef<(() => void) | null>(null);
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
+
+  useLayoutEffect(() => {
+    useKanbanStore.getState().setTasks(tasksRef.current, project.id);
+    setNotes(null);
+    setSprints(null);
+    setAssets(null);
+    setTeamData(null);
+    setVaultCredentials(null);
+    setSettingsData(null);
+  }, [project.id]);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 1023px)");

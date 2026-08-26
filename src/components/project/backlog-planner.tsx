@@ -268,13 +268,18 @@ export function BacklogPlanner({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
 
+  const storeProjectId = useKanbanStore((s) => s.projectId);
   const tasks = useKanbanStore((s) => s.tasks);
   const setTasks = useKanbanStore((s) => s.setTasks);
   const updateTask = useKanbanStore((s) => s.updateTask);
 
   useEffect(() => {
+    const store = useKanbanStore.getState();
+    if (store.projectId !== projectId || store.tasks.length === 0) {
+      setTasks(initialTasks, projectId);
+      return;
+    }
     setTasks((prev) => {
-      if (prev.length === 0) return initialTasks;
       const incoming = new Map(initialTasks.map((t) => [t.id, t]));
       const prevIds = new Set(prev.map((t) => t.id));
       const merged = prev.map((t) => {
@@ -284,8 +289,8 @@ export function BacklogPlanner({
       });
       const extra = initialTasks.filter((t) => !prevIds.has(t.id));
       return extra.length === 0 ? merged : [...merged, ...extra];
-    });
-  }, [initialTasks, setTasks]);
+    }, projectId);
+  }, [initialTasks, setTasks, projectId]);
 
   const cent = useCentrifugo();
   useChannel(
@@ -300,7 +305,7 @@ export function BacklogPlanner({
     ),
   );
 
-  const liveTasks = tasks.length > 0 ? tasks : initialTasks;
+  const liveTasks = storeProjectId === projectId ? tasks : initialTasks;
   const taskById = useMemo(() => new Map(liveTasks.map((t) => [t.id, t])), [liveTasks]);
 
   const openSprints = useMemo(

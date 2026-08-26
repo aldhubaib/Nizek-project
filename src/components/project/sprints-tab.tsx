@@ -48,6 +48,10 @@ export function SprintsTab({
   useEffect(() => {
     if (!activeId) return;
     const backlog = (stage: string) => stage === "NEW_REQUEST" || stage === "CLARIFICATION";
+    const store = useKanbanStore.getState();
+    if (store.projectId != null && store.projectId !== projectId) {
+      setTasks(tasks, projectId);
+    }
     const current = useKanbanStore.getState().tasks;
     if (current.length === 0) {
       if (!tasks.some((task) => task.sprintId === activeId && backlog(task.stage))) return;
@@ -57,6 +61,7 @@ export function SprintsTab({
             ? { ...task, stage: "READY_FOR_DEV" }
             : task,
         ),
+        projectId,
       );
     } else {
       let changed = false;
@@ -69,7 +74,7 @@ export function SprintsTab({
       if (!changed) return;
     }
     void promoteActiveSprintTasks(activeId);
-  }, [activeId, tasks, setTasks, updateTask]);
+  }, [activeId, projectId, tasks, setTasks, updateTask]);
 
   if (!active) {
     return (

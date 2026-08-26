@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { ArrowLeft, Bell, Camera, Loader2, Volume2 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { updateMyAvatar, updateMyName } from "@/actions/account";
+import { useCurrentUser } from "@/components/current-user-provider";
 import {
   pushSupported,
   isPushEnabled,
@@ -34,8 +34,10 @@ export function AccountClient({
   email: string;
   imageUrl: string | null;
 }) {
-  const [name, setName] = useState(initialName);
-  const [savedName, setSavedName] = useState(initialName);
+  const me = useCurrentUser();
+  const resolvedName = (initialName || me?.name || "").trim();
+  const [name, setName] = useState(resolvedName);
+  const [savedName, setSavedName] = useState(resolvedName);
   const [imageUrl, setImageUrl] = useState(initialImageUrl);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -214,15 +216,17 @@ export function AccountClient({
           </div>
         </div>
 
-        <div className="mx-auto mt-4 w-full max-w-xs">
+        <div className="mt-4 grid w-full grid-cols-1 gap-1.5">
           <label
             htmlFor="account-name"
-            className="mb-1.5 block text-center text-s font-medium text-muted-foreground"
+            className="block text-center text-s font-medium text-muted-foreground"
           >
             Name
           </label>
-          <Input
+          <input
             id="account-name"
+            type="text"
+            name="displayName"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onBlur={saveName}
@@ -232,7 +236,7 @@ export function AccountClient({
             }}
             placeholder="Your name"
             autoComplete="name"
-            className="block h-10 w-full text-center"
+            className="box-border h-10 w-full rounded-lg border border-border bg-field px-3 text-center text-s text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
           />
         </div>
       </section>

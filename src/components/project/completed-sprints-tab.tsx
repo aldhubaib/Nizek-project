@@ -91,8 +91,9 @@ export function CompletedSprintsTab({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [snapshots, setSnapshots] = useState<Record<string, SprintSnapshotTask[]> | null>(null);
   const storeTasks = useKanbanStore((s) => s.tasks);
+  const storeProjectId = useKanbanStore((s) => s.projectId);
   const updateTask = useKanbanStore((s) => s.updateTask);
-  const liveTasks = storeTasks.length > 0 ? storeTasks : initialTasks;
+  const liveTasks = storeProjectId === projectId && storeTasks.length > 0 ? storeTasks : initialTasks;
   const [reviewSprint, setReviewSprint] = useState<SprintDTO | null>(null);
   const [planningSprint, setPlanningSprint] = useState<SprintDTO | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);

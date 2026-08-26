@@ -68,6 +68,7 @@ export default async function ProjectDetailPage({ params }: Props) {
 
   return (
     <ProjectDetailClient
+      key={projectId}
       project={project}
       tasks={tasks as unknown as KanbanTask[]}
       userRole={member.role}
