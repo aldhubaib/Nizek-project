@@ -26,6 +26,7 @@ import { ProofOfWorkDialog } from "@/components/kanban/proof-of-work-dialog";
 import { ProofVideosSection } from "@/components/kanban/proof-videos-section";
 import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
 import { needsProofOfWork } from "@/lib/proof-of-work";
+import { useKanbanStore } from "@/store/kanban";
 import { DeclineDialog } from "@/components/kanban/decline-dialog";
 import { projectNoteUrl, isRoadmapNote } from "@/lib/project-note-url";
 import { cn } from "@/lib/utils";
@@ -160,6 +161,19 @@ export function TaskDetailPage({
 
   // Task state (mutable for title, priority, stage)
   const [taskStage, setTaskStage] = useState<Stage>(initialTask.stage as Stage);
+
+  useEffect(() => {
+    function onProofComplete(event: Event) {
+      const detail = (event as CustomEvent<{ taskId?: string; stage?: Stage; order?: number }>).detail;
+      if (detail?.taskId !== initialTask.id) return;
+      const stage = detail.stage ?? "INTERNAL_REVIEW";
+      setTaskStage(stage);
+      useKanbanStore.getState().moveTask(initialTask.id, stage, detail.order ?? initialTask.order);
+      setActivityKey((k) => k + 1);
+    }
+    window.addEventListener("proof-upload-complete", onProofComplete);
+    return () => window.removeEventListener("proof-upload-complete", onProofComplete);
+  }, [initialTask.id, initialTask.order]);
   const [titleValue, setTitleValue] = useState(initialTask.title);
   const [editingTitle, setEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLTextAreaElement>(null);
@@ -569,7 +583,7 @@ export function TaskDetailPage({
           }}
         />
       ) : (
-      <div className="max-w-2xl mx-auto px-app py-8 space-y-6">
+      <div className="mx-auto max-w-[54.6rem] px-app py-8 space-y-6">
         {/* Title */}
         <div className="rounded-lg border border-border/50 bg-card px-3 pb-3">
           <label className="text-s font-semibold text-foreground px-1 py-4 block">Title</label>
@@ -825,6 +839,8 @@ export function TaskDetailPage({
           projectId={projectId}
           onSubmitted={() => {
             setShowProof(false);
+            setTaskStage("INTERNAL_REVIEW");
+            useKanbanStore.getState().moveTask(initialTask.id, "INTERNAL_REVIEW", initialTask.order);
             setActivityKey((k) => k + 1);
           }}
           onCancel={() => setShowProof(false)}

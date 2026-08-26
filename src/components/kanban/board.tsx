@@ -152,8 +152,23 @@ export function KanbanBoard({
       if (!snap) return;
       useKanbanStore.getState().updateTask(taskId, { stage: snap.stage, order: snap.order });
     }
+    function onProofComplete(event: Event) {
+      const detail = (event as CustomEvent<{ taskId?: string; stage?: Stage; order?: number }>).detail;
+      if (!detail?.taskId) return;
+      const stage = detail.stage ?? "INTERNAL_REVIEW";
+      const order =
+        detail.order ??
+        useKanbanStore.getState().tasks.find((t) => t.id === detail.taskId)?.order ??
+        0;
+      useKanbanStore.getState().moveTask(detail.taskId, stage, order);
+      snapshotRef.current = useKanbanStore.getState().tasks;
+    }
     window.addEventListener("proof-upload-failed", onProofFailed);
-    return () => window.removeEventListener("proof-upload-failed", onProofFailed);
+    window.addEventListener("proof-upload-complete", onProofComplete);
+    return () => {
+      window.removeEventListener("proof-upload-failed", onProofFailed);
+      window.removeEventListener("proof-upload-complete", onProofComplete);
+    };
   }, []);
 
   useEffect(() => {
@@ -639,7 +654,10 @@ export function KanbanBoard({
         <ProofOfWorkDialog
           target={pendingProof}
           projectId={projectId}
-          onSubmitted={() => setPendingProof(null)}
+          onSubmitted={() => {
+            useKanbanStore.getState().moveTask(pendingProof.taskId, "INTERNAL_REVIEW", pendingProof.order);
+            setPendingProof(null);
+          }}
           onCancel={() => {
             setTasks(snapshotRef.current, projectId);
             setPendingProof(null);

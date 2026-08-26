@@ -284,7 +284,14 @@ export async function submitProofAndMove(data: {
 }): Promise<{ success: true } | { success: false; error: string }> {
   const task = await prisma.task.findUnique({
     where: { id: data.taskId },
-    select: { id: true, projectId: true, stage: true },
+    select: {
+      id: true,
+      projectId: true,
+      stage: true,
+      title: true,
+      taskNumber: true,
+      taskType: true,
+    },
   });
   if (!task) return { success: false, error: "Task not found" };
   const { user } = await requireProjectMember(task.projectId);
@@ -352,10 +359,51 @@ export async function submitProofAndMove(data: {
     });
   }
 
-  return moveTask({
+  const moved = await moveTask({
     taskId: task.id,
     stage: data.stage,
     order: data.order,
     proofOfWorkId: proof.id,
   });
+
+  if (moved.success && videos.length > 0) {
+    await postProofVideosToProjectChat({
+      taskId: task.id,
+      taskType: task.taskType,
+      taskNumber: task.taskNumber,
+      taskTitle: task.title,
+      videos,
+    });
+  }
+
+  return moved;
+}
+
+async function postProofVideosToProjectChat(opts: {
+  taskId: string;
+  taskType: string;
+  taskNumber: number;
+  taskTitle: string;
+  videos: ProofVideoInput[];
+}) {
+  const { sendMessage } = await import("@/actions/messages");
+  const code = taskCode(opts.taskType, opts.taskNumber);
+  const count = opts.videos.length;
+  const body =
+    count === 1
+      ? `Proof of work for ${code} ${opts.taskTitle}`
+      : `Proof of work (${count} videos) for ${code} ${opts.taskTitle}`;
+  const sent = await sendMessage({
+    taskId: opts.taskId,
+    body,
+    attachments: opts.videos.map((video) => ({
+      filename: video.filename,
+      url: video.url,
+      fileSize: video.fileSize,
+      mimeType: video.mimeType || "video/mp4",
+    })),
+  });
+  if (!sent.ok) {
+    console.error("[proof chat]", sent.error);
+  }
 }

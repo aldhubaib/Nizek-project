@@ -85,6 +85,7 @@ import { useChannel, usePresence, useTyping } from "@/components/realtime/hooks"
 import {
   AttachmentBubble,
   isVoiceAttachment,
+  isVideoAttachment,
   Lightbox,
   useLightbox,
   FilesPanel,
@@ -111,6 +112,11 @@ import { NoteCommentCard } from "@/components/messages/note-comment-card";
 import { TaskCommentCard } from "@/components/messages/task-comment-card";
 import { NoteActivityCard } from "@/components/messages/note-activity-card";
 import { TaskRejectionCard } from "@/components/messages/task-rejection-card";
+import { TaskInboxSlideOver } from "@/components/messages/task-inbox-slide-over";
+import {
+  ProofOfWorkCard,
+  isProofOfWorkChatMessage,
+} from "@/components/messages/proof-of-work-card";
 import type { DeadlineReminderPayload } from "@/lib/deadline-reminder-payload";
 import type { NoteCommentPayload } from "@/lib/note-comment-payload";
 import type { TaskCommentPayload } from "@/lib/task-comment-payload";
@@ -245,6 +251,10 @@ function isFeedCardKind(kind?: string) {
     kind === "proof_bypass" ||
     kind === "rejection"
   );
+}
+
+function isFeedMessage(m: ChatMessage) {
+  return isFeedCardKind(m.kind) || isProofOfWorkChatMessage(m);
 }
 
 const fmtTaskNumber = (n: number) => `T-${String(n).padStart(3, "0")}`;
@@ -643,12 +653,13 @@ const MessageRow = memo(function MessageRow({
   memberNames: Record<string, string>;
 }) {
   const imageAtts = m.attachments.filter((a) => a.isImage);
-  const fileAtts = m.attachments.filter((a) => !a.isImage);
-  const nestImages =
-    imageAtts.length > 0 &&
+  const videoAtts = m.attachments.filter((a) => isVideoAttachment(a));
+  const fileAtts = m.attachments.filter((a) => !a.isImage && !isVideoAttachment(a));
+  const nestMedia =
+    (imageAtts.length > 0 || videoAtts.length > 0) &&
     Boolean(m.body || editing) &&
-    m.kind !== "rejection" &&
-    !showTaskCard;
+    m.kind !== "rejection";
+  const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [swipeX, setSwipeX] = useState(0);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -732,7 +743,7 @@ const MessageRow = memo(function MessageRow({
     swiped.current = false;
   };
 
-  if (m.noteActivity || m.noteComment || m.taskComment || m.deadlineReminder || m.proofBypass || m.kind === "proof_bypass" || m.kind === "rejection") {
+  if (m.noteActivity || m.noteComment || m.taskComment || m.deadlineReminder || m.proofBypass || m.kind === "proof_bypass" || m.kind === "rejection" || isProofOfWorkChatMessage(m)) {
     const authorLabel = chatPostAuthorLabel(m.authorId, m.authorName);
     return (
       <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
@@ -773,7 +784,9 @@ const MessageRow = memo(function MessageRow({
                 taskId={m.task?.id}
                 body={m.body}
                 mentions={m.mentions}
+                attachments={m.attachments}
                 createdAt={m.createdAt}
+                onOpenImage={openImage}
               />
             ) : m.kind === "proof_bypass" || m.proofBypass ? (
               m.proofBypass ? (
@@ -785,10 +798,20 @@ const MessageRow = memo(function MessageRow({
               ) : (
                 <p className="text-s text-muted-foreground">Video bypass request</p>
               )
+            ) : isProofOfWorkChatMessage(m) && m.task ? (
+              <ProofOfWorkCard
+                taskId={m.task.id}
+                projectId={m.task.projectId}
+                taskNumber={m.task.number}
+                taskTitle={m.task.title}
+                body={m.body}
+                videos={videoAtts}
+                createdAt={m.createdAt}
+              />
             ) : (
               <NoteCommentCard payload={m.noteComment!} createdAt={m.createdAt} />
             )}
-            {imageAtts.length > 0 && (
+            {imageAtts.length > 0 && m.kind !== "rejection" && (
               <div className="flex max-w-full flex-wrap gap-xs justify-start">
                 {imageAtts.map((a) => (
                   <AttachmentBubble
@@ -800,7 +823,26 @@ const MessageRow = memo(function MessageRow({
                 ))}
               </div>
             )}
-            {fileAtts.length > 0 && (
+            {videoAtts.length > 0 && !isProofOfWorkChatMessage(m) && m.kind !== "rejection" && (
+              <div
+                className={cn(
+                  "max-w-full",
+                  videoAtts.length > 1
+                    ? "grid w-full max-w-[20rem] grid-cols-2 gap-1.5"
+                    : "flex w-full max-w-[20rem] flex-col",
+                )}
+              >
+                {videoAtts.map((a) => (
+                  <AttachmentBubble
+                    key={a.id}
+                    attachment={a}
+                    mine={false}
+                    onOpenImage={openImage}
+                  />
+                ))}
+              </div>
+            )}
+            {fileAtts.length > 0 && m.kind !== "rejection" && (
               <div className="flex max-w-full flex-wrap gap-xs justify-start">
                 {fileAtts.map((a) => (
                   <AttachmentBubble
@@ -875,7 +917,7 @@ const MessageRow = memo(function MessageRow({
             )}
           </div>
         )}
-        <div className={cn("relative flex min-w-0 max-w-[70%] flex-col gap-xs", mine ? "items-end" : "items-start")}>
+        <div className={cn("relative flex min-w-0 max-w-[70%] flex-col gap-xs", mine ? "ml-auto items-end" : "items-start")}>
           {selected && (
             <div
               className={cn(
@@ -925,14 +967,20 @@ const MessageRow = memo(function MessageRow({
                 />
               )}
               {hasBubble && (
-            <div className="group relative">
+            <div
+              className={cn(
+                "group relative max-w-full",
+                nestMedia && "w-80 max-w-full",
+                mine ? "self-end" : "self-start",
+              )}
+            >
               <div
                 className={cn(
                   "flex max-w-full flex-col text-s leading-relaxed",
                   notice
-                    ? "min-w-64 gap-xs rounded-xl border border-border/60 bg-surface-2/80 p-2.5 text-foreground"
-                    : nestImages
-                      ? "w-[min(100%,20rem)] gap-2 p-2"
+                    ? "w-full min-w-64 gap-xs rounded-xl border border-border/60 bg-surface-2/80 p-2.5 text-foreground"
+                    : nestMedia
+                      ? "w-full gap-2 p-2"
                       : "gap-xs px-3.5 py-2",
                   !notice && "rounded-2xl",
                   !notice &&
@@ -942,9 +990,13 @@ const MessageRow = memo(function MessageRow({
                 )}
               >
                 {m.task && showTaskCard && (
-                  <Link
-                    href={`/dashboard/projects/${m.task.projectId}/tasks/${m.task.id}`}
-                    className="flex items-center gap-2 rounded-lg border border-border/60 bg-field/60 px-2.5 py-2 transition-colors hover:bg-field"
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTaskPanelOpen(true);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg border border-border/60 bg-field/60 px-2.5 py-2 text-left transition-colors hover:bg-field"
                   >
                     <CheckSquare className="h-4 w-4 shrink-0 text-primary" />
                     <div className="min-w-0 flex-1">
@@ -956,7 +1008,7 @@ const MessageRow = memo(function MessageRow({
                       </div>
                     </div>
                     <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  </Link>
+                  </button>
                 )}
                 {editing ? (
                   <div className="flex flex-col gap-2">
@@ -1023,7 +1075,7 @@ const MessageRow = memo(function MessageRow({
                       );
                     })()
                   ) : (
-                    <div className={cn("flex items-end gap-2", notice && "px-0.5", nestImages && "px-1.5 pt-0.5")}>
+                    <div className={cn("flex items-end gap-2", notice && "px-0.5", nestMedia && "px-1.5 pt-0.5")}>
                       <span className="whitespace-pre-wrap break-words">
                         {renderMessageBody(m.body, m.mentions, blue)}
                       </span>
@@ -1038,7 +1090,7 @@ const MessageRow = memo(function MessageRow({
                     </div>
                   ))
                 )}
-                {nestImages && (
+                {nestMedia && (
                   <div className="flex flex-col gap-1.5">
                     {imageAtts.map((a) => (
                       <AttachmentBubble
@@ -1054,6 +1106,30 @@ const MessageRow = memo(function MessageRow({
                         }
                       />
                     ))}
+                    {videoAtts.length > 0 && (
+                      <div
+                        className={cn(
+                          videoAtts.length > 1
+                            ? "grid grid-cols-2 gap-1.5"
+                            : "flex flex-col",
+                        )}
+                      >
+                        {videoAtts.map((a) => (
+                          <AttachmentBubble
+                            key={a.id}
+                            attachment={a}
+                            mine={mine}
+                            embedded
+                            onOpenImage={openImage}
+                            menu={
+                              <span className="hidden lg:contents">
+                                <FileCaretMenu {...actionHandlers} />
+                              </span>
+                            }
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1083,7 +1159,7 @@ const MessageRow = memo(function MessageRow({
               <LinkPreviewCard url={previewUrl} mine={mine} />
             ) : null;
           })()}
-          {imageAtts.length > 0 && !nestImages && (
+          {imageAtts.length > 0 && !nestMedia && (
             <div
               className={cn(
                 "flex max-w-full flex-wrap gap-xs",
@@ -1099,6 +1175,31 @@ const MessageRow = memo(function MessageRow({
                   menu={
                     <span className="hidden lg:contents">
                       <ImageActionsMenu {...actionHandlers} />
+                    </span>
+                  }
+                />
+              ))}
+            </div>
+          )}
+          {videoAtts.length > 0 && !nestMedia && (
+            <div
+              className={cn(
+                "max-w-full",
+                videoAtts.length > 1
+                  ? "grid w-80 max-w-full grid-cols-2 gap-1.5"
+                  : "flex w-80 max-w-full flex-col",
+                mine ? "self-end" : "self-start",
+              )}
+            >
+              {videoAtts.map((a) => (
+                <AttachmentBubble
+                  key={a.id}
+                  attachment={a}
+                  mine={mine}
+                  onOpenImage={openImage}
+                  menu={
+                    <span className="hidden lg:contents">
+                      <FileCaretMenu {...actionHandlers} />
                     </span>
                   }
                 />
@@ -1129,7 +1230,7 @@ const MessageRow = memo(function MessageRow({
             </div>
           )}
           {/* Attachment-only bubbles: time + read receipts for mine. */}
-          {!m.body && !editing && (imageAtts.length > 0 || fileAtts.length > 0) && (
+          {!m.body && !editing && (imageAtts.length > 0 || videoAtts.length > 0 || fileAtts.length > 0) && (
             <div className={cn("px-1", mine && "self-end")}>
               <MessageMeta
                 createdAt={m.createdAt}
@@ -1152,6 +1253,14 @@ const MessageRow = memo(function MessageRow({
           )}
         </div>
       </div>
+      {taskPanelOpen && m.task ? (
+        <TaskInboxSlideOver
+          taskId={m.task.id}
+          href={`/dashboard/projects/${m.task.projectId}/tasks/${m.task.id}`}
+          title={m.task.title}
+          onClose={() => setTaskPanelOpen(false)}
+        />
+      ) : null}
     </div>
   );
 });
@@ -2831,8 +2940,8 @@ export function ThreadChat({
             {messages.map((m, i) => {
               const prev = messages[i - 1];
               const showDay = !prev || !sameDay(prev.createdAt, m.createdAt);
-              const isFeed = isFeedCardKind(m.kind);
-              const prevFeed = isFeedCardKind(prev?.kind);
+              const isFeed = isFeedMessage(m);
+              const prevFeed = prev ? isFeedMessage(prev) : false;
               const newGroup =
                 !prev ||
                 prev.authorId !== m.authorId ||

@@ -278,10 +278,13 @@ header.app-top-bar,
   min-height: var(--app-bar-height);
 }
 header.app-top-bar {
-  padding-right: calc(3.5rem + env(safe-area-inset-right, 0px));
+  padding-right: calc(var(--app-gutter) + env(safe-area-inset-right, 0px));
 }
 header.app-top-bar.app-top-bar-menu {
   padding-right: calc(6rem + env(safe-area-inset-right, 0px));
+}
+.app-shell-chrome.app-top-bar {
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 .app-status-frost,

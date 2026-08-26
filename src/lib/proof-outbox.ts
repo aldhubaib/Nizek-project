@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { submitProofAndMove, type ProofVideoInput } from "@/actions/proof-of-work";
 import { uploadFileToR2 } from "@/lib/upload";
+import { useKanbanStore } from "@/store/kanban";
 
 export type ProofOutboxFile = {
   key: string;
@@ -153,8 +154,13 @@ async function finish(id: string) {
     window.dispatchEvent(new CustomEvent("proof-upload-failed", { detail: { taskId: entry.taskId } }));
     return;
   }
+  useKanbanStore.getState().moveTask(entry.taskId, "INTERNAL_REVIEW", entry.order);
   patchEntry(id, { status: "done" });
-  window.dispatchEvent(new CustomEvent("proof-upload-complete", { detail: { taskId: entry.taskId } }));
+  window.dispatchEvent(
+    new CustomEvent("proof-upload-complete", {
+      detail: { taskId: entry.taskId, stage: "INTERNAL_REVIEW", order: entry.order },
+    }),
+  );
   window.setTimeout(() => {
     entries = entries.filter((e) => e.id !== id);
     emit();

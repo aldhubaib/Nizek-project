@@ -21,8 +21,8 @@ export function PageName({
  *
  * The right padding is the part worth knowing about. The shared ⋮ sits in
  * that corner (overlaid by the dashboard shell), so a header that ran the
- * full width would put its own controls underneath it. `hasMenu` widens the
- * gap for pages that fill the ⋮ or park a button beside it through
+ * full width would put its own controls underneath it. `hasMenu` reserves
+ * extra room on pages that park a button beside the ⋮ through
  * `PageHeaderActions`.
  */
 export function PageHeader({

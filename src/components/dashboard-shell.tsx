@@ -185,7 +185,7 @@ export function DashboardShell({
       >
         <ClientRouteGuard enabled={isClient} />
         {isDesktop && (
-          <div className="app-shell-chrome fixed top-3 right-l z-[100] flex items-center gap-xs">
+          <div className="app-shell-chrome fixed top-3 right-0 z-[100] flex items-center gap-xs pe-[env(safe-area-inset-right,0px)]">
             {headerActions}
           </div>
         )}

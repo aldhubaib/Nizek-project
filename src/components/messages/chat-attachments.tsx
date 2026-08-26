@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
 import {
   Download,
@@ -11,6 +12,7 @@ import {
   FileAudio,
   FileVideo,
   File as FileIcon,
+  Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MessageAttachment } from "@/actions/messages";
@@ -22,6 +24,16 @@ function formatBytes(bytes: number | null) {
   if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`;
   const mb = kb / 1024;
   return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
+}
+
+function formatDuration(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "";
+  const total = Math.round(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 function fileIconFor(a: MessageAttachment) {
@@ -175,6 +187,162 @@ export function isVoiceAttachment(attachment: MessageAttachment): boolean {
   );
 }
 
+export function isVideoAttachment(attachment: MessageAttachment): boolean {
+  return (attachment.contentType ?? "").startsWith("video/");
+}
+
+function VideoOverlay({
+  attachment,
+  onClose,
+}: {
+  attachment: MessageAttachment;
+  onClose: () => void;
+}) {
+  useScrollLock(true);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      data-scroll-lock-root
+      className="fixed inset-0 z-[250] flex flex-col bg-black/90"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={attachment.name}
+    >
+      <div
+        className="flex items-center justify-between gap-2 px-4 py-3 text-white"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="min-w-0">
+          <div className="truncate text-s font-medium">{attachment.name}</div>
+          {attachment.sizeBytes ? (
+            <div className="text-s text-white/60">{formatBytes(attachment.sizeBytes)}</div>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-1">
+          <a
+            href={attachment.url}
+            download={attachment.name}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="grid size-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+            aria-label="Download"
+          >
+            <Download className="h-4 w-4" />
+          </a>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid size-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+      <div
+        className="relative flex min-h-0 flex-1 items-center justify-center px-4 pb-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <video
+          src={attachment.url}
+          controls
+          autoPlay
+          playsInline
+          className="max-h-[calc(100dvh-6.5rem)] max-w-full rounded-lg"
+        />
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function CompactVideoTile({
+  attachment,
+  embedded,
+  menu,
+}: {
+  attachment: MessageAttachment;
+  embedded?: boolean;
+  menu?: React.ReactNode;
+}) {
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState<number | null>(null);
+
+  return (
+    <>
+      <div
+        className={cn(
+          "group relative overflow-hidden border border-border/50 bg-surface",
+          embedded ? "rounded-lg" : "rounded-xl",
+        )}
+      >
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setPlaying(true);
+          }}
+          className="block w-full text-left"
+          aria-label={`Play ${attachment.name}`}
+        >
+          <div className="relative aspect-video bg-black">
+            <video
+              src={attachment.url}
+              muted
+              playsInline
+              preload="metadata"
+              className="h-full w-full object-cover"
+              onLoadedMetadata={(e) => {
+                const el = e.currentTarget;
+                if (Number.isFinite(el.duration)) setDuration(el.duration);
+                if (el.currentTime === 0) el.currentTime = 0.1;
+              }}
+            />
+            <span className="absolute inset-0 grid place-items-center bg-black/25">
+              <span className="grid size-9 place-items-center rounded-full bg-white/90 text-black shadow-sm">
+                <Play className="size-3.5 fill-current ps-px" />
+              </span>
+            </span>
+            {duration != null && duration > 0 && (
+              <span className="absolute bottom-1.5 left-1.5 inline-flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
+                <FileVideo className="size-3" />
+                {formatDuration(duration)}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 bg-surface-2/80 px-2 py-1.5">
+            <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
+              {attachment.name}
+            </span>
+            {attachment.sizeBytes ? (
+              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                {formatBytes(attachment.sizeBytes)}
+              </span>
+            ) : null}
+          </div>
+        </button>
+        {menu && (
+          <div className="absolute left-1.5 top-1.5 opacity-0 transition-opacity focus-within:opacity-100 max-lg:opacity-100 group-hover:opacity-100">
+            {menu}
+          </div>
+        )}
+      </div>
+      {playing ? (
+        <VideoOverlay attachment={attachment} onClose={() => setPlaying(false)} />
+      ) : null}
+    </>
+  );
+}
+
 export function AttachmentBubble({
   attachment,
   mine,
@@ -241,25 +409,11 @@ export function AttachmentBubble({
 
   if (ct.startsWith("video/")) {
     return (
-      <div className="group relative overflow-hidden rounded-xl bg-black">
-        <video
-          src={attachment.url}
-          controls
-          preload="metadata"
-          className="max-h-96 w-full max-w-md"
-        />
-        <a
-          href={attachment.url}
-          download={attachment.name}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="absolute right-2 top-2 grid size-8 place-items-center rounded-full bg-overlay text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 max-lg:opacity-100 group-hover:opacity-100"
-          aria-label="Download"
-        >
-          <Download className="h-4 w-4" />
-        </a>
-      </div>
+      <CompactVideoTile
+        attachment={attachment}
+        embedded={embedded}
+        menu={menu}
+      />
     );
   }
 
