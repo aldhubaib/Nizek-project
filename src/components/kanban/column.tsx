@@ -53,7 +53,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
     <div
       ref={setNodeRef}
         className={cn(
-          "flex w-full max-h-[70dvh] flex-col overflow-hidden rounded-lg border border-border/50 bg-muted/30 transition-colors lg:h-full lg:max-h-none lg:min-h-0 lg:min-w-0 lg:flex-1 lg:basis-0",
+          "flex h-full min-h-0 w-72 shrink-0 flex-col overflow-hidden rounded-lg border border-border/50 bg-muted/30 transition-colors",
           isOver && !disabled && isValidDropTarget && "border-success/60 bg-success/5",
           isOver && !disabled && isDragging && !isValidDropTarget && "border-destructive/50 bg-destructive/5"
         )}

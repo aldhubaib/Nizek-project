@@ -78,7 +78,9 @@ export interface BoardProps {
   onRemoveFromSprint?: (taskId: string) => void;
 }
 
-const ASSIGN_TO_ME_CHECKPOINT = {
+const BOARD_ROW =
+  "flex h-full min-h-0 min-w-0 flex-1 flex-row gap-4 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-2";
+
   title: "Taking ownership",
   message: "By confirming, this task will be assigned to you and you take ownership of it.",
   confirmLabel: "Assign to Me",
@@ -573,7 +575,7 @@ export function KanbanBoard({
           </p>
         </div>
         )}
-        <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-hidden pb-4 lg:flex-row lg:pb-0">
+        <div className={BOARD_ROW}>
           {boardStages.map((stage) => {
             const stageTasks = tasksByStage[stage.id] ?? [];
             return (
@@ -600,8 +602,8 @@ export function KanbanBoard({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      {/* Below the desktop breakpoint columns stack; from lg up they share the full width. */}
-      <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-hidden pb-4 lg:flex-row lg:pb-0">
+      {/* Columns keep a fixed width; the row scrolls horizontally instead of shrinking. */}
+      <div className={BOARD_ROW}>
         {boardStages.map((stage) => {
           const stageTasks = tasksByStage[stage.id] ?? [];
           return (
