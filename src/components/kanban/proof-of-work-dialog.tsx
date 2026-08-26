@@ -83,7 +83,12 @@ export function ProofOfWorkDialog({
     setBusy(true);
     setError(null);
     try {
-      setBypass(await requestProofBypass(target.taskId));
+      const status = await requestProofBypass(target.taskId);
+      setBypass(status);
+      // Pending requests wait in the approver inbox — don't leave this
+      // sheet up on "Waiting for approval." Cancel also reverts the
+      // optimistic Internal Review drop on the board.
+      if (status.status === "PENDING") onCancel();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not ask for a bypass");
     } finally {

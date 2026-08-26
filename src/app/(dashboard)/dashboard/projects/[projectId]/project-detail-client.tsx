@@ -31,7 +31,7 @@ import { Users, KeyRound, Settings, Loader2, ArrowLeft, Check } from "lucide-rea
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { outlineBadge } from "@/lib/task-label";
+import { outlineBadge, normalizeProjectTab } from "@/lib/task-label";
 import { PageHeader } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 
@@ -226,8 +226,7 @@ export function ProjectDetailClient({
   const searchParams = useSearchParams();
   const [activeTab, setActiveTabState] = useState(() => {
     const tab = searchParams.get("tab") ?? "board";
-    // The Roadmap tab merged into Notes; keep old links working.
-    return tab === "roadmap" ? "notes" : tab;
+    return normalizeProjectTab(tab);
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -274,6 +273,13 @@ export function ProjectDetailClient({
     return () => mq.removeEventListener("change", sync);
   }, []);
 
+  useEffect(() => {
+    if (searchParams.get("tab") !== "completed") return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "roadmap");
+    window.history.replaceState(null, "", `?${params.toString()}`);
+  }, [searchParams]);
+
   const handleNoteFullscreen = useCallback((
     open: boolean,
     opts?: { goBack?: () => void; crumbs?: string[]; title?: string; backLabel?: string },
@@ -300,7 +306,7 @@ export function ProjectDetailClient({
 
   useEffect(() => {
     if (
-      (activeTab === "sprints" || activeTab === "board" || activeTab === "completed") &&
+      (activeTab === "sprints" || activeTab === "board" || activeTab === "roadmap") &&
       sprints === null
     ) {
       startSprintsTransition(async () => {
@@ -397,7 +403,7 @@ export function ProjectDetailClient({
   const projectTabs: OverflowTabItem<string>[] = [
     { id: "board", label: "Backlog" },
     { id: "sprints", label: "Active sprint" },
-    { id: "completed", label: "Road map" },
+    { id: "roadmap", label: "Road map" },
     { id: "notes", label: "Notes", count: notesCount },
     { id: "assets", label: "Assets", count: assetsCount },
   ];
@@ -405,7 +411,7 @@ export function ProjectDetailClient({
   return (
     <div
       className={cn(
-        (activeTab === "board" || activeTab === "sprints" || activeTab === "completed") &&
+        (activeTab === "board" || activeTab === "sprints" || activeTab === "roadmap") &&
           !noteFullscreen &&
           "lg:flex lg:h-dvh lg:min-h-0 lg:flex-col lg:overflow-hidden",
       )}
@@ -466,7 +472,7 @@ export function ProjectDetailClient({
         onValueChange={(val) => setActiveTab(val as string)}
         className={cn(
           "w-full min-w-0 gap-0",
-          (activeTab === "board" || activeTab === "sprints" || activeTab === "completed") &&
+          (activeTab === "board" || activeTab === "sprints" || activeTab === "roadmap") &&
             !noteFullscreen &&
             "lg:min-h-0 lg:flex-1 lg:overflow-hidden",
         )}
@@ -540,7 +546,7 @@ export function ProjectDetailClient({
           <TabsList className="hidden">
             <TabsTrigger value="board" className={PROJECT_TAB_CLASS} />
             <TabsTrigger value="sprints" className={PROJECT_TAB_CLASS} />
-            <TabsTrigger value="completed" className={PROJECT_TAB_CLASS} />
+            <TabsTrigger value="roadmap" className={PROJECT_TAB_CLASS} />
             <TabsTrigger value="notes" className={PROJECT_TAB_CLASS} />
             <TabsTrigger value="assets" className={PROJECT_TAB_CLASS} />
             {canManageTeam && <TabsTrigger value="team" className={PROJECT_TAB_CLASS} />}
@@ -555,7 +561,7 @@ export function ProjectDetailClient({
           "min-w-0",
           noteFullscreen
             ? "px-0 py-0"
-            : (activeTab === "board" || activeTab === "sprints" || activeTab === "completed")
+            : (activeTab === "board" || activeTab === "sprints" || activeTab === "roadmap")
               ? "flex min-h-0 flex-col overflow-hidden px-app pt-4 pb-4 lg:flex-1 lg:pb-0"
               : "px-app py-4",
         )}
@@ -605,8 +611,8 @@ export function ProjectDetailClient({
             ))}
           </TabsContent>
 
-          <TabsContent value="completed" className="flex min-h-0 flex-1 flex-col">
-            {activeTab === "completed" && (loadingSprints || !sprints ? (
+          <TabsContent value="roadmap" className="flex min-h-0 flex-1 flex-col">
+            {activeTab === "roadmap" && (loadingSprints || !sprints ? (
               <TabSpinner />
             ) : (
               <CompletedSprintsTab

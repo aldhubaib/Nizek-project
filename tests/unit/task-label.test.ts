@@ -10,9 +10,9 @@ describe("sprintTabForStatus", () => {
     expect(sprintTabForStatus("ACTIVE")).toBe("sprints");
   });
 
-  it("sends closed sprints to the completed tab", () => {
-    expect(sprintTabForStatus("COMPLETED")).toBe("completed");
-    expect(sprintTabForStatus("SHIPPED")).toBe("completed");
+  it("sends closed sprints to the roadmap tab", () => {
+    expect(sprintTabForStatus("COMPLETED")).toBe("roadmap");
+    expect(sprintTabForStatus("SHIPPED")).toBe("roadmap");
   });
 
   it("sends planned work to the backlog", () => {
@@ -44,6 +44,12 @@ describe("projectHrefForTaskReturn", () => {
   it("falls back to the task's current sprint", () => {
     expect(projectHrefForTaskReturn("p1", null, "ACTIVE")).toBe(
       "/dashboard/projects/p1?tab=sprints",
+    );
+  });
+
+  it("maps the old completed tab onto roadmap", () => {
+    expect(projectHrefForTaskReturn("p1", "completed")).toBe(
+      "/dashboard/projects/p1?tab=roadmap",
     );
   });
 

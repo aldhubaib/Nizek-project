@@ -98,17 +98,36 @@ interface SprintTaskRowProps extends HTMLAttributes<HTMLElement> {
   hideStatus?: boolean;
   hideAssignee?: boolean;
   disableHoverBorder?: boolean;
+  /** Backlog keeps estimate / status / assignee. Roadmap is icon + name only. */
+  variant?: "backlog" | "roadmap";
 }
 
 export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
   function SprintTaskRow(
-    { task, extra, assigneeSlot, footer, as = "button", missingData, hideStatus, hideAssignee, disableHoverBorder, className, ...props },
+    {
+      task,
+      extra,
+      assigneeSlot,
+      footer,
+      as = "button",
+      missingData,
+      hideStatus,
+      hideAssignee,
+      disableHoverBorder,
+      variant = "backlog",
+      className,
+      ...props
+    },
     ref,
   ) {
     const initials =
       task.assignee?.name?.split(" ").map((n) => n[0]).join("") ?? "?";
     const Comp = as === "div" ? "div" : "button";
     const showMissing = missingData ?? isMissingDataTask(task);
+    const compact = variant === "roadmap";
+    const showStatus = !compact && !hideStatus;
+    const showAssignee = !compact && !hideAssignee;
+    const showExtra = !compact && extra;
 
     const row = (
       <>
@@ -119,7 +138,7 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
               ? task.title.split(/\s+/).slice(0, 15).join(" ") + "…"
               : task.title}
           </span>
-          {(task.sprintCount ?? 0) >= 2 && (
+          {!compact && (task.sprintCount ?? 0) >= 2 && (
             <span
               title={`In ${task.sprintCount} sprints`}
               className="inline-flex shrink-0 items-center rounded-lg border border-border px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground"
@@ -128,27 +147,29 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
             </span>
           )}
         </span>
-        <div className="flex shrink-0 items-center gap-2">
-          {extra}
-          {!hideStatus && <StatusBadge config={taskStageBadge(task.stage, showMissing)} />}
-          {!hideAssignee && (assigneeSlot ?? (
-            task.assignee ? (
-              task.assignee.imageUrl ? (
-                <img
-                  src={task.assignee.imageUrl}
-                  alt={task.assignee.name ?? ""}
-                  className="block size-5 shrink-0 rounded-full object-cover"
-                />
+        {(showExtra || showStatus || showAssignee) && (
+          <div className="flex shrink-0 items-center gap-2">
+            {showExtra ? extra : null}
+            {showStatus && <StatusBadge config={taskStageBadge(task.stage, showMissing)} />}
+            {showAssignee && (assigneeSlot ?? (
+              task.assignee ? (
+                task.assignee.imageUrl ? (
+                  <img
+                    src={task.assignee.imageUrl}
+                    alt={task.assignee.name ?? ""}
+                    className="block size-5 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="grid size-5 shrink-0 place-items-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
+                    {initials}
+                  </span>
+                )
               ) : (
-                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
-                  {initials}
-                </span>
+                <EmptyAssigneeIcon />
               )
-            ) : (
-              <EmptyAssigneeIcon />
-            )
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </>
     );
 
@@ -157,8 +178,9 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
         ref={ref as never}
         {...(as === "button" ? { type: "button" as const } : {})}
         className={cn(
-          "flex min-h-16 w-full rounded-md border border-border bg-field px-3 py-4 text-start",
-          footer ? "flex-col items-stretch gap-3" : "items-center gap-3",
+          "flex w-full rounded-md border border-border bg-field px-3 text-start",
+          compact ? "min-h-12 items-center gap-3 py-3" : "min-h-16 py-4",
+          footer ? "flex-col items-stretch gap-3" : !compact && "items-center gap-3",
           !disableHoverBorder && "hover:border-foreground/40",
           className,
         )}
@@ -168,6 +190,13 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
         {footer}
       </Comp>
     );
+  },
+);
+
+/** Road map list row — same card as backlog, icon + name only. */
+export const RoadmapTaskRow = forwardRef<HTMLElement, Omit<SprintTaskRowProps, "variant">>(
+  function RoadmapTaskRow(props, ref) {
+    return <SprintTaskRow ref={ref} variant="roadmap" {...props} />;
   },
 );
 

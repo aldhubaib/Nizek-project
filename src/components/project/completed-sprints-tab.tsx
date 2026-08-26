@@ -17,7 +17,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { MoreHorizontal, Search } from "lucide-react";
-import { EstimateBadge, SprintTaskRow, TaskTypeCountSummary } from "@/components/project/sprint-task-row";
+import { RoadmapTaskRow } from "@/components/project/sprint-task-row";
 import {
   deleteSprint,
   getSprintSnapshots,
@@ -45,7 +45,7 @@ import { cn } from "@/lib/utils";
 import { useKanbanStore, type KanbanTask } from "@/store/kanban";
 import { NoteSlideOver } from "@/components/project/note-slide-over";
 import { NoteFullScreenCreate } from "@/components/project/note-full-screen-create";
-import { taskDetailHref } from "@/lib/task-label";
+import { TaskInboxSlideOver } from "@/components/messages/task-inbox-slide-over";
 
 const COLUMN_IDS = new Set<string>(SPRINT_BOARD_COLUMNS.map((c) => c.id));
 
@@ -97,6 +97,7 @@ export function CompletedSprintsTab({
   const liveTasks = storeProjectId === projectId && storeTasks.length > 0 ? storeTasks : initialTasks;
   const [reviewSprint, setReviewSprint] = useState<SprintDTO | null>(null);
   const [planningSprint, setPlanningSprint] = useState<SprintDTO | null>(null);
+  const [openTask, setOpenTask] = useState<{ id: string; title: string } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const canDrag = canManage && isProjectActive;
@@ -320,13 +321,15 @@ export function CompletedSprintsTab({
                     canDrag={canDrag}
                     canManage={canManage}
                     isProjectActive={isProjectActive}
-                    projectId={projectId}
                     onToggle={() =>
                       setCollapsed((c) => ({ ...c, [sprint.id]: !isCollapsed }))
                     }
                     onPlan={() => setPlanningSprint(sprint)}
                     onReview={() => setReviewSprint(sprint)}
                     onDelete={() => setDeletingSprint(sprint)}
+                    onOpenTask={(task) =>
+                      setOpenTask({ id: task.taskId, title: task.title })
+                    }
                   />
                 );
               })}
@@ -353,6 +356,13 @@ export function CompletedSprintsTab({
         confirmWord={deletingSprint.name}
         confirmLabel="Delete sprint"
         onConfirm={confirmDelete}
+      />
+    ) : null}
+    {openTask ? (
+      <TaskInboxSlideOver
+        taskId={openTask.id}
+        title={openTask.title}
+        onClose={() => setOpenTask(null)}
       />
     ) : null}
     {reviewSprint ? (
@@ -435,11 +445,11 @@ function SprintBoardCard({
   canDrag,
   canManage,
   isProjectActive,
-  projectId,
   onToggle,
   onPlan,
   onReview,
   onDelete,
+  onOpenTask,
 }: {
   sprint: SprintDTO;
   items: SprintSnapshotTask[];
@@ -447,13 +457,12 @@ function SprintBoardCard({
   canDrag: boolean;
   canManage: boolean;
   isProjectActive: boolean;
-  projectId: string;
   onToggle: () => void;
   onPlan: () => void;
   onReview: () => void;
   onDelete: () => void;
+  onOpenTask: (task: SprintSnapshotTask) => void;
 }) {
-  const router = useRouter();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: sprintDragId(sprint.id),
     disabled: !canDrag,
@@ -468,7 +477,6 @@ function SprintBoardCard({
     >
       <CollapsibleSection
         title={sprint.name}
-        extra={<TaskTypeCountSummary tasks={items} />}
         collapsed={collapsed}
         onToggle={onToggle}
         actions={
@@ -506,17 +514,10 @@ function SprintBoardCard({
           <div className="space-y-3">
             {items.map((task) => (
               <div key={task.id} className="space-y-1.5">
-                <SprintTaskRow
+                <RoadmapTaskRow
                   task={task}
                   missingData={false}
-                  extra={
-                    task.estimatedMinutes != null && task.estimatedMinutes > 0 ? (
-                      <EstimateBadge minutes={task.estimatedMinutes} />
-                    ) : null
-                  }
-                  onClick={() =>
-                    router.push(taskDetailHref(projectId, task.taskId, "completed"))
-                  }
+                  onClick={() => onOpenTask(task)}
                 />
                 {task.incompleteReason ? (
                   <p className="rounded-lg border border-border/60 bg-surface/60 px-3 py-2 text-s leading-relaxed text-muted-foreground">
