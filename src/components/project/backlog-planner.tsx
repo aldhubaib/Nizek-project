@@ -920,6 +920,7 @@ export function BacklogPlanner({
       }}
     />
     <AddToActiveSprintDialog
+      key={addToActive?.task.id ?? "idle"}
       open={addToActive != null}
       projectId={projectId}
       sprintName={addToActive?.sprint.name ?? ""}

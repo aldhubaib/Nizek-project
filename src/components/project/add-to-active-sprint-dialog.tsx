@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Clock } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { taskCode, taskStageBadge } from "@/lib/task-label";
@@ -36,6 +36,15 @@ export function AddToActiveSprintDialog({
   onConfirm,
 }: Props) {
   const [estimate, setEstimate] = useState("");
+
+  useEffect(() => {
+    if (!open) {
+      setEstimate("");
+      return;
+    }
+    const existing = task?.estimatedMinutes;
+    setEstimate(existing != null && existing > 0 ? String(existing) : "");
+  }, [open, task?.id, task?.estimatedMinutes]);
 
   if (!open || !task) return null;
 
@@ -87,6 +96,9 @@ export function AddToActiveSprintDialog({
                 <input
                   type="number"
                   min="1"
+                  name={`sprint-estimate-${task.id}`}
+                  autoComplete="off"
+                  inputMode="numeric"
                   value={estimate}
                   onChange={(e) => setEstimate(e.target.value)}
                   onKeyDown={(e) => {

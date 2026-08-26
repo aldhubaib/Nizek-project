@@ -32,7 +32,7 @@ function category(status: ProofBypassPayload["status"]) {
 
 function excerpt(payload: ProofBypassPayload, status: ProofBypassPayload["status"]) {
   if (status === "APPROVED") {
-    return `${payload.decidedByName ?? "Someone"} approved the bypass. The task can move without videos.`;
+    return `${payload.decidedByName ?? "Someone"} approved the bypass. The task moved to Internal Review.`;
   }
   if (status === "REJECTED") {
     return `${payload.decidedByName ?? "Someone"} rejected the bypass. Upload videos to move the task.`;

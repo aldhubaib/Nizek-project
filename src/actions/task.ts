@@ -371,7 +371,22 @@ export async function moveTask(data: {
     if (!isAdmin && task.stage !== data.stage) {
       const perms = getPermissionsFromRole(member.projectRole);
       if (!canTransition(perms, task.stage, data.stage)) {
-        return { success: false, error: `Your role cannot move tasks from ${task.stage.replaceAll("_", " ")} to ${data.stage.replaceAll("_", " ")}` };
+        const approvedThisBypass =
+          data.stage === "INTERNAL_REVIEW" &&
+          Boolean(data.proofOfWorkId) &&
+          Boolean(
+            await prisma.proofOfWork.findFirst({
+              where: {
+                id: data.proofOfWorkId,
+                taskId: task.id,
+                bypassedById: user.id,
+              },
+              select: { id: true },
+            }),
+          );
+        if (!approvedThisBypass) {
+          return { success: false, error: `Your role cannot move tasks from ${task.stage.replaceAll("_", " ")} to ${data.stage.replaceAll("_", " ")}` };
+        }
       }
     }
 

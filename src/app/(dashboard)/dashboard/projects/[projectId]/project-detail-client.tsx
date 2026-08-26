@@ -403,7 +403,13 @@ export function ProjectDetailClient({
   ];
 
   return (
-    <div>
+    <div
+      className={cn(
+        (activeTab === "board" || activeTab === "sprints" || activeTab === "completed") &&
+          !noteFullscreen &&
+          "lg:flex lg:h-dvh lg:min-h-0 lg:flex-col lg:overflow-hidden",
+      )}
+    >
       {isMobile && !noteFullscreen && (
         <PageOverflowItems id="project-views" order={0}>
           {projectTabs.map((tab) => {
@@ -462,7 +468,7 @@ export function ProjectDetailClient({
           "w-full min-w-0 gap-0",
           (activeTab === "board" || activeTab === "sprints" || activeTab === "completed") &&
             !noteFullscreen &&
-            "lg:h-dvh lg:overflow-hidden",
+            "lg:min-h-0 lg:flex-1 lg:overflow-hidden",
         )}
       >
       <PageHeader hasMenu className="relative w-full min-w-0 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-2">
@@ -550,7 +556,7 @@ export function ProjectDetailClient({
           noteFullscreen
             ? "px-0 py-0"
             : (activeTab === "board" || activeTab === "sprints" || activeTab === "completed")
-              ? "flex flex-col px-app pt-4 pb-4 lg:min-h-0 lg:flex-1 lg:pb-0"
+              ? "flex min-h-0 flex-col overflow-hidden px-app pt-4 pb-4 lg:flex-1 lg:pb-0"
               : "px-app py-4",
         )}
       >
@@ -577,7 +583,7 @@ export function ProjectDetailClient({
             ))}
           </TabsContent>
 
-          <TabsContent value="sprints" className="flex min-h-0 flex-1 flex-col">
+          <TabsContent value="sprints" className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {activeTab === "sprints" && (loadingSprints || !sprints ? (
               <TabSpinner />
             ) : (

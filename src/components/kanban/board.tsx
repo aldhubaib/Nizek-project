@@ -242,7 +242,9 @@ export function KanbanBoard({
       const ev = data as { type?: string; taskId?: string; userId?: string };
       // The project channel also carries chat payloads — only react to task-*.
       if (!ev?.type || !ev.type.startsWith("task-")) return;
-      if (ev.userId === currentUserId) return; // ignore our own echoes
+      // Own drags already patched the store. Still apply our own task-moved
+      // when we are not dragging — e.g. a bypass we just approved.
+      if (ev.userId === currentUserId && (ev.type !== "task-moved" || isDragging.current)) return;
       if (isDragging.current || pendingDeclineRef.current) return;
       if (ev.type === "task-deleted") {
         if (ev.taskId && useKanbanStore.getState().projectId === projectId) {
@@ -563,15 +565,15 @@ export function KanbanBoard({
 
   if (!isProjectActive || readOnly) {
     return (
-      <div>
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {!isProjectActive && (
-        <div className="mb-6 rounded-lg border border-orange/30 bg-orange/10 px-4 py-3">
+        <div className="mb-6 shrink-0 rounded-lg border border-orange/30 bg-orange/10 px-4 py-3">
           <p className="text-s font-medium text-orange">
             No active contract — this project is read-only. Add a new contract to re-enable editing.
           </p>
         </div>
         )}
-        <div className="flex w-full flex-col gap-4 pb-4 lg:h-full lg:min-h-0 lg:flex-1 lg:flex-row lg:pb-0">
+        <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-hidden pb-4 lg:flex-row lg:pb-0">
           {boardStages.map((stage) => {
             const stageTasks = tasksByStage[stage.id] ?? [];
             return (
@@ -591,6 +593,7 @@ export function KanbanBoard({
   }
 
   return (
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
     <DndContext
       sensors={sensors}
       collisionDetection={columnFirstCollision}
@@ -598,7 +601,7 @@ export function KanbanBoard({
       onDragEnd={handleDragEnd}
     >
       {/* Below the desktop breakpoint columns stack; from lg up they share the full width. */}
-      <div className="flex w-full flex-col gap-4 pb-4 lg:h-full lg:min-h-0 lg:flex-1 lg:flex-row lg:pb-0">
+      <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-hidden pb-4 lg:flex-row lg:pb-0">
         {boardStages.map((stage) => {
           const stageTasks = tasksByStage[stage.id] ?? [];
           return (
@@ -679,6 +682,7 @@ export function KanbanBoard({
         />
       )}
     </DndContext>
+    </div>
   );
 }
 

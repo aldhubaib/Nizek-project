@@ -133,6 +133,13 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
   );
   useChannel(taskChannel(taskId), onRealtimeComment);
 
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [input]);
+
   const filteredMembers = members.filter((m) =>
     m.name?.toLowerCase().includes(mentionQuery.toLowerCase())
   );
@@ -507,24 +514,15 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
             className="hidden"
             onChange={(e) => { handleFilesSelected(e.target.files); e.target.value = ""; }}
           />
-          <div className="flex-1 relative min-h-[24px] max-h-[100px]">
-            <div
-              aria-hidden
-              className="absolute inset-0 text-s leading-[1.5] whitespace-pre-wrap break-words pointer-events-none text-transparent overflow-hidden"
-            >
-              {renderContent(input)}{"\u200B"}
-            </div>
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder="Write a comment... Use @ to mention"
-              rows={1}
-              className="relative w-full resize-none bg-transparent text-s leading-[1.5] text-foreground placeholder:text-muted-foreground/50 outline-none min-h-[24px] max-h-[100px] caret-foreground"
-              style={{ fieldSizing: "content", WebkitTextFillColor: "transparent" } as React.CSSProperties}
-            />
-          </div>
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Write a comment... Use @ to mention"
+            rows={1}
+            className="min-h-6 max-h-40 w-full min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-1 text-s leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/50"
+          />
           <button
             onClick={handleSubmit}
             disabled={(!input.trim() && pendingFiles.length === 0) || submitting}

@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
+import { logTaskActivity } from "@/lib/activity";
 import { notifyRequesterInMailbox } from "@/lib/deliver-proof-bypass";
 import type { ProofBypassPayload } from "@/lib/proof-bypass-payload";
 import { publish, projectChannel } from "@/lib/centrifugo";
+import { moveTask } from "@/actions/task";
 
 async function canApproveBypass(projectId: string, userId: string, isAdmin: boolean) {
   if (isAdmin) return true;
@@ -31,6 +33,69 @@ async function loadPassForApprover(passId: string) {
   return { pass, user };
 }
 
+const REVIEW_OR_LATER = new Set([
+  "INTERNAL_REVIEW",
+  "CLIENT_REVIEW",
+  "READY_FOR_RELEASE",
+  "DONE",
+]);
+
+async function moveTaskToInternalReviewOnApprove(pass: {
+  id: string;
+  task: { id: string; projectId: string };
+  requestedBy: { id: string };
+}, approver: { id: string; name: string | null }) {
+  const task = await prisma.task.findUnique({
+    where: { id: pass.task.id },
+    select: { id: true, stage: true, projectId: true },
+  });
+  if (!task) return;
+
+  const proof = await prisma.proofOfWork.create({
+    data: {
+      taskId: task.id,
+      createdById: pass.requestedBy.id,
+      bypassedById: approver.id,
+      bypassedAt: new Date(),
+    },
+  });
+
+  await logTaskActivity({
+    taskId: task.id,
+    userId: pass.requestedBy.id,
+    action: "proof_bypass",
+    field: "bypass",
+    newValue: approver.name ?? "manager",
+  });
+
+  if (REVIEW_OR_LATER.has(task.stage)) {
+    await prisma.proofBypassPass.update({
+      where: { id: pass.id },
+      data: { status: "USED", usedAt: new Date() },
+    });
+    return;
+  }
+
+  const order = await prisma.task.count({
+    where: { projectId: task.projectId, stage: "INTERNAL_REVIEW" },
+  });
+  const moved = await moveTask({
+    taskId: task.id,
+    stage: "INTERNAL_REVIEW",
+    order,
+    proofOfWorkId: proof.id,
+  });
+  if (!moved.success) {
+    console.error("[proof bypass move]", moved.error);
+    return;
+  }
+
+  await prisma.proofBypassPass.update({
+    where: { id: pass.id },
+    data: { status: "USED", usedAt: new Date() },
+  });
+}
+
 async function decide(passId: string, status: "APPROVED" | "REJECTED") {
   const { pass, user } = await loadPassForApprover(passId);
   if (pass.status !== "PENDING") throw new Error("This request is no longer pending");
@@ -39,6 +104,10 @@ async function decide(passId: string, status: "APPROVED" | "REJECTED") {
     where: { id: pass.id },
     data: { status, approvedById: user.id, approvedAt: new Date() },
   });
+
+  if (status === "APPROVED") {
+    await moveTaskToInternalReviewOnApprove(pass, user);
+  }
 
   const project = await prisma.project.findUnique({
     where: { id: pass.task.projectId },
@@ -62,8 +131,10 @@ async function decide(passId: string, status: "APPROVED" | "REJECTED") {
     type: status === "APPROVED" ? "proof-bypass.approved" : "proof-bypass.rejected",
     passId: pass.id,
     taskId: pass.task.id,
+    requesterId: pass.requestedBy.id,
     deciderId: user.id,
   });
+  revalidatePath(`/dashboard/projects/${pass.task.projectId}`);
   revalidatePath(`/dashboard/projects/${pass.task.projectId}/bypass-requests`);
 }
 

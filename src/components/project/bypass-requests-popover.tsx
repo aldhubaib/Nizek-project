@@ -12,6 +12,7 @@ import { BypassRequestList } from "@/components/project/bypass-request-list";
 import { useChannel } from "@/components/realtime/hooks";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { projectChannel } from "@/lib/channels";
+import { useKanbanStore } from "@/store/kanban";
 
 export function BypassRequestsPopover({
   projectId,
@@ -31,9 +32,10 @@ export function BypassRequestsPopover({
   const refresh = useCallback(() => {
     Promise.all([listProofBypassRequests(projectId), canCurrentUserBypassProof(projectId)])
       .then(([rows, decide]) => {
-        setRequests(rows);
+        const pending = rows.filter((row) => row.status === "PENDING");
+        setRequests(pending);
         setCanDecide(decide);
-        setCount(rows.filter((row) => row.status === "PENDING").length);
+        setCount(pending.length);
       })
       .catch(() => {});
   }, [projectId]);
@@ -55,15 +57,13 @@ export function BypassRequestsPopover({
           if (requests !== null) refresh();
         } else if (ev.type === "proof-bypass.approved" || ev.type === "proof-bypass.rejected") {
           setCount((c) => Math.max(0, c - 1));
-          setRequests((prev) =>
-            prev
-              ? prev.map((row) =>
-                  row.id === ev.passId
-                    ? { ...row, status: ev.type === "proof-bypass.approved" ? "APPROVED" : "REJECTED" }
-                    : row,
-                )
-              : prev,
-          );
+          setRequests((prev) => (prev ? prev.filter((row) => row.id !== ev.passId) : prev));
+          if (ev.type === "proof-bypass.approved" && ev.taskId) {
+            const order = useKanbanStore
+              .getState()
+              .tasks.filter((t) => t.stage === "INTERNAL_REVIEW").length;
+            useKanbanStore.getState().moveTask(ev.taskId, "INTERNAL_REVIEW", order);
+          }
         }
       },
       [currentUserId, requests, refresh],
@@ -126,14 +126,16 @@ export function BypassRequestsPopover({
                 requests={requests}
                 canDecide={canDecide}
                 currentUserId={currentUserId}
-                onChanged={(_id, status) => {
-                  setRequests((prev) =>
-                    prev
-                      ? prev.map((row) => (row.id === _id ? { ...row, status } : row))
-                      : prev,
-                  );
-                  if (status === "APPROVED" || status === "REJECTED") {
+                onChanged={(_id, status, taskId) => {
+                  setRequests((prev) => (prev ? prev.filter((row) => row.id !== _id) : prev));
+                  if (status === "APPROVED" || status === "REJECTED" || status === "USED") {
                     setCount((c) => Math.max(0, c - 1));
+                  }
+                  if (status === "USED" && taskId) {
+                    const order = useKanbanStore
+                      .getState()
+                      .tasks.filter((t) => t.stage === "INTERNAL_REVIEW").length;
+                    useKanbanStore.getState().moveTask(taskId, "INTERNAL_REVIEW", order);
                   }
                 }}
                 onOpenTask={(taskId) => {

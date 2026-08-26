@@ -98,14 +98,14 @@ export function SprintsTab({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <h2 className="min-w-0 text-s font-semibold">{active.name}</h2>
         <SprintStatusControl status={active.status} endDate={active.endDate} />
         <BypassRequestsPopover projectId={projectId} currentUserId={currentUserId} />
       </div>
 
-      <div className="min-h-0 min-w-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <KanbanBoard
           initialTasks={tasks}
           projectId={projectId}

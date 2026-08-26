@@ -37,7 +37,7 @@ export function BypassRequestList({
   requests: ProofBypassRequest[];
   canDecide: boolean;
   currentUserId: string;
-  onChanged?: (id: string, status: "APPROVED" | "REJECTED") => void;
+  onChanged?: (id: string, status: "APPROVED" | "REJECTED" | "USED", taskId: string) => void;
   onOpenTask: (taskId: string) => void;
 }) {
   const [rows, setRows] = useState(requests);
@@ -54,9 +54,10 @@ export function BypassRequestList({
     try {
       if (action === "approve") await approveProofBypass(id);
       else await rejectProofBypass(id);
-      const status = action === "approve" ? "APPROVED" : "REJECTED";
-      setRows((prev) => prev.map((row) => (row.id === id ? { ...row, status } : row)));
-      onChanged?.(id, status);
+      const status = action === "approve" ? "USED" : "REJECTED";
+      const taskId = rows.find((row) => row.id === id)?.task.id ?? "";
+      setRows((prev) => prev.filter((row) => row.id !== id));
+      onChanged?.(id, status, taskId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update request");
     } finally {
@@ -65,7 +66,7 @@ export function BypassRequestList({
   }
 
   if (rows.length === 0) {
-    return <p className="py-10 text-center text-s text-muted-foreground">No bypass requests yet.</p>;
+    return <p className="py-10 text-center text-s text-muted-foreground">No pending bypass requests.</p>;
   }
 
   return (
