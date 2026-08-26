@@ -738,9 +738,10 @@ export function NoteFullScreenDetail({
     if (!isSprintPlanning) return;
     const planningSprintId = sprintIdFromPlanningHtml(note.content);
     if (!planningSprintId) return;
+    const sprintId: string = planningSprintId;
     let cancelled = false;
     function load() {
-      getSprintPlanningTasks(planningSprintId)
+      getSprintPlanningTasks(sprintId)
         .then((data) => {
           if (cancelled) return;
           setSprintTasks(data.tasks);

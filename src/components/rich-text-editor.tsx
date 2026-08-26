@@ -66,21 +66,23 @@ function syncSprintTasksIntoEditor(editor: Editor, tasks: SprintPlanningTask[]) 
   if (!type) return;
 
   const existing = new Set<string>();
-  let lastTaskEnd: number | null = null;
-  let placeholderFrom: number | null = null;
-  let placeholderTo: number | null = null;
+  const scan = {
+    lastTaskEnd: null as number | null,
+    placeholderFrom: null as number | null,
+    placeholderTo: null as number | null,
+  };
   editor.state.doc.descendants((node, pos) => {
     if (node.type.name === "sprintTask") {
       const id = (node.attrs.task as SprintPlanningTask | null)?.id;
       if (id) existing.add(id);
-      lastTaskEnd = pos + node.nodeSize;
+      scan.lastTaskEnd = pos + node.nodeSize;
     }
     if (
       node.type.name === "paragraph" &&
       node.textContent.includes("No tasks in this sprint yet.")
     ) {
-      placeholderFrom = pos;
-      placeholderTo = pos + node.nodeSize;
+      scan.placeholderFrom = pos;
+      scan.placeholderTo = pos + node.nodeSize;
     }
   });
 
@@ -88,14 +90,16 @@ function syncSprintTasksIntoEditor(editor: Editor, tasks: SprintPlanningTask[]) 
   if (missing.length === 0) return;
 
   let tr = editor.state.tr;
-  if (placeholderFrom != null && placeholderTo != null) {
-    tr = tr.delete(placeholderFrom, placeholderTo);
-    if (lastTaskEnd != null && lastTaskEnd > placeholderFrom) {
-      lastTaskEnd -= placeholderTo - placeholderFrom;
+  if (scan.placeholderFrom != null && scan.placeholderTo != null) {
+    const from = scan.placeholderFrom;
+    const to = scan.placeholderTo;
+    tr = tr.delete(from, to);
+    if (scan.lastTaskEnd != null && scan.lastTaskEnd > from) {
+      scan.lastTaskEnd -= to - from;
     }
   }
 
-  let insertPos = Math.min(lastTaskEnd ?? tr.doc.content.size, tr.doc.content.size);
+  let insertPos = Math.min(scan.lastTaskEnd ?? tr.doc.content.size, tr.doc.content.size);
   for (const task of missing) {
     const node = type.create({
       id: task.id,
