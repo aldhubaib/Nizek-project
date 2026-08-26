@@ -79,7 +79,7 @@ export interface BoardProps {
 }
 
 const BOARD_ROW =
-  "flex h-full min-h-0 min-w-0 flex-1 flex-row gap-4 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-2";
+  "flex h-full min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden overscroll-y-contain pb-2 lg:flex-row lg:items-stretch lg:overflow-x-auto lg:overflow-y-hidden lg:overscroll-x-contain";
 
 const ASSIGN_TO_ME_CHECKPOINT = {
   title: "Taking ownership",
@@ -568,7 +568,7 @@ export function KanbanBoard({
 
   if (!isProjectActive || readOnly) {
     return (
-      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden">
         {!isProjectActive && (
         <div className="mb-6 shrink-0 rounded-lg border border-orange/30 bg-orange/10 px-4 py-3">
           <p className="text-s font-medium text-orange">
@@ -576,6 +576,7 @@ export function KanbanBoard({
           </p>
         </div>
         )}
+        <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden">
         <div className={BOARD_ROW}>
           {boardStages.map((stage) => {
             const stageTasks = tasksByStage[stage.id] ?? [];
@@ -591,19 +592,20 @@ export function KanbanBoard({
             );
           })}
         </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden">
     <DndContext
       sensors={sensors}
       collisionDetection={columnFirstCollision}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      {/* Columns keep a fixed width; the row scrolls horizontally instead of shrinking. */}
+      {/* Stacked on small screens; from lg up columns stay 400px and the row scrolls sideways. */}
       <div className={BOARD_ROW}>
         {boardStages.map((stage) => {
           const stageTasks = tasksByStage[stage.id] ?? [];

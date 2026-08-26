@@ -105,7 +105,8 @@ export function SprintsTab({
         <BypassRequestsPopover projectId={projectId} currentUserId={currentUserId} />
       </div>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="relative min-h-[calc(100dvh-8.75rem)] min-w-0 flex-1 overflow-hidden">
+        <div className="absolute inset-0">
         <KanbanBoard
           initialTasks={tasks}
           projectId={projectId}
@@ -120,6 +121,7 @@ export function SprintsTab({
           pipelineOnly
           readOnly={!isActive}
         />
+        </div>
       </div>
     </div>
   );

@@ -53,7 +53,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
     <div
       ref={setNodeRef}
         className={cn(
-          "flex h-full min-h-0 w-72 shrink-0 flex-col overflow-hidden rounded-lg border border-border/50 bg-muted/30 transition-colors",
+          "flex w-full max-h-[70dvh] shrink-0 flex-col overflow-hidden rounded-lg border border-border/50 bg-muted/30 transition-colors lg:h-full lg:max-h-none lg:min-h-0 lg:w-[400px] lg:self-stretch",
           isOver && !disabled && isValidDropTarget && "border-success/60 bg-success/5",
           isOver && !disabled && isDragging && !isValidDropTarget && "border-destructive/50 bg-destructive/5"
         )}
@@ -72,7 +72,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-2">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain p-2">
         <SortableContext
           items={allTaskIds}
           strategy={verticalListSortingStrategy}
@@ -94,7 +94,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
         </SortableContext>
 
         {tasks.length === 0 && (
-          <div className="flex items-center justify-center py-8">
+          <div className="flex flex-1 items-center justify-center py-8">
             <p className="text-s text-muted-foreground/60">No tasks</p>
           </div>
         )}

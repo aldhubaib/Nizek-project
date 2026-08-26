@@ -474,7 +474,7 @@ export function ProjectDetailClient({
           "w-full min-w-0 gap-0",
           (activeTab === "board" || activeTab === "sprints" || activeTab === "roadmap") &&
             !noteFullscreen &&
-            "lg:min-h-0 lg:flex-1 lg:overflow-hidden",
+            "lg:min-h-0 lg:h-full lg:flex-1 lg:overflow-hidden",
         )}
       >
       <PageHeader hasMenu className="relative w-full min-w-0 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-2">
@@ -562,7 +562,7 @@ export function ProjectDetailClient({
           noteFullscreen
             ? "px-0 py-0"
             : (activeTab === "board" || activeTab === "sprints" || activeTab === "roadmap")
-              ? "flex min-h-0 flex-col overflow-hidden px-app pt-4 pb-4 lg:flex-1 lg:pb-0"
+              ? "flex min-h-0 flex-col overflow-hidden px-app pt-4 pb-4 lg:flex-1 lg:basis-0 lg:pb-0"
               : "px-app py-4",
         )}
       >
@@ -589,7 +589,7 @@ export function ProjectDetailClient({
             ))}
           </TabsContent>
 
-          <TabsContent value="sprints" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <TabsContent value="sprints" className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
             {activeTab === "sprints" && (loadingSprints || !sprints ? (
               <TabSpinner />
             ) : (
