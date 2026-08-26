@@ -4,13 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { requireUser, requireProjectMember } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { logTaskActivity } from "@/lib/activity";
+import { isBuiltInTaskFieldQuestion } from "@/lib/task-readiness";
 
 export async function getTaskQuestions(taskType?: "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN") {
   await requireUser();
-  return prisma.defaultQuestion.findMany({
+  const questions = await prisma.defaultQuestion.findMany({
     where: taskType ? { taskType } : {},
     orderBy: { order: "asc" },
   });
+  return questions.filter((q) => !isBuiltInTaskFieldQuestion(q.question));
 }
 
 export async function saveTaskAnswers(data: {

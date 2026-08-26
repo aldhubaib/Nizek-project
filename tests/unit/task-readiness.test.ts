@@ -13,40 +13,46 @@ const spec = (id: string, required = false) => ({
 });
 
 describe("isReadinessQuestion", () => {
-  it("counts spec questions even when they are not marked required", () => {
-    expect(isReadinessQuestion({ type: "text" })).toBe(true);
-    expect(isReadinessQuestion({ type: "select" })).toBe(true);
+  it("only counts questions marked mandatory or required before backlog", () => {
+    expect(isReadinessQuestion({ type: "text" })).toBe(false);
+    expect(isReadinessQuestion({ type: "text", required: true })).toBe(true);
+    expect(isReadinessQuestion({ type: "select", mandatory: true })).toBe(true);
   });
 
   it("ignores client questions", () => {
     expect(isReadinessQuestion({ type: "client" })).toBe(false);
   });
+
+  it("ignores Priority — that field lives on the task, not in questions", () => {
+    expect(isReadinessQuestion({ type: "text", question: "Priority", required: true })).toBe(false);
+    expect(isReadinessQuestion({ type: "select", question: "priority", mandatory: true })).toBe(false);
+  });
 });
 
 describe("computeIsReadyForTransition", () => {
-  it("keeps a task in Missing Data when spec questions are unanswered", () => {
-    expect(computeIsReadyForTransition([spec("q1"), spec("q2")], {})).toBe(false);
+  it("keeps a task in Missing Data when required questions are unanswered", () => {
+    expect(computeIsReadyForTransition([spec("q1", true), spec("q2", true)], {})).toBe(false);
   });
 
-  it("does not treat required:false as optional for the Backlog split", () => {
+  it("treats required:false as optional for the Backlog split", () => {
     expect(
       computeIsReadyForTransition([spec("q1", false)], {}),
-    ).toBe(false);
+    ).toBe(true);
   });
 
-  it("is ready only after every spec question has an answer", () => {
+  it("is ready only after every required question has an answer", () => {
     expect(
       computeIsReadyForTransition(
         [spec("q1", false), spec("q2", true)],
-        { q1: "one", q2: "two" },
+        { q2: "two" },
       ),
     ).toBe(true);
   });
 
-  it("stays unready if a select/file answer is an empty list", () => {
+  it("stays unready if a required select/file answer is an empty list", () => {
     expect(
       computeIsReadyForTransition(
-        [{ id: "files", type: "file" }],
+        [{ id: "files", type: "file", required: true }],
         { files: "[]" },
       ),
     ).toBe(false);
@@ -61,6 +67,15 @@ describe("computeIsReadyForTransition", () => {
         { c1: JSON.stringify({ needed: true, completed: false }) },
       ),
     ).toBe(false);
+  });
+
+  it("does not keep a task in Missing Data for an unanswered Priority question", () => {
+    expect(
+      computeIsReadyForTransition(
+        [{ id: "p1", type: "text", question: "Priority", required: true }],
+        {},
+      ),
+    ).toBe(true);
   });
 });
 

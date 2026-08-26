@@ -30,12 +30,26 @@ export function isWaitingOnClientAnswer(
 }
 
 /**
+ * Priority lives on the task (Details), not in Task Questions.
+ * A leftover "Priority" question must never block Backlog.
+ */
+export function isBuiltInTaskFieldQuestion(question: string | undefined | null): boolean {
+  return question?.trim().toLowerCase() === "priority";
+}
+
+/**
  * Spec fields that decide Backlog vs Missing Data.
  * Only mandatory or required-before-backlog questions block readiness;
- * client questions never block this split.
+ * client questions and built-in task fields (priority) never block this split.
  */
-export function isReadinessQuestion(q: { type: string; mandatory?: boolean; required?: boolean }): boolean {
+export function isReadinessQuestion(q: {
+  type: string;
+  question?: string;
+  mandatory?: boolean;
+  required?: boolean;
+}): boolean {
   if (q.type === "client") return false;
+  if (isBuiltInTaskFieldQuestion(q.question)) return false;
   return q.mandatory === true || q.required === true;
 }
 
@@ -49,7 +63,7 @@ export function isMissingDataTask(task: {
 }
 
 export function computeIsReadyForTransition(
-  questions: { id: string; type: string; required?: boolean; mandatory?: boolean }[],
+  questions: { id: string; type: string; question?: string; required?: boolean; mandatory?: boolean }[],
   answers: Record<string, string>,
 ): boolean {
   const specQs = questions.filter(isReadinessQuestion);

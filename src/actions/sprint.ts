@@ -12,6 +12,7 @@ import { revalidatePath } from "next/cache";
 import type { SprintStatus } from "@/generated/prisma/client";
 import { isClosedSprint, isCurrentSprintStatus, isUnstartedSprint, comparePlannedSprints, type SprintBoardColumn } from "@/lib/sprint-status";
 import { taskCode } from "@/lib/task-label";
+import { isBuiltInTaskFieldQuestion } from "@/lib/task-readiness";
 import { countWorkingDays } from "@/lib/working-days";
 import { logTaskActivity } from "@/lib/activity";
 import { broadcastTaskEvent, publish, projectChannel } from "@/lib/centrifugo";
@@ -700,7 +701,7 @@ export async function getSprintPlanningTasks(sprintId: string): Promise<{
 
   const tasks: SprintPlanningTask[] = sprint.tasks.map((task) => {
     const answerByQuestion = new Map(task.answers.map((a) => [a.questionId, a.answer]));
-    const typed = questions.filter((q) => q.taskType === task.taskType);
+    const typed = questions.filter((q) => q.taskType === task.taskType && !isBuiltInTaskFieldQuestion(q.question));
     return {
       id: task.id,
       code: taskCode(task.taskType, task.taskNumber),
@@ -862,7 +863,7 @@ export async function getSprintReviewTasks(sprintId: string): Promise<{
     ]);
     const mapped: SprintPlanningTask[] = snapshots.map((snap) => {
       const answerByQuestion = new Map(snap.task.answers.map((a) => [a.questionId, a.answer]));
-      const typed = questions.filter((q) => q.taskType === snap.task.taskType);
+      const typed = questions.filter((q) => q.taskType === snap.task.taskType && !isBuiltInTaskFieldQuestion(q.question));
       return {
         id: snap.task.id,
         code: taskCode(snap.task.taskType, snap.task.taskNumber),
