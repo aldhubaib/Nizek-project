@@ -49,12 +49,8 @@ export function AttachExistingNoteDialog({
   useEffect(() => {
     if (!open) return;
     setQuery("");
+    setNotes([]);
     setError(null);
-    setLoading(true);
-    searchProjectNotesForLink(projectId, taskId, "", { kind })
-      .then((rows) => setNotes(rows as NoteRow[]))
-      .catch(() => setNotes([]))
-      .finally(() => setLoading(false));
   }, [open, projectId, taskId, kind]);
 
   useEffect(() => {
@@ -62,10 +58,16 @@ export function AttachExistingNoteDialog({
     const t = setTimeout(() => {
       setLoading(true);
       searchProjectNotesForLink(projectId, taskId, query, { kind })
-        .then((rows) => setNotes(rows as NoteRow[]))
-        .catch(() => setNotes([]))
+        .then((rows) => {
+          setNotes(rows as NoteRow[]);
+          setError(null);
+        })
+        .catch((err) => {
+          setNotes([]);
+          setError(err instanceof Error ? err.message : "Failed to load notes");
+        })
         .finally(() => setLoading(false));
-    }, 200);
+    }, query ? 200 : 0);
     return () => clearTimeout(t);
   }, [query, open, projectId, taskId, kind]);
 

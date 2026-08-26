@@ -822,14 +822,13 @@ export async function searchProjectNotesForLink(
   return prisma.meetingNote.findMany({
     where: {
       projectId,
-      NOT: {
-        OR: [{ taskId }, { taskLinks: { some: { taskId } } }],
-      },
-      ...(kind === "roadmap"
-        ? { noteType: "DEADLINE" }
-        : kind === "notes"
-          ? { noteType: { not: "DEADLINE" } }
-          : {}),
+      // `NOT { taskId }` drops rows where taskId is null (SQL NULL). Include
+      // unlinked notes explicitly, then skip ones already on this task.
+      AND: [
+        { OR: [{ taskId: null }, { taskId: { not: taskId } }] },
+        { taskLinks: { none: { taskId } } },
+      ],
+      ...(kind === "roadmap" ? { noteType: "DEADLINE" } : {}),
       ...(q ? { title: { contains: q, mode: "insensitive" } } : {}),
     },
     select: {
