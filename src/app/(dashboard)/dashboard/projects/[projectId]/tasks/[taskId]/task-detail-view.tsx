@@ -23,6 +23,7 @@ import { QuestionField, questionShowsRequiredStar, type TaskQuestion } from "@/c
 import { CommentSection } from "@/components/kanban/comment-section";
 import { StageConfirmDialog, getCheckpoint } from "@/components/kanban/stage-confirm-dialog";
 import { ProofOfWorkDialog } from "@/components/kanban/proof-of-work-dialog";
+import { ProofVideosSection } from "@/components/kanban/proof-videos-section";
 import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
 import { needsProofOfWork } from "@/lib/proof-of-work";
 import { DeclineDialog } from "@/components/kanban/decline-dialog";
@@ -800,6 +801,8 @@ export function TaskDetailPage({
             </div>
           )}
         </div>
+
+        <ProofVideosSection taskId={initialTask.id} />
 
         {/* Comments */}
         <div className="rounded-lg border border-border/50 bg-card px-3 pb-3">

@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { getTaskActivities } from "@/actions/activity";
 import { getComments } from "@/actions/comment";
-import { getProofHistory, type ProofHistoryItem } from "@/actions/proof-of-work";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Avatar as UiAvatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -150,7 +149,6 @@ interface Props {
 export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [proofs, setProofs] = useState<ProofHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterMode>("all");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -165,13 +163,12 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([getTaskActivities(taskId), getComments(taskId), getProofHistory(taskId)])
-      .then(([acts, commentRes, proofRows]) => {
+    Promise.all([getTaskActivities(taskId), getComments(taskId)])
+      .then(([acts, commentRes]) => {
         setActivities(acts as Activity[]);
         if (commentRes && (commentRes as { success: boolean }).success) {
           setComments((commentRes as unknown as { comments: Comment[] }).comments);
         }
-        setProofs(proofRows);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -385,40 +382,6 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
             )}
           </div>
         )}
-
-        {proofs.length > 0 ? (
-          <div className="border-t border-border px-5 py-3">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Proof of work
-            </p>
-            <div className="space-y-3">
-              {proofs.map((proof) => (
-                <div key={proof.id} className="rounded-lg border border-border/60 p-3">
-                  <p className="text-xs text-muted-foreground">
-                    {proof.createdBy.name ?? "Someone"} · {timeAgo(proof.createdAt)}
-                    {proof.bypassedBy
-                      ? ` · bypassed by ${proof.bypassedBy.name ?? "a manager"}`
-                      : ""}
-                  </p>
-                  {proof.videos.length > 0 ? (
-                    <div className="mt-2 space-y-2">
-                      {proof.videos.map((video) => (
-                        <video
-                          key={video.id}
-                          src={video.url}
-                          controls
-                          className="max-h-48 w-full rounded-md bg-black"
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-1 text-s text-muted-foreground">No videos — bypass approved.</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
 
         {/* Body */}
         <div className="overflow-y-auto px-5 py-4">

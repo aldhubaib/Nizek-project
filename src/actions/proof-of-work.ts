@@ -78,6 +78,19 @@ async function bypassApproverIds(projectId: string) {
   return [...new Set(members.map((m) => m.userId))];
 }
 
+async function hasProofBypassApprover(projectId: string) {
+  const found = await prisma.projectMember.findFirst({
+    where: { projectId, canBypassProof: true },
+    select: { id: true },
+  });
+  return Boolean(found);
+}
+
+export async function projectHasProofBypassApprover(projectId: string) {
+  await requireProjectMember(projectId);
+  return hasProofBypassApprover(projectId);
+}
+
 export async function canCurrentUserBypassProof(projectId: string) {
   const { user } = await requireProjectMember(projectId);
   return canApproveBypass(projectId, user.id, user.systemRole === "ADMIN");
@@ -129,6 +142,9 @@ export async function requestProofBypass(taskId: string): Promise<ProofBypassSta
   });
   if (!task) throw new Error("Task not found");
   const { user } = await requireProjectMember(task.projectId);
+  if (!(await hasProofBypassApprover(task.projectId))) {
+    throw new Error("No one on this project can approve a bypass.");
+  }
 
   const existing = await prisma.proofBypassPass.findFirst({
     where: { taskId, requestedById: user.id, status: { in: ["PENDING", "APPROVED"] } },
@@ -181,6 +197,25 @@ export async function requestProofBypass(taskId: string): Promise<ProofBypassSta
   });
 
   return { id: pass.id, status: "PENDING", approvedByName: null };
+}
+
+export type TaskProofVideo = {
+  id: string;
+  filename: string;
+  url: string;
+  fileSize: number | null;
+  mimeType: string | null;
+};
+
+export async function getTaskProofVideos(taskId: string): Promise<TaskProofVideo[]> {
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { projectId: true } });
+  if (!task) return [];
+  await requireProjectMember(task.projectId);
+  return prisma.proofOfWorkVideo.findMany({
+    where: { proof: { taskId } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, filename: true, url: true, fileSize: true, mimeType: true },
+  });
 }
 
 export async function getProofHistory(taskId: string): Promise<ProofHistoryItem[]> {

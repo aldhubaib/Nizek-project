@@ -54,6 +54,9 @@ import { formatWorkingDays, parseWorkingDays, toDateInputValue } from "@/lib/wor
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 import { useCollaboration } from "@/components/realtime/use-collaboration";
+import { useChannel } from "@/components/realtime/hooks";
+import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
+import { projectChannel } from "@/lib/channels";
 
 function getDeadlineStatus(dueDate: Date | string, completedAt: Date | string | null) {
   if (completedAt) return outlineBadge("Completed", "text-success", "border-success/30");
@@ -722,7 +725,7 @@ export function NoteFullScreenDetail({
   const liveEdit =
     (isSprintPlanning && !planningLocked && canCreateSprintPlanning) ||
     (isSprintReview && canEndSprint);
-  const { ydoc, provider: collabProvider, enabled: collabEnabled } =
+  const { ydoc, provider: collabProvider, synced: collabSynced, enabled: collabEnabled } =
     useCollaboration(isSprintDoc && liveEdit ? note.id : null);
   const { saveError: autoSaveError } = useNoteAutosave({
     noteId: note.id,
@@ -736,17 +739,46 @@ export function NoteFullScreenDetail({
     const sprintId = sprintIdFromPlanningHtml(note.content);
     if (!sprintId) return;
     let cancelled = false;
+    function load() {
+      getSprintPlanningTasks(sprintId)
+        .then((data) => {
+          if (cancelled) return;
+          setSprintTasks(data.tasks);
+          setSprintStatus(data.status);
+        })
+        .catch(() => {});
+    }
+    load();
+    window.addEventListener("focus", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", load);
+    };
+  }, [isSprintPlanning, note.content]);
+
+  const sprintTasksLoadRef = useRef<(() => void) | undefined>(undefined);
+  sprintTasksLoadRef.current = () => {
+    if (!isSprintPlanning) return;
+    const sprintId = sprintIdFromPlanningHtml(note.content);
+    if (!sprintId) return;
     getSprintPlanningTasks(sprintId)
       .then((data) => {
-        if (cancelled) return;
         setSprintTasks(data.tasks);
         setSprintStatus(data.status);
       })
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [isSprintPlanning, note.content]);
+  };
+  const cent = useCentrifugo();
+  useChannel(
+    cent?.enabled && isSprintPlanning ? projectChannel(projectId) : null,
+    useCallback((data: unknown) => {
+      const ev = data as { type?: string } | null;
+      if (!ev?.type) return;
+      if (ev.type.startsWith("sprint.") || ev.type === "task-updated") {
+        sprintTasksLoadRef.current?.();
+      }
+    }, []),
+  );
 
   const currentRoadmapStatus = normalizeRoadmapStatus(note.roadmapStatus, completedAt);
   const canCreateTaskFromNote =
@@ -1280,6 +1312,7 @@ export function NoteFullScreenDetail({
                 onSprintStatusChange={setSprintStatus}
                 ydoc={ydoc}
                 collabProvider={collabProvider}
+                collabSynced={collabSynced}
                 onSprintTaskPatch={(taskId, patch) => {
                   setSprintTasks((prev) =>
                     prev.map((item) => (item.id === taskId ? { ...item, ...patch } : item)),

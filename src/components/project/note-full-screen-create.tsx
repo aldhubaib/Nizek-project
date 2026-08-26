@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import {
   overlayPlanningTaskAssignees,
   sprintPlanningDocHtml,
   sprintPlanningIsLocked,
+  syncPlanningDocTasks,
   type SprintPlanningTask,
 } from "@/lib/sprint-planning-doc";
 import {
@@ -26,6 +27,9 @@ import {
 } from "@/lib/sprint-review-doc";
 import { isClosedSprint } from "@/lib/sprint-status";
 import { useCollaboration } from "@/components/realtime/use-collaboration";
+import { useChannel } from "@/components/realtime/hooks";
+import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
+import { projectChannel } from "@/lib/channels";
 
 export { NOTES_CREATE_TYPES, type NoteType } from "@/components/project/note-types";
 
@@ -163,7 +167,7 @@ export function NoteFullScreenCreate({
         if (existing) {
           setNoteId(existing.id);
           setTitle(existing.title);
-          setContent(overlayPlanningTaskAssignees(existing.content, planning.tasks));
+          setContent(syncPlanningDocTasks(existing.content, planning.tasks));
           return;
         }
         const info = blankPlanningSchedule(planning.info);
@@ -193,6 +197,47 @@ export function NoteFullScreenCreate({
       cancelled = true;
     };
   }, [sprintId, projectId, initialTitle, isSprintDoc, isSprintReview]);
+
+  useEffect(() => {
+    if (!sprintId || !isSprintPlanning) return;
+    let cancelled = false;
+    function refresh() {
+      getSprintPlanningTasks(sprintId)
+        .then((data) => {
+          if (cancelled) return;
+          setSprintStatus(data.status);
+          setSprintTasks(data.tasks);
+        })
+        .catch(() => {});
+    }
+    window.addEventListener("focus", refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refresh);
+    };
+  }, [sprintId, isSprintPlanning]);
+
+  const sprintTasksLoadRef = useRef<(() => void) | undefined>(undefined);
+  sprintTasksLoadRef.current = () => {
+    if (!sprintId || !isSprintPlanning) return;
+    getSprintPlanningTasks(sprintId)
+      .then((data) => {
+        setSprintStatus(data.status);
+        setSprintTasks(data.tasks);
+      })
+      .catch(() => {});
+  };
+  const cent = useCentrifugo();
+  useChannel(
+    cent?.enabled && isSprintPlanning ? projectChannel(projectId) : null,
+    useCallback((data: unknown) => {
+      const ev = data as { type?: string } | null;
+      if (!ev?.type) return;
+      if (ev.type.startsWith("sprint.") || ev.type === "task-updated") {
+        sprintTasksLoadRef.current?.();
+      }
+    }, []),
+  );
 
   async function handleSave() {
     if (!noteType) { setTypeError(true); return; }
@@ -352,6 +397,7 @@ export function NoteFullScreenCreate({
               onSprintStatusChange={setSprintStatus}
               ydoc={ydoc}
               collabProvider={collabProvider}
+              collabSynced={collabSynced}
               currentUser={currentUser}
               onSprintTaskPatch={(taskId, patch) => {
                 setSprintTasks((prev) =>

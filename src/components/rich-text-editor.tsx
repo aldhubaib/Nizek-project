@@ -49,6 +49,66 @@ import { SprintInfoBlock } from "@/components/tiptap/sprint-info-block";
 import { SprintTaskBlock } from "@/components/tiptap/sprint-task-block";
 import { type SprintPlanningTask } from "@/lib/sprint-planning-doc";
 
+function planningDocIsReview(editor: Editor): boolean {
+  let review = false;
+  editor.state.doc.descendants((node) => {
+    if (node.type.name !== "sprintInfo") return;
+    const variant = (node.attrs.info as { variant?: string } | null)?.variant;
+    if (variant === "review") review = true;
+  });
+  return review;
+}
+
+function syncSprintTasksIntoEditor(editor: Editor, tasks: SprintPlanningTask[]) {
+  if (tasks.length === 0) return;
+  if (planningDocIsReview(editor)) return;
+  const type = editor.schema.nodes.sprintTask;
+  if (!type) return;
+
+  const existing = new Set<string>();
+  let lastTaskEnd: number | null = null;
+  let placeholder: { from: number; to: number } | null = null;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === "sprintTask") {
+      const id = (node.attrs.task as SprintPlanningTask | null)?.id;
+      if (id) existing.add(id);
+      lastTaskEnd = pos + node.nodeSize;
+    }
+    if (
+      node.type.name === "paragraph" &&
+      node.textContent.includes("No tasks in this sprint yet.")
+    ) {
+      placeholder = { from: pos, to: pos + node.nodeSize };
+    }
+  });
+
+  const missing = tasks.filter((task) => !existing.has(task.id));
+  if (missing.length === 0) return;
+
+  let tr = editor.state.tr;
+  if (placeholder) {
+    tr = tr.delete(placeholder.from, placeholder.to);
+    if (lastTaskEnd != null && lastTaskEnd > placeholder.from) {
+      lastTaskEnd -= placeholder.to - placeholder.from;
+    }
+  }
+
+  let insertPos = Math.min(lastTaskEnd ?? tr.doc.content.size, tr.doc.content.size);
+  for (const task of missing) {
+    const node = type.create({
+      id: task.id,
+      task,
+      showQuestions: true,
+      decision: "",
+      risk: "",
+      variant: "planning",
+    });
+    tr = tr.insert(insertPos, node);
+    insertPos += node.nodeSize;
+  }
+  if (tr.docChanged) editor.view.dispatch(tr);
+}
+
 const CURSOR_COLORS = [
   "#f87171", "#fb923c", "#facc15", "#4ade80", "#22d3ee",
   "#818cf8", "#c084fc", "#f472b6", "#a78bfa", "#34d399",
@@ -77,6 +137,7 @@ export interface RichTextEditorProps {
   onSprintStatusChange?: (status: string) => void;
   ydoc?: Y.Doc | null;
   collabProvider?: HocuspocusProvider | null;
+  collabSynced?: boolean;
   currentUser?: { id: string; name: string | null; imageUrl: string | null } | null;
 }
 
@@ -95,6 +156,7 @@ export function RichTextEditor({
   onSprintStatusChange,
   ydoc,
   collabProvider,
+  collabSynced = false,
   currentUser,
 }: RichTextEditorProps) {
   const [slashMenu, setSlashMenu] = useState<{ x: number; y: number; query: string } | null>(null);
@@ -353,7 +415,7 @@ export function RichTextEditor({
       if (task) {
         editor.chain().focus().insertContent({
           type: "sprintTask",
-          attrs: { task, showQuestions: false },
+          attrs: { id: task.id, task, showQuestions: false },
         }).run();
       }
       setSlashMenu(null);
@@ -466,6 +528,11 @@ export function RichTextEditor({
       onSprintTaskPatchRef.current?.(taskId, patch);
     editor.view.dispatch(editor.state.tr.setMeta("sprintTasks", sprintTasks.length));
   }, [editor, sprintTasks]);
+
+  useEffect(() => {
+    if (!editor) return;
+    syncSprintTasksIntoEditor(editor, sprintTasks);
+  }, [editor, sprintTasks, collabSynced]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

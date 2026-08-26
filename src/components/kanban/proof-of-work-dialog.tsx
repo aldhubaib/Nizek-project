@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Film, Loader2, Plus, X } from "lucide-react";
-import { getProofBypassStatus, requestProofBypass, type ProofBypassStatus } from "@/actions/proof-of-work";
+import { getProofBypassStatus, projectHasProofBypassApprover, requestProofBypass, type ProofBypassStatus } from "@/actions/proof-of-work";
 import { enqueueProofUpload } from "@/lib/proof-outbox";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { Button } from "@/components/ui/button";
@@ -33,12 +33,21 @@ export function ProofOfWorkDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [bypass, setBypass] = useState<ProofBypassStatus | null>(null);
+  const [canAskBypass, setCanAskBypass] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void getProofBypassStatus(target.taskId).then((status) => setBypass(status));
   }, [target.taskId]);
+
+  useEffect(() => {
+    if (!projectId) {
+      setCanAskBypass(false);
+      return;
+    }
+    void projectHasProofBypassApprover(projectId).then(setCanAskBypass);
+  }, [projectId]);
 
   useChannel(
     cent?.enabled && projectId ? projectChannel(projectId) : null,
@@ -66,7 +75,11 @@ export function ProofOfWorkDialog({
 
   function submit(useBypass = false) {
     if (files.length === 0 && !useBypass) {
-      setError("Upload at least one video, or ask for a bypass.");
+      setError(
+        canAskBypass
+          ? "Upload at least one video, or ask for a bypass."
+          : "Upload at least one video.",
+      );
       return;
     }
     enqueueProofUpload({
@@ -155,24 +168,26 @@ export function ProofOfWorkDialog({
           </button>
         </div>
 
-        <div className="mt-4">
-          {bypass?.status === "PENDING" ? (
-            <p className="text-s text-muted-foreground">Bypass requested. Waiting for approval.</p>
-          ) : bypass?.status === "APPROVED" ? (
-            <p className="text-s text-success">
-              Bypass approved{bypass.approvedByName ? ` by ${bypass.approvedByName}` : ""}.
-            </p>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void askBypass()}
-              disabled={busy}
-              className="text-s text-primary hover:underline disabled:opacity-50"
-            >
-              {busy ? "Asking…" : "Ask for Bypass"}
-            </button>
-          )}
-        </div>
+        {bypass || canAskBypass ? (
+          <div className="mt-4">
+            {bypass?.status === "PENDING" ? (
+              <p className="text-s text-muted-foreground">Bypass requested. Waiting for approval.</p>
+            ) : bypass?.status === "APPROVED" ? (
+              <p className="text-s text-success">
+                Bypass approved{bypass.approvedByName ? ` by ${bypass.approvedByName}` : ""}.
+              </p>
+            ) : canAskBypass ? (
+              <button
+                type="button"
+                onClick={() => void askBypass()}
+                disabled={busy}
+                className="text-s text-primary hover:underline disabled:opacity-50"
+              >
+                {busy ? "Asking…" : "Ask for Bypass"}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {error ? <p className="mt-3 text-s text-destructive">{error}</p> : null}
 

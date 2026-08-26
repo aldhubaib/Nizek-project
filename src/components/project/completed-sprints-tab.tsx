@@ -22,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { MoreHorizontal, Search } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { RoadmapTaskRow } from "@/components/project/sprint-task-row";
 import {
   deleteSprint,
@@ -41,7 +41,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ConfirmDeleteDialog } from "@/components/equity/confirm-delete-dialog";
-import { Input } from "@/components/ui/input";
 import {
   SPRINT_BOARD_COLUMNS,
   compareClosedSprints,
@@ -101,7 +100,6 @@ export function CompletedSprintsTab({
   isProjectActive,
 }: Props) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [deletingSprint, setDeletingSprint] = useState<SprintDTO | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -139,16 +137,6 @@ export function CompletedSprintsTab({
     }
   }, [closedCount, projectId, snapshots]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return sprints;
-    return sprints.filter(
-      (sprint) =>
-        sprint.name.toLowerCase().includes(q) ||
-        (sprint.incompleteReason ?? "").toLowerCase().includes(q),
-    );
-  }, [sprints, query]);
-
   const byColumn = useMemo(() => {
     const groups: Record<SprintBoardColumn, SprintDTO[]> = {
       PLANNED: [],
@@ -157,14 +145,14 @@ export function CompletedSprintsTab({
       COMPLETED: [],
       SHIPPED: [],
     };
-    for (const sprint of filtered) {
+    for (const sprint of sprints) {
       groups[sprintBoardColumn(sprint.status)].push(sprint);
     }
     groups.PLANNED.sort(comparePlannedSprints);
     groups.COMPLETED.sort(compareClosedSprints);
     groups.SHIPPED.sort(compareClosedSprints);
     return groups;
-  }, [filtered]);
+  }, [sprints]);
 
   function tasksForSprint(sprintId: string): SprintSnapshotTask[] {
     if (snapshots && snapshots[sprintId]) {
@@ -339,17 +327,6 @@ export function CompletedSprintsTab({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="relative shrink-0">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search sprints"
-          className="pl-8"
-          aria-label="Search sprints"
-        />
-      </div>
-
       {error ? <p className="text-s text-destructive">{error}</p> : null}
 
       <DndContext
@@ -391,11 +368,9 @@ export function CompletedSprintsTab({
               column={column}
               sprints={byColumn[column.id]}
               emptyLabel={
-                query.trim()
-                  ? `No sprints match "${query.trim()}".`
-                  : column.id === "NEXT"
-                    ? "Drop one sprint here."
-                    : "Drop a sprint here."
+                column.id === "NEXT"
+                  ? "Drop one sprint here."
+                  : "Drop a sprint here."
               }
               dropBlocked={
                 column.id === "NEXT" &&

@@ -154,6 +154,7 @@ async function finish(id: string) {
     return;
   }
   patchEntry(id, { status: "done" });
+  window.dispatchEvent(new CustomEvent("proof-upload-complete", { detail: { taskId: entry.taskId } }));
   window.setTimeout(() => {
     entries = entries.filter((e) => e.id !== id);
     emit();

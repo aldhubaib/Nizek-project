@@ -157,6 +157,58 @@ export function overlayPlanningTaskAssignees(
   });
 }
 
+const EMPTY_SPRINT_TASKS_HTML = `<p><em>No tasks in this sprint yet.</em></p>`;
+const SPRINT_TASK_BLOCK_RE = /<div\b[^>]*data-type="sprint-task"[^>]*>[\s\S]*?<\/div>/gi;
+
+export function planningTaskIdsFromHtml(html: string): string[] {
+  const ids: string[] = [];
+  const tags = html.match(/<div\b[^>]*data-type="sprint-task"[^>]*>/gi) ?? [];
+  for (const tag of tags) {
+    const taskMatch = tag.match(/\sdata-task="([^"]*)"/i);
+    if (!taskMatch) continue;
+    try {
+      const task = JSON.parse(unescapeAttr(taskMatch[1])) as { id?: string };
+      if (task.id) ids.push(task.id);
+    } catch {
+      /* skip malformed nodes */
+    }
+  }
+  return ids;
+}
+
+/** Keep saved planning HTML in sync with the sprint: overlay live fields and insert missing tasks. */
+export function syncPlanningDocTasks(html: string, tasks: SprintPlanningTask[]): string {
+  let next = overlayPlanningTaskAssignees(html, tasks);
+  if (tasks.length === 0) return next;
+
+  const existing = new Set(planningTaskIdsFromHtml(next));
+  const missing = tasks.filter((task) => !existing.has(task.id));
+  if (missing.length === 0) return next;
+
+  const blocks = missing.map((task) => sprintTaskNodeHtml(task)).join("");
+  if (next.includes(EMPTY_SPRINT_TASKS_HTML)) {
+    return next.replace(EMPTY_SPRINT_TASKS_HTML, blocks);
+  }
+
+  const matches = [...next.matchAll(SPRINT_TASK_BLOCK_RE)];
+  const last = matches.at(-1);
+  if (last?.index != null) {
+    const insertAt = last.index + last[0].length;
+    return `${next.slice(0, insertAt)}${blocks}${next.slice(insertAt)}`;
+  }
+
+  const heading = next.search(/<h2>List of Sprint Items<\/h2>/i);
+  if (heading >= 0) {
+    const afterHeading = next.slice(heading);
+    const paragraphEnd = afterHeading.search(/<\/p>/i);
+    if (paragraphEnd >= 0) {
+      const insertAt = heading + paragraphEnd + 4;
+      return `${next.slice(0, insertAt)}${blocks}${next.slice(insertAt)}`;
+    }
+  }
+  return next + blocks;
+}
+
 export function sprintTaskNodeHtml(
   task: SprintPlanningTask,
   options?: {
@@ -170,6 +222,7 @@ export function sprintTaskNodeHtml(
   const reason = options?.incompleteReason ?? "";
   const attrs = [
     `data-type="sprint-task"`,
+    `data-id="${escapeHtml(task.id)}"`,
     `data-task="${escapeHtml(JSON.stringify(task))}"`,
     showQuestions ? `data-show-questions="true"` : "",
     variant !== "planning" ? `data-variant="${variant}"` : "",
@@ -179,7 +232,8 @@ export function sprintTaskNodeHtml(
   ]
     .filter(Boolean)
     .join(" ");
-  return `<div ${attrs}></div>`;
+  // Non-empty inner HTML so consecutive atom nodes survive TipTap/DOM parsing.
+  return `<div ${attrs}><br></div>`;
 }
 
 function unescapeAttr(value: string) {
@@ -247,7 +301,7 @@ export function sprintPlanningDocHtml(
 ): string {
   const taskBlocks =
     tasks.length === 0
-      ? `<p><em>No tasks in this sprint yet.</em></p>`
+      ? EMPTY_SPRINT_TASKS_HTML
       : tasks.map((task) => sprintTaskNodeHtml(task)).join("");
 
   return [

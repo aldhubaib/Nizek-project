@@ -55,6 +55,7 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
     <NodeViewWrapper
       as="div"
       data-type="sprint-task"
+      data-id={task.id}
       contentEditable={false}
       className="not-prose my-10 select-none"
     >
@@ -170,6 +171,7 @@ export const SprintTaskBlock = Node.create<{
   name: "sprintTask",
   group: "block",
   atom: true,
+  isolating: true,
   selectable: true,
   draggable: false,
   addOptions() {
@@ -177,6 +179,23 @@ export const SprintTaskBlock = Node.create<{
   },
   addAttributes() {
     return {
+      id: {
+        default: null as string | null,
+        parseHTML: (element) => {
+          const attr = element.getAttribute("data-id");
+          if (attr) return attr;
+          try {
+            const task = JSON.parse(element.getAttribute("data-task") || "null") as {
+              id?: string;
+            } | null;
+            return task?.id ?? null;
+          } catch {
+            return null;
+          }
+        },
+        renderHTML: (attributes) =>
+          attributes.id ? { "data-id": attributes.id as string } : {},
+      },
       task: {
         default: null as SprintPlanningTask | null,
         parseHTML: (element) => {
@@ -233,6 +252,7 @@ export const SprintTaskBlock = Node.create<{
         "data-type": "sprint-task",
         contenteditable: "false",
       }),
+      ["br"],
     ];
   },
   addNodeView() {
