@@ -10,7 +10,7 @@ import {
 } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import type { SprintStatus } from "@/generated/prisma/client";
-import { isClosedSprint, isCurrentSprintStatus, isUnstartedSprint, comparePlannedSprints, type SprintBoardColumn } from "@/lib/sprint-status";
+import { isClosedSprint, isCurrentSprintStatus, isUnstartedSprint, comparePlannedSprints, compareClosedSprints, type SprintBoardColumn } from "@/lib/sprint-status";
 import { taskCode } from "@/lib/task-label";
 import { isBuiltInTaskFieldQuestion } from "@/lib/task-readiness";
 import { countWorkingDays } from "@/lib/working-days";
@@ -176,7 +176,7 @@ export async function listSprints(projectId: string): Promise<SprintDTO[]> {
         return comparePlannedSprints(a, b);
       }
       if (isClosedSprint(a.status)) {
-        return (b.completedAt ?? b.updatedAt).getTime() - (a.completedAt ?? a.updatedAt).getTime();
+        return compareClosedSprints(a, b);
       }
       return a.startDate.getTime() - b.startDate.getTime();
     })
@@ -312,6 +312,15 @@ export async function setSprintBoardStatus(
   }
 
   if (!next) throw new Error("Could not move sprint");
+  if (next === "NEXT" && from !== "NEXT") {
+    const otherNext = await prisma.sprint.findFirst({
+      where: { projectId: existing.projectId, status: "NEXT", id: { not: sprintId } },
+      select: { name: true },
+    });
+    if (otherNext) {
+      throw new Error(`Next already has "${otherNext.name}". Move it first.`);
+    }
+  }
   if (next === from) {
     const current = await prisma.sprint.findUniqueOrThrow({
       where: { id: sprintId },

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  compareClosedSprints,
   comparePlannedSprints,
   isClosedSprint,
   isCurrentSprintStatus,
@@ -42,5 +43,19 @@ describe("sprintBoardColumn", () => {
     const b = { sortOrder: 0, status: "NEXT", startDate: "2026-06-01" };
     expect(comparePlannedSprints(b, a)).toBeLessThan(0);
     expect(comparePlannedSprints({ ...a, sortOrder: 0 }, { ...b, sortOrder: 0 })).toBeGreaterThan(0);
+  });
+});
+
+describe("compareClosedSprints", () => {
+  it("puts the newest sprint review completion first", () => {
+    const older = { completedAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-06-01T00:00:00.000Z" };
+    const newer = { completedAt: "2026-03-01T00:00:00.000Z", updatedAt: "2026-03-01T00:00:00.000Z" };
+    expect(compareClosedSprints(newer, older)).toBeLessThan(0);
+  });
+
+  it("falls back to updatedAt when completedAt is missing", () => {
+    const withReview = { completedAt: "2026-02-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" };
+    const legacy = { completedAt: null, updatedAt: "2026-04-01T00:00:00.000Z" };
+    expect(compareClosedSprints(legacy, withReview)).toBeLessThan(0);
   });
 });

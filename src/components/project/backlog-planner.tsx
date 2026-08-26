@@ -60,7 +60,6 @@ import { projectChannel } from "@/lib/channels";
 
 const BACKLOG_ZONE = "backlog";
 const MISSING_ZONE = "missing-data";
-const PLANNED_GROUP = "planned-group";
 const SPRINT_BLOCK_PREFIX = "sprint-block:";
 
 function sprintBlockId(sprintId: string) {
@@ -314,7 +313,7 @@ export function BacklogPlanner({
     [sprints],
   );
   const activeSprint = openSprints.find((s) => s.status === "ACTIVE") ?? null;
-  const plannedSprints = openSprints
+  const unstartedSprints = openSprints
     .filter((s) => isUnstartedSprint(s.status))
     .slice()
     .sort(comparePlannedSprints);
@@ -522,12 +521,12 @@ export function BacklogPlanner({
         ? overId.slice("sprint:".length)
         : taskById.get(overId)?.sprintId ?? null;
     if (!toId || toId === fromId) return;
-    const ids = plannedSprints.map((s) => s.id);
+    const ids = unstartedSprints.map((s) => s.id);
     const oldIndex = ids.indexOf(fromId);
     const newIndex = ids.indexOf(toId);
     if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
     const nextIds = arrayMove(ids, oldIndex, newIndex);
-    const previous = plannedSprints;
+    const previous = unstartedSprints;
     setSprints((prev) => {
       const order = new Map(nextIds.map((id, i) => [id, i]));
       return prev.map((s) =>
@@ -810,34 +809,18 @@ export function BacklogPlanner({
 
         {activeSprint && <SprintBlock sprint={activeSprint} />}
 
-        {plannedSprints.length > 0 ? (
-          <CollapsibleSection
-            title="Planned"
-            count={plannedSprints.length}
-            collapsed={collapsed[PLANNED_GROUP] ?? false}
-            onToggle={() =>
-              setCollapsed((c) => ({
-                ...c,
-                [PLANNED_GROUP]: !(c[PLANNED_GROUP] ?? false),
-              }))
-            }
-          >
-            <SortableContext
-              items={plannedSprints.map((s) => sprintBlockId(s.id))}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="flex flex-col gap-3">
-                {plannedSprints.map((sprint) => (
-                  <SprintBlock
-                    key={sprint.id}
-                    sprint={sprint}
-                    reorderable={canDrag && canCreateSprintPlanning}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </CollapsibleSection>
-        ) : null}
+        <SortableContext
+          items={unstartedSprints.map((s) => sprintBlockId(s.id))}
+          strategy={verticalListSortingStrategy}
+        >
+          {unstartedSprints.map((sprint) => (
+            <SprintBlock
+              key={sprint.id}
+              sprint={sprint}
+              reorderable={canDrag && canCreateSprintPlanning}
+            />
+          ))}
+        </SortableContext>
 
         <CollapsibleSection
           title="Backlog"

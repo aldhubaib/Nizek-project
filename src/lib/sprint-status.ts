@@ -38,3 +38,18 @@ export function comparePlannedSprints(
   if (nextFirst !== 0) return nextFirst;
   return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
 }
+
+function closedAtMs(sprint: {
+  completedAt: string | Date | null;
+  updatedAt: string | Date;
+}): number {
+  return new Date(sprint.completedAt ?? sprint.updatedAt).getTime();
+}
+
+/** Newest sprint-review completion first (`completedAt` is set when the review ends the sprint). */
+export function compareClosedSprints(
+  a: { completedAt: string | Date | null; updatedAt: string | Date },
+  b: { completedAt: string | Date | null; updatedAt: string | Date },
+): number {
+  return closedAtMs(b) - closedAtMs(a);
+}
