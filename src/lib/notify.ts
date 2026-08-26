@@ -8,6 +8,7 @@ import {
 } from "@/lib/notification-prefs";
 import { enqueuePush } from "@/lib/push-queue";
 import type { PushPayload } from "@/lib/push-core";
+import { sumInboxMessageUnreads } from "@/lib/inbox-unread";
 
 type NotifyInput = {
   recipientIds: string[];
@@ -182,13 +183,7 @@ export async function unreadCountsFor(recipientId: string): Promise<{
     prisma.notification.count({
       where: { recipientId, read: false },
     }),
-    prisma.notification.count({
-      where: {
-        recipientId,
-        read: false,
-        linkUrl: { startsWith: "/dashboard/messages/" },
-      },
-    }),
+    sumInboxMessageUnreads(recipientId),
   ]);
   return { unread, inboxUnread };
 }

@@ -17,3 +17,9 @@ export function formatUnreadSeparator(count: number): string {
   if (count <= 0) return "";
   return count === 1 ? "1 unread message" : `${count} unread messages`;
 }
+
+/** Inbox / nav pill. Caps at 99+ like WhatsApp. */
+export function formatUnreadBadge(count: number): string {
+  if (count <= 0) return "";
+  return count > 99 ? "99+" : String(count);
+}

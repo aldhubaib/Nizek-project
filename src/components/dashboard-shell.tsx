@@ -16,7 +16,6 @@ import {
   PageOverflowMenuProvider,
 } from "@/components/page-overflow-menu";
 import { ClientRouteGuard } from "@/components/client-route-guard";
-import { useHideHeaderOnScroll } from "@/hooks/use-hide-header-on-scroll";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { ProofUploadToast } from "@/components/kanban/proof-upload-toast";
 
@@ -94,8 +93,6 @@ export function DashboardShell({
   useEffect(() => {
     if (isDesktop && drawerOpen) setDrawerOpen(false);
   }, [isDesktop, drawerOpen]);
-
-  useHideHeaderOnScroll(true);
 
   useEffect(() => {
     bootstrapServiceWorker();

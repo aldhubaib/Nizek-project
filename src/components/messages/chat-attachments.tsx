@@ -181,6 +181,7 @@ export function AttachmentBubble({
   onOpenImage,
   menu,
   timeLabel,
+  embedded,
 }: {
   attachment: MessageAttachment;
   mine: boolean;
@@ -188,16 +189,23 @@ export function AttachmentBubble({
   menu?: React.ReactNode;
   /** Message time shown inline inside the voice pill (voice notes only). */
   timeLabel?: string;
+  /** Nested inside a text bubble — no extra chrome, fills the bubble width. */
+  embedded?: boolean;
 }) {
   const ct = attachment.contentType ?? "";
 
   if (attachment.isImage) {
     return (
-      <div className="group relative overflow-hidden rounded-xl border border-border/50 bg-surface">
+      <div
+        className={cn(
+          "group relative overflow-hidden rounded-xl",
+          !embedded && "border border-border/50 bg-surface",
+        )}
+      >
         <button
           type="button"
           onClick={() => onOpenImage?.(attachment)}
-          className="block"
+          className="block w-full"
           aria-label={`Open ${attachment.name}`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -205,9 +213,10 @@ export function AttachmentBubble({
             src={attachment.url}
             alt={attachment.name}
             loading="lazy"
-            // Natural aspect ratio, capped — a portrait screenshot shows whole
-            // rather than being cropped to fit a fixed landscape frame.
-            className="block h-auto max-h-80 w-auto max-w-full object-contain transition-transform group-hover:scale-[1.02]"
+            className={cn(
+              "block h-auto max-h-80 object-cover transition-transform group-hover:scale-[1.02]",
+              embedded ? "w-full" : "w-auto max-w-full object-contain",
+            )}
           />
         </button>
         {menu && (

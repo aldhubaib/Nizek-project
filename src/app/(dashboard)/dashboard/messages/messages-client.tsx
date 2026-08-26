@@ -40,6 +40,7 @@ import { usePresence } from "@/components/realtime/hooks";
 import { globalPresenceChannel } from "@/lib/channels";
 import { useNotificationStore } from "@/store/notifications";
 import { prefetchInboxThread } from "@/lib/thread-cache";
+import { formatUnreadBadge } from "@/lib/chat-unread";
 
 function formatRelative(iso: string) {
   if (!iso) return "";
@@ -914,7 +915,7 @@ function ThreadRow({
           </div>
           {thread.unread > 0 && !active && (
             <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold leading-none text-primary-foreground">
-              {thread.unread > 9 ? "9+" : thread.unread}
+              {formatUnreadBadge(thread.unread)}
             </span>
           )}
         </div>

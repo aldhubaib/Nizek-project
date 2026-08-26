@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUnreadStore } from "@/store/unread";
+import { formatUnreadBadge } from "@/lib/chat-unread";
 
 const NAV_ITEMS = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
@@ -109,7 +110,7 @@ export function BottomNav({
                 />
                 {showBadge && (
                   <span className="absolute -right-2.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold leading-none text-primary-foreground">
-                    {inboxUnread > 9 ? "9+" : inboxUnread}
+                    {formatUnreadBadge(inboxUnread)}
                   </span>
                 )}
               </span>

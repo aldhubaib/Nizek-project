@@ -4,9 +4,9 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Sparkles, Wrench, Bug, Undo2, AlertCircle, Palette, Gauge, Hourglass, X } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { KanbanTask, TaskType, EstimateAccuracy } from "@/store/kanban";
-import { outlineBadge } from "@/lib/task-label";
+import { outlineBadge, taskDetailHref } from "@/lib/task-label";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -118,6 +118,7 @@ interface TaskCardProps {
 
 export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, locked, projectId, queueNumber, canSelfAssign, onSelfAssign, onRemoveFromSprint, hideSprintName }: TaskCardProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const {
     attributes,
     listeners,
@@ -145,7 +146,9 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
       return;
     }
     if (!projectId || isOverlay) return;
-    router.push(`/dashboard/projects/${projectId}/tasks/${task.id}`);
+    const tab = searchParams.get("tab");
+    const from = tab === "roadmap" ? "notes" : (tab ?? "board");
+    router.push(taskDetailHref(projectId, task.id, from));
   };
 
   const style = {

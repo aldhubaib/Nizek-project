@@ -115,6 +115,7 @@ model User {
   invitations    Invitation[]
 
   conversations     ConversationParticipant[] @relation("ConversationMember")
+  chatReadCursors   ChatReadCursor[]
   messages          Message[]                 @relation("MessageAuthor")
   messageMentions   MessageMention[]          @relation("MessageMentionedUser")
   messageReactions  MessageReaction[]         @relation("MessageReactionAuthor")
@@ -1682,6 +1683,19 @@ model ConversationParticipant {
 
   @@unique([conversationId, memberId])
   @@index([memberId])
+}
+
+/// Per-user last-read cursor for inbox threads (`project-{id}` | `conv-{id}`).
+/// Missing row = never opened / never received a live message → unread stays 0
+/// so we don't flood the inbox with historical counts.
+model ChatReadCursor {
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  threadId   String
+  lastReadAt DateTime
+  updatedAt  DateTime @updatedAt
+
+  @@id([userId, threadId])
 }
 
 model Message {

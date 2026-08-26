@@ -42,16 +42,31 @@ function apply(
 }
 
 describe("applyRealtimeEvent", () => {
-  it("increments bell + inbox + thread unread on notification.new", () => {
+  it("increments the bell on notification.new without touching inbox pills", () => {
     const next = apply(initialNotificationRealtimeState, {
       type: NOTIFICATION_NEW,
       authorId: "other",
       notification: notif(),
     });
     expect(next.notificationUnread).toBe(1);
+    expect(next.inboxUnread).toBe(0);
+    expect(next.threadUnread["conv-1"]).toBeUndefined();
+    expect(next.items[0].id).toBe("n1");
+  });
+
+  it("increments inbox + thread unread on inbox events", () => {
+    const next = apply(initialNotificationRealtimeState, {
+      type: "inbox",
+      threadId: "conv-1",
+      conversationId: "1",
+      authorId: "other",
+      lastAuthor: "Sam",
+      lastMessage: "yo",
+      lastAt: "2026-01-01T00:00:01.000Z",
+    });
     expect(next.inboxUnread).toBe(1);
     expect(next.threadUnread["conv-1"]).toBe(1);
-    expect(next.items[0].id).toBe("n1");
+    expect(next.threadPreviews["conv-1"].lastMessage).toBe("yo");
   });
 
   it("does not double-count a replayed notification.new", () => {
@@ -64,8 +79,7 @@ describe("applyRealtimeEvent", () => {
       notification: notif(),
     });
     expect(second.notificationUnread).toBe(1);
-    expect(second.inboxUnread).toBe(1);
-    expect(second.threadUnread["conv-1"]).toBe(1);
+    expect(second.inboxUnread).toBe(0);
     expect(second.items).toHaveLength(1);
   });
 
@@ -105,7 +119,22 @@ describe("applyRealtimeEvent", () => {
     expect(afterNew.notificationUnread).toBe(1);
   });
 
-  it("inbox-only (muted) updates preview without incrementing unread", () => {
+  it("does not double-count a replayed inbox event for the same preview", () => {
+    const payload = {
+      type: "inbox",
+      threadId: "conv-1",
+      authorId: "other",
+      lastAuthor: "Sam",
+      lastMessage: "yo",
+      lastAt: "2026-01-01T00:00:01.000Z",
+    };
+    const first = apply(initialNotificationRealtimeState, payload);
+    const second = apply(first, payload);
+    expect(second.inboxUnread).toBe(1);
+    expect(second.threadUnread["conv-1"]).toBe(1);
+  });
+
+  it("inbox-only (muted) still shows an unread count", () => {
     const next = apply(initialNotificationRealtimeState, {
       type: "inbox",
       threadId: "conv-1",
@@ -114,8 +143,8 @@ describe("applyRealtimeEvent", () => {
       lastMessage: "muted still live",
       lastAt: "2026-01-01T00:00:01.000Z",
     });
-    expect(next.inboxUnread).toBe(0);
-    expect(next.threadUnread["conv-1"]).toBeUndefined();
+    expect(next.inboxUnread).toBe(1);
+    expect(next.threadUnread["conv-1"]).toBe(1);
     expect(next.threadPreviews["conv-1"].lastMessage).toBe("muted still live");
   });
 
@@ -132,6 +161,23 @@ describe("applyRealtimeEvent", () => {
     expect(next.items[0].read).toBe(true);
   });
 
+  it("skips inbox unread while the thread is open", () => {
+    const next = apply(
+      initialNotificationRealtimeState,
+      {
+        type: "inbox",
+        threadId: "conv-1",
+        authorId: "other",
+        lastMessage: "yo",
+        lastAt: "2026-01-01T00:00:01.000Z",
+      },
+      { pathname: "/dashboard/messages/conv-1" },
+    );
+    expect(next.inboxUnread).toBe(0);
+    expect(next.threadUnread["conv-1"]).toBeUndefined();
+    expect(next.threadPreviews["conv-1"].lastMessage).toBe("yo");
+  });
+
   it("skips unread for self-authored notification.new", () => {
     const next = apply(initialNotificationRealtimeState, {
       type: NOTIFICATION_NEW,
@@ -143,10 +189,25 @@ describe("applyRealtimeEvent", () => {
     expect(next.items[0].read).toBe(true);
   });
 
+  it("skips unread for self-authored inbox events", () => {
+    const next = apply(initialNotificationRealtimeState, {
+      type: "inbox",
+      threadId: "conv-1",
+      authorId: "me",
+      lastMessage: "yo",
+      lastAt: "2026-01-01T00:00:01.000Z",
+    });
+    expect(next.inboxUnread).toBe(0);
+    expect(next.threadUnread["conv-1"]).toBeUndefined();
+  });
+
   it("notification.read zeros matching thread badges from server counts", () => {
     const seeded = apply(initialNotificationRealtimeState, {
-      type: NOTIFICATION_NEW,
-      notification: notif(),
+      type: "inbox",
+      threadId: "conv-1",
+      authorId: "other",
+      lastMessage: "yo",
+      lastAt: "2026-01-01T00:00:01.000Z",
     });
     const next = apply(seeded, {
       type: NOTIFICATION_READ,
@@ -159,27 +220,35 @@ describe("applyRealtimeEvent", () => {
     expect(next.threadUnread["conv-1"]).toBe(0);
     expect(next.notificationUnread).toBe(2);
     expect(next.inboxUnread).toBe(1);
-    expect(next.items[0].read).toBe(true);
   });
 
-  it("notification.read-all clears every badge", () => {
+  it("notification.read-all clears the bell without wiping chat unread", () => {
     const seeded = apply(initialNotificationRealtimeState, {
-      type: NOTIFICATION_NEW,
-      notification: notif(),
+      type: "inbox",
+      threadId: "conv-1",
+      authorId: "other",
+      lastMessage: "yo",
+      lastAt: "2026-01-01T00:00:01.000Z",
     });
-    const next = apply(seeded, { type: NOTIFICATION_READ_ALL });
+    const next = apply(seeded, { type: NOTIFICATION_READ_ALL, unread: 0, inboxUnread: 1 });
     expect(next.notificationUnread).toBe(0);
-    expect(next.inboxUnread).toBe(0);
-    expect(next.threadUnread["conv-1"]).toBe(0);
-    expect(next.items.every((n) => n.read)).toBe(true);
+    expect(next.inboxUnread).toBe(1);
+    expect(next.threadUnread["conv-1"]).toBe(1);
   });
 });
 
 describe("clearThreadUnreadState", () => {
   it("clears instantly and holds against a stale hydrate", () => {
-    const seeded = apply(initialNotificationRealtimeState, {
+    const withNotif = apply(initialNotificationRealtimeState, {
       type: NOTIFICATION_NEW,
       notification: notif(),
+    });
+    const seeded = apply(withNotif, {
+      type: "inbox",
+      threadId: "conv-1",
+      authorId: "other",
+      lastMessage: "yo",
+      lastAt: "2026-01-01T00:00:01.000Z",
     });
     const cleared = clearThreadUnreadState(seeded, "conv-1", ctx.now);
     expect(cleared.threadUnread["conv-1"]).toBe(0);

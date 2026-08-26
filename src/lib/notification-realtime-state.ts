@@ -6,7 +6,6 @@ import {
 import {
   inboxThreadIdFromLinkUrl,
   inboxThreadIdsFromReadPayload,
-  isInboxMessageLink,
   threadIdFromInboxDelta,
 } from "@/lib/notification-read";
 import { isViewingLink } from "@/lib/notification-sound-policy";
@@ -204,16 +203,14 @@ function applyNotificationNew(
   };
 
   // Open thread / own messages: the row still exists on the server (until
-  // mark-read), but the current tab must not flash badges or double-count
-  // when `inbox` arrives for the same message.
+  // mark-read), but the current tab must not flash the bell. Inbox pills are
+  // owned by `inbox` events (message counts), so a paired notification.new
+  // must not double-count.
   if (!viewing && !self) {
     next = {
       ...next,
       notificationUnread: next.notificationUnread + 1,
     };
-    if (isInboxMessageLink(incoming.linkUrl)) {
-      next = bumpUnread(next, threadId);
-    }
   }
 
   return next;
@@ -265,15 +262,15 @@ function applyReadAll(
   payload: ReadPayload,
   now: number,
 ): NotificationRealtimeState {
-  const threadUnread: Record<string, number> = {};
-  for (const id of Object.keys(state.threadUnread)) threadUnread[id] = 0;
   return {
     ...state,
     items: state.items.map((x) => (x.read ? x : { ...x, read: true })),
     notificationUnread:
       typeof payload.unread === "number" ? Math.max(0, payload.unread) : 0,
-    inboxUnread: 0,
-    threadUnread,
+    inboxUnread:
+      typeof payload.inboxUnread === "number"
+        ? Math.max(0, payload.inboxUnread)
+        : state.inboxUnread,
     lastEvent: event(NOTIFICATION_READ_ALL, "cleared", now),
   };
 }
@@ -292,19 +289,32 @@ function applyInbox(
     };
   }
 
+  const prevPreview = state.threadPreviews[threadId];
+  const lastMessage =
+    payload.lastMessage ?? prevPreview?.lastMessage ?? "";
+  const lastAuthor = payload.lastAuthor ?? prevPreview?.lastAuthor ?? "";
+  const lastAt =
+    payload.lastAt ?? prevPreview?.lastAt ?? new Date(now).toISOString();
+  const duplicatePreview =
+    Boolean(prevPreview) &&
+    prevPreview.lastAt === lastAt &&
+    prevPreview.lastMessage === lastMessage;
+
   const threadPreviews = {
     ...state.threadPreviews,
-    [threadId]: {
-      lastMessage: payload.lastMessage ?? state.threadPreviews[threadId]?.lastMessage ?? "",
-      lastAuthor: payload.lastAuthor ?? state.threadPreviews[threadId]?.lastAuthor ?? "",
-      lastAt: payload.lastAt ?? state.threadPreviews[threadId]?.lastAt ?? new Date(now).toISOString(),
-    },
+    [threadId]: { lastMessage, lastAuthor, lastAt },
   };
 
-  // Unread is owned by `notification.new` (already mute/preference filtered).
-  // `inbox` only patches the preview so muted threads still update live
-  // without a badge, and so a paired `notification.new` cannot double-count.
-  return {
+  const inboxThread =
+    threadId.startsWith("conv-") || threadId.startsWith("project-");
+  const shouldBump =
+    inboxThread &&
+    !isSelf(ctx, payload.authorId) &&
+    !isViewingThread(ctx.pathname, threadId) &&
+    !wasRecentlyCleared(state, threadId, now) &&
+    !duplicatePreview;
+
+  let next: NotificationRealtimeState = {
     ...state,
     threadPreviews,
     lastInboxThreadId: threadId,
@@ -318,6 +328,8 @@ function applyInbox(
       now,
     ),
   };
+  if (shouldBump) next = bumpUnread(next, threadId);
+  return next;
 }
 
 export function applyRealtimeEvent(

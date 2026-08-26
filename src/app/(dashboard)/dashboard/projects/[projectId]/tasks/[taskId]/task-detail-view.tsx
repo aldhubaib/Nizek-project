@@ -28,7 +28,7 @@ import { needsProofOfWork } from "@/lib/proof-of-work";
 import { DeclineDialog } from "@/components/kanban/decline-dialog";
 import { projectNoteUrl, isRoadmapNote } from "@/lib/project-note-url";
 import { cn } from "@/lib/utils";
-import { sprintTabForStatus, taskStageBadge } from "@/lib/task-label";
+import { projectHrefForTaskReturn, sprintTabForStatus, taskStageBadge } from "@/lib/task-label";
 import { EstimateBadge, TaskTypeBadge } from "@/components/project/sprint-task-row";
 import { SprintStatusControl } from "@/components/project/sprint-status-control";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -125,6 +125,7 @@ interface Props {
   canDelete?: boolean;
   initialThreadId?: string | null;
   backToNoteId?: string | null;
+  backToTab?: string | null;
   embedded?: boolean;
   onClose?: () => void;
 }
@@ -141,12 +142,20 @@ export function TaskDetailPage({
   canDelete,
   initialThreadId = null,
   backToNoteId = null,
+  backToTab = null,
   embedded = false,
   onClose,
 }: Props) {
   const router = useRouter();
   const questions = allQuestions.filter((q) => q.taskType === initialTask.taskType);
   const taskTypeMeta = TASK_TYPE_META[initialTask.taskType] ?? TASK_TYPE_META.FEATURE;
+  const projectBackHref = backToNoteId
+    ? projectNoteUrl(projectId, backToNoteId)
+    : projectHrefForTaskReturn(
+        projectId,
+        backToTab,
+        initialTask.sprints[0]?.status,
+      );
 
   // Task state (mutable for title, priority, stage)
   const [taskStage, setTaskStage] = useState<Stage>(initialTask.stage as Stage);
@@ -509,11 +518,7 @@ export function TaskDetailPage({
               setNoteEditorOpen(false);
               return;
             }
-            router.push(
-              backToNoteId
-                ? projectNoteUrl(projectId, backToNoteId)
-                : `/dashboard/projects/${projectId}`,
-            );
+            router.push(projectBackHref);
           }}
           className="text-muted-foreground hover:text-foreground transition-colors"
           title={
@@ -537,7 +542,7 @@ export function TaskDetailPage({
           items={[
             {
               label: projectName,
-              onClick: () => router.push(`/dashboard/projects/${projectId}`),
+              onClick: () => router.push(projectBackHref),
             },
             {
               label: `${taskTypeMeta.prefix}-${String(initialTask.taskNumber).padStart(3, "0")}`,

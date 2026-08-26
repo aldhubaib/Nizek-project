@@ -127,6 +127,7 @@ export default async function TaskDetailPage({ params, searchParams }: Props) {
       }
       initialThreadId={threadId ?? null}
       backToNoteId={from === "note" ? (noteId ?? null) : null}
+      backToTab={from && from !== "note" ? from : null}
     />
   );
 }

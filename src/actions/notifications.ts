@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { publish, userChannel } from "@/lib/centrifugo";
 import { NOTIFICATION_READ, NOTIFICATION_READ_ALL } from "@/lib/channels";
 import { unreadCountsFor } from "@/lib/notify";
+import { sumInboxMessageUnreads } from "@/lib/inbox-unread";
 
 export type NotificationDTO = {
   id: string;
@@ -77,12 +78,13 @@ export async function markAllNotificationsRead(): Promise<number> {
       unreadRows.map((r) => r.linkUrl).filter((u): u is string => !!u),
     ),
   ];
+  const inboxUnread = await sumInboxMessageUnreads(user.id);
   void publish(userChannel(user.id), {
     type: NOTIFICATION_READ_ALL,
     tags,
     linkUrls,
     unread: 0,
-    inboxUnread: 0,
+    inboxUnread,
   });
   return 0;
 }

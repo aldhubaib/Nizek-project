@@ -52,6 +52,7 @@ import { moveTask as moveTaskAction } from "@/actions/task";
 import { isMissingDataTask } from "@/lib/task-readiness";
 import { promoteToBacklogBottom } from "@/lib/backlog-placement";
 import { isClosedSprint, isUnstartedSprint, comparePlannedSprints } from "@/lib/sprint-status";
+import { taskDetailHref } from "@/lib/task-label";
 
 import { useChannel } from "@/components/realtime/hooks";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
@@ -152,7 +153,7 @@ function TaskRow({
           wasDragged.current = false;
           return;
         }
-        router.push(`/dashboard/projects/${projectId}/tasks/${task.id}`);
+        router.push(taskDetailHref(projectId, task.id, "board"));
       }}
       className={cn(
         isDragging && "opacity-50",

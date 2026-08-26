@@ -359,42 +359,6 @@ header.app-top-bar.app-top-bar-menu {
   }
 }
 
-.app-top-bar,
-.app-top-bar-tall,
-.app-shell-chrome {
-  transition: transform 0.22s ease, margin-bottom 0.22s ease;
-}
-html.app-chrome-away .app-top-bar,
-html.app-chrome-away .app-top-bar-tall,
-html.app-chrome-away .app-shell-chrome {
-  transform: translate3d(0, -100%, 0);
-  pointer-events: none;
-}
-/* Slide-over panels live in a portal; their headers must stay visible even
-   when the main page chrome auto-hides on scroll. */
-[data-slide-over] .app-top-bar,
-[data-slide-over] .app-top-bar-tall {
-  transform: none !important;
-  pointer-events: auto !important;
-  margin-bottom: 0 !important;
-}
-/* While a panel locks the page, keep the dimmed inbox/project chrome in place. */
-html[data-scroll-locked].app-chrome-away .app-top-bar,
-html[data-scroll-locked].app-chrome-away .app-top-bar-tall,
-html[data-scroll-locked].app-chrome-away .app-shell-chrome {
-  transform: none;
-  pointer-events: auto;
-  margin-bottom: 0;
-}
-html.app-chrome-away .app-top-bar:not(.sticky):not(.fixed):not(.absolute),
-html.app-chrome-away .app-top-bar-tall:not(.sticky):not(.fixed):not(.absolute) {
-  margin-bottom: calc(-1 * var(--app-bar-height, 3rem));
-}
-html[data-scroll-locked].app-chrome-away .app-top-bar:not(.sticky):not(.fixed):not(.absolute),
-html[data-scroll-locked].app-chrome-away .app-top-bar-tall:not(.sticky):not(.fixed):not(.absolute) {
-  margin-bottom: 0;
-}
-
 .app-scroll-under-tall {
   padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
 }

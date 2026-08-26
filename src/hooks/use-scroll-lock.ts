@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { APP_CHROME_AWAY } from "@/hooks/use-hide-header-on-scroll";
 
 const ATTR = "data-scroll-locked";
 export const SCROLL_LOCK_ROOT_SEL = "[data-scroll-lock-root]";
@@ -99,7 +98,6 @@ export function useScrollLock(active: boolean) {
 
     if (refCount === 1) {
       html.setAttribute(ATTR, "");
-      html.classList.remove(APP_CHROME_AWAY);
       document.addEventListener("touchstart", onTouchStart, { passive: true });
       document.addEventListener("touchmove", blockTouchMove, { passive: false });
       document.addEventListener("touchend", onTouchEnd, { passive: true });

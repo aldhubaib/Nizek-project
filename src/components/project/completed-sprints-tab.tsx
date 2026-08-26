@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils";
 import { useKanbanStore, type KanbanTask } from "@/store/kanban";
 import { NoteSlideOver } from "@/components/project/note-slide-over";
 import { NoteFullScreenCreate } from "@/components/project/note-full-screen-create";
+import { taskDetailHref } from "@/lib/task-label";
 
 const COLUMN_IDS = new Set<string>(SPRINT_BOARD_COLUMNS.map((c) => c.id));
 
@@ -514,7 +515,7 @@ function SprintBoardCard({
                     ) : null
                   }
                   onClick={() =>
-                    router.push(`/dashboard/projects/${projectId}/tasks/${task.taskId}`)
+                    router.push(taskDetailHref(projectId, task.taskId, "completed"))
                   }
                 />
                 {task.incompleteReason ? (

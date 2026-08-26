@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstUnreadMessageId, formatUnreadSeparator } from "@/lib/chat-unread";
+import { firstUnreadMessageId, formatUnreadBadge, formatUnreadSeparator } from "@/lib/chat-unread";
 
 describe("firstUnreadMessageId", () => {
   const msgs = [
@@ -30,5 +30,14 @@ describe("formatUnreadSeparator", () => {
     expect(formatUnreadSeparator(0)).toBe("");
     expect(formatUnreadSeparator(1)).toBe("1 unread message");
     expect(formatUnreadSeparator(18)).toBe("18 unread messages");
+  });
+});
+
+describe("formatUnreadBadge", () => {
+  it("caps at 99+", () => {
+    expect(formatUnreadBadge(0)).toBe("");
+    expect(formatUnreadBadge(2)).toBe("2");
+    expect(formatUnreadBadge(99)).toBe("99");
+    expect(formatUnreadBadge(100)).toBe("99+");
   });
 });

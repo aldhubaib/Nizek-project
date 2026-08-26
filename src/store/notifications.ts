@@ -87,10 +87,6 @@ export const useNotificationStore = create<NotificationStore>((set) => ({
       ...s,
       items: s.items.map((n) => (n.read ? n : { ...n, read: true })),
       notificationUnread: 0,
-      inboxUnread: 0,
-      threadUnread: Object.fromEntries(
-        Object.keys(s.threadUnread).map((id) => [id, 0]),
-      ),
     })),
 
   requestInboxResync: () =>

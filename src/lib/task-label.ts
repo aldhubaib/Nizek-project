@@ -98,3 +98,35 @@ export function sprintTabForStatus(status: string): "board" | "sprints" | "compl
   return "board";
 }
 
+export function isProjectReturnTab(
+  value: string | null | undefined,
+): value is "board" | "sprints" | "completed" {
+  return value === "board" || value === "sprints" || value === "completed";
+}
+
+/** Task details URL, carrying the project tab to return to. */
+export function taskDetailHref(
+  projectId: string,
+  taskId: string,
+  from?: string | null,
+): string {
+  const base = `/dashboard/projects/${projectId}/tasks/${taskId}`;
+  if (isProjectReturnTab(from)) return `${base}?from=${from}`;
+  return base;
+}
+
+/** Project page to return to from task details. */
+export function projectHrefForTaskReturn(
+  projectId: string,
+  from?: string | null,
+  sprintStatus?: string | null,
+): string {
+  const tab = isProjectReturnTab(from)
+    ? from
+    : sprintStatus
+      ? sprintTabForStatus(sprintStatus)
+      : "board";
+  if (tab === "board") return `/dashboard/projects/${projectId}`;
+  return `/dashboard/projects/${projectId}?tab=${tab}`;
+}
+

@@ -644,6 +644,11 @@ const MessageRow = memo(function MessageRow({
 }) {
   const imageAtts = m.attachments.filter((a) => a.isImage);
   const fileAtts = m.attachments.filter((a) => !a.isImage);
+  const nestImages =
+    imageAtts.length > 0 &&
+    Boolean(m.body || editing) &&
+    m.kind !== "rejection" &&
+    !showTaskCard;
   const [swipeX, setSwipeX] = useState(0);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -923,10 +928,13 @@ const MessageRow = memo(function MessageRow({
             <div className="group relative">
               <div
                 className={cn(
-                  "flex max-w-full flex-col gap-xs text-s leading-relaxed",
+                  "flex max-w-full flex-col text-s leading-relaxed",
                   notice
-                    ? "min-w-64 rounded-xl border border-border/60 bg-surface-2/80 p-2.5 text-foreground"
-                    : "rounded-2xl px-3.5 py-2",
+                    ? "min-w-64 gap-xs rounded-xl border border-border/60 bg-surface-2/80 p-2.5 text-foreground"
+                    : nestImages
+                      ? "w-[min(100%,20rem)] gap-2 p-2"
+                      : "gap-xs px-3.5 py-2",
+                  !notice && "rounded-2xl",
                   !notice &&
                     (blue
                       ? "rounded-br-md bg-primary text-primary-foreground"
@@ -1015,7 +1023,7 @@ const MessageRow = memo(function MessageRow({
                       );
                     })()
                   ) : (
-                    <div className={cn("flex items-end gap-2", notice && "px-0.5")}>
+                    <div className={cn("flex items-end gap-2", notice && "px-0.5", nestImages && "px-1.5 pt-0.5")}>
                       <span className="whitespace-pre-wrap break-words">
                         {renderMessageBody(m.body, m.mentions, blue)}
                       </span>
@@ -1029,6 +1037,24 @@ const MessageRow = memo(function MessageRow({
                       />
                     </div>
                   ))
+                )}
+                {nestImages && (
+                  <div className="flex flex-col gap-1.5">
+                    {imageAtts.map((a) => (
+                      <AttachmentBubble
+                        key={a.id}
+                        attachment={a}
+                        mine={mine}
+                        embedded
+                        onOpenImage={openImage}
+                        menu={
+                          <span className="hidden lg:contents">
+                            <ImageActionsMenu {...actionHandlers} />
+                          </span>
+                        }
+                      />
+                    ))}
+                  </div>
                 )}
               </div>
               {/* Desktop only — WhatsApp hover ⋮. Mobile uses selection header. */}
@@ -1057,7 +1083,7 @@ const MessageRow = memo(function MessageRow({
               <LinkPreviewCard url={previewUrl} mine={mine} />
             ) : null;
           })()}
-          {imageAtts.length > 0 && (
+          {imageAtts.length > 0 && !nestImages && (
             <div
               className={cn(
                 "flex max-w-full flex-wrap gap-xs",
@@ -3666,41 +3692,51 @@ function OutboxBubble({
   onDiscard: () => void;
 }) {
   const failed = entry.status === "error";
+  const imageFiles = entry.files.filter(
+    (f) => f.contentType?.startsWith("image/") && f.previewUrl,
+  );
+  const otherFiles = entry.files.filter(
+    (f) => !(f.contentType?.startsWith("image/") && f.previewUrl),
+  );
+  const nestImages = Boolean(entry.body) && imageFiles.length > 0;
+
+  const pendingImage = (f: (typeof entry.files)[number], embedded: boolean) => {
+    const pct = f.status === "done" ? 100 : f.progress;
+    return (
+      <div
+        key={f.key}
+        className={cn(
+          "relative overflow-hidden rounded-xl",
+          embedded ? "w-full" : "border border-border/50 bg-surface",
+        )}
+        style={embedded ? undefined : { maxWidth: 240 }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={f.previewUrl!}
+          alt={f.name}
+          className={cn(
+            "object-cover",
+            embedded ? "max-h-80 w-full" : "max-h-60 w-auto max-w-[240px]",
+          )}
+        />
+        {!failed && entry.status === "uploading" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50">
+            <Loader2 className="h-6 w-6 animate-spin text-white" />
+            <span className="text-s font-semibold text-white">{pct}%</span>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex justify-end gap-2">
       <div className="flex max-w-[70%] flex-col items-end gap-1">
-        {entry.files.length > 0 && (
+        {otherFiles.length > 0 && (
           <div className="flex max-w-full flex-col gap-xs">
-            {entry.files.map((f) => {
+            {otherFiles.map((f) => {
               const pct = f.status === "done" ? 100 : f.progress;
-              const isImage = Boolean(
-                f.contentType?.startsWith("image/") && f.previewUrl,
-              );
-              if (isImage) {
-                return (
-                  <div
-                    key={f.key}
-                    className="relative overflow-hidden rounded-xl border border-border/50 bg-surface"
-                    style={{ maxWidth: 240 }}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={f.previewUrl!}
-                      alt={f.name}
-                      className="max-h-60 w-auto max-w-[240px] object-cover"
-                    />
-                    {!failed && entry.status === "uploading" && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50">
-                        <Loader2 className="h-6 w-6 animate-spin text-white" />
-                        <span className="text-s font-semibold text-white">
-                          {pct}%
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              }
               return (
                 <div
                   key={f.key}
@@ -3722,6 +3758,11 @@ function OutboxBubble({
             })}
           </div>
         )}
+        {!nestImages && imageFiles.length > 0 && (
+          <div className="flex max-w-full flex-col gap-xs">
+            {imageFiles.map((f) => pendingImage(f, false))}
+          </div>
+        )}
         {(entry.body || replied) && (
           <div className="flex min-w-0 max-w-full flex-col items-end gap-1">
             {replied && (
@@ -3735,9 +3776,23 @@ function OutboxBubble({
               />
             )}
             {entry.body && (
-              <div className="flex max-w-full items-end gap-2 rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-s leading-relaxed text-primary-foreground opacity-90">
-                <span className="whitespace-pre-wrap break-words">{entry.body}</span>
-                <Clock className="ml-1 h-3 w-3 shrink-0 translate-y-0.5 opacity-70" />
+              <div
+                className={cn(
+                  "flex max-w-full rounded-2xl rounded-br-md bg-primary text-s leading-relaxed text-primary-foreground opacity-90",
+                  nestImages
+                    ? "w-[min(100%,20rem)] flex-col gap-2 p-2"
+                    : "flex-row items-end gap-2 px-3.5 py-2",
+                )}
+              >
+                <div className={cn("flex items-end gap-2", nestImages && "px-1.5 pt-0.5")}>
+                  <span className="whitespace-pre-wrap break-words">{entry.body}</span>
+                  <Clock className="ml-1 h-3 w-3 shrink-0 translate-y-0.5 opacity-70" />
+                </div>
+                {nestImages && (
+                  <div className="flex flex-col gap-1.5">
+                    {imageFiles.map((f) => pendingImage(f, true))}
+                  </div>
+                )}
               </div>
             )}
           </div>

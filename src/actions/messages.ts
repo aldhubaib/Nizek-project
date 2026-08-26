@@ -53,6 +53,11 @@ import {
   userChannel,
 } from "@/lib/centrifugo";
 import { NOTIFICATION_READ } from "@/lib/channels";
+import { threadPushTag } from "@/lib/notification-read";
+import {
+  countInboxMessageUnreads,
+  sumInboxMessageUnreads,
+} from "@/lib/inbox-unread";
 import {
   canAccessClientConversation,
   CLIENT_CONVERSATION_KIND,
@@ -70,8 +75,8 @@ const CONTRACT_SELECT = {
 
 // Single write path for every chat surface: project channels, direct messages,
 // and (deep-linked) task threads. Persists to Postgres (source of truth),
-// creates Notification rows (inbox unread), and publishes live via Centrifugo.
-// Identity everywhere is User.id.
+// creates Notification rows (bell / push), records ChatReadCursor for inbox
+// unread, and publishes live via Centrifugo. Identity everywhere is User.id.
 
 export type ActionResult<T> =
   | { ok: true; data: T }
@@ -254,7 +259,22 @@ async function resolveThreadUnreadCursor(
 ): Promise<{ lastReadAt: string | null; unreadCount: number }> {
   let lastReadAt: Date | null = null;
 
-  if (input.conversationId) {
+  const cursorThreadId = input.conversationId
+    ? `conv-${input.conversationId}`
+    : input.projectId && !input.taskId
+      ? `project-${input.projectId}`
+      : null;
+  if (cursorThreadId) {
+    const cursor = await prisma.chatReadCursor.findUnique({
+      where: {
+        userId_threadId: { userId, threadId: cursorThreadId },
+      },
+      select: { lastReadAt: true },
+    });
+    lastReadAt = cursor?.lastReadAt ?? null;
+  }
+
+  if (!lastReadAt && input.conversationId) {
     const row = await prisma.conversationParticipant.findUnique({
       where: {
         conversationId_memberId: {
@@ -1225,9 +1245,42 @@ export async function sendMessage(
       });
     }
 
-    const inboxTargets = conversationId
-      ? participantIds
-      : [...uniqueRecipients, user.id];
+    let inboxTargets: string[];
+    if (conversationId) {
+      inboxTargets = participantIds;
+    } else if (projectId && !taskId) {
+      // Project channels: every member needs a live inbox delta so unread
+      // badges update even when nobody was @mentioned.
+      const members = await prisma.projectMember.findMany({
+        where: { projectId },
+        select: { userId: true },
+      });
+      inboxTargets = members.map((m) => m.userId);
+      if (!inboxTargets.includes(user.id)) inboxTargets.push(user.id);
+    } else {
+      inboxTargets = [...uniqueRecipients, user.id];
+    }
+
+    const cursorTargets = [...new Set(inboxTargets)].filter(
+      (id) => id !== user.id,
+    );
+    if (
+      cursorTargets.length > 0 &&
+      (conversationId || (projectId && !taskId))
+    ) {
+      // First inbound message seeds lastReadAt just before this row so only
+      // this message (and later ones) count. skipDuplicates keeps an existing
+      // cursor — including mention-backfill — intact.
+      await prisma.chatReadCursor.createMany({
+        data: cursorTargets.map((id) => ({
+          userId: id,
+          threadId,
+          lastReadAt: new Date(message.createdAt.getTime() - 1),
+        })),
+        skipDuplicates: true,
+      });
+    }
+
     void broadcast([...new Set(inboxTargets)].map(userChannel), {
       type: "inbox",
       threadId,
@@ -1274,6 +1327,25 @@ export async function markThreadRead(target: {
 
   const now = new Date();
 
+  const inboxThreadId = target.conversationId
+    ? `conv-${target.conversationId}`
+    : target.projectId && !target.taskId
+      ? `project-${target.projectId}`
+      : null;
+  if (inboxThreadId) {
+    await prisma.chatReadCursor.upsert({
+      where: {
+        userId_threadId: { userId: user.id, threadId: inboxThreadId },
+      },
+      create: {
+        userId: user.id,
+        threadId: inboxThreadId,
+        lastReadAt: now,
+      },
+      update: { lastReadAt: now },
+    });
+  }
+
   // DMs: advance lastReadAt so senders can show read receipts.
   if (target.conversationId) {
     await prisma.conversationParticipant.updateMany({
@@ -1288,26 +1360,34 @@ export async function markThreadRead(target: {
   }
 
   // Only the caller's own notification rows are touched, so no further access
-  // checks are needed.
+  // checks are needed. Always publish even when there are no rows — other tabs
+  // still need the lastReadAt-driven inbox count.
   const toMark = await prisma.notification.findMany({
     where: { recipientId: user.id, read: false, linkUrl },
     select: { id: true, tag: true },
   });
-  if (toMark.length === 0) return;
-
-  await prisma.notification.updateMany({
-    where: { recipientId: user.id, read: false, linkUrl },
-    data: { read: true, readAt: now },
-  });
+  if (toMark.length > 0) {
+    await prisma.notification.updateMany({
+      where: { recipientId: user.id, read: false, linkUrl },
+      data: { read: true, readAt: now },
+    });
+  }
   const { unread, inboxUnread } = await unreadCountsFor(user.id);
+  const pushTag = threadPushTag(target);
+  const tags = [
+    ...new Set(
+      [
+        ...toMark.map((n) => n.tag),
+        pushTag,
+      ].filter((t): t is string => !!t),
+    ),
+  ];
   // Sync read-state to the user's other devices/tabs (bell + app badge +
   // inbox list) and let them close the matching OS push banners by tag.
   void publish(userChannel(user.id), {
     type: NOTIFICATION_READ,
     ids: toMark.map((n) => n.id),
-    tags: [
-      ...new Set(toMark.map((n) => n.tag).filter((t): t is string => !!t)),
-    ],
+    tags,
     linkUrls: [linkUrl],
     unread,
     inboxUnread,
@@ -1315,19 +1395,10 @@ export async function markThreadRead(target: {
   return { unread, inboxUnread };
 }
 
-/** Sum of unread notification counts for inbox thread links. */
+/** Sum of unread messages across inbox threads. */
 export async function getInboxUnreadCount(): Promise<number> {
   const user = await requireUser();
-  const rows = await prisma.notification.groupBy({
-    by: ["linkUrl"],
-    where: {
-      recipientId: user.id,
-      read: false,
-      linkUrl: { startsWith: "/dashboard/messages/" },
-    },
-    _count: true,
-  });
-  return rows.reduce((sum, r) => sum + r._count, 0);
+  return sumInboxMessageUnreads(user.id);
 }
 
 /**
@@ -1520,16 +1591,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
   const isAdmin = user.systemRole === "ADMIN";
   const client = isClientUser(user);
 
-  const unreadCounts = await prisma.notification.groupBy({
-    by: ["linkUrl"],
-    where: { recipientId: user.id, read: false, linkUrl: { not: null } },
-    _count: true,
-  });
-  const unreadMap = new Map<string, number>();
-  for (const row of unreadCounts) {
-    if (!row.linkUrl) continue;
-    unreadMap.set(row.linkUrl, row._count);
-  }
+  const unreadMap = await countInboxMessageUnreads(user.id);
 
   // Clients only see enabled client rooms they participate in.
   if (client) {
@@ -1575,7 +1637,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         lastMessage: last ? inboxPreview(last.body) : "",
         lastAuthor: last ? (last.author.name ?? last.author.email) : "",
         lastAt: last ? last.createdAt.toISOString() : "",
-        unread: unreadMap.get(`/dashboard/messages/conv-${c.id}`) ?? 0,
+        unread: unreadMap.get(`conv-${c.id}`) ?? 0,
         avatar: generateColor(name),
         initials: name.charAt(0).toUpperCase(),
         inactive: c.project ? !getActiveContract(c.project.contracts) : false,
@@ -1704,7 +1766,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
 
   const projectThreads: InboxThread[] = projects.map((p) => {
     const last = p.messages[0];
-    const unread = unreadMap.get(`/dashboard/messages/project-${p.id}`) ?? 0;
+    const unread = unreadMap.get(`project-${p.id}`) ?? 0;
     return {
       id: `project-${p.id}`,
       kind: "project" as const,
@@ -1748,7 +1810,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         lastMessage: last ? inboxPreview(last.body) : "",
         lastAuthor: last ? (last.author.name ?? last.author.email) : "",
         lastAt: last ? last.createdAt.toISOString() : "",
-        unread: unreadMap.get(`/dashboard/messages/conv-${c.id}`) ?? 0,
+        unread: unreadMap.get(`conv-${c.id}`) ?? 0,
         avatar: generateColor(name),
         initials: name.charAt(0).toUpperCase(),
         inactive: !enabled || !getActiveContract(c.project!.contracts),
@@ -1793,7 +1855,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       lastMessage: lastBody,
       lastAuthor: last ? (last.author.name ?? last.author.email) : "",
       lastAt: last ? last.createdAt.toISOString() : "",
-      unread: unreadMap.get(`/dashboard/messages/conv-${c.id}`) ?? 0,
+      unread: unreadMap.get(`conv-${c.id}`) ?? 0,
       avatar: generateColor(name),
       initials: name.charAt(0).toUpperCase(),
       inactive: false,
@@ -1819,7 +1881,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       lastMessage: last ? inboxPreview(last.body) : "",
       lastAuthor: last ? (last.author.name ?? last.author.email) : "",
       lastAt: last ? last.createdAt.toISOString() : "",
-      unread: unreadMap.get(`/dashboard/messages/conv-${c.id}`) ?? 0,
+      unread: unreadMap.get(`conv-${c.id}`) ?? 0,
       avatar: generateColor(peerName),
       initials: peerName.charAt(0).toUpperCase(),
       inactive: false,
