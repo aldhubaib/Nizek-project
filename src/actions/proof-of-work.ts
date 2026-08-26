@@ -8,6 +8,7 @@ import { moveTask } from "@/actions/task";
 import { ensureBypassConversation, postBypassInbox, postBypassToProjectChat } from "@/lib/deliver-proof-bypass";
 import type { ProofBypassPayload } from "@/lib/proof-bypass-payload";
 import { publish, projectChannel } from "@/lib/centrifugo";
+import { isProofApprovedStage } from "@/lib/proof-of-work";
 
 export type ProofVideoInput = {
   filename: string;
@@ -205,17 +206,58 @@ export type TaskProofVideo = {
   url: string;
   fileSize: number | null;
   mimeType: string | null;
+  createdAt: Date;
 };
 
-export async function getTaskProofVideos(taskId: string): Promise<TaskProofVideo[]> {
-  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { projectId: true } });
-  if (!task) return [];
-  await requireProjectMember(task.projectId);
-  return prisma.proofOfWorkVideo.findMany({
-    where: { proof: { taskId } },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, filename: true, url: true, fileSize: true, mimeType: true },
+export type TaskProofVideoGroups = {
+  approved: TaskProofVideo[];
+  history: TaskProofVideo[];
+};
+
+const VIDEO_SELECT = {
+  id: true,
+  filename: true,
+  url: true,
+  fileSize: true,
+  mimeType: true,
+} as const;
+
+function videosWithProofDate(
+  proof: { createdAt: Date; videos: Omit<TaskProofVideo, "createdAt">[] },
+): TaskProofVideo[] {
+  return proof.videos.map((video) => ({ ...video, createdAt: proof.createdAt }));
+}
+
+export async function getTaskProofVideos(taskId: string): Promise<TaskProofVideoGroups> {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { projectId: true, stage: true },
   });
+  if (!task) return { approved: [], history: [] };
+  await requireProjectMember(task.projectId);
+
+  const proofs = await prisma.proofOfWork.findMany({
+    where: { taskId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      createdAt: true,
+      videos: { orderBy: { createdAt: "desc" }, select: VIDEO_SELECT },
+    },
+  });
+
+  if (proofs.length === 0) return { approved: [], history: [] };
+
+  const [latest, ...older] = proofs;
+  const previous = older.flatMap(videosWithProofDate);
+
+  if (isProofApprovedStage(task.stage)) {
+    return { approved: videosWithProofDate(latest), history: previous };
+  }
+
+  return {
+    approved: [],
+    history: [...videosWithProofDate(latest), ...previous],
+  };
 }
 
 export async function getProofHistory(taskId: string): Promise<ProofHistoryItem[]> {

@@ -802,7 +802,7 @@ export function TaskDetailPage({
           )}
         </div>
 
-        <ProofVideosSection taskId={initialTask.id} />
+        <ProofVideosSection taskId={initialTask.id} taskStage={taskStage} />
 
         {/* Comments */}
         <div className="rounded-lg border border-border/50 bg-card px-3 pb-3">
