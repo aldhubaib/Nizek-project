@@ -19,7 +19,7 @@ import { NoteFullScreenCreate, NOTES_CREATE_TYPES } from "@/components/project/n
 import { getNoteTypeConfig } from "@/components/project/note-types";
 import { NoteCommentReplyDialog } from "@/components/messages/note-comment-reply-dialog";
 import { formatDistanceToNow } from "date-fns";
-import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
+import { QuestionField, questionShowsRequiredStar, type TaskQuestion } from "@/components/kanban/question-field";
 import { CommentSection } from "@/components/kanban/comment-section";
 import { StageConfirmDialog, getCheckpoint } from "@/components/kanban/stage-confirm-dialog";
 import { ProofOfWorkDialog } from "@/components/kanban/proof-of-work-dialog";
@@ -715,8 +715,10 @@ export function TaskDetailPage({
                   return (
                     <div key={q.id} className="relative group space-y-1.5">
                       <label className="text-s font-medium text-muted-foreground px-1">
-                        {i + 1}.                         {q.question}
-                        {q.type !== "client" && <span className="text-destructive ms-0.5">*</span>}
+                        {i + 1}. {q.question}
+                        {questionShowsRequiredStar(q, "backlog") && (
+                          <span className="text-destructive ms-0.5">*</span>
+                        )}
                       </label>
                       <div className="relative rounded-md border border-border bg-field px-3 py-3">
                         {!isPostClarification && (
@@ -738,7 +740,7 @@ export function TaskDetailPage({
                           index={i}
                           value={answers[q.id] ?? ""}
                           readonly={isPostClarification || !isEditing}
-                          showRequiredAs="transition"
+                          showRequiredAs="backlog"
                           showLabel={false}
                           onChange={(val) => handleAnswerChange(q.id, val)}
                         />

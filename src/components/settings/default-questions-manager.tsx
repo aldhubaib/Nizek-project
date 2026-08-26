@@ -205,7 +205,7 @@ function SortableQuestionItem({
                 onChange={(e) => setEditRequired(e.target.checked)}
                 className="rounded border-border accent-orange w-3.5 h-3.5"
               />
-              <span className="text-xs text-muted-foreground">Required before transition</span>
+              <span className="text-xs text-muted-foreground">Required before backlog</span>
             </label>
           </div>
         </div>
@@ -255,9 +255,9 @@ function SortableQuestionItem({
                 ? "bg-orange/10 border-orange/30 text-orange"
                 : "bg-muted border-border text-muted-foreground/50 hover:border-muted-foreground/40 hover:text-muted-foreground"
             )}
-            title={q.required ? "Required before transition — click to remove" : "Click to require before stage transition"}
+            title={q.required ? "Required before backlog — click to remove" : "Click to require before the task can enter the Backlog"}
           >
-            {q.required ? "Before transition" : ""}
+            {q.required ? "Before backlog" : ""}
           </button>
           <button
             onClick={() => onDelete(q.id)}
@@ -396,7 +396,7 @@ export function DefaultQuestionsManager({ questions }: Props) {
             Task Questions
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            These questions apply to all projects. Changes here affect every project immediately.
+            These questions apply to all projects. Mandatory fields must be filled when creating a task. Before backlog fields must be filled before a task can leave Missing Data.
           </p>
         </div>
       </div>
@@ -540,7 +540,7 @@ export function DefaultQuestionsManager({ questions }: Props) {
                 onChange={(e) => setNewRequired(e.target.checked)}
                 className="rounded border-border accent-orange w-3.5 h-3.5"
               />
-              <span className="text-s text-muted-foreground">Required before transition</span>
+              <span className="text-s text-muted-foreground">Required before backlog</span>
             </label>
           </div>
           <AddButton

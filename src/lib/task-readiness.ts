@@ -31,7 +31,7 @@ export function isWaitingOnClientAnswer(
 
 /**
  * Spec fields that decide Backlog vs Missing Data.
- * Only mandatory or required-before-transition questions block readiness;
+ * Only mandatory or required-before-backlog questions block readiness;
  * client questions never block this split.
  */
 export function isReadinessQuestion(q: { type: string; mandatory?: boolean; required?: boolean }): boolean {

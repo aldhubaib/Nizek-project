@@ -159,6 +159,18 @@ function parseMultiValue(raw: string): string[] {
   return [raw];
 }
 
+export type ShowRequiredAs = "all" | "mandatory" | "backlog";
+
+/** Whether the field label should show a required asterisk for this screen. */
+export function questionShowsRequiredStar(
+  question: { mandatory?: boolean; required?: boolean },
+  showRequiredAs: ShowRequiredAs = "all",
+): boolean {
+  if (showRequiredAs === "mandatory") return question.mandatory === true;
+  if (showRequiredAs === "backlog") return question.required === true;
+  return question.mandatory === true || question.required === true;
+}
+
 interface Props {
   question: TaskQuestion;
   index: number;
@@ -166,7 +178,7 @@ interface Props {
   onChange: (value: string) => void;
   compact?: boolean;
   readonly?: boolean;
-  showRequiredAs?: "all" | "mandatory" | "transition";
+  showRequiredAs?: ShowRequiredAs;
   showLabel?: boolean;
 }
 
@@ -429,7 +441,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
       {showLabel && (
         <label className={cn("font-medium text-muted-foreground", compact ? "text-xs" : "text-s")}>
           {index + 1}. {question.question}
-          {(showRequiredAs === "all" ? (question.mandatory || question.required) : showRequiredAs === "mandatory" ? question.mandatory : question.required) && (
+          {questionShowsRequiredStar(question, showRequiredAs) && (
             <span className="text-destructive ms-0.5">*</span>
           )}
         </label>
