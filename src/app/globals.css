@@ -441,11 +441,101 @@ html[data-scroll-locked].app-chrome-away .app-top-bar-tall:not(.sticky):not(.fix
   border-color: var(--border);
   margin: 1.5rem 0;
 }
+.ProseMirror p,
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror li,
+.ProseMirror blockquote {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+.ProseMirror [dir="rtl"] {
+  direction: rtl;
+  unicode-bidi: isolate;
+  text-align: right;
+}
+.ProseMirror [dir="ltr"] {
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: left;
+}
 .ProseMirror img {
   max-width: 100%;
   height: auto;
   border-radius: 0.5rem;
   margin: 1rem 0;
+}
+.note-image {
+  position: relative;
+  margin: 1rem 0;
+}
+.note-image img {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  margin: 0;
+  border-radius: 0.5rem;
+  vertical-align: middle;
+}
+.note-image[data-display="normal"][data-align="left"] {
+  text-align: left;
+}
+.note-image[data-display="normal"][data-align="center"] {
+  text-align: center;
+}
+.note-image[data-display="normal"][data-align="right"] {
+  text-align: right;
+}
+.note-image[data-display="normal"] img {
+  max-width: min(28rem, 100%);
+}
+.note-image[data-display="full"] {
+  text-align: center;
+}
+.note-image[data-display="full"] img {
+  width: 100%;
+  max-width: 100%;
+}
+.note-image-selected img {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.note-image-toolbar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--popover);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  transform: translateX(-50%);
+}
+.ProseMirror img[data-display="full"] {
+  width: 100%;
+  max-width: 100%;
+}
+.ProseMirror img[data-display="normal"][data-align="left"] {
+  display: block;
+  margin-inline-end: auto;
+  margin-inline-start: 0;
+  max-width: min(28rem, 100%);
+}
+.ProseMirror img[data-display="normal"][data-align="center"] {
+  display: block;
+  margin-inline: auto;
+  max-width: min(28rem, 100%);
+}
+.ProseMirror img[data-display="normal"][data-align="right"] {
+  display: block;
+  margin-inline-start: auto;
+  margin-inline-end: 0;
+  max-width: min(28rem, 100%);
 }
 .ProseMirror code {
   background: var(--surface-2);

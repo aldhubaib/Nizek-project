@@ -3,7 +3,6 @@
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import Image from "@tiptap/extension-image";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
 import type { HocuspocusProvider } from "@hocuspocus/provider";
@@ -31,10 +30,14 @@ import {
   Check,
   Loader2,
   ListTodo,
+  AlignLeft,
+  AlignRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
 import { NoteAnnotation } from "@/components/tiptap/note-annotation-mark";
+import { NoteImage } from "@/components/tiptap/note-image";
+import { TextDirection } from "@/components/tiptap/text-direction";
 import {
   AttendanceBlock,
   type AttendancePerson,
@@ -123,7 +126,8 @@ export function RichTextEditor({
         ...(isCollaborative ? { history: false } : {}),
       }),
       Placeholder.configure({ placeholder }),
-      Image.configure({ inline: false }),
+      NoteImage.configure({ inline: false }),
+      TextDirection,
       NoteAnnotation,
       AttendanceBlock,
       SprintInfoBlock.configure({
@@ -240,7 +244,10 @@ export function RichTextEditor({
     if (!editor?.isEditable) return;
     try {
       const { url } = await uploadFileToR2(file);
-      editor.chain().focus().setImage({ src: url }).run();
+      editor.chain().focus().insertContent({
+        type: "image",
+        attrs: { src: url, align: "center", display: "normal" },
+      }).run();
     } catch (err) {
       console.error("Image upload failed:", err);
     }
@@ -284,6 +291,8 @@ export function RichTextEditor({
     { id: "divider", label: "Divider", description: "Horizontal rule", icon: Minus, aliases: [] },
     { id: "code", label: "Code Block", description: "Code snippet", icon: Code, aliases: [] },
     { id: "image", label: "Image", description: "Upload from device", icon: ImageIcon, aliases: [] },
+    { id: "rtl", label: "Right to left", description: "Arabic and RTL text", icon: AlignRight, aliases: ["arabic", "ar"] },
+    { id: "ltr", label: "Left to right", description: "English and LTR text", icon: AlignLeft, aliases: [] },
     ...(projectId
       ? [{
           id: "people",
@@ -396,6 +405,12 @@ export function RichTextEditor({
       case "code":
         chain.toggleCodeBlock().run();
         break;
+      case "rtl":
+        chain.setTextDirection("rtl").run();
+        break;
+      case "ltr":
+        chain.setTextDirection("ltr").run();
+        break;
     }
     setSlashMenu(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -503,6 +518,11 @@ export function RichTextEditor({
     return (
       <div className="relative">
         {hiddenInput}
+        {editable ? (
+          <div className="mb-3 flex justify-end">
+            <DirectionToolbar editor={editor} />
+          </div>
+        ) : null}
         <EditorContent editor={editor} />
         {editable && slashMenu && filteredCmds.length > 0 && (
           <SlashCommandMenu
@@ -552,6 +572,25 @@ export function RichTextEditor({
           active={editor.isActive("orderedList")}
         >
           <ListOrdered className="h-3.5 w-3.5" />
+        </ToolbarButton>
+        <span className="mx-1 h-4 w-px bg-border" />
+        <ToolbarButton
+          title="Left to right"
+          onClick={() => editor.chain().focus().setTextDirection("ltr").run()}
+          active={["paragraph", "heading", "blockquote", "listItem"].some((type) =>
+            editor.isActive(type, { dir: "ltr" }),
+          )}
+        >
+          <AlignLeft className="h-3.5 w-3.5" />
+        </ToolbarButton>
+        <ToolbarButton
+          title="Right to left"
+          onClick={() => editor.chain().focus().setTextDirection("rtl").run()}
+          active={["paragraph", "heading", "blockquote", "listItem"].some((type) =>
+            editor.isActive(type, { dir: "rtl" }),
+          )}
+        >
+          <AlignRight className="h-3.5 w-3.5" />
         </ToolbarButton>
       </div>
       <div className="relative">
@@ -729,20 +768,51 @@ const AttendancePicker = forwardRef<HTMLDivElement, AttendancePickerProps>(
 );
 AttendancePicker.displayName = "AttendancePicker";
 
+function DirectionToolbar({ editor, className }: { editor: Editor; className?: string }) {
+  const rtl = ["paragraph", "heading", "blockquote", "listItem"].some((type) =>
+    editor.isActive(type, { dir: "rtl" }),
+  );
+  const ltr = ["paragraph", "heading", "blockquote", "listItem"].some((type) =>
+    editor.isActive(type, { dir: "ltr" }),
+  );
+  return (
+    <div className={cn("flex items-center gap-0.5 rounded-lg border border-border bg-card/95 p-0.5 shadow-sm", className)}>
+      <ToolbarButton
+        title="Left to right"
+        onClick={() => editor.chain().focus().setTextDirection("ltr").run()}
+        active={ltr}
+      >
+        <AlignLeft className="h-3.5 w-3.5" />
+      </ToolbarButton>
+      <ToolbarButton
+        title="Right to left"
+        onClick={() => editor.chain().focus().setTextDirection("rtl").run()}
+        active={rtl}
+      >
+        <AlignRight className="h-3.5 w-3.5" />
+      </ToolbarButton>
+    </div>
+  );
+}
+
 /* ─── Toolbar Button ─── */
 
 function ToolbarButton({
   children,
   onClick,
   active,
+  title,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   active: boolean;
+  title?: string;
 }) {
   return (
     <button
       type="button"
+      title={title}
+      aria-label={title}
       onClick={onClick}
       className={cn(
         "rounded p-1.5 transition-colors",

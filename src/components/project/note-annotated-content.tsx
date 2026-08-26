@@ -4,11 +4,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { createPortal } from "react-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import Image from "@tiptap/extension-image";
 import { ArrowLeft, Check, CheckSquare, Copy, Loader2, MessageSquare, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NoteAnnotation } from "@/components/tiptap/note-annotation-mark";
+import { NoteImage } from "@/components/tiptap/note-image";
+import { TextDirection } from "@/components/tiptap/text-direction";
 import { AttendanceBlock } from "@/components/tiptap/attendance-block";
 import { SprintInfoBlock } from "@/components/tiptap/sprint-info-block";
 import { SprintTaskBlock } from "@/components/tiptap/sprint-task-block";
@@ -146,7 +147,8 @@ export function NoteAnnotatedContent({
     editable: false,
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-      Image.configure({ inline: false }),
+      NoteImage.configure({ inline: false }),
+      TextDirection,
       NoteAnnotation,
       AttendanceBlock,
       SprintInfoBlock,
