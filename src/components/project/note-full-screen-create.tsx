@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { createMeetingNote, getMeetingNote, getSprintPlanningNote, getSprintReviewNote } from "@/actions/meeting-note";
 import { getSprintPlanningTasks, getSprintReviewTasks } from "@/actions/sprint";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { PageHeaderActions } from "@/components/page-header-actions";
 import { useNoteAutosave } from "@/components/project/use-note-autosave";
 import { cn } from "@/lib/utils";
+import { SprintDocDashboard } from "@/components/project/sprint-doc-dashboard";
 import { NOTE_TYPE_CONFIG, type NoteType } from "@/components/project/note-types";
 import {
   blankPlanningSchedule,
@@ -343,12 +343,14 @@ export function NoteFullScreenCreate({
             className={cn(
               "w-full bg-transparent border-none outline-none placeholder:text-muted-foreground/30",
               isSprintDoc
-                ? "mb-8 text-center text-4xl font-bold leading-tight"
+                ? "mb-10 text-center text-4xl font-bold leading-tight"
                 : "mb-4 text-m font-bold",
               planningLocked && "pointer-events-none",
             )}
             autoFocus={!planningLocked}
           />
+
+          {isSprintDoc ? <SprintDocDashboard tasks={sprintTasks} review={isSprintReview} /> : null}
 
           {isDeadline ? (
             <div className="flex items-center gap-3 mb-8 pb-6 border-b border-border/50">
@@ -368,16 +370,7 @@ export function NoteFullScreenCreate({
                 This planning document is locked. Only an admin can edit it after the sprint starts.
               </p>
             ) : null
-          ) : (
-            <div className="flex items-center gap-3 mb-8 pb-6 border-b border-border/50">
-              <Input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-auto text-s h-8"
-              />
-            </div>
-          )}
+          ) : null}
 
           {sprintId && !sprintReady ? (
             <div className="flex min-h-[30vh] items-center justify-center text-muted-foreground">

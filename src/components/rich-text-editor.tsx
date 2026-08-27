@@ -591,11 +591,6 @@ export function RichTextEditor({
     return (
       <div className="relative">
         {hiddenInput}
-        {editable ? (
-          <div className="mb-3 flex justify-end">
-            <DirectionToolbar editor={editor} />
-          </div>
-        ) : null}
         <EditorContent editor={editor} />
         {editable && slashMenu && filteredCmds.length > 0 && (
           <SlashCommandMenu
@@ -645,25 +640,6 @@ export function RichTextEditor({
           active={editor.isActive("orderedList")}
         >
           <ListOrdered className="h-3.5 w-3.5" />
-        </ToolbarButton>
-        <span className="mx-1 h-4 w-px bg-border" />
-        <ToolbarButton
-          title="Left to right"
-          onClick={() => editor.chain().focus().setTextDirection("ltr").run()}
-          active={["paragraph", "heading", "blockquote", "listItem"].some((type) =>
-            editor.isActive(type, { dir: "ltr" }),
-          )}
-        >
-          <AlignLeft className="h-3.5 w-3.5" />
-        </ToolbarButton>
-        <ToolbarButton
-          title="Right to left"
-          onClick={() => editor.chain().focus().setTextDirection("rtl").run()}
-          active={["paragraph", "heading", "blockquote", "listItem"].some((type) =>
-            editor.isActive(type, { dir: "rtl" }),
-          )}
-        >
-          <AlignRight className="h-3.5 w-3.5" />
         </ToolbarButton>
       </div>
       <div className="relative">
@@ -840,33 +816,6 @@ const AttendancePicker = forwardRef<HTMLDivElement, AttendancePickerProps>(
   },
 );
 AttendancePicker.displayName = "AttendancePicker";
-
-function DirectionToolbar({ editor, className }: { editor: Editor; className?: string }) {
-  const rtl = ["paragraph", "heading", "blockquote", "listItem"].some((type) =>
-    editor.isActive(type, { dir: "rtl" }),
-  );
-  const ltr = ["paragraph", "heading", "blockquote", "listItem"].some((type) =>
-    editor.isActive(type, { dir: "ltr" }),
-  );
-  return (
-    <div className={cn("flex items-center gap-0.5 rounded-lg border border-border bg-card/95 p-0.5 shadow-sm", className)}>
-      <ToolbarButton
-        title="Left to right"
-        onClick={() => editor.chain().focus().setTextDirection("ltr").run()}
-        active={ltr}
-      >
-        <AlignLeft className="h-3.5 w-3.5" />
-      </ToolbarButton>
-      <ToolbarButton
-        title="Right to left"
-        onClick={() => editor.chain().focus().setTextDirection("rtl").run()}
-        active={rtl}
-      >
-        <AlignRight className="h-3.5 w-3.5" />
-      </ToolbarButton>
-    </div>
-  );
-}
 
 /* ─── Toolbar Button ─── */
 

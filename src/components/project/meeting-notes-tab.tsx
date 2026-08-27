@@ -8,10 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FileText, Trash2, Clock, History, Pencil, ExternalLink, CalendarClock, CheckCircle2, Circle, Link2, MessageSquare, Check, CheckSquare, MoreVertical } from "lucide-react";
 import { NoteFullScreenCreate } from "@/components/project/note-full-screen-create";
+import { SprintDocDashboard } from "@/components/project/sprint-doc-dashboard";
 import { ALL_NOTE_TYPES, NOTE_TYPE_CONFIG, NOTES_CREATE_TYPES, type NoteType } from "@/components/project/note-types";
 import { OverflowTabBar } from "@/components/overflow-tab-bar";
 import { updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete, getMeetingNote } from "@/actions/meeting-note";
-import { getSprintPlanningTasks } from "@/actions/sprint";
+import { getSprintPlanningTasks, getSprintReviewTasks } from "@/actions/sprint";
 import { useNoteAutosave } from "@/components/project/use-note-autosave";
 import { documentDateIsoFromPlanningHtml, sprintIdFromPlanningHtml, sprintPlanningIsLocked, type SprintPlanningTask } from "@/lib/sprint-planning-doc";
 import { getNoteCommentThreads } from "@/actions/note-comment";
@@ -735,13 +736,22 @@ export function NoteFullScreenDetail({
   });
 
   useEffect(() => {
-    if (!isSprintPlanning) return;
+    if (!isSprintDoc) return;
     const planningSprintId = sprintIdFromPlanningHtml(note.content);
     if (!planningSprintId) return;
     const sprintId: string = planningSprintId;
     let cancelled = false;
     function load() {
-      getSprintPlanningTasks(sprintId)
+      const request = isSprintReview
+        ? getSprintReviewTasks(sprintId).then((data) => ({
+            tasks: [...data.completed, ...data.incomplete],
+            status: data.status,
+          }))
+        : getSprintPlanningTasks(sprintId).then((data) => ({
+            tasks: data.tasks,
+            status: data.status,
+          }));
+      request
         .then((data) => {
           if (cancelled) return;
           setSprintTasks(data.tasks);
@@ -755,14 +765,23 @@ export function NoteFullScreenDetail({
       cancelled = true;
       window.removeEventListener("focus", load);
     };
-  }, [isSprintPlanning, note.content]);
+  }, [isSprintDoc, isSprintReview, note.content]);
 
   const sprintTasksLoadRef = useRef<(() => void) | undefined>(undefined);
   sprintTasksLoadRef.current = () => {
-    if (!isSprintPlanning) return;
+    if (!isSprintDoc) return;
     const sprintId = sprintIdFromPlanningHtml(note.content);
     if (!sprintId) return;
-    getSprintPlanningTasks(sprintId)
+    const request = isSprintReview
+      ? getSprintReviewTasks(sprintId).then((data) => ({
+          tasks: [...data.completed, ...data.incomplete],
+          status: data.status,
+        }))
+      : getSprintPlanningTasks(sprintId).then((data) => ({
+          tasks: data.tasks,
+          status: data.status,
+        }));
+    request
       .then((data) => {
         setSprintTasks(data.tasks);
         setSprintStatus(data.status);
@@ -771,7 +790,7 @@ export function NoteFullScreenDetail({
   };
   const cent = useCentrifugo();
   useChannel(
-    cent?.enabled && isSprintPlanning ? projectChannel(projectId) : null,
+    cent?.enabled && isSprintDoc ? projectChannel(projectId) : null,
     useCallback((data: unknown) => {
       const ev = data as { type?: string } | null;
       if (!ev?.type) return;
@@ -1272,24 +1291,27 @@ export function NoteFullScreenDetail({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className={cn(
-                  "w-full bg-transparent border-none outline-none placeholder:text-muted-foreground/30 mb-6 sm:mb-8",
+                  "w-full bg-transparent border-none outline-none placeholder:text-muted-foreground/30",
                   isSprintDoc
-                    ? "text-center text-4xl font-bold leading-tight"
-                    : "text-m font-bold",
+                    ? "mb-10 text-center text-4xl font-bold leading-tight"
+                    : "mb-6 text-m font-bold sm:mb-8",
                 )}
                 autoFocus
               />
             ) : (
               <h1
                 className={cn(
-                  "mb-6 sm:mb-8 font-bold",
-                  isSprintDoc ? "text-center text-4xl leading-tight" : "text-m",
+                  "font-bold",
+                  isSprintDoc
+                    ? "mb-10 text-center text-4xl leading-tight"
+                    : "mb-6 text-m sm:mb-8",
                   completedAt && "line-through opacity-60",
                 )}
               >
                 {note.title}
               </h1>
             )}
+            {isSprintDoc ? <SprintDocDashboard tasks={sprintTasks} review={isSprintReview} /> : null}
             {isSprintDoc && (workingDaysError || autoSaveError) ? (
               <p className="mb-4 text-s text-destructive">{workingDaysError ?? autoSaveError}</p>
             ) : planningLocked ? (

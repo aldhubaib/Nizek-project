@@ -4,6 +4,7 @@ import {
   planningTaskIdsFromHtml,
   sprintPlanningDocHtml,
   sprintTaskNodeHtml,
+  summarizeSprintTasks,
   syncPlanningDocTasks,
   type SprintPlanningInfo,
   type SprintPlanningTask,
@@ -82,5 +83,52 @@ describe("sprint planning document tasks", () => {
     const synced = syncPlanningDocTasks(saved, live);
     expect(synced).toContain("Ada");
     expect(synced).toContain("90");
+  });
+});
+
+describe("summarizeSprintTasks", () => {
+  it("counts types and sums estimates", () => {
+    expect(
+      summarizeSprintTasks([
+        { taskType: "FEATURE", estimatedMinutes: 60 },
+        { taskType: "FEATURE", estimatedMinutes: 30 },
+        { taskType: "ENHANCEMENT", estimatedMinutes: 20 },
+        { taskType: "BUG", estimatedMinutes: 10 },
+        { taskType: "REPORTED_BUG", estimatedMinutes: null },
+        { taskType: "DESIGN", estimatedMinutes: 15 },
+      ]),
+    ).toEqual({
+      businessCases: 2,
+      enhancements: 1,
+      bugs: 2,
+      design: 1,
+      totalMinutes: 135,
+      taskCount: 6,
+      completed: 0,
+      uncompleted: 0,
+    });
+  });
+
+  it("counts completed and uncompleted by stage", () => {
+    expect(
+      summarizeSprintTasks([
+        { taskType: "FEATURE", stage: "DONE", estimatedMinutes: 60 },
+        { taskType: "BUG", stage: "IN_DEVELOPMENT", estimatedMinutes: 10 },
+        { taskType: "ENHANCEMENT", stage: "DONE", estimatedMinutes: 20 },
+      ]),
+    ).toMatchObject({ completed: 2, uncompleted: 1, taskCount: 3 });
+  });
+
+  it("returns zeros for an empty sprint", () => {
+    expect(summarizeSprintTasks([])).toEqual({
+      businessCases: 0,
+      enhancements: 0,
+      bugs: 0,
+      design: 0,
+      totalMinutes: 0,
+      taskCount: 0,
+      completed: 0,
+      uncompleted: 0,
+    });
   });
 });

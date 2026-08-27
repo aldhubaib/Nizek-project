@@ -111,6 +111,48 @@ export type SprintPlanningTask = {
   unplanned?: boolean;
 };
 
+export type SprintTaskSummary = {
+  businessCases: number;
+  enhancements: number;
+  bugs: number;
+  design: number;
+  totalMinutes: number;
+  taskCount: number;
+  completed: number;
+  uncompleted: number;
+};
+
+export function summarizeSprintTasks(
+  tasks: { taskType: string; estimatedMinutes?: number | null; stage?: string }[],
+): SprintTaskSummary {
+  let businessCases = 0;
+  let enhancements = 0;
+  let bugs = 0;
+  let design = 0;
+  let totalMinutes = 0;
+  let completed = 0;
+  let uncompleted = 0;
+  for (const task of tasks) {
+    if (task.taskType === "FEATURE") businessCases += 1;
+    else if (task.taskType === "ENHANCEMENT") enhancements += 1;
+    else if (task.taskType === "BUG" || task.taskType === "REPORTED_BUG") bugs += 1;
+    else if (task.taskType === "DESIGN") design += 1;
+    if (task.estimatedMinutes) totalMinutes += task.estimatedMinutes;
+    if (task.stage === "DONE") completed += 1;
+    else if (task.stage) uncompleted += 1;
+  }
+  return {
+    businessCases,
+    enhancements,
+    bugs,
+    design,
+    totalMinutes,
+    taskCount: tasks.length,
+    completed,
+    uncompleted,
+  };
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
