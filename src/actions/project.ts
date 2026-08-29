@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireUser, requireProjectMember, requireProjectRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { removeFromAllowlistIfUnused } from "@/lib/pending-invite";
+import { removeFromAllowlistIfUnused, syncInviteDisplayName } from "@/lib/pending-invite";
 import { validateContractDates } from "@/lib/contract-rules";
 import {
   disableClientChat,
@@ -11,6 +11,15 @@ import {
   syncClientConversationParticipants,
   CLIENT_CONVERSATION_KIND,
 } from "@/lib/client-chat";
+import {
+  membershipRoleFromProjectRole,
+  promoteUserToClient,
+  demoteClientIfUnneeded,
+  ensureClientChatForProject,
+  rememberClientSignup,
+  forgetClientSignupIfUnused,
+} from "@/lib/client-role";
+import { joinDisplayName } from "@/lib/display-name";
 
 async function requireMemberManagement(projectId: string) {
   const { user, member } = await requireProjectMember(projectId);
@@ -346,9 +355,12 @@ export async function inviteMember(data: {
   projectId: string;
   email: string;
   roleId: string;
+  name: string;
 }) {
   const { user, canInviteMembers, canInviteClients } = await requireMemberManagement(data.projectId);
   const email = data.email.toLowerCase().trim();
+  const name = data.name.trim();
+  if (!name) throw new Error("Name is required");
 
   const pRole = await prisma.projectRole.findUnique({
     where: { id: data.roleId },
@@ -358,14 +370,24 @@ export async function inviteMember(data: {
   }
 
   const existingUser = await prisma.user.findUnique({ where: { email }, select: { systemRole: true } });
-  const isClient = existingUser?.systemRole === "CLIENT";
-  if (isClient && !canInviteClients) throw new Error("You don't have permission to invite clients");
-  if (!isClient && !canInviteMembers) throw new Error("You don't have permission to invite team members");
+  const assigningClient = pRole.isClient || existingUser?.systemRole === "CLIENT";
+  if (assigningClient && !canInviteClients) throw new Error("You don't have permission to invite clients");
+  if (!assigningClient && !canInviteMembers) throw new Error("You don't have permission to invite team members");
 
-  const invitation = await prisma.invitation.create({
-    data: {
+  const invitation = await prisma.invitation.upsert({
+    where: { email_projectId: { email, projectId: data.projectId } },
+    update: {
+      role: membershipRoleFromProjectRole(pRole),
+      roleId: data.roleId,
+      status: "PENDING",
+      invitedById: user.id,
+      name,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    },
+    create: {
       email,
-      role: pRole.isAdmin ? "ADMIN" : "MEMBER",
+      name,
+      role: membershipRoleFromProjectRole(pRole),
       roleId: data.roleId,
       projectId: data.projectId,
       invitedById: user.id,
@@ -379,7 +401,14 @@ export async function inviteMember(data: {
     create: { email },
   });
 
+  if (pRole.isClient) {
+    await rememberClientSignup(email, name);
+    await ensureClientChatForProject(data.projectId, user.id);
+  }
+
   revalidatePath(`/dashboard/projects/${data.projectId}`);
+  revalidatePath("/dashboard/messages");
+  revalidatePath("/dashboard/admin");
   return invitation;
 }
 
@@ -509,6 +538,7 @@ export async function removeMember(data: {
     where: { id: data.memberId },
   });
 
+  await demoteClientIfUnneeded(member.userId);
   await syncClientChatIfEnabled(data.projectId);
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
@@ -524,7 +554,7 @@ export async function updateMemberRole(data: {
   memberId: string;
   roleId: string;
 }) {
-  await requireMemberManagement(data.projectId);
+  const { user } = await requireMemberManagement(data.projectId);
 
   const pRole = await prisma.projectRole.findUnique({
     where: { id: data.roleId },
@@ -533,15 +563,29 @@ export async function updateMemberRole(data: {
     throw new Error("Invalid role");
   }
 
+  const member = await prisma.projectMember.findUnique({
+    where: { id: data.memberId },
+    select: { userId: true },
+  });
+  if (!member) throw new Error("Member not found");
+
   await prisma.projectMember.update({
     where: { id: data.memberId },
     data: {
-      role: pRole.isAdmin ? "ADMIN" : "MEMBER",
+      role: membershipRoleFromProjectRole(pRole),
       roleId: data.roleId,
     },
   });
 
+  if (pRole.isClient) {
+    await promoteUserToClient(member.userId);
+    await ensureClientChatForProject(data.projectId, user.id);
+  } else {
+    await demoteClientIfUnneeded(member.userId);
+  }
+
   revalidatePath(`/dashboard/projects/${data.projectId}`);
+  revalidatePath("/dashboard/messages");
 }
 
 export async function addMemberToProject(data: {
@@ -558,14 +602,26 @@ export async function addMemberToProject(data: {
     const inviteId = data.userId.replace("pending:", "");
     const pendingInvite = await prisma.pendingTeamInvite.findUnique({ where: { id: inviteId } });
     if (!pendingInvite) throw new Error("Pending invite not found");
-    const isClient = pendingInvite.systemRole === "CLIENT";
-    if (isClient && !canInviteClients) throw new Error("You don't have permission to invite clients");
-    if (!isClient && !canInviteMembers) throw new Error("You don't have permission to invite team members");
+    const assigningClient = pRole.isClient || pendingInvite.systemRole === "CLIENT";
+    if (assigningClient && !canInviteClients) throw new Error("You don't have permission to invite clients");
+    if (!assigningClient && !canInviteMembers) throw new Error("You don't have permission to invite team members");
 
-    await prisma.invitation.create({
-      data: {
+    const pendingName = joinDisplayName(pendingInvite.firstName, pendingInvite.lastName) || null;
+
+    await prisma.invitation.upsert({
+      where: { email_projectId: { email: pendingInvite.email, projectId: data.projectId } },
+      update: {
+        role: membershipRoleFromProjectRole(pRole),
+        roleId: data.roleId,
+        status: "PENDING",
+        invitedById: user.id,
+        ...(pendingName ? { name: pendingName } : {}),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+      create: {
         email: pendingInvite.email,
-        role: pRole.isAdmin ? "ADMIN" : "MEMBER",
+        name: pendingName,
+        role: membershipRoleFromProjectRole(pRole),
         roleId: data.roleId,
         projectId: data.projectId,
         invitedById: user.id,
@@ -573,15 +629,21 @@ export async function addMemberToProject(data: {
       },
     });
 
+    if (pRole.isClient) {
+      await rememberClientSignup(pendingInvite.email, pendingName ?? undefined);
+      await ensureClientChatForProject(data.projectId, user.id);
+    }
+
     revalidatePath(`/dashboard/projects/${data.projectId}`);
+    revalidatePath("/dashboard/messages");
     return;
   }
 
   const targetUser = await prisma.user.findUnique({ where: { id: data.userId }, select: { systemRole: true } });
   if (!targetUser) throw new Error("User not found");
-  const isClient = targetUser.systemRole === "CLIENT";
-  if (isClient && !canInviteClients) throw new Error("You don't have permission to invite clients");
-  if (!isClient && !canInviteMembers) throw new Error("You don't have permission to invite team members");
+  const assigningClient = pRole.isClient || targetUser.systemRole === "CLIENT";
+  if (assigningClient && !canInviteClients) throw new Error("You don't have permission to invite clients");
+  if (!assigningClient && !canInviteMembers) throw new Error("You don't have permission to invite team members");
 
   const existing = await prisma.projectMember.findUnique({
     where: { userId_projectId: { userId: data.userId, projectId: data.projectId } },
@@ -592,12 +654,17 @@ export async function addMemberToProject(data: {
     data: {
       userId: data.userId,
       projectId: data.projectId,
-      role: pRole.isAdmin ? "ADMIN" : "MEMBER",
+      role: membershipRoleFromProjectRole(pRole),
       roleId: data.roleId,
     },
   });
 
-  await syncClientChatIfEnabled(data.projectId);
+  if (pRole.isClient) {
+    await promoteUserToClient(data.userId);
+    await ensureClientChatForProject(data.projectId, user.id);
+  } else {
+    await syncClientChatIfEnabled(data.projectId);
+  }
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
   revalidatePath("/dashboard/messages");
@@ -618,7 +685,7 @@ export async function getAvailableUsers(projectId: string) {
       orderBy: { name: "asc" },
     }),
     prisma.pendingTeamInvite.findMany({
-      select: { id: true, email: true, systemRole: true },
+      select: { id: true, email: true, systemRole: true, firstName: true, lastName: true },
       orderBy: { createdAt: "desc" },
     }),
   ]);
@@ -631,7 +698,7 @@ export async function getAvailableUsers(projectId: string) {
     .filter((p) => !invitedEmails.has(p.email) && !allUsers.some((u) => u.email === p.email))
     .map((p) => ({
       id: `pending:${p.id}`,
-      name: null as string | null,
+      name: joinDisplayName(p.firstName, p.lastName) || null,
       email: p.email,
       imageUrl: null as string | null,
       isClient: p.systemRole === "CLIENT",
@@ -659,6 +726,20 @@ export async function deleteProject(data: {
   revalidatePath("/dashboard");
 }
 
+export async function getProjectMembers(projectId: string) {
+  await requireProjectMember(projectId);
+  return prisma.projectMember.findMany({
+    where: { projectId },
+    include: {
+      user: {
+        select: { id: true, name: true, imageUrl: true, email: true, systemRole: true },
+      },
+      projectRole: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
 export async function getProjectInvitations(projectId: string) {
   await requireProjectMember(projectId);
 
@@ -672,23 +753,76 @@ export async function getProjectInvitations(projectId: string) {
   });
 }
 
-export async function cancelInvitation(data: { projectId: string; invitationId: string }) {
+export async function cancelInvitation(data: {
+  projectId: string;
+  invitationId: string;
+}): Promise<{ ok: true }> {
   await requireMemberManagement(data.projectId);
 
-  const invitation = await prisma.invitation.findUnique({
-    where: { id: data.invitationId },
-    select: { email: true, projectId: true },
+  const invitation = await prisma.invitation.findFirst({
+    where: { id: data.invitationId, projectId: data.projectId },
+    select: { id: true, email: true, role: true },
   });
-  if (!invitation || invitation.projectId !== data.projectId) {
-    throw new Error("Invitation not found");
+
+  if (invitation) {
+    await prisma.invitation.delete({ where: { id: invitation.id } });
+    if (invitation.role === "CLIENT") {
+      await forgetClientSignupIfUnused(invitation.email);
+    }
+    await removeFromAllowlistIfUnused(invitation.email);
   }
 
-  await prisma.invitation.delete({
-    where: { id: data.invitationId },
+  revalidatePath(`/dashboard/projects/${data.projectId}`);
+  return { ok: true };
+}
+
+export async function updateInvitationName(data: {
+  projectId: string;
+  invitationId: string;
+  name: string;
+}): Promise<{ ok: true } | { error: string }> {
+  await requireMemberManagement(data.projectId);
+  const trimmed = data.name.trim();
+  if (!trimmed) return { error: "Name is required" };
+
+  const invitation = await prisma.invitation.findFirst({
+    where: { id: data.invitationId, projectId: data.projectId, status: "PENDING" },
+    select: { id: true, email: true },
   });
-  await removeFromAllowlistIfUnused(invitation.email);
+  if (!invitation) return { error: "Invitation not found" };
+
+  await syncInviteDisplayName(invitation.email, trimmed);
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
+  revalidatePath("/dashboard/admin");
+  return { ok: true };
+}
+
+export async function updateMemberName(data: {
+  projectId: string;
+  memberId: string;
+  name: string;
+}): Promise<{ ok: true } | { error: string }> {
+  await requireMemberManagement(data.projectId);
+  const trimmed = data.name.trim();
+  if (!trimmed) return { error: "Name is required" };
+
+  const member = await prisma.projectMember.findFirst({
+    where: { id: data.memberId, projectId: data.projectId },
+    select: { userId: true, user: { select: { email: true } } },
+  });
+  if (!member) return { error: "Member not found" };
+
+  await prisma.user.update({
+    where: { id: member.userId },
+    data: { name: trimmed },
+  });
+  await syncInviteDisplayName(member.user.email, trimmed);
+
+  revalidatePath(`/dashboard/projects/${data.projectId}`);
+  revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/account");
+  return { ok: true };
 }
 
 export async function updateMemberInvitePerms(data: {

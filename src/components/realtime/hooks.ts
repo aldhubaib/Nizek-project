@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useCentrifugo } from "./centrifugo-provider";
+import { userChannel, TYPING_EVENT } from "@/lib/channels";
+import { publishTypingEvent } from "@/actions/messages";
 
 // Subscribe to a channel and invoke `onMessage` for each publication.
 // `onStale` (optional) fires when the channel reconnected but missed events
@@ -75,7 +77,6 @@ export function usePresence(channel: string | null): Set<string> {
   return online;
 }
 
-const TYPING_EVENT = "typing";
 const TYPING_TTL = 4000;
 
 // Typing indicator over a channel. Returns the set of member ids currently
@@ -86,13 +87,21 @@ export function useTyping(
   const cent = useCentrifugo();
   const [typingMap, setTypingMap] = useState<Record<string, number>>({});
   const lastSentRef = useRef(0);
+  const personal = cent ? userChannel(cent.memberId) : null;
 
-  useChannel(channel, (data) => {
-    const d = data as { type?: string; memberId?: string } | null;
-    if (!cent || !d || d.type !== TYPING_EVENT || !d.memberId) return;
-    if (d.memberId === cent.memberId) return;
-    setTypingMap((prev) => ({ ...prev, [d.memberId!]: Date.now() }));
-  });
+  const onEvent = useCallback(
+    (data: unknown) => {
+      const d = data as { type?: string; memberId?: string; channel?: string } | null;
+      if (!cent || !d || d.type !== TYPING_EVENT || !d.memberId) return;
+      if (d.memberId === cent.memberId) return;
+      if (d.channel && channel && d.channel !== channel) return;
+      setTypingMap((prev) => ({ ...prev, [d.memberId!]: Date.now() }));
+    },
+    [cent, channel],
+  );
+
+  useChannel(channel, onEvent);
+  useChannel(personal, onEvent);
 
   // Expire stale typing entries.
   useEffect(() => {
@@ -112,11 +121,16 @@ export function useTyping(
   }, []);
 
   const notifyTyping = useCallback(() => {
-    if (!cent || !channel) return;
+    if (!channel) return;
     const now = Date.now();
-    if (now - lastSentRef.current < 1500) return; // throttle
+    if (now - lastSentRef.current < 1500) return;
     lastSentRef.current = now;
-    cent.publish(channel, { type: TYPING_EVENT, memberId: cent.memberId });
+    cent?.publish(channel, {
+      type: TYPING_EVENT,
+      memberId: cent.memberId,
+      channel,
+    });
+    void publishTypingEvent(channel);
   }, [cent, channel]);
 
   return { typing: Object.keys(typingMap), notifyTyping };

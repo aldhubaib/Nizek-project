@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 
 const ALLOWED = [
   "/dashboard/messages",
-  "/dashboard/settings",
   "/dashboard/account",
 ];
 

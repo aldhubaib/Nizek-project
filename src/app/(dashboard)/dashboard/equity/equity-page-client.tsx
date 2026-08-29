@@ -74,8 +74,9 @@ export function EquityPageClient({
   return (
     <div>
       <PageHeader hasMenu>
-        <PieChart className="w-4 h-4 text-primary shrink-0" strokeWidth={1.5} />
-        <PageName className="flex-1">Equity</PageName>
+        <div className="flex min-w-0 flex-1 items-center gap-s">
+          <PageName>Equity</PageName>
+        </div>
         <EquityMenu />
         {tab === "portfolios" && (
           <AddButton

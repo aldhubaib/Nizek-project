@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   Users,
   Shield,
@@ -9,7 +9,6 @@ import {
   FileText,
   HelpCircle,
   ChevronRight,
-  ArrowLeft,
   Image as ImageIcon,
   LogIn,
   Volume2,
@@ -35,7 +34,7 @@ import type { BrandingAssetDTO } from "@/actions/branding";
 import type { LoginPhotoDTO } from "@/actions/login-photos";
 import type { NotificationSoundDTO } from "@/actions/notification-sound-settings";
 import type { BrandingSlotId } from "@/lib/branding-slots";
-import { PageHeader, PageName } from "@/components/page-header";
+import { PageHeader, PageBackButton, PageName } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 
 type TabId =
@@ -188,7 +187,6 @@ export function AdminPageClient({
   projectOptions,
   currentUserId,
 }: Props) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const rawTab = searchParams.get("tab") as TabId | null;
   // Push Health folded into Member Notifications; old links keep working.
@@ -224,9 +222,10 @@ export function AdminPageClient({
   return (
     <div>
       <PageHeader>
+        <PageBackButton href="/dashboard/admin" label="Back to settings" />
         <PageBreadcrumb
           items={[
-            { label: "Settings", onClick: () => router.push("/dashboard/admin") },
+            { label: "Settings", href: "/dashboard/admin" },
             { label: active.label },
           ]}
         />

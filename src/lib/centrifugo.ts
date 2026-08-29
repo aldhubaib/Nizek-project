@@ -152,6 +152,28 @@ export async function publish(channel: string, data: unknown): Promise<void> {
   await apiCall("publish", { channel, data });
 }
 
+/** Same as publish/broadcast but never written to channel history (typing). */
+export async function broadcastEphemeral(
+  channels: string[],
+  data: unknown,
+): Promise<void> {
+  const unique = [...new Set(channels)].filter(Boolean);
+  if (unique.length === 0) return;
+  if (unique.length === 1) {
+    await apiCall("publish", {
+      channel: unique[0],
+      data,
+      skip_history: true,
+    });
+    return;
+  }
+  await apiCall("batch", {
+    commands: unique.map((channel) => ({
+      publish: { channel, data, skip_history: true },
+    })),
+  });
+}
+
 // ─── Kanban board events (consolidated from Pusher) ────────────────────────────
 // Board task events ride the project channel alongside chat; subscribers filter by
 // the `task-*` discriminator so chat and board payloads never cross-fire.

@@ -325,6 +325,21 @@ header.app-top-bar.app-top-bar-menu {
   z-index: -1;
 }
 
+/* Opt out of the frost. Lists that scroll underneath a translucent
+   backdrop-filter drop paint tiles on some GPUs — content stays in the DOM but
+   renders as black gaps that flicker while scrolling. Headers that sit above a
+   scroller paint solid instead. */
+.app-top-bar-solid {
+  background-color: var(--background);
+  isolation: auto;
+}
+.app-top-bar-solid::before,
+.app-top-bar-solid:not(.app-shell-chrome)::before {
+  background-color: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 /* iOS WebKit: standalone PWA gets floor values for insets that env() sometimes
    under-reports. The 34px bottom floor only applies in standalone so plain
    Safari tabs don't get phantom bottom padding. */
@@ -364,6 +379,19 @@ header.app-top-bar.app-top-bar-menu {
 
 .app-scroll-under-tall {
   padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
+}
+
+/* Preview-as-client bar already covers the notch; chat headers sit below it. */
+[data-impersonating] .app-top-bar-tall {
+  --app-bar-height: 3.5rem;
+  padding-top: 1rem;
+  min-height: 3.5rem;
+}
+[data-impersonating] .app-top-bar-tall::before {
+  top: 0;
+}
+[data-impersonating] .app-scroll-under-tall {
+  padding-top: 3.5rem;
 }
 
 /* Tiptap editor heading styles */
@@ -547,6 +575,21 @@ header.app-top-bar.app-top-bar-menu {
 }
 .animate-scroll-down {
   animation: scroll-down 30s linear infinite;
+}
+
+/* Jump-to-message highlight. A ring would trace the full-width row wrapper,
+   drawing a large empty outline across the half the bubble does not occupy. */
+@keyframes message-flash {
+  from {
+    background-color: color-mix(in srgb, var(--primary) 20%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.message-flash {
+  border-radius: 0.75rem;
+  animation: message-flash 1.5s ease-out forwards;
 }
 
 mark.note-annotation {

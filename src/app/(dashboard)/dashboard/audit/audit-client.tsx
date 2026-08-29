@@ -69,13 +69,12 @@ export function AuditClient({ access, reports }: Props) {
   return (
     <div>
       <PageHeader className="justify-between">
-        <PageName className="flex items-center gap-2">
-          <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
-          Task Audit
-          <span className="text-xs font-normal text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-s">
+          <PageName>Task Audit</PageName>
+          <span className="hidden truncate text-xs font-normal text-muted-foreground sm:inline">
             ({reports.length} report{reports.length === 1 ? "" : "s"})
           </span>
-        </PageName>
+        </div>
         <AddButton
           label={hasTodayReport ? "Today's report" : "Create report"}
           onClick={() => setCreateOpen(true)}

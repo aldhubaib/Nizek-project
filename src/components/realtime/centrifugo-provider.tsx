@@ -256,6 +256,14 @@ export function CentrifugoProvider({
     });
     sub.on("error", (ctx) => {
       console.warn(`[realtime] subscription error (${channel}):`, ctx.error?.message ?? ctx);
+      window.setTimeout(() => {
+        const current = subsRef.current.get(channel);
+        if (!current || current.sub !== sub) return;
+        if (sub.state === "subscribed") return;
+        try {
+          sub.subscribe();
+        } catch {}
+      }, 2000);
     });
     entry = { sub, handlers, staleHandlers };
     subsRef.current.set(channel, entry);
@@ -288,6 +296,13 @@ export function CentrifugoProvider({
   const publish = useCallback((channel: string, data: unknown) => {
     const client = clientRef.current;
     if (!client) return;
+    const sub = client.getSubscription(channel);
+    if (sub && sub.state === "subscribed") {
+      sub.publish(data).catch(() => {
+        client.publish(channel, data).catch(() => {});
+      });
+      return;
+    }
     client.publish(channel, data).catch(() => {});
   }, []);
 

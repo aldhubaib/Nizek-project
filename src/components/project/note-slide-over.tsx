@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
 
+const SLIDE_OVER_THEME_COLOR = "#1c1c1e";
+
 /**
- * Chat-opened note: full-bleed on mobile, slides in from the right on
- * desktop and leaves a peek of the inbox that grows with the viewport.
+ * Every side panel in the app. Full-bleed at any size — it still slides in
+ * from the right, but covers the page rather than leaving a peek behind it.
  */
 export function NoteSlideOver({
   title,
@@ -16,69 +18,81 @@ export function NoteSlideOver({
   onClose,
   children,
   className,
+  bodyClassName,
 }: {
   title: ReactNode;
   headerRight?: ReactNode;
   onClose: () => void;
   children: ReactNode;
   className?: string;
+  bodyClassName?: string;
 }) {
-  const [mounted, setMounted] = useState(false);
+  useScrollLock(true);
 
   useEffect(() => {
-    setMounted(true);
+    const metas = document.querySelectorAll('meta[name="theme-color"]');
+    const prev = Array.from(metas).map((m) => m.getAttribute("content"));
+    metas.forEach((m) => m.setAttribute("content", SLIDE_OVER_THEME_COLOR));
+    return () => {
+      metas.forEach((m, i) => {
+        if (prev[i] != null) m.setAttribute("content", prev[i]!);
+      });
+    };
   }, []);
 
-  useScrollLock(mounted);
-
   useEffect(() => {
-    if (!mounted) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mounted, onClose]);
+  }, [onClose]);
 
   const ui = (
     <div
       data-slide-over
       data-scroll-lock-root
-      className="fixed inset-0 z-[200] flex justify-end overflow-hidden overscroll-none"
+      className="fixed inset-0 z-[850] isolate flex overflow-hidden overscroll-none bg-background"
+      style={{ zIndex: 850 }}
     >
-      <button
-        type="button"
-        aria-label="Close note"
-        onClick={onClose}
-        className="absolute inset-0 touch-none bg-overlay"
-      />
       <div
         className={cn(
-          "relative z-10 flex h-full min-h-0 w-full flex-col overscroll-none bg-background shadow-2xl",
+          "relative z-10 flex h-full min-h-0 w-full flex-col overscroll-none bg-background",
           "animate-in slide-in-from-right duration-200",
-          "lg:w-[min(100%,max(45rem,calc(100%-min(24vw,20rem))))] lg:border-s lg:border-border",
           className,
         )}
       >
-        <header className="z-10 flex app-top-bar shrink-0 items-center gap-xs border-b border-border px-2 sm:px-3">
+        <header className="z-10 flex app-top-bar-tall shrink-0 items-center gap-xs border-b border-border bg-background px-2 sm:px-3">
           <button
             type="button"
             onClick={onClose}
-            className="grid size-9 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:size-9 lg:rounded-md"
             aria-label="Close"
           >
+            {/* Points the way the panel leaves — it slides back off the right. */}
             <ArrowRight className="h-4 w-4" />
           </button>
-          <div className="min-w-0 flex-1 truncate text-s font-semibold">{title}</div>
+          <div className="min-w-0 flex-1">
+            {typeof title === "string" ? (
+              <div className="truncate text-s font-semibold">{title}</div>
+            ) : (
+              title
+            )}
+          </div>
           {headerRight}
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background",
+            bodyClassName,
+          )}
+        >
           {children}
         </div>
       </div>
     </div>
   );
 
-  if (!mounted) return null;
+  if (typeof document === "undefined") return null;
   return createPortal(ui, document.body);
 }

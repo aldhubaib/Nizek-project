@@ -12,6 +12,7 @@ import {
   X,
   Users,
   Crown,
+  MessageCircle,
 } from "lucide-react";
 import { createRole, updateRole, deleteRole } from "@/actions/role";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ interface WorkspaceRole {
   id: string;
   name: string;
   isAdmin: boolean;
+  isClient: boolean;
   canCreateTask: boolean;
   canModifyTask: boolean;
   canMoveTask: boolean;
@@ -105,6 +107,7 @@ function stageLabel(id: string): string {
 }
 
 const EMPTY_GENERAL = {
+  isClient: false,
   canMoveTask: false,
   canDeleteTask: false,
   canDeclineTask: false,
@@ -142,21 +145,20 @@ export function RolesManager({ roles }: Props) {
     try {
       await createRole({
         name: newName.trim(),
-        canCreateTask: newStagePerms.createStages.length > 0,
-        canModifyTask: newStagePerms.modifyStages.length > 0,
-        // Derived like create/modify: any configured transition means the
-        // role can move tasks. The standalone flag only matters when no
-        // transitions are set.
-        canMoveTask:
-          newPerms.canMoveTask || Object.keys(newStagePerms.transitions).length > 0,
-        canDeleteTask: newPerms.canDeleteTask,
-        canDeclineTask: newPerms.canDeclineTask,
-        isTeamLead: newPerms.isTeamLead,
-        canCreateSprintPlanning: newPerms.canCreateSprintPlanning,
-        canStartSprint: newPerms.canStartSprint,
-        canEndSprint: newPerms.canEndSprint,
-        canDeleteSprint: newPerms.canDeleteSprint,
-        allowedTransitions: serializeAllData(newStagePerms),
+        isClient: newPerms.isClient,
+        canCreateTask: newPerms.isClient ? false : newStagePerms.createStages.length > 0,
+        canModifyTask: newPerms.isClient ? false : newStagePerms.modifyStages.length > 0,
+        canMoveTask: newPerms.isClient
+          ? false
+          : newPerms.canMoveTask || Object.keys(newStagePerms.transitions).length > 0,
+        canDeleteTask: newPerms.isClient ? false : newPerms.canDeleteTask,
+        canDeclineTask: newPerms.isClient ? false : newPerms.canDeclineTask,
+        isTeamLead: newPerms.isClient ? false : newPerms.isTeamLead,
+        canCreateSprintPlanning: newPerms.isClient ? false : newPerms.canCreateSprintPlanning,
+        canStartSprint: newPerms.isClient ? false : newPerms.canStartSprint,
+        canEndSprint: newPerms.isClient ? false : newPerms.canEndSprint,
+        canDeleteSprint: newPerms.isClient ? false : newPerms.canDeleteSprint,
+        allowedTransitions: newPerms.isClient ? {} : serializeAllData(newStagePerms),
       });
       setNewName("");
       setNewPerms({ ...EMPTY_GENERAL });
@@ -173,6 +175,7 @@ export function RolesManager({ roles }: Props) {
     setEditingId(role.id);
     setEditName(role.name);
     setEditPerms({
+      isClient: role.isClient,
       canMoveTask: role.canMoveTask,
       canDeleteTask: role.canDeleteTask,
       canDeclineTask: role.canDeclineTask,
@@ -197,18 +200,20 @@ export function RolesManager({ roles }: Props) {
       await updateRole({
         roleId,
         name: editName.trim() || undefined,
-        canCreateTask: editStagePerms.createStages.length > 0,
-        canModifyTask: editStagePerms.modifyStages.length > 0,
-        canMoveTask:
-          editPerms.canMoveTask || Object.keys(editStagePerms.transitions).length > 0,
-        canDeleteTask: editPerms.canDeleteTask,
-        canDeclineTask: editPerms.canDeclineTask,
-        isTeamLead: editPerms.isTeamLead,
-        canCreateSprintPlanning: editPerms.canCreateSprintPlanning,
-        canStartSprint: editPerms.canStartSprint,
-        canEndSprint: editPerms.canEndSprint,
-        canDeleteSprint: editPerms.canDeleteSprint,
-        allowedTransitions: serializeAllData(editStagePerms),
+        isClient: editPerms.isClient,
+        canCreateTask: editPerms.isClient ? false : editStagePerms.createStages.length > 0,
+        canModifyTask: editPerms.isClient ? false : editStagePerms.modifyStages.length > 0,
+        canMoveTask: editPerms.isClient
+          ? false
+          : editPerms.canMoveTask || Object.keys(editStagePerms.transitions).length > 0,
+        canDeleteTask: editPerms.isClient ? false : editPerms.canDeleteTask,
+        canDeclineTask: editPerms.isClient ? false : editPerms.canDeclineTask,
+        isTeamLead: editPerms.isClient ? false : editPerms.isTeamLead,
+        canCreateSprintPlanning: editPerms.isClient ? false : editPerms.canCreateSprintPlanning,
+        canStartSprint: editPerms.isClient ? false : editPerms.canStartSprint,
+        canEndSprint: editPerms.isClient ? false : editPerms.canEndSprint,
+        canDeleteSprint: editPerms.isClient ? false : editPerms.canDeleteSprint,
+        allowedTransitions: editPerms.isClient ? {} : serializeAllData(editStagePerms),
       });
       setEditingId(null);
     } catch (err) {
@@ -255,6 +260,22 @@ export function RolesManager({ roles }: Props) {
             autoFocus
           />
 
+          <PermToggle
+            label="Client — chat only"
+            checked={newPerms.isClient}
+            onChange={(v) =>
+              setNewPerms((p) => ({
+                ...EMPTY_GENERAL,
+                isClient: v,
+              }))
+            }
+          />
+          {newPerms.isClient ? (
+            <p className="text-xs text-muted-foreground">
+              This person only sees this project&apos;s client chat. No dashboard, projects, tasks, or internal chats.
+            </p>
+          ) : (
+            <>
           <div className="flex flex-wrap gap-3">
             <PermToggle label="Delete tasks" checked={newPerms.canDeleteTask} onChange={(v) => setNewPerms((p) => ({ ...p, canDeleteTask: v }))} />
             <PermToggle label="Decline tasks" checked={newPerms.canDeclineTask} onChange={(v) => setNewPerms((p) => ({ ...p, canDeclineTask: v }))} />
@@ -272,6 +293,8 @@ export function RolesManager({ roles }: Props) {
             canMoveTask={newPerms.canMoveTask}
             onMoveTaskChange={(v) => setNewPerms((p) => ({ ...p, canMoveTask: v }))}
           />
+            </>
+          )}
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => setShowCreate(false)}>
@@ -310,6 +333,24 @@ export function RolesManager({ roles }: Props) {
                       autoFocus
                     />
 
+                    {!role.isAdmin && (
+                      <PermToggle
+                        label="Client — chat only"
+                        checked={editPerms.isClient}
+                        onChange={(v) =>
+                          setEditPerms((p) => ({
+                            ...EMPTY_GENERAL,
+                            isClient: v,
+                          }))
+                        }
+                      />
+                    )}
+                    {editPerms.isClient ? (
+                      <p className="text-xs text-muted-foreground">
+                        This person only sees this project&apos;s client chat. No dashboard, projects, tasks, or internal chats.
+                      </p>
+                    ) : (
+                      <>
                     <div className="flex flex-wrap gap-3">
                       <PermToggle label="Delete tasks" checked={editPerms.canDeleteTask} onChange={(v) => setEditPerms((p) => ({ ...p, canDeleteTask: v }))} />
                       <PermToggle label="Decline tasks" checked={editPerms.canDeclineTask} onChange={(v) => setEditPerms((p) => ({ ...p, canDeclineTask: v }))} />
@@ -327,6 +368,8 @@ export function RolesManager({ roles }: Props) {
                       canMoveTask={editPerms.canMoveTask}
                       onMoveTaskChange={(v) => setEditPerms((p) => ({ ...p, canMoveTask: v }))}
                     />
+                      </>
+                    )}
 
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="sm" onClick={() => setEditingId(null)}>
@@ -347,6 +390,12 @@ export function RolesManager({ roles }: Props) {
                           <span className="text-xs bg-orange/15 text-orange border border-orange/30 px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1">
                             <Crown className="w-2.5 h-2.5" strokeWidth={2} />
                             Team Lead
+                          </span>
+                        )}
+                        {role.isClient && (
+                          <span className="text-xs bg-cyan/15 text-cyan border border-cyan/30 px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1">
+                            <MessageCircle className="w-2.5 h-2.5" strokeWidth={2} />
+                            Chat only
                           </span>
                         )}
                         {role.isAdmin && (
@@ -379,6 +428,12 @@ export function RolesManager({ roles }: Props) {
                       </div>
                     </div>
 
+                    {role.isClient ? (
+                      <p className="text-xs text-muted-foreground">
+                        Only this project&apos;s client chat. Nothing else.
+                      </p>
+                    ) : (
+                      <>
                     {/* Permission badges */}
                     <div className="flex flex-wrap gap-xs mb-2">
                       <PermBadge label="Delete" enabled={role.canDeleteTask} />
@@ -391,6 +446,8 @@ export function RolesManager({ roles }: Props) {
 
                     {/* Stage summary */}
                     <RoleStageSummary parsed={parsed} canMoveTask={role.canMoveTask} />
+                      </>
+                    )}
                   </div>
                 )}
               </div>

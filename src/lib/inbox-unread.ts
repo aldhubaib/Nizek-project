@@ -10,7 +10,9 @@ function toCount(n: number | bigint): number {
 
 /**
  * Unread inbox counts from messages after each user's ChatReadCursor.
- * Missing cursor → 0 (do not treat the entire history as unread).
+ * Missing cursor → 0 for project/DM threads (do not treat history as unread).
+ * Client rooms are the exception: never-opened client chats count every
+ * message from someone else, so staff see a bubble without opening them first.
  */
 export async function countInboxMessageUnreads(
   userId: string,
@@ -31,12 +33,16 @@ export async function countInboxMessageUnreads(
     prisma.$queryRaw<UnreadRow[]>`
       SELECT m."conversationId" AS id, COUNT(*)::int AS n
       FROM "Message" m
-      INNER JOIN "ChatReadCursor" c
+      INNER JOIN "Conversation" conv ON conv.id = m."conversationId"
+      LEFT JOIN "ChatReadCursor" c
         ON c."userId" = ${userId}
        AND c."threadId" = ('conv-' || m."conversationId")
       WHERE m."conversationId" IS NOT NULL
         AND m."authorId" <> ${userId}
-        AND m."createdAt" > c."lastReadAt"
+        AND (
+          (c."lastReadAt" IS NOT NULL AND m."createdAt" > c."lastReadAt")
+          OR (c."lastReadAt" IS NULL AND conv.kind = 'client')
+        )
       GROUP BY m."conversationId"
     `,
   ]);

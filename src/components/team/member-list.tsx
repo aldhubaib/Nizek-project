@@ -9,8 +9,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Trash2, Shield, X, Clock, Mail, UserPlus, Users, AlertTriangle, ArrowRightLeft, Film } from "lucide-react";
-import { removeMember, updateMemberRole, cancelInvitation, updateMemberInvitePerms } from "@/actions/project";
+import { Trash2, Shield, X, Clock, Mail, Users, AlertTriangle, ArrowRightLeft, Film, Eye, Pencil } from "lucide-react";
+import { removeMember, updateMemberRole, cancelInvitation, updateMemberInvitePerms, updateInvitationName, updateMemberName } from "@/actions/project";
+import { startImpersonationByEmail } from "@/actions/impersonation";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { outlineBadge } from "@/lib/task-label";
 
@@ -29,7 +30,6 @@ interface Member {
   roleId: string | null;
   projectRole: WorkspaceRole | null;
   canInviteMembers: boolean;
-  canInviteClients: boolean;
   canBypassProof: boolean;
   user: {
     id: string;
@@ -42,6 +42,7 @@ interface Member {
 interface Invitation {
   id: string;
   email: string;
+  name: string | null;
   role: string;
   status: string;
   createdAt: Date;
@@ -58,6 +59,8 @@ interface Props {
   roles: WorkspaceRole[];
   invitations?: Invitation[];
   canManageMembers?: boolean;
+  onTeamChanged?: () => void;
+  canImpersonate?: boolean;
 }
 
 interface TransferState {
@@ -75,13 +78,23 @@ export function MemberList({
   roles,
   invitations = [],
   canManageMembers = false,
+  onTeamChanged,
+  canImpersonate = false,
 }: Props) {
   const isAdmin = currentUserRole === "ADMIN" || canManageMembers;
   const [transferState, setTransferState] = useState<TransferState | null>(null);
+  const [impersonating, setImpersonating] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
   const [permOverrides, setPermOverrides] = useState<
-    Record<string, Partial<Pick<Member, "canInviteMembers" | "canInviteClients" | "canBypassProof">>>
+    Record<string, Partial<Pick<Member, "canInviteMembers" | "canBypassProof">>>
   >({});
+  const [nameEdit, setNameEdit] = useState<{
+    kind: "member" | "invitation";
+    id: string;
+    value: string;
+    error: string | null;
+    saving: boolean;
+  } | null>(null);
 
   async function handleRoleChange(memberId: string, roleId: string) {
     try {
@@ -110,6 +123,8 @@ export function MemberList({
         } else {
           alert(result.error || "Failed to remove member");
         }
+      } else {
+        onTeamChanged?.();
       }
     } catch (err) {
       alert((err as Error).message || "Failed to remove member");
@@ -132,6 +147,7 @@ export function MemberList({
         return;
       }
       setTransferState(null);
+      onTeamChanged?.();
     } catch (err) {
       alert((err as Error).message || "Failed to transfer tasks");
     } finally {
@@ -139,15 +155,60 @@ export function MemberList({
     }
   }
 
+  async function handleSignInAsEmail(email: string) {
+    setImpersonating(email);
+    try {
+      const res = await startImpersonationByEmail(email);
+      if (res?.error) {
+        alert(res.error);
+        setImpersonating(null);
+        return;
+      }
+      window.location.href = res.redirectTo ?? "/dashboard";
+    } catch (err) {
+      alert((err as Error).message || "Failed to sign in as user");
+      setImpersonating(null);
+    }
+  }
+
   async function handleCancelInvite(invitationId: string) {
     try {
       await cancelInvitation({ projectId, invitationId });
+      onTeamChanged?.();
     } catch (err) {
       console.error(err);
     }
   }
 
-  async function handleToggleInvitePerm(memberId: string, field: "canInviteMembers" | "canInviteClients" | "canBypassProof", value: boolean) {
+  async function handleNameSave() {
+    if (!nameEdit || nameEdit.saving) return;
+    const trimmed = nameEdit.value.trim();
+    if (!trimmed) {
+      setNameEdit({ ...nameEdit, error: "Name is required" });
+      return;
+    }
+    setNameEdit({ ...nameEdit, error: null, saving: true });
+    try {
+      const res =
+        nameEdit.kind === "member"
+          ? await updateMemberName({ projectId, memberId: nameEdit.id, name: trimmed })
+          : await updateInvitationName({ projectId, invitationId: nameEdit.id, name: trimmed });
+      if (res && "error" in res && res.error) {
+        setNameEdit({ ...nameEdit, error: res.error, saving: false });
+        return;
+      }
+      setNameEdit(null);
+      onTeamChanged?.();
+    } catch (err) {
+      setNameEdit({
+        ...nameEdit,
+        error: (err as Error).message || "Failed to update name",
+        saving: false,
+      });
+    }
+  }
+
+  async function handleToggleInvitePerm(memberId: string, field: "canInviteMembers" | "canBypassProof", value: boolean) {
     setPermOverrides((prev) => ({ ...prev, [memberId]: { ...prev[memberId], [field]: value } }));
     try {
       await updateMemberInvitePerms({ projectId, memberId, [field]: value });
@@ -256,12 +317,43 @@ export function MemberList({
                     </div>
                   )}
                   <div className="min-w-0">
-                    <p className="text-s font-medium text-foreground truncate">
-                      {member.user.name ?? member.user.email}
-                      {isSelf && (
-                        <span className="ms-1 text-xs text-muted-foreground">(you)</span>
-                      )}
-                    </p>
+                    {nameEdit?.kind === "member" && nameEdit.id === member.id ? (
+                      <NameEditRow
+                        value={nameEdit.value}
+                        saving={nameEdit.saving}
+                        error={nameEdit.error}
+                        onChange={(value) => setNameEdit({ ...nameEdit, value, error: null })}
+                        onSave={handleNameSave}
+                        onCancel={() => setNameEdit(null)}
+                      />
+                    ) : (
+                      <p className="text-s font-medium text-foreground truncate flex items-center gap-1">
+                        <span className="truncate">
+                          {member.user.name ?? member.user.email}
+                          {isSelf && (
+                            <span className="ms-1 text-xs text-muted-foreground">(you)</span>
+                          )}
+                        </span>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setNameEdit({
+                                kind: "member",
+                                id: member.id,
+                                value: member.user.name ?? "",
+                                error: null,
+                                saving: false,
+                              })
+                            }
+                            title="Edit name"
+                            className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        )}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground truncate">
                       {member.user.email}
                     </p>
@@ -316,12 +408,6 @@ export function MemberList({
                     label="Members"
                   />
                   <InviteToggle
-                    checked={permOverrides[member.id]?.canInviteClients ?? member.canInviteClients}
-                    onChange={(v) => handleToggleInvitePerm(member.id, "canInviteClients", v)}
-                    icon={<UserPlus className="w-3 h-3" strokeWidth={1.5} />}
-                    label="Clients"
-                  />
-                  <InviteToggle
                     checked={permOverrides[member.id]?.canBypassProof ?? member.canBypassProof}
                     onChange={(v) => handleToggleInvitePerm(member.id, "canBypassProof", v)}
                     icon={<Film className="w-3 h-3" strokeWidth={1.5} />}
@@ -346,6 +432,7 @@ export function MemberList({
             {invitations.map((inv) => {
               const expired = isExpired(inv);
               const roleName = inv.projectRole?.name ?? inv.role;
+              const displayName = inv.name?.trim() || inv.email;
 
               return (
                 <div
@@ -358,9 +445,41 @@ export function MemberList({
                         <Mail className="w-4 h-4" strokeWidth={1.5} />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-s font-medium text-muted-foreground truncate">
-                          {inv.email}
-                        </p>
+                        {nameEdit?.kind === "invitation" && nameEdit.id === inv.id ? (
+                          <NameEditRow
+                            value={nameEdit.value}
+                            saving={nameEdit.saving}
+                            error={nameEdit.error}
+                            onChange={(value) => setNameEdit({ ...nameEdit, value, error: null })}
+                            onSave={handleNameSave}
+                            onCancel={() => setNameEdit(null)}
+                          />
+                        ) : (
+                          <p className="text-s font-medium text-foreground truncate flex items-center gap-1">
+                            <span className="truncate">{displayName}</span>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setNameEdit({
+                                    kind: "invitation",
+                                    id: inv.id,
+                                    value: inv.name ?? "",
+                                    error: null,
+                                    saving: false,
+                                  })
+                                }
+                                title="Edit name"
+                                className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            )}
+                          </p>
+                        )}
+                        {inv.name?.trim() && (
+                          <p className="text-xs text-muted-foreground truncate">{inv.email}</p>
+                        )}
                         <div className="flex items-center gap-xs mt-0.5">
                           {expired ? (
                             <StatusBadge config={outlineBadge("Expired", "text-destructive", "border-destructive/30")} />
@@ -373,17 +492,31 @@ export function MemberList({
                         </div>
                       </div>
                     </div>
-                    {isAdmin && (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => handleCancelInvite(inv.id)}
-                        title="Remove from allowlist"
-                        className="text-muted-foreground/40 hover:text-destructive shrink-0 -mt-0.5 -me-1"
-                      >
-                        <X className="w-3.5 h-3.5" strokeWidth={1.5} />
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-0.5 shrink-0 -mt-0.5 -me-1">
+                      {canImpersonate && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleSignInAsEmail(inv.email)}
+                          disabled={impersonating === inv.email}
+                          title={`Sign in as ${inv.email}`}
+                          className="text-muted-foreground/40 hover:text-foreground"
+                        >
+                          <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        </Button>
+                      )}
+                      {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleCancelInvite(inv.id)}
+                          title="Remove from allowlist"
+                          className="text-muted-foreground/40 hover:text-destructive"
+                        >
+                          <X className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between">
@@ -396,6 +529,61 @@ export function MemberList({
         </div>
       )}
     </div>
+  );
+}
+
+function NameEditRow({
+  value,
+  saving,
+  error,
+  onChange,
+  onSave,
+  onCancel,
+}: {
+  value: string;
+  saving: boolean;
+  error: string | null;
+  onChange: (value: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave();
+      }}
+      className="space-y-1"
+    >
+      <div className="flex items-center gap-xs">
+        <input
+          type="text"
+          value={value}
+          autoFocus
+          disabled={saving}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => e.key === "Escape" && onCancel()}
+          placeholder="Full name"
+          className="h-6 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-muted-foreground/50 disabled:opacity-50"
+        />
+        <button
+          type="submit"
+          disabled={saving}
+          className="h-6 px-2 rounded-md text-xs font-medium bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50 shrink-0"
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="h-6 px-2 rounded-md text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50 shrink-0"
+        >
+          Cancel
+        </button>
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </form>
   );
 }
 

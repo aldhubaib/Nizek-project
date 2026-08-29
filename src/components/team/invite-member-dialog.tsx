@@ -11,22 +11,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { UserPlus, Shield, Check, Search, Mail, X, Loader2 } from "lucide-react";
+import { UserPlus, Check, Search, Mail, X, Loader2 } from "lucide-react";
 import { AddButton } from "@/components/add-button";
 import { inviteMember, addMemberToProject, getAvailableUsers } from "@/actions/project";
 import { cn } from "@/lib/utils";
+
+const ROLE_SELECT_CLASS =
+  "w-full rounded-md border border-border bg-background px-3 py-2 text-s text-foreground focus:outline-none focus:ring-2 focus:ring-ring";
 
 interface WorkspaceRole {
   id: string;
   name: string;
   isAdmin: boolean;
+  isClient?: boolean;
   canCreateTask: boolean;
   canModifyTask: boolean;
   canMoveTask: boolean;
@@ -51,13 +48,15 @@ interface Props {
   roles: WorkspaceRole[];
   canInviteMembers: boolean;
   canInviteClients: boolean;
+  onChanged?: () => void | Promise<void>;
 }
 
-export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInviteClients }: Props) {
+export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInviteClients, onChanged }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"add" | "invite">("add");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
   const [inviteRoleId, setInviteRoleId] = useState<string>(roles[0]?.id ?? "");
   const [userSearch, setUserSearch] = useState("");
   const [availableUsers, setAvailableUsers] = useState<AvailableUser[]>([]);
@@ -75,6 +74,10 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
         .finally(() => setLoadingUsers(false));
     }
   }, [open, mode, projectId]);
+
+  useEffect(() => {
+    if (!inviteRoleId && defaultRoleId) setInviteRoleId(defaultRoleId);
+  }, [defaultRoleId, inviteRoleId]);
 
   const visibleUsers = availableUsers.filter((u) => {
     if (u.isClient) return canInviteClients;
@@ -137,16 +140,24 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
     setOpen(false);
     setSelected([]);
     setUserSearch("");
+    await onChanged?.();
   }
 
   async function handleSubmitInvite(e: React.FormEvent) {
     e.preventDefault();
-    if (!inviteEmail.trim() || !inviteRoleId) return;
+    if (!inviteName.trim() || !inviteEmail.trim() || !inviteRoleId) return;
     setLoading(true);
     try {
-      await inviteMember({ projectId, email: inviteEmail.trim(), roleId: inviteRoleId });
+      await inviteMember({
+        projectId,
+        email: inviteEmail.trim(),
+        name: inviteName.trim(),
+        roleId: inviteRoleId,
+      });
       setOpen(false);
       setInviteEmail("");
+      setInviteName("");
+      await onChanged?.();
     } catch (err) {
       alert((err as Error).message);
     } finally {
@@ -159,6 +170,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
     if (!v) {
       setSelected([]);
       setInviteEmail("");
+      setInviteName("");
       setUserSearch("");
       setMode("add");
       setAddProgress(null);
@@ -290,29 +302,17 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
                         <span className="text-s font-medium text-foreground truncate flex-1 min-w-0">
                           {user.name || user.email}
                         </span>
-                        <Select
+                        <select
                           value={entry.roleId}
-                          onValueChange={(val) => val && setRoleForUser(entry.userId, val)}
+                          onChange={(e) => setRoleForUser(entry.userId, e.target.value)}
+                          className="h-6 w-auto min-w-[90px] rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         >
-                          <SelectTrigger className="h-6 w-auto min-w-[90px] text-xs border-border px-2 gap-1">
-                            <SelectValue>
-                              <span className="flex items-center gap-1">
-                                <Shield className="w-2.5 h-2.5 text-muted-foreground" strokeWidth={1.5} />
-                                {roles.find((r) => r.id === entry.roleId)?.name ?? "Role"}
-                              </span>
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {roles.map((r) => (
-                              <SelectItem key={r.id} value={r.id}>
-                                <span className="flex items-center gap-1">
-                                  <Shield className="w-2.5 h-2.5 text-muted-foreground" strokeWidth={1.5} />
-                                  {r.name}
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          {roles.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name}{r.isClient ? " (chat only)" : ""}
+                            </option>
+                          ))}
+                        </select>
                         <button
                           type="button"
                           onClick={() => removeSelected(entry.userId)}
@@ -357,6 +357,18 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
         ) : (
           <form onSubmit={handleSubmitInvite} className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="invite-name">Name</Label>
+              <Input
+                id="invite-name"
+                type="text"
+                required
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                placeholder="Full name"
+                autoComplete="name"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
@@ -371,28 +383,42 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
               </p>
             </div>
             <div className="space-y-2">
-              <Label>Role</Label>
-              <Select value={inviteRoleId} onValueChange={(val) => val && setInviteRoleId(val)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a role" />
-                </SelectTrigger>
-                <SelectContent>
+              <Label htmlFor="invite-role">Role</Label>
+              {roles.length === 0 ? (
+                <p className="text-s text-muted-foreground">
+                  No roles yet. Create one in{" "}
+                  <a href="/dashboard/roles" className="text-primary underline">
+                    Roles
+                  </a>
+                  .
+                </p>
+              ) : (
+                <select
+                  id="invite-role"
+                  value={inviteRoleId}
+                  onChange={(e) => setInviteRoleId(e.target.value)}
+                  required
+                  className={ROLE_SELECT_CLASS}
+                >
+                  {!inviteRoleId && <option value="">Select a role</option>}
                   {roles.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      <span className="flex items-center gap-xs">
-                        <Shield className="w-3 h-3 text-muted-foreground" strokeWidth={1.5} />
-                        {r.name}
-                      </span>
-                    </SelectItem>
+                    <option key={r.id} value={r.id}>
+                      {r.name}{r.isClient ? " (chat only)" : ""}
+                    </option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
+              )}
+              {roles.find((r) => r.id === inviteRoleId)?.isClient && (
+                <p className="text-xs text-muted-foreground">
+                  This person will only see this project&apos;s client chat — nothing else.
+                </p>
+              )}
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={loading || !inviteEmail.trim() || !inviteRoleId}>
+              <Button type="submit" disabled={loading || !inviteName.trim() || !inviteEmail.trim() || !inviteRoleId}>
                 {loading ? "Adding..." : "Allow Sign In"}
               </Button>
             </div>

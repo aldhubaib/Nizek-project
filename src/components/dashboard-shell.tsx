@@ -118,7 +118,10 @@ export function DashboardShell({
 
   const shell = (
     <PageOverflowMenuProvider>
-      <div className={`flex min-h-screen ${onInbox ? "h-dvh overflow-hidden" : ""}`}>
+      {/* min-h-screen is 100vh and would win over h-dvh's 100dvh on mobile,
+          leaving the composer under the browser chrome. The inbox is a fixed
+          full-height shell, so it takes dvh alone. */}
+      <div className={`flex ${onInbox ? "h-dvh overflow-hidden" : "min-h-screen"}`}>
       {/* Desktop sidebar — pushes content, not overlay */}
       {isDesktop && (
         <div
@@ -179,7 +182,7 @@ export function DashboardShell({
       <main
         className={`relative z-10 min-h-0 min-w-0 flex-1 bg-background ${
           isDesktop ? "rounded-l-2xl" : ""
-        } ${onInbox ? "overflow-hidden" : ""} ${
+        } ${onInbox ? "flex flex-col overflow-hidden" : ""} ${
           bottomNavVisible && !onInbox ? "app-has-bottom-nav" : ""
         }`}
       >

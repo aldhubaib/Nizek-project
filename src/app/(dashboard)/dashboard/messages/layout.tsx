@@ -30,7 +30,7 @@ async function MessagesLayoutInner({
   // Normal page inside the dashboard shell (app sidebar stays visible). The
   // shell hides its mobile header on inbox routes, so full height everywhere.
   return (
-    <div className="flex h-dvh min-h-0 overflow-hidden text-foreground">
+    <div className="flex h-full min-h-0 flex-1 overflow-hidden text-foreground">
       <ThreadSidebar threads={threads} isClient={isClient} />
       <MessagesMain>{children}</MessagesMain>
     </div>

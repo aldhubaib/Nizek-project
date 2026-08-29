@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { ClientShell } from "@/components/client-shell";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { CurrentUserProvider } from "@/components/current-user-provider";
 import { getCurrentUser, getImpersonation, needsProfilePhoto, getSession } from "@/lib/auth";
@@ -35,17 +36,21 @@ export default async function DashboardLayout({
       getNotificationSoundUrl(),
       getImpersonation(),
       getBrandingMap(),
-      isAdmin
-        ? true
+      isClient || isAdmin
+        ? Promise.resolve(isAdmin)
         : user
           ? prisma.auditPermission.count({ where: { userId: user.id } }).then((n) => n > 0)
           : false,
-      canAccessEquity(user?.id),
-      canAccessAnyVault(user?.id),
+      isClient ? Promise.resolve(false) : canAccessEquity(user?.id),
+      isClient ? Promise.resolve(false) : canAccessAnyVault(user?.id),
     ]);
   const logoUrl = branding.webLogo
     ? brandingUrlWithBust(branding, "webLogo")
     : null;
+
+  const banner = impersonation ? (
+    <ImpersonationBanner targetName={impersonation.targetName} />
+  ) : null;
 
   return (
     <CurrentUserProvider
@@ -60,19 +65,29 @@ export default async function DashboardLayout({
           : null
       }
     >
-      <DashboardShell
-        isAdmin={isAdmin}
-        canAudit={canAudit}
-        canEquity={canEquity}
-        canVault={canVault}
-        isClient={isClient}
-        currentUserId={user?.id}
-        notificationSoundUrl={notificationSoundUrl}
-        logoUrl={logoUrl}
-      >
-        {children}
-        {impersonation && <ImpersonationBanner targetName={impersonation.targetName} />}
-      </DashboardShell>
+      {isClient ? (
+        <ClientShell
+          currentUserId={user?.id}
+          notificationSoundUrl={notificationSoundUrl}
+          logoUrl={logoUrl}
+          impersonatingAs={impersonation?.targetName ?? null}
+        >
+          {children}
+        </ClientShell>
+      ) : (
+        <DashboardShell
+          isAdmin={isAdmin}
+          canAudit={canAudit}
+          canEquity={canEquity}
+          canVault={canVault}
+          currentUserId={user?.id}
+          notificationSoundUrl={notificationSoundUrl}
+          logoUrl={logoUrl}
+        >
+          {children}
+          {banner}
+        </DashboardShell>
+      )}
     </CurrentUserProvider>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, RotateCcw, Trash2, Trash } from "lucide-react";
+import { Loader2, RotateCcw, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -49,11 +49,7 @@ export function TrashClient({
   return (
     <div>
       <PageHeader hasMenu={isAdmin && items.length > 0}>
-        <Trash
-          className="w-4 h-4 text-muted-foreground shrink-0"
-          strokeWidth={1.5}
-        />
-        <PageName className="flex-1">Trash</PageName>
+        <PageName>Trash</PageName>
         {isAdmin && items.length > 0 && (
           <PageHeaderActions>
             <Button

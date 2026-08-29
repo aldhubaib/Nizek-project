@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddButton } from "@/components/add-button";
 import {
-  ArrowLeft, Loader2, MessageCircleQuestion, History, MessageSquare,
+  Loader2, MessageCircleQuestion, History, MessageSquare,
   ChevronRight, ChevronLeft, ChevronDown, Pencil, Check, Undo2,
   FileText, Paperclip, X, MoreVertical, Trash2, Zap, Info, Plus,
 } from "lucide-react";
@@ -38,7 +38,7 @@ import { CountBadge } from "@/components/ui/count-badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageBackButton } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
@@ -527,7 +527,7 @@ export function TaskDetailPage({
         <div className="flex justify-end px-app pt-3">{actionsMenu}</div>
       ) : (
       <PageHeader>
-        <button
+        <PageBackButton
           onClick={() => {
             if (noteEditorOpen) {
               setNoteEditorOpen(false);
@@ -535,29 +535,23 @@ export function TaskDetailPage({
             }
             router.push(projectBackHref);
           }}
-          className="text-muted-foreground hover:text-foreground transition-colors"
-          title={
+          label={
             noteEditorOpen
               ? "Back to task"
               : backToNoteId
                 ? "Back to note"
                 : "Back to project"
           }
-          aria-label={
-            noteEditorOpen
-              ? "Back to task"
-              : backToNoteId
-                ? "Back to note"
-                : "Back to project"
-          }
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
+        />
         <PageBreadcrumb
           items={[
+            { label: "Projects", href: "/dashboard/projects" },
             {
               label: projectName,
-              onClick: () => router.push(projectBackHref),
+              href: noteEditorOpen ? undefined : projectBackHref,
+              onClick: noteEditorOpen
+                ? () => setNoteEditorOpen(false)
+                : undefined,
             },
             {
               label: `${taskTypeMeta.prefix}-${String(initialTask.taskNumber).padStart(3, "0")}`,

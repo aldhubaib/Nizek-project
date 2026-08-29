@@ -209,7 +209,10 @@ export function prefetchInboxThread(
           ...base,
           currentMemberId: currentMemberId || base.currentMemberId,
           messages: mergeThreadMessages(base.messages, page.messages as ChatMessage[]),
-          hasMoreOlder: page.hasMore || base.hasMoreOlder,
+          // This page is only the newest slice. An existing snapshot may already
+          // reach further back, so its answer wins; `page.hasMore` only applies
+          // when there was nothing cached to compare against.
+          hasMoreOlder: base.messages.length > 0 ? base.hasMoreOlder : page.hasMore,
           lastReadAt: page.lastReadAt,
           unreadCount: page.unreadCount,
         },

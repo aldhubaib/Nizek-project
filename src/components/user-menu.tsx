@@ -23,18 +23,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export function UserMenu({
-  collapsed = false,
-  onNavigate,
-}: {
-  collapsed?: boolean;
-  onNavigate?: () => void;
-}) {
-  const router = useRouter();
+function useAccountIdentity() {
   const user = useCurrentUser();
-  const [signOutOpen, setSignOutOpen] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
-
   const email = user?.email ?? "";
   const name = user?.name ?? email ?? "You";
   const img = user?.imageUrl;
@@ -66,22 +56,157 @@ export function UserMenu({
       </span>
     );
 
+  return { name, email, avatar };
+}
+
+/**
+ * The account rows on their own, so surfaces that already own a menu (the chat
+ * header's overflow button) can host them instead of adding a second trigger.
+ * The host renders SignOutDialog, since a dialog inside the menu would unmount
+ * with it.
+ */
+export function AccountMenuItems({
+  profileLabel = "Manage account",
+  onProfile,
+  onSignOut,
+}: {
+  /** Pass null where the identity row alone is enough to reach the profile. */
+  profileLabel?: string | null;
+  onProfile: () => void;
+  /** Omit where signing out lives elsewhere, such as inside the profile. */
+  onSignOut?: () => void;
+}) {
+  const { name, email, avatar } = useAccountIdentity();
+
+  return (
+    <>
+      <DropdownMenuItem
+        className="h-auto cursor-pointer items-start gap-s py-1.5"
+        onClick={onProfile}
+      >
+        {avatar("h-8 w-8")}
+        <div className="min-w-0">
+          <div className="truncate text-s font-medium text-foreground">
+            {name}
+          </div>
+          {email && (
+            <div className="truncate text-xs text-muted-foreground">
+              {email}
+            </div>
+          )}
+        </div>
+      </DropdownMenuItem>
+      {profileLabel ? (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="cursor-pointer gap-s" onClick={onProfile}>
+            <UserCog className="h-4 w-4" />
+            {profileLabel}
+          </DropdownMenuItem>
+        </>
+      ) : null}
+      {onSignOut ? (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            className="gap-s"
+            onClick={onSignOut}
+          >
+            <LogOut className="h-4 w-4" />
+            Sign out
+          </DropdownMenuItem>
+        </>
+      ) : null}
+    </>
+  );
+}
+
+export function SignOutDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const router = useRouter();
+  const [signingOut, setSigningOut] = useState(false);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Sign out</DialogTitle>
+          <DialogDescription>
+            Are you sure you want to sign out of your account?
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={signingOut}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            className="gap-2"
+            disabled={signingOut}
+            onClick={async () => {
+              setSigningOut(true);
+              await authClient.signOut({
+                fetchOptions: { onSuccess: () => router.push("/sign-in") },
+              });
+            }}
+          >
+            {signingOut ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <LogOut className="h-4 w-4" />
+            )}
+            Sign out
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function UserMenu({
+  collapsed = false,
+  onNavigate,
+  variant = "sidebar",
+}: {
+  collapsed?: boolean;
+  onNavigate?: () => void;
+  variant?: "sidebar" | "header";
+}) {
+  const router = useRouter();
+  const { name, email, avatar } = useAccountIdentity();
+  const [signOutOpen, setSignOutOpen] = useState(false);
+
   const goToAccount = () => {
     onNavigate?.();
     router.push("/dashboard/account");
   };
+
+  const header = variant === "header";
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
           className={cn(
-            "flex w-full items-center gap-s rounded-lg p-1 text-start outline-none transition-colors hover:bg-card/60",
-            collapsed && "justify-center",
+            "flex items-center text-start outline-none transition-colors",
+            header
+              ? "rounded-full p-0.5 hover:bg-card/60"
+              : "w-full gap-s rounded-lg p-1 hover:bg-card/60",
+            !header && collapsed && "justify-center",
           )}
         >
-          {avatar("h-7 w-7")}
-          {!collapsed && (
+          {avatar(header ? "h-8 w-8" : "h-7 w-7")}
+          {!header && !collapsed && (
             <span className="min-w-0 flex-1">
               <span className="block truncate text-s font-medium text-foreground">
                 {name}
@@ -95,87 +220,22 @@ export function UserMenu({
           )}
         </DropdownMenuTrigger>
         <DropdownMenuContent
-          side="top"
-          align="start"
+          side={header ? "bottom" : "top"}
+          align={header ? "end" : "start"}
           className="w-56"
           positionerClassName="z-[700]"
         >
-          <DropdownMenuItem
-            className="h-auto cursor-pointer items-start gap-s py-1.5"
-            onClick={goToAccount}
-          >
-            {avatar("h-8 w-8")}
-            <div className="min-w-0">
-              <div className="truncate text-s font-medium text-foreground">
-                {name}
-              </div>
-              {email && (
-                <div className="truncate text-xs text-muted-foreground">
-                  {email}
-                </div>
-              )}
-            </div>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="cursor-pointer gap-s"
-            onClick={goToAccount}
-          >
-            <UserCog className="h-4 w-4" />
-            Manage account
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            className="gap-s"
-            onClick={() => {
+          <AccountMenuItems
+            onProfile={goToAccount}
+            onSignOut={() => {
               onNavigate?.();
               setSignOutOpen(true);
             }}
-          >
-            <LogOut className="h-4 w-4" />
-            Sign out
-          </DropdownMenuItem>
+          />
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog open={signOutOpen} onOpenChange={setSignOutOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Sign out</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to sign out of your account?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => setSignOutOpen(false)}
-              disabled={signingOut}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              className="gap-2"
-              disabled={signingOut}
-              onClick={async () => {
-                setSigningOut(true);
-                await authClient.signOut({
-                  fetchOptions: { onSuccess: () => router.push("/sign-in") },
-                });
-              }}
-            >
-              {signingOut ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <LogOut className="h-4 w-4" />
-              )}
-              Sign out
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SignOutDialog open={signOutOpen} onOpenChange={setSignOutOpen} />
     </>
   );
 }

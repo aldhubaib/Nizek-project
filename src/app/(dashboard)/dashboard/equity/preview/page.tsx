@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { canAccessEquity } from "@/lib/equity-access";
 import { getEquityPortfolios } from "@/actions/equity";
-import { PageHeader, PageName } from "@/components/page-header";
+import { PageHeader, PageBackButton } from "@/components/page-header";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { EquityMenu } from "@/components/equity/equity-menu";
 import {
   AllProjectsTable,
@@ -30,14 +29,13 @@ export default async function EquityPreviewPage() {
   return (
     <div>
       <PageHeader hasMenu>
-        <Link
-          href="/dashboard/equity"
-          aria-label="Back to equity"
-          className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground transition-colors no-underline shrink-0"
-        >
-          <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
-        </Link>
-        <PageName className="flex-1">Report preview</PageName>
+        <PageBackButton href="/dashboard/equity" label="Back to equity" />
+        <PageBreadcrumb
+          items={[
+            { label: "Equity", href: "/dashboard/equity" },
+            { label: "Report preview" },
+          ]}
+        />
         <EquityMenu />
       </PageHeader>
 

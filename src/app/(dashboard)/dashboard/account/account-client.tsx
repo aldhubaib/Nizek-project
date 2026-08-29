@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { ArrowLeft, Bell, Camera, Loader2, Volume2 } from "lucide-react";
+import { Bell, Camera, Loader2, Volume2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { updateMyAvatar, updateMyName } from "@/actions/account";
 import { useCurrentUser } from "@/components/current-user-provider";
@@ -12,7 +11,7 @@ import {
   enablePush,
   disablePush,
 } from "@/lib/push-client";
-import { PageHeader, PageName } from "@/components/page-header";
+import { PageHeader, PageBackButton, PageName } from "@/components/page-header";
 import {
   isNotificationSoundEnabled,
   setNotificationSoundEnabled,
@@ -29,10 +28,12 @@ export function AccountClient({
   name: initialName,
   email,
   imageUrl: initialImageUrl,
+  isClient = false,
 }: {
   name: string;
   email: string;
   imageUrl: string | null;
+  isClient?: boolean;
 }) {
   const me = useCurrentUser();
   const resolvedName = (initialName || me?.name || "").trim();
@@ -152,13 +153,10 @@ export function AccountClient({
   return (
     <div>
       <PageHeader>
-        <Link
-          href="/dashboard"
-          className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
-          aria-label="Back to dashboard"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Link>
+        {/* Clients have no dashboard behind this — the chat list is their home. */}
+        {isClient && (
+          <PageBackButton href="/dashboard/messages" label="Back to chats" />
+        )}
         <PageName>Account</PageName>
       </PageHeader>
       <div className="mx-auto flex w-full max-w-lg flex-col gap-4 px-app py-4 sm:py-6">

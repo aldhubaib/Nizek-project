@@ -17,7 +17,7 @@ import { VaultTab } from "@/components/vault/vault-tab";
 import { createPortal } from "react-dom";
 import { getMeetingNotes } from "@/actions/meeting-note";
 import { getAssets } from "@/actions/asset";
-import { getProjectInvitations } from "@/actions/project";
+import { getProjectInvitations, getProjectMembers } from "@/actions/project";
 import { getRoles } from "@/actions/role";
 import { getContractPrefixes } from "@/actions/contract-prefix";
 import { getTeams } from "@/actions/team";
@@ -26,13 +26,12 @@ import { listSprints, type SprintDTO } from "@/actions/sprint";
 
 import type { TaskQuestion } from "@/components/kanban/question-field";
 import { useKanbanStore, type KanbanTask } from "@/store/kanban";
-import Link from "next/link";
-import { Users, KeyRound, Settings, Loader2, ArrowLeft, Check } from "lucide-react";
+import { Users, KeyRound, Settings, Loader2, Check } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { outlineBadge, normalizeProjectTab } from "@/lib/task-label";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageBackButton } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 
 const PROJECT_TAB_CLASS =
@@ -73,6 +72,7 @@ interface ProjectRole {
   id: string;
   name: string;
   isAdmin: boolean;
+  isClient?: boolean;
   canCreateTask: boolean;
   canModifyTask: boolean;
   canMoveTask: boolean;
@@ -171,6 +171,7 @@ interface Team {
 interface Invitation {
   id: string;
   email: string;
+  name: string | null;
   role: string;
   status: string;
   createdAt: Date;
@@ -235,6 +236,7 @@ export function ProjectDetailClient({
   const [sprints, setSprints] = useState<SprintDTO[] | null>(null);
   const [assets, setAssets] = useState<Asset[] | null>(null);
   const [teamData, setTeamData] = useState<{ roles: ProjectRole[]; invitations: Invitation[] } | null>(null);
+  const [teamMembers, setTeamMembers] = useState<Member[]>(members);
   const [vaultCredentials, setVaultCredentials] = useState<VaultCredentialDTO[] | null>(null);
   const [settingsData, setSettingsData] = useState<{ teams: Team[]; contractPrefixes: ContractPrefixOption[] } | null>(null);
 
@@ -244,6 +246,21 @@ export function ProjectDetailClient({
   const [loadingTeam, startTeamTransition] = useTransition();
   const [loadingVault, startVaultTransition] = useTransition();
   const [loadingSettings, startSettingsTransition] = useTransition();
+
+  const loadTeam = useCallback(async () => {
+    const [roles, invitations, nextMembers] = await Promise.all([
+      getRoles(),
+      getProjectInvitations(project.id),
+      getProjectMembers(project.id),
+    ]);
+    setTeamData({ roles, invitations: invitations as unknown as Invitation[] });
+    setTeamMembers(nextMembers as unknown as Member[]);
+  }, [project.id]);
+
+  const reloadTeam = useCallback(async () => {
+    await loadTeam();
+    router.refresh();
+  }, [loadTeam, router]);
   const [noteFullscreen, setNoteFullscreen] = useState(false);
   const [noteHeader, setNoteHeader] = useState<{
     crumbs?: string[];
@@ -261,6 +278,7 @@ export function ProjectDetailClient({
     setSprints(null);
     setAssets(null);
     setTeamData(null);
+    setTeamMembers(members);
     setVaultCredentials(null);
     setSettingsData(null);
   }, [project.id]);
@@ -355,15 +373,9 @@ export function ProjectDetailClient({
 
   useEffect(() => {
     if (activeTab === "team" && teamData === null) {
-      startTeamTransition(async () => {
-        const [roles, invitations] = await Promise.all([
-          getRoles(),
-          getProjectInvitations(project.id),
-        ]);
-        setTeamData({ roles, invitations: invitations as unknown as Invitation[] });
-      });
+      startTeamTransition(() => loadTeam());
     }
-  }, [activeTab, teamData, project.id]);
+  }, [activeTab, teamData, loadTeam]);
 
   useEffect(() => {
     if (activeTab === "vault" && canAccessVault && vaultCredentials === null) {
@@ -480,24 +492,12 @@ export function ProjectDetailClient({
       <PageHeader hasMenu className="relative w-full min-w-0 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-2">
         <div className="relative z-10 flex min-w-0 items-center gap-s">
           {noteFullscreen ? (
-            <button
-              type="button"
+            <PageBackButton
               onClick={() => noteBackRef.current?.()}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              title={noteHeader?.backLabel ?? "Back"}
-              aria-label={noteHeader?.backLabel ?? "Back"}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
+              label={noteHeader?.backLabel ?? "Back"}
+            />
           ) : (
-            <Link
-              href="/dashboard/projects"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              title="Back to all projects"
-              aria-label="Back to all projects"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
+            <PageBackButton href="/dashboard/projects" label="Back to all projects" />
           )}
           {project.logoUrl ? (
             <img
@@ -514,6 +514,10 @@ export function ProjectDetailClient({
           )}
           <PageBreadcrumb
             items={[
+              {
+                label: "Projects",
+                href: "/dashboard/projects",
+              },
               {
                 label: project.name,
                 onClick: noteFullscreen ? () => noteBackRef.current?.() : undefined,
@@ -663,7 +667,7 @@ export function ProjectDetailClient({
           </TabsContent>
 
           <TabsContent value="team">
-            {loadingTeam || !teamData ? (
+            {!teamData ? (
               <TabSpinner />
             ) : (
               <div className="space-y-4">
@@ -675,17 +679,20 @@ export function ProjectDetailClient({
                       roles={teamData.roles}
                       canInviteMembers={userPermissions.canInviteMembers}
                       canInviteClients={userPermissions.canInviteClients}
+                      onChanged={reloadTeam}
                     />
                   )}
                 </div>
                 <MemberList
-                  members={members}
+                  members={teamMembers}
                   projectId={project.id}
                   currentUserRole={userRole}
                   currentUserId={currentUserId}
                   roles={teamData.roles}
                   invitations={teamData.invitations}
                   canManageMembers={userPermissions.canInviteMembers || userPermissions.canInviteClients}
+                  canImpersonate={isSystemAdmin}
+                  onTeamChanged={reloadTeam}
                 />
               </div>
             )}

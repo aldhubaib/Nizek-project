@@ -4,6 +4,7 @@ import { nextCookies } from "better-auth/next-js";
 import { APIError } from "better-auth/api";
 import { prisma } from "@/lib/prisma";
 import { applyPendingInvite, logPendingInviteError } from "@/lib/pending-invite";
+import { joinDisplayName } from "@/lib/display-name";
 
 export const auth = betterAuth({
   baseURL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
@@ -57,6 +58,13 @@ export const auth = betterAuth({
 
   account: {
     modelName: "Account",
+    // Pre-provisioned invitees (admin "view as" before first Google login)
+    // share the same User row. Google must be trusted so the later real
+    // sign-in links instead of failing on the unique email.
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ["google"],
+    },
   },
 
   databaseHooks: {
@@ -74,10 +82,19 @@ export const auth = betterAuth({
           const pending = await prisma.pendingTeamInvite.findFirst({
             where: { email: { equals: email, mode: "insensitive" } },
           });
-          const inviteName = [pending?.firstName, pending?.lastName]
-            .filter((part) => part?.trim())
-            .join(" ")
-            .trim();
+          let inviteName = joinDisplayName(pending?.firstName, pending?.lastName);
+          if (!inviteName) {
+            const projectInvite = await prisma.invitation.findFirst({
+              where: {
+                email: { equals: email, mode: "insensitive" },
+                status: "PENDING",
+                name: { not: null },
+              },
+              select: { name: true },
+              orderBy: { createdAt: "desc" },
+            });
+            inviteName = projectInvite?.name?.trim() ?? "";
+          }
 
           return {
             data: {

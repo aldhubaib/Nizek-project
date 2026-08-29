@@ -30,7 +30,10 @@ function Avatar({
       data-slot="avatar"
       data-size={size}
       className={cn(
-        "group/avatar relative flex shrink-0 rounded-full select-none after:absolute after:inset-0 after:rounded-full after:border after:border-border after:mix-blend-darken dark:after:mix-blend-lighten",
+        // No mix-blend on the ring: avatars appear in every chat and inbox row,
+        // and a blend mode per row forces a backdrop read that drops paint
+        // tiles while the list scrolls.
+        "group/avatar relative flex shrink-0 rounded-full select-none after:absolute after:inset-0 after:rounded-full after:border after:border-foreground/10",
         AVATAR_SIZE[size],
         className
       )}

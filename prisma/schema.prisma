@@ -252,6 +252,8 @@ model ProjectRole {
   name               String  @unique
   description        String?
   isAdmin            Boolean @default(false)
+  /** Chat-only: assigned users become CLIENT and only see this project's client chat. */
+  isClient           Boolean @default(false)
   canCreateTask      Boolean @default(false)
   canModifyTask      Boolean @default(false)
   canMoveTask        Boolean @default(false)
@@ -795,6 +797,8 @@ model Invitation {
   invitedBy   User      @relation(fields: [invitedById], references: [id], onDelete: Cascade)
   roleId      String?
   projectRole ProjectRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  /// Display name set at invite time (editable before they sign in).
+  name        String?
 
   createdAt DateTime @default(now())
   expiresAt DateTime

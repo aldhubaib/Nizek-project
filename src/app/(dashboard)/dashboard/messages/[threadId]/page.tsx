@@ -8,7 +8,7 @@ import {
   conversationChannel,
   globalPresenceChannel,
 } from "@/lib/channels";
-import { getThreadMessages } from "@/actions/messages";
+import { getThreadMessages, getInboxThreads } from "@/actions/messages";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import {
   canCreateInStage,
@@ -20,6 +20,15 @@ import {
   CLIENT_CONVERSATION_KIND,
   isClientUser,
 } from "@/lib/client-chat";
+import {
+  ANNOUNCEMENTS_CONVERSATION_ID,
+  ANNOUNCEMENTS_SUBTITLE,
+  ANNOUNCEMENTS_THREAD_ID,
+  ANNOUNCEMENTS_TITLE,
+  canPostAnnouncement,
+  canReadAnnouncements,
+  getOrCreateAnnouncementsConversation,
+} from "@/lib/announcements";
 import { ThreadChat, type ThreadTarget } from "./thread-chat";
 
 const CONTRACT_SELECT = {
@@ -57,6 +66,8 @@ export default async function ThreadPage({
   // contract (mirrors Falak: inactive projects have a read-only channel).
   let inactive = false;
   let readOnly = false;
+  // Announcements: everyone reads and reacts, but only admins start a thread.
+  let replyOnly = false;
   let isClientRoom = false;
 
   let canCreateTask = false;
@@ -107,6 +118,28 @@ export default async function ThreadPage({
     projectName = project.name;
     inactive = !getActiveContract(project.contracts);
     contractsForPerms = project.contracts;
+  } else if (threadId === ANNOUNCEMENTS_THREAD_ID) {
+    if (!canReadAnnouncements(user)) notFound();
+    await getOrCreateAnnouncementsConversation();
+
+    // Membership is every non-client user, so there are no participant rows to
+    // read — the audience doubles as the mention list.
+    const staff = await prisma.user.findMany({
+      where: { systemRole: { not: "CLIENT" }, blocked: false },
+      select: { id: true, name: true, email: true },
+    });
+    for (const m of staff) memberNames[m.id] = m.name ?? m.email;
+    mentionables = staff
+      .filter((m) => m.id !== user.id)
+      .map((m) => ({ id: m.id, name: m.name ?? m.email }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    target = { conversationId: ANNOUNCEMENTS_CONVERSATION_ID };
+    channel = conversationChannel(ANNOUNCEMENTS_CONVERSATION_ID);
+    presenceChannel = globalPresenceChannel();
+    title = ANNOUNCEMENTS_TITLE;
+    subtitle = ANNOUNCEMENTS_SUBTITLE;
+    replyOnly = !canPostAnnouncement(user);
   } else if (threadId.startsWith("conv-")) {
     const conversationId = threadId.slice(5);
     const convoMeta = await prisma.conversation.findUnique({
@@ -152,9 +185,11 @@ export default async function ThreadPage({
       channel = conversationChannel(convo.id);
       presenceChannel = globalPresenceChannel();
       title = access.project.name;
-      subtitle = access.project.clientChatEnabled
-        ? "Client chat"
-        : "Client chat (disabled)";
+      subtitle = client
+        ? "Chatting with Nizek"
+        : access.project.clientChatEnabled
+          ? "Client chat"
+          : "Client chat (disabled)";
       projectName = access.project.name;
       readOnly = !access.canPost;
       inactive =
@@ -292,6 +327,7 @@ export default async function ThreadPage({
 
   // Latest page only (50 messages) — older pages load on demand in the client.
   const page = await getThreadMessages(target);
+  const clientThreadCount = client ? (await getInboxThreads()).length : 0;
 
   // Deliberately NO mark-as-read here: this Server Component also renders for
   // Next.js Link prefetches from the inbox list, and hovering a thread must
@@ -314,6 +350,7 @@ export default async function ThreadPage({
       mentionables={mentionables}
       inactive={inactive}
       readOnly={readOnly}
+      replyOnly={replyOnly}
       canCreateTask={canCreateTask}
       allowedTaskTypes={allowedTaskTypes}
       activeContractType={activeContractType}
@@ -322,6 +359,8 @@ export default async function ThreadPage({
       lastReadAt={page.lastReadAt}
       unreadCount={page.unreadCount}
       isClientRoom={isClientRoom}
+      isClientUser={client}
+      showInboxBack={!client || clientThreadCount > 1}
       focusMessageId={focusMessageId}
     />
   );

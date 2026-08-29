@@ -1,8 +1,10 @@
 import { Fragment, type KeyboardEvent, type ReactNode } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 export type BreadcrumbItem = {
   label: ReactNode;
+  href?: string;
   onClick?: () => void;
   className?: string;
 };
@@ -20,7 +22,23 @@ function Crumb({
     item.className,
   );
 
-  if (item.onClick && !current) {
+  if (current) {
+    return (
+      <span className={className} aria-current="page">
+        {item.label}
+      </span>
+    );
+  }
+
+  if (item.href) {
+    return (
+      <Link href={item.href} className={cn(className, "hover:text-foreground")}>
+        {item.label}
+      </Link>
+    );
+  }
+
+  if (item.onClick) {
     function onKeyDown(e: KeyboardEvent<HTMLSpanElement>) {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
@@ -40,11 +58,7 @@ function Crumb({
     );
   }
 
-  return (
-    <span className={className} aria-current={current ? "page" : undefined}>
-      {item.label}
-    </span>
-  );
+  return <span className={className}>{item.label}</span>;
 }
 
 export function PageBreadcrumb({ items }: { items: BreadcrumbItem[] }) {

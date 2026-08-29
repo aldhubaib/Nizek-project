@@ -54,6 +54,7 @@ import { useKanbanStore, type KanbanTask } from "@/store/kanban";
 import { NoteSlideOver } from "@/components/project/note-slide-over";
 import { NoteFullScreenCreate } from "@/components/project/note-full-screen-create";
 import { TaskInboxSlideOver } from "@/components/messages/task-inbox-slide-over";
+import { OverflowTabBar } from "@/components/overflow-tab-bar";
 
 const COLUMN_IDS = new Set<string>(SPRINT_BOARD_COLUMNS.map((c) => c.id));
 
@@ -110,6 +111,7 @@ export function CompletedSprintsTab({
   const liveTasks = storeProjectId === projectId && storeTasks.length > 0 ? storeTasks : initialTasks;
   const [reviewSprint, setReviewSprint] = useState<SprintDTO | null>(null);
   const [planningSprint, setPlanningSprint] = useState<SprintDTO | null>(null);
+  const [docsSprint, setDocsSprint] = useState<SprintDTO | null>(null);
   const [openTask, setOpenTask] = useState<{ id: string; title: string } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -126,6 +128,11 @@ export function CompletedSprintsTab({
 
   const closePlanning = useCallback(() => {
     setPlanningSprint(null);
+    router.refresh();
+  }, [router]);
+
+  const closeDocs = useCallback(() => {
+    setDocsSprint(null);
     router.refresh();
   }, [router]);
 
@@ -336,7 +343,7 @@ export function CompletedSprintsTab({
         onDragCancel={handleDragCancel}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-4">
+        <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overscroll-x-contain pb-4">
           {SPRINT_BOARD_COLUMNS.map((column) => {
             const cards = byColumn[column.id].map((sprint) => {
               const items = tasksForSprint(sprint.id);
@@ -355,6 +362,7 @@ export function CompletedSprintsTab({
                   }
                   onPlan={() => setPlanningSprint(sprint)}
                   onReview={() => setReviewSprint(sprint)}
+                  onDocs={() => setDocsSprint(sprint)}
                   onDelete={() => setDeletingSprint(sprint)}
                   onOpenTask={(task) =>
                     setOpenTask({ id: task.taskId, title: task.title })
@@ -440,6 +448,13 @@ export function CompletedSprintsTab({
         />
       </NoteSlideOver>
     ) : null}
+    {docsSprint ? (
+      <ClosedSprintDocs
+        projectId={projectId}
+        sprint={docsSprint}
+        onClose={closeDocs}
+      />
+    ) : null}
     {planningSprint ? (
       <NoteSlideOver
         title={`${planningSprint.name} planning`}
@@ -461,6 +476,71 @@ export function CompletedSprintsTab({
   );
 }
 
+type SprintDocKind = "planning" | "review";
+
+/**
+ * A finished sprint's planning and review share one panel. Tabs switch between
+ * them so neither document is buried under the other.
+ */
+function ClosedSprintDocs({
+  projectId,
+  sprint,
+  onClose,
+}: {
+  projectId: string;
+  sprint: SprintDTO;
+  onClose: () => void;
+}) {
+  const [kind, setKind] = useState<SprintDocKind>("planning");
+
+  return (
+    <NoteSlideOver
+      title={sprint.name}
+      onClose={onClose}
+      bodyClassName="flex flex-col overflow-hidden"
+    >
+      <div className="shrink-0 border-b border-border px-app py-2">
+        <OverflowTabBar
+          items={[
+            { id: "planning", label: "Planning" },
+            { id: "review", label: "Review" },
+          ]}
+          value={kind}
+          onChange={setKind}
+          justify="start"
+        />
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {kind === "planning" ? (
+          <NoteFullScreenCreate
+            key={`${sprint.id}-planning`}
+            projectId={projectId}
+            createTypes={["SPRINT_PLANNING"]}
+            initialTitle={`${sprint.name} planning`}
+            sprintId={sprint.id}
+            sprintStatus={sprint.status}
+            autoFocusTitle={false}
+            saveInHeader={false}
+            onCreated={() => {}}
+          />
+        ) : (
+          <NoteFullScreenCreate
+            key={`${sprint.id}-review`}
+            projectId={projectId}
+            createTypes={["SPRINT_REVIEW"]}
+            initialTitle={`${sprint.name} review`}
+            sprintId={sprint.id}
+            sprintStatus={sprint.status}
+            autoFocusTitle={false}
+            saveInHeader={false}
+            onCreated={() => {}}
+          />
+        )}
+      </div>
+    </NoteSlideOver>
+  );
+}
+
 function SprintColumn({
   column,
   sprints,
@@ -479,7 +559,8 @@ function SprintColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex w-[min(100%,18rem)] shrink-0 flex-col rounded-lg border border-border/50 bg-muted/30 lg:min-h-0 lg:flex-1 lg:basis-0",
+        // Matches the kanban column width so both boards read as one system.
+        "flex w-[min(100%,18rem)] shrink-0 flex-col rounded-lg border border-border/50 bg-muted/30 lg:min-h-0 lg:w-[400px]",
         isOver && !dropBlocked && "border-success/60 bg-success/5",
         isOver && dropBlocked && "border-destructive/50 bg-destructive/5",
       )}
@@ -510,6 +591,7 @@ function SprintBoardCard({
   onToggle,
   onPlan,
   onReview,
+  onDocs,
   onDelete,
   onOpenTask,
 }: {
@@ -522,6 +604,7 @@ function SprintBoardCard({
   onToggle: () => void;
   onPlan: () => void;
   onReview: () => void;
+  onDocs: () => void;
   onDelete: () => void;
   onOpenTask: (task: SprintSnapshotTask) => void;
 }) {
@@ -562,12 +645,22 @@ function SprintBoardCard({
               <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onClick={onPlan}>
-                Sprint planning
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onReview}>
-                Sprint review
-              </DropdownMenuItem>
+              {/* A finished sprint is read as a pair — the plan and how it
+                  actually went — so both open together. */}
+              {isClosedSprint(sprint.status) ? (
+                <DropdownMenuItem onClick={onDocs}>
+                  Sprint documents
+                </DropdownMenuItem>
+              ) : (
+                <>
+                  <DropdownMenuItem onClick={onPlan}>
+                    Sprint planning
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onReview}>
+                    Sprint review
+                  </DropdownMenuItem>
+                </>
+              )}
               {canManage && isProjectActive ? (
                 <DropdownMenuItem
                   variant="destructive"

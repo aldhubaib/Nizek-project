@@ -8,6 +8,14 @@ import {
   subscriptionToken,
   isCentrifugoConfigured,
 } from "@/lib/centrifugo";
+import {
+  canAccessClientConversation,
+  CLIENT_CONVERSATION_KIND,
+} from "@/lib/client-chat";
+import {
+  ANNOUNCEMENTS_CONVERSATION_ID,
+  canReadAnnouncements,
+} from "@/lib/announcements";
 
 export const runtime = "nodejs";
 
@@ -45,13 +53,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Realtime disabled" }, { status: 503 });
   }
 
-  let memberId: string;
+  let user: Awaited<ReturnType<typeof requireUser>>;
   try {
-    const user = await requireUser();
-    memberId = user.id;
+    user = await requireUser();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const memberId = user.id;
 
   const body = (await request.json().catch(() => ({}))) as {
     channel?: string;
@@ -72,8 +80,9 @@ export async function POST(request: NextRequest) {
   const cacheKey = `${memberId}:${channel}`;
   let allowed = getCachedAccess(cacheKey);
   if (allowed === undefined) {
-    allowed = await canSubscribe(channel, memberId);
-    setCachedAccess(cacheKey, allowed);
+    allowed = await canSubscribe(channel, user);
+    // Only cache allow — a deny can flip after joining a client room or a deploy.
+    if (allowed) setCachedAccess(cacheKey, true);
   }
   if (!allowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -82,7 +91,11 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ token: subscriptionToken(memberId, channel) });
 }
 
-async function canSubscribe(channel: string, memberId: string): Promise<boolean> {
+async function canSubscribe(
+  channel: string,
+  user: { id: string; systemRole: string },
+): Promise<boolean> {
+  const memberId = user.id;
   const [namespace, rest] = splitChannel(channel);
 
   switch (namespace) {
@@ -106,6 +119,20 @@ async function canSubscribe(channel: string, memberId: string): Promise<boolean>
       return hasProjectAccess(task.projectId);
     }
     case "conv": {
+      if (rest === ANNOUNCEMENTS_CONVERSATION_ID) {
+        return canReadAnnouncements(user);
+      }
+      const convo = await prisma.conversation.findUnique({
+        where: { id: rest },
+        select: { kind: true },
+      });
+      if (!convo) return false;
+      // Client rooms: anyone who can open the thread (participant, curated
+      // staff, or admin) must be on the realtime channel for typing/presence.
+      if (convo.kind === CLIENT_CONVERSATION_KIND) {
+        const access = await canAccessClientConversation(rest, user);
+        return access.ok;
+      }
       const participant = await prisma.conversationParticipant.findFirst({
         where: { conversationId: rest, memberId },
         select: { id: true },

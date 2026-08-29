@@ -24,7 +24,7 @@ export function TaskCommentCard({
 
   return (
     <>
-      <div className="w-full overflow-hidden rounded-xl border border-orange/35 bg-card/95 shadow-sm ring-1 ring-inset ring-orange/20">
+      <div className="w-full rounded-xl border border-orange/35 bg-card/95 shadow-sm ring-1 ring-inset ring-orange/20">
         <div className="h-0.5 w-full bg-orange/70" />
         <div className="space-y-3 p-3.5">
           <div className="flex items-start gap-s">

@@ -47,6 +47,7 @@ export function NoteFullScreenCreate({
   canEditSprintDoc,
   onCancel,
   saveInHeader = true,
+  autoFocusTitle = true,
   currentUser,
 }: {
   projectId: string;
@@ -65,6 +66,8 @@ export function NoteFullScreenCreate({
   onCancel?: () => void;
   /** Portal Save into the shell header. Turn off when this form sits under an overlay that covers that slot. */
   saveInHeader?: boolean;
+  /** Turn off when two documents share a view, so neither grabs the caret. */
+  autoFocusTitle?: boolean;
   currentUser?: { id: string; name: string | null; imageUrl: string | null } | null;
 }) {
   const [title, setTitle] = useState(initialTitle);
@@ -347,7 +350,7 @@ export function NoteFullScreenCreate({
                 : "mb-4 text-m font-bold",
               planningLocked && "pointer-events-none",
             )}
-            autoFocus={!planningLocked}
+            autoFocus={autoFocusTitle && !planningLocked}
           />
 
           {isSprintDoc ? <SprintDocDashboard tasks={sprintTasks} review={isSprintReview} /> : null}

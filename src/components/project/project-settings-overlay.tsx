@@ -103,7 +103,13 @@ export function ProjectSettingsOverlay({
 
   useEffect(() => {
     void getRoles()
-      .then((rows) => setRoles(rows.map((r) => ({ id: r.id, name: r.name }))))
+      .then((rows) =>
+        setRoles(
+          rows
+            .filter((r) => !r.isClient)
+            .map((r) => ({ id: r.id, name: r.name })),
+        ),
+      )
       .catch(() => {});
   }, []);
 

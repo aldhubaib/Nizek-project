@@ -42,17 +42,19 @@ import {
   type ProofBypassPayload,
 } from "@/lib/proof-bypass-payload";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { plainTextExcerpt } from "@/lib/html-annotate";
 import { ALL_MENTION_ID, ALL_MENTION_NAME } from "@/lib/mentions";
 import {
   broadcast,
+  broadcastEphemeral,
   publish,
   taskChannel,
   projectChannel,
   conversationChannel,
   userChannel,
 } from "@/lib/centrifugo";
-import { NOTIFICATION_READ } from "@/lib/channels";
+import { NOTIFICATION_READ, TYPING_EVENT } from "@/lib/channels";
 import { threadPushTag } from "@/lib/notification-read";
 import {
   countInboxMessageUnreads,
@@ -61,8 +63,20 @@ import {
 import {
   canAccessClientConversation,
   CLIENT_CONVERSATION_KIND,
+  ensureClientInbox,
   isClientUser,
 } from "@/lib/client-chat";
+import {
+  ANNOUNCEMENTS_CONVERSATION_ID,
+  ANNOUNCEMENTS_CONVERSATION_KIND,
+  ANNOUNCEMENTS_SUBTITLE,
+  ANNOUNCEMENTS_THREAD_ID,
+  ANNOUNCEMENTS_TITLE,
+  announcementAudienceIds,
+  canPostAnnouncement,
+  canReadAnnouncements,
+  getOrCreateAnnouncementsConversation,
+} from "@/lib/announcements";
 
 const CONTRACT_SELECT = {
   id: true,
@@ -242,7 +256,7 @@ type SendMessageInput = {
 
 // ─── Thread messages (paginated) ─────────────────────────────────────────────
 
-const THREAD_PAGE_SIZE = 50;
+const THREAD_PAGE_SIZE = 25;
 
 async function resolveThreadUnreadCursor(
   userId: string,
@@ -383,7 +397,9 @@ export async function getThreadMessages(input: {
       select: { id: true, kind: true },
     });
     if (!convoMeta) throw new Error("Permission denied");
-    if (convoMeta.kind === CLIENT_CONVERSATION_KIND) {
+    if (convoMeta.kind === ANNOUNCEMENTS_CONVERSATION_KIND) {
+      if (!canReadAnnouncements(user)) throw new Error("Permission denied");
+    } else if (convoMeta.kind === CLIENT_CONVERSATION_KIND) {
       const access = await canAccessClientConversation(input.conversationId, user);
       if (!access.ok) throw new Error("Permission denied");
     } else {
@@ -768,6 +784,10 @@ async function filterAccessibleMessageIds(
         if (clientOk.get(m.conversationId)) allowed.add(m.id);
         continue;
       }
+      if (convo.kind === ANNOUNCEMENTS_CONVERSATION_KIND) {
+        if (!client) allowed.add(m.id);
+        continue;
+      }
       if (partSet.has(m.conversationId)) allowed.add(m.id);
       continue;
     }
@@ -809,6 +829,120 @@ export async function getProjectTaskRefs(
   }));
 }
 
+async function fanOutMessageSideEffects(input: {
+  conversationId: string | null;
+  projectId: string | null;
+  taskId: string | null;
+  userId: string;
+  isClientRoom: boolean;
+  participantIds: string[];
+  uniqueRecipients: string[];
+  notifyType: string;
+  title: string;
+  notifBody: string;
+  url: string;
+  threadId: string;
+  authorName: string;
+  preview: string;
+  notifIcon: string | undefined;
+  messageCreatedAt: Date;
+}) {
+  const {
+    conversationId,
+    projectId,
+    taskId,
+    userId,
+    isClientRoom,
+    participantIds,
+    uniqueRecipients,
+    notifyType,
+    title,
+    notifBody,
+    url,
+    threadId,
+    authorName,
+    preview,
+    notifIcon,
+    messageCreatedAt,
+  } = input;
+
+  if (uniqueRecipients.length > 0) {
+    const pushTag = `thread-${threadId}`;
+    const rows = await createAndPublishNotifications({
+      recipientIds: uniqueRecipients,
+      type: notifyType,
+      title,
+      body: notifBody,
+      linkUrl: url,
+      tag: pushTag,
+      threadKey: threadId,
+      authorId: userId,
+    });
+    if (rows.length > 0) {
+      void enqueuePush(
+        rows.map((r) => r.recipientId),
+        {
+          title,
+          body: notifBody,
+          url,
+          tag: pushTag,
+          type: notifyType,
+          icon: notifIcon,
+        },
+      );
+    }
+  }
+
+  if (conversationId) {
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { updatedAt: new Date() },
+    });
+  }
+
+  let inboxTargets: string[];
+  if (conversationId) {
+    inboxTargets = participantIds;
+  } else if (projectId && !taskId) {
+    const members = await prisma.projectMember.findMany({
+      where: { projectId },
+      select: { userId: true },
+    });
+    inboxTargets = members.map((m) => m.userId);
+    if (!inboxTargets.includes(userId)) inboxTargets.push(userId);
+  } else {
+    inboxTargets = [...uniqueRecipients, userId];
+  }
+
+  const cursorTargets = [...new Set(inboxTargets)].filter((id) => id !== userId);
+  if (
+    cursorTargets.length > 0 &&
+    (conversationId || (projectId && !taskId))
+  ) {
+    await prisma.chatReadCursor.createMany({
+      data: cursorTargets.map((id) => ({
+        userId: id,
+        threadId,
+        lastReadAt: new Date(messageCreatedAt.getTime() - 1),
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  void broadcast([...new Set(inboxTargets)].map(userChannel), {
+    type: "inbox",
+    threadId,
+    projectId,
+    taskId,
+    conversationId,
+    kind: isClientRoom ? "client" : conversationId ? "direct" : "project",
+    authorId: userId,
+    lastAuthor: authorName,
+    lastMessage: preview,
+    lastAt: new Date().toISOString(),
+  });
+}
+
 // ─── Send ────────────────────────────────────────────────────────────────────
 
 export async function sendMessage(
@@ -834,6 +968,8 @@ export async function sendMessage(
     let groupName = "";
     let participantIds: string[] = [];
     let isClientRoom = false;
+    /** Set only for announcement replies — narrows who gets notified. */
+    let announcementReplyAuthorId: string | null = null;
     let noteCommentThreadId: string | null = null;
     let taskHighlightThreadId: string | null = null;
     let mentionProjectId: string | null = null;
@@ -853,7 +989,28 @@ export async function sendMessage(
       });
       if (!convoMeta) throw new Error("Conversation not found");
 
-      if (convoMeta.kind === CLIENT_CONVERSATION_KIND) {
+      if (convoMeta.kind === ANNOUNCEMENTS_CONVERSATION_KIND) {
+        if (!canReadAnnouncements(user)) throw new Error("Conversation not found");
+        if (input.replyToId) {
+          const parent = await prisma.message.findFirst({
+            where: { id: input.replyToId, conversationId },
+            select: { id: true, authorId: true },
+          });
+          if (!parent) throw new Error("You can only reply inside this channel");
+          // A reply is a conversation with the thread, not company-wide news:
+          // it pings the author and anyone named, never all of staff.
+          announcementReplyAuthorId = parent.authorId;
+        } else if (!canPostAnnouncement(user)) {
+          throw new Error(
+            "Only admins can post announcements — you can reply to one.",
+          );
+        }
+        participantIds = await announcementAudienceIds();
+        if (!participantIds.includes(user.id)) participantIds.push(user.id);
+        groupName = ANNOUNCEMENTS_TITLE;
+        taskId = null;
+        projectId = null;
+      } else if (convoMeta.kind === CLIENT_CONVERSATION_KIND) {
         const access = await canAccessClientConversation(conversationId, user);
         if (!access.ok || !access.canPost) {
           throw new Error(
@@ -1155,7 +1312,11 @@ export async function sendMessage(
     if (conversationId) {
       url = `/dashboard/messages/conv-${conversationId}`;
       threadId = `conv-${conversationId}`;
-      recipients = participantIds.filter((id) => id !== user.id);
+      recipients = announcementReplyAuthorId
+        ? [...new Set([announcementReplyAuthorId, ...mentionedIds])].filter(
+            (id) => id !== user.id,
+          )
+        : participantIds.filter((id) => id !== user.id);
     } else if (taskId) {
       url = `/dashboard/projects/${projectId}/tasks/${taskId}`;
       threadId = `task-${taskId}`;
@@ -1196,108 +1357,99 @@ export async function sendMessage(
           : (projectLogoUrl ?? message.author.imageUrl)) ?? undefined;
 
     const uniqueRecipients = [...new Set(recipients)];
-    if (uniqueRecipients.length > 0) {
-      // Thread-scoped tag: successive messages in the same thread replace the
-      // OS banner (WhatsApp behavior) and reading the thread dismisses it
-      // everywhere via NotificationSync.
-      const pushTag = `thread-${threadId}`;
-      // Create rows + publish per-recipient `notification.new` so bells update
-      // live without a refetch. Returns only recipients who pass preference /
-      // thread-mute filtering — push MUST use the same filtered list.
-      const rows = await createAndPublishNotifications({
-        recipientIds: uniqueRecipients,
-        type: notifyType,
-        title,
-        body: notifBody,
-        linkUrl: url,
-        tag: pushTag,
-        threadKey: threadId,
-        authorId: user.id,
-      });
-      // OS-level web push — enqueued to background worker.
-      if (rows.length > 0) {
-        void enqueuePush(
-          rows.map((r) => r.recipientId),
-          {
-            title,
-            body: notifBody,
-            url,
-            tag: pushTag,
-            type: notifyType,
-            icon: notifIcon,
-          },
-        );
-      }
-    }
 
-    // Live delivery: thread channels for open views, user channels for inbox.
-    // Never publish client-room messages onto the internal project channel.
+    // Live delivery first so the sender sees their own bubble without waiting
+    // on notifications / unread cursors.
     const threadChannels: string[] = [];
     if (taskId) threadChannels.push(taskChannel(taskId));
     if (projectId && !conversationId) threadChannels.push(projectChannel(projectId));
     if (conversationId) threadChannels.push(conversationChannel(conversationId));
     void broadcast(threadChannels, { type: "message.new", message: dto });
 
-    if (conversationId) {
-      await prisma.conversation.update({
-        where: { id: conversationId },
-        data: { updatedAt: new Date() },
+    after(() => {
+      void fanOutMessageSideEffects({
+        conversationId,
+        projectId,
+        taskId,
+        userId: user.id,
+        isClientRoom,
+        participantIds,
+        uniqueRecipients,
+        notifyType,
+        title,
+        notifBody,
+        url,
+        threadId,
+        authorName,
+        preview,
+        notifIcon,
+        messageCreatedAt: message.createdAt,
+      }).catch((err) => {
+        console.error("[Send Message] fan-out failed", err);
       });
-    }
-
-    let inboxTargets: string[];
-    if (conversationId) {
-      inboxTargets = participantIds;
-    } else if (projectId && !taskId) {
-      // Project channels: every member needs a live inbox delta so unread
-      // badges update even when nobody was @mentioned.
-      const members = await prisma.projectMember.findMany({
-        where: { projectId },
-        select: { userId: true },
-      });
-      inboxTargets = members.map((m) => m.userId);
-      if (!inboxTargets.includes(user.id)) inboxTargets.push(user.id);
-    } else {
-      inboxTargets = [...uniqueRecipients, user.id];
-    }
-
-    const cursorTargets = [...new Set(inboxTargets)].filter(
-      (id) => id !== user.id,
-    );
-    if (
-      cursorTargets.length > 0 &&
-      (conversationId || (projectId && !taskId))
-    ) {
-      // First inbound message seeds lastReadAt just before this row so only
-      // this message (and later ones) count. skipDuplicates keeps an existing
-      // cursor — including mention-backfill — intact.
-      await prisma.chatReadCursor.createMany({
-        data: cursorTargets.map((id) => ({
-          userId: id,
-          threadId,
-          lastReadAt: new Date(message.createdAt.getTime() - 1),
-        })),
-        skipDuplicates: true,
-      });
-    }
-
-    void broadcast([...new Set(inboxTargets)].map(userChannel), {
-      type: "inbox",
-      threadId,
-      projectId,
-      taskId,
-      conversationId,
-      kind: isClientRoom ? "client" : conversationId ? "direct" : "project",
-      // Delta payload so the inbox sidebar can patch the row in place instead of
-      // refetching the whole RSC tree.
-      authorId: user.id,
-      lastAuthor: authorName,
-      lastMessage: preview,
-      lastAt: new Date().toISOString(),
     });
 
     return dto;
   });
+}
+
+/**
+ * Live "is typing…" for a chat channel. Published from the server so it works
+ * even when the browser cannot publish on the Centrifugo subscription
+ * (client rooms often fail that path). skip_history so it never replays.
+ */
+export async function publishTypingEvent(channel: string): Promise<void> {
+  const user = await requireUser();
+  const trimmed = channel.trim();
+  if (!trimmed) return;
+
+  const idx = trimmed.indexOf(":");
+  if (idx === -1) return;
+  const namespace = trimmed.slice(0, idx);
+  const rest = trimmed.slice(idx + 1);
+  if (!rest) return;
+
+  const extraUserChannels: string[] = [];
+
+  if (namespace === "conv") {
+    const convo = await prisma.conversation.findUnique({
+      where: { id: rest },
+      select: {
+        kind: true,
+        participants: { select: { memberId: true } },
+      },
+    });
+    if (!convo) return;
+    if (convo.kind === CLIENT_CONVERSATION_KIND) {
+      const access = await canAccessClientConversation(rest, user);
+      if (!access.ok || !access.canPost) return;
+    } else if (!convo.participants.some((p) => p.memberId === user.id)) {
+      return;
+    }
+    extraUserChannels.push(
+      ...convo.participants
+        .map((p) => p.memberId)
+        .filter((id) => id !== user.id)
+        .map(userChannel),
+    );
+  } else if (namespace === "project") {
+    if (isClientUser(user)) return;
+    if (!(await hasProjectAccess(rest))) return;
+  } else if (namespace === "task") {
+    if (isClientUser(user)) return;
+    const task = await prisma.task.findFirst({
+      where: { id: rest },
+      select: { projectId: true },
+    });
+    if (!task || !(await hasProjectAccess(task.projectId))) return;
+  } else {
+    return;
+  }
+
+  await broadcastEphemeral(
+    [trimmed, ...extraUserChannels],
+    { type: TYPING_EVENT, memberId: user.id, channel: trimmed },
+  );
 }
 
 // ─── Read state ───────────────────────────────────────────────────────────────
@@ -1478,7 +1630,10 @@ export async function toggleReaction(
     });
     if (!message) throw new Error("Message not found");
 
-    if (message.conversationId) {
+    if (message.conversationId === ANNOUNCEMENTS_CONVERSATION_ID) {
+      // No participant rows here — membership is every non-client user.
+      if (!canReadAnnouncements(user)) throw new Error("Permission denied");
+    } else if (message.conversationId) {
       const convo = await prisma.conversation.findFirst({
         where: {
           id: message.conversationId,
@@ -1569,7 +1724,7 @@ export async function deleteMessage(
 
 export type InboxThread = {
   id: string; // project-<id> | conv-<id>
-  kind: "project" | "direct" | "client";
+  kind: "project" | "direct" | "client" | "announcements";
   name: string;
   subtitle: string;
   projectId: string | null;
@@ -1595,31 +1750,38 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
 
   // Clients only see enabled client rooms they participate in.
   if (client) {
-    const conversations = await prisma.conversation.findMany({
-      where: {
-        kind: CLIENT_CONVERSATION_KIND,
-        participants: { some: { memberId: user.id } },
-        project: { clientChatEnabled: true },
-      },
-      orderBy: { updatedAt: "desc" },
-      take: 200,
-      include: {
-        project: {
-          select: {
-            id: true,
-            name: true,
-            logoUrl: true,
-            clientChatEnabled: true,
-            contracts: { select: CONTRACT_SELECT },
+    const loadClientConversations = () =>
+      prisma.conversation.findMany({
+        where: {
+          kind: CLIENT_CONVERSATION_KIND,
+          participants: { some: { memberId: user.id } },
+          project: { clientChatEnabled: true },
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 200,
+        include: {
+          project: {
+            select: {
+              id: true,
+              name: true,
+              logoUrl: true,
+              clientChatEnabled: true,
+              contracts: { select: CONTRACT_SELECT },
+            },
+          },
+          messages: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            include: { author: { select: { id: true, name: true, email: true } } },
           },
         },
-        messages: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
-          include: { author: { select: { id: true, name: true, email: true } } },
-        },
-      },
-    });
+      });
+
+    let conversations = await loadClientConversations();
+    if (conversations.length === 0) {
+      await ensureClientInbox(user.id);
+      conversations = await loadClientConversations();
+    }
 
     return conversations.map((c) => {
       const last = c.messages[0];
@@ -1628,7 +1790,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         id: `conv-${c.id}`,
         kind: "client" as const,
         name,
-        subtitle: "Client chat",
+        subtitle: "Chatting with Nizek",
         projectId: c.project?.id ?? null,
         conversationId: c.id,
         logoUrl: c.project?.logoUrl ?? null,
@@ -1891,11 +2053,55 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
   const noteConvIds = new Set(noteCommentConversations.map((c) => c.id));
   const uniqueDmThreads = dmThreads.filter((t) => !noteConvIds.has(t.conversationId!));
 
-  return [...projectThreads, ...clientThreads, ...noteCommentThreads, ...uniqueDmThreads].sort((a, b) => {
+  const sorted = [
+    ...projectThreads,
+    ...clientThreads,
+    ...noteCommentThreads,
+    ...uniqueDmThreads,
+  ].sort((a, b) => {
     const ta = a.lastAt ? new Date(a.lastAt).getTime() : 0;
     const tb = b.lastAt ? new Date(b.lastAt).getTime() : 0;
     return tb - ta;
   });
+
+  // Pinned: stays first no matter how long since the last announcement.
+  return [await buildAnnouncementsThread(unreadMap), ...sorted];
+}
+
+async function buildAnnouncementsThread(
+  unreadMap: Map<string, number>,
+): Promise<InboxThread> {
+  const [, last] = await Promise.all([
+    getOrCreateAnnouncementsConversation(),
+    prisma.message.findFirst({
+      where: { conversationId: ANNOUNCEMENTS_CONVERSATION_ID },
+      orderBy: { createdAt: "desc" },
+      select: {
+        body: true,
+        createdAt: true,
+        author: { select: { name: true, email: true } },
+      },
+    }),
+  ]);
+
+  return {
+    id: ANNOUNCEMENTS_THREAD_ID,
+    kind: "announcements",
+    name: ANNOUNCEMENTS_TITLE,
+    subtitle: ANNOUNCEMENTS_SUBTITLE,
+    projectId: null,
+    conversationId: ANNOUNCEMENTS_CONVERSATION_ID,
+    logoUrl: null,
+    peerImageUrl: null,
+    peerMemberIds: [],
+    lastMessage: last ? inboxPreview(last.body) : "No announcements yet",
+    lastAuthor: last ? (last.author.name ?? last.author.email) : "",
+    lastAt: last ? last.createdAt.toISOString() : "",
+    unread: unreadMap.get(ANNOUNCEMENTS_THREAD_ID) ?? 0,
+    avatar: generateColor(ANNOUNCEMENTS_TITLE),
+    initials: "A",
+    inactive: false,
+  };
 }
 
 // ─── Direct conversations ─────────────────────────────────────────────────────

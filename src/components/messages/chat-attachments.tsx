@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
 import {
@@ -12,10 +12,13 @@ import {
   FileAudio,
   FileVideo,
   File as FileIcon,
+  Pause,
   Play,
+  Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MessageAttachment } from "@/actions/messages";
+import { extractUrls } from "@/lib/link-preview";
 
 function formatBytes(bytes: number | null) {
   if (!bytes) return "";
@@ -34,6 +37,284 @@ function formatDuration(seconds: number) {
   const s = total % 60;
   if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function formatVoiceClock(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
+  const total = Math.max(0, Math.round(seconds));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+const VOICE_BARS = 40;
+
+function hashSeed(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** Stable fake waveform so a sent note looks like speech, not a flat line. */
+function seededPeaks(id: string): number[] {
+  let s = hashSeed(id);
+  const rand = () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 2 ** 32;
+  };
+  const peaks: number[] = [];
+  let envelope = 0.45;
+  for (let i = 0; i < VOICE_BARS; i++) {
+    envelope += (rand() - 0.48) * 0.28;
+    envelope = Math.min(0.95, Math.max(0.18, envelope));
+    const dip = rand() > 0.82 ? 0.12 + rand() * 0.2 : envelope;
+    peaks.push(Math.min(1, dip * (0.4 + rand() * 0.6)));
+  }
+  return peaks;
+}
+
+/** Only one voice note plays at a time — starting another stops the last. */
+let stopActiveVoice: (() => void) | null = null;
+
+function finiteDuration(el: HTMLAudioElement): number {
+  const d = el.duration;
+  if (Number.isFinite(d) && d > 0) return d;
+  if (el.seekable.length > 0) {
+    const end = el.seekable.end(el.seekable.length - 1);
+    if (Number.isFinite(end) && end > 0) return end;
+  }
+  return 0;
+}
+
+function VoiceWaveform({
+  peaks,
+  className,
+}: {
+  peaks: number[];
+  className: string;
+}) {
+  return (
+    <div className="flex h-10 w-full items-center gap-[2px]">
+      {peaks.map((peak, i) => (
+        <span
+          key={i}
+          className={cn("min-w-[2px] flex-1 rounded-full", className)}
+          style={{ height: `${10 + Math.round(peak * 20)}px` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function VoiceNotePlayer({
+  attachment,
+  mine,
+  timeLabel,
+  menu,
+}: {
+  attachment: MessageAttachment;
+  mine: boolean;
+  timeLabel?: string;
+  menu?: React.ReactNode;
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const probingRef = useRef(false);
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [current, setCurrent] = useState(0);
+  const peaks = useMemo(
+    () => seededPeaks(attachment.id || attachment.url),
+    [attachment.id, attachment.url],
+  );
+
+  const captureDuration = useCallback((el: HTMLAudioElement) => {
+    const d = finiteDuration(el);
+    if (d > 0) setDuration(d);
+  }, []);
+
+  const stop = useCallback(() => {
+    const el = audioRef.current;
+    if (el) {
+      el.pause();
+      el.currentTime = 0;
+    }
+    setPlaying(false);
+    setCurrent(0);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (stopActiveVoice === stop) stopActiveVoice = null;
+      audioRef.current?.pause();
+    };
+  }, [stop]);
+
+  useEffect(() => {
+    if (!playing) return;
+    let raf = 0;
+    const tick = () => {
+      const el = audioRef.current;
+      if (el && !probingRef.current) {
+        setCurrent(el.currentTime);
+        captureDuration(el);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, captureDuration]);
+
+  const toggle = useCallback(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (playing) {
+      el.pause();
+      setPlaying(false);
+      return;
+    }
+    if (stopActiveVoice && stopActiveVoice !== stop) stopActiveVoice();
+    stopActiveVoice = stop;
+    el.play()
+      .then(() => setPlaying(true))
+      .catch(() => setPlaying(false));
+  }, [playing, stop]);
+
+  const seekTo = useCallback(
+    (clientX: number, target: HTMLElement) => {
+      const el = audioRef.current;
+      if (!el) return;
+      const d = duration || finiteDuration(el);
+      if (d <= 0) return;
+      const rect = target.getBoundingClientRect();
+      const pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+      el.currentTime = pct * d;
+      setCurrent(el.currentTime);
+      if (d !== duration) setDuration(d);
+    },
+    [duration],
+  );
+
+  const progress = duration > 0 ? Math.min(1, current / duration) : 0;
+  const remainingClip = `${((1 - progress) * 100).toFixed(2)}%`;
+
+  return (
+    <div className="group relative flex max-w-full items-center gap-1.5">
+      <audio
+        ref={audioRef}
+        src={attachment.url}
+        preload="metadata"
+        className="hidden"
+        onLoadedMetadata={(e) => {
+          const el = e.currentTarget;
+          const d = finiteDuration(el);
+          if (d > 0) {
+            setDuration(d);
+            return;
+          }
+          // Chrome reports Infinity for some WebM notes until you seek past the end.
+          probingRef.current = true;
+          const prev = el.currentTime;
+          el.currentTime = 1e101;
+          const onUpdate = () => {
+            el.removeEventListener("timeupdate", onUpdate);
+            const found = finiteDuration(el);
+            el.currentTime = prev;
+            probingRef.current = false;
+            if (found > 0) setDuration(found);
+          };
+          el.addEventListener("timeupdate", onUpdate);
+        }}
+        onDurationChange={(e) => captureDuration(e.currentTarget)}
+        onEnded={stop}
+        onPause={() => {
+          if (!probingRef.current) setPlaying(false);
+        }}
+      />
+      <div
+        className={cn(
+          "flex h-14 w-[min(100%,18.5rem)] items-center rounded-full ps-1.5 pe-3 shadow-md",
+          mine
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-foreground",
+        )}
+      >
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggle();
+          }}
+          aria-label={playing ? "Pause voice message" : "Play voice message"}
+          className={cn(
+            "grid size-10 shrink-0 place-items-center rounded-full transition-colors",
+            mine ? "bg-black/20 hover:bg-black/30" : "bg-foreground/10 hover:bg-foreground/15",
+          )}
+        >
+          {playing ? (
+            <Pause className="size-4 fill-current" />
+          ) : (
+            <Play className="size-4 fill-current ps-px" />
+          )}
+        </button>
+        <button
+          type="button"
+          className="min-w-[7rem] flex-1 px-3"
+          aria-label="Seek"
+          onClick={(e) => {
+            e.stopPropagation();
+            seekTo(e.clientX, e.currentTarget);
+          }}
+        >
+          <span className="relative block">
+            <VoiceWaveform
+              peaks={peaks}
+              className={mine ? "bg-primary-foreground/30" : "bg-foreground/25"}
+            />
+            <span
+              className="absolute inset-0 overflow-hidden"
+              style={{ clipPath: `inset(0 ${remainingClip} 0 0)` }}
+            >
+              <VoiceWaveform
+                peaks={peaks}
+                className={mine ? "bg-white" : "bg-foreground"}
+              />
+            </span>
+            <span
+              aria-hidden
+              className={cn(
+                "absolute top-1/2 size-3 -translate-y-1/2 rounded-full shadow-sm",
+                mine ? "bg-white" : "bg-foreground",
+              )}
+              style={{
+                left: `calc(${progress * 100}% - 6px)`,
+              }}
+            />
+          </span>
+        </button>
+        <span className="w-11 shrink-0 text-end font-mono text-xs font-medium tabular-nums">
+          {formatVoiceClock(playing || current > 0 ? current : duration)}
+        </span>
+        {menu && (
+          <div
+            className={cn(
+              "shrink-0 [&_button]:!grid [&_button]:size-8 [&_button]:opacity-100",
+              mine ? "text-primary-foreground" : "text-foreground",
+            )}
+          >
+            {menu}
+          </div>
+        )}
+      </div>
+      {timeLabel && (
+        <span className="shrink-0 text-xs leading-none text-muted-foreground">
+          {timeLabel}
+        </span>
+      )}
+    </div>
+  );
 }
 
 function fileIconFor(a: MessageAttachment) {
@@ -80,24 +361,30 @@ export function Lightbox({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        onClose();
+        return;
+      }
       if (e.key === "ArrowRight") onIndex((index + 1) % images.length);
       if (e.key === "ArrowLeft")
         onIndex((index - 1 + images.length) % images.length);
     };
-    window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
     return () => {
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, true);
     };
   }, [index, images.length, onClose, onIndex]);
 
   const current = images[index];
   if (!current) return null;
 
-  return (
+  return createPortal(
     <div
       data-scroll-lock-root
-      className="fixed inset-0 z-50 flex flex-col bg-black/90 backdrop-blur-sm"
+      className="fixed inset-0 z-[950] flex flex-col bg-black"
+      style={{ zIndex: 950 }}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -174,7 +461,8 @@ export function Lightbox({
           </button>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -202,16 +490,20 @@ function VideoOverlay({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      onClose();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
 
   return createPortal(
     <div
       data-scroll-lock-root
-      className="fixed inset-0 z-[250] flex flex-col bg-black/90"
+      className="fixed inset-0 z-[950] flex flex-col bg-black"
+      style={{ zIndex: 950 }}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -373,7 +665,7 @@ export function AttachmentBubble({
         <button
           type="button"
           onClick={() => onOpenImage?.(attachment)}
-          className="block w-full"
+          className="relative block min-h-40 w-full max-h-80 overflow-hidden bg-surface"
           aria-label={`Open ${attachment.name}`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -381,10 +673,7 @@ export function AttachmentBubble({
             src={attachment.url}
             alt={attachment.name}
             loading="lazy"
-            className={cn(
-              "block h-auto max-h-80 object-cover transition-transform group-hover:scale-[1.02]",
-              embedded ? "w-full" : "w-auto max-w-full object-contain",
-            )}
+            className="block h-auto max-h-80 w-full object-contain"
           />
         </button>
         {menu && (
@@ -419,21 +708,12 @@ export function AttachmentBubble({
 
   if (isVoiceAttachment(attachment)) {
     return (
-      <div className="group flex w-full max-w-md items-center gap-2 rounded-xl border border-border/60 bg-surface/60 p-2">
-        <audio
-          src={attachment.url}
-          controls
-          preload="metadata"
-          className="h-9 min-w-0 flex-1"
-          style={{ colorScheme: "light" }}
-        />
-        {timeLabel && (
-          <span className="shrink-0 pe-1 text-xs leading-none text-muted-foreground">
-            {timeLabel}
-          </span>
-        )}
-        {menu && <div className="shrink-0">{menu}</div>}
-      </div>
+      <VoiceNotePlayer
+        attachment={attachment}
+        mine={mine}
+        timeLabel={timeLabel}
+        menu={menu}
+      />
     );
   }
 
@@ -494,118 +774,305 @@ export function AttachmentBubble({
   );
 }
 
-type Filter = "all" | "image" | "video" | "audio" | "file";
+type Tab = "media" | "docs" | "links" | "audio";
 
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "image", label: "Images" },
-  { id: "video", label: "Videos" },
+const TABS: { id: Tab; label: string }[] = [
+  { id: "media", label: "Media" },
+  { id: "docs", label: "Docs" },
+  { id: "links", label: "Links" },
   { id: "audio", label: "Audio" },
-  { id: "file", label: "Files" },
 ];
+
+type PanelMessage = {
+  authorName: string;
+  createdAt: string;
+  body?: string;
+  attachments: MessageAttachment[];
+};
+
+type FileRow = {
+  att: MessageAttachment;
+  authorName: string;
+  createdAt: string;
+  kind: Exclude<Tab, "links">;
+};
+
+function attachmentKind(a: MessageAttachment): FileRow["kind"] {
+  const ct = a.contentType ?? "";
+  if (a.isImage) return "media";
+  if (ct.startsWith("video/")) return "media";
+  if (ct.startsWith("audio/")) return "audio";
+  return "docs";
+}
+
+function groupByMonth<T extends { createdAt: string }>(rows: T[]) {
+  const groups: { key: string; label: string; items: T[] }[] = [];
+  const now = new Date();
+  for (const row of rows) {
+    const d = new Date(row.createdAt);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const last = groups[groups.length - 1];
+    if (last?.key === key) {
+      last.items.push(row);
+      continue;
+    }
+    const label =
+      d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+        ? "This month"
+        : d.toLocaleDateString([], { month: "long", year: "numeric" });
+    groups.push({ key, label, items: [row] });
+  }
+  return groups;
+}
+
+function hostnameOf(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
 
 export function FilesPanel({
   messages,
-  onClose,
 }: {
-  messages: { authorName: string; createdAt: string; attachments: MessageAttachment[] }[];
-  onClose: () => void;
+  messages: PanelMessage[];
 }) {
-  const [filter, setFilter] = useState<Filter>("all");
+  const [tab, setTab] = useState<Tab>("media");
+  const [playingVideo, setPlayingVideo] = useState<MessageAttachment | null>(null);
   const lb = useLightbox();
 
-  const items = useMemo(() => {
-    const out: {
-      att: MessageAttachment;
-      authorName: string;
-      createdAt: string;
-    }[] = [];
+  const files = useMemo(() => {
+    const out: FileRow[] = [];
     for (const m of messages) {
       for (const a of m.attachments) {
-        const ct = a.contentType ?? "";
-        const kind: Filter = a.isImage
-          ? "image"
-          : ct.startsWith("video/")
-            ? "video"
-            : ct.startsWith("audio/")
-              ? "audio"
-              : "file";
-        if (filter === "all" || filter === kind) {
-          out.push({ att: a, authorName: m.authorName, createdAt: m.createdAt });
-        }
+        out.push({
+          att: a,
+          authorName: m.authorName,
+          createdAt: m.createdAt,
+          kind: attachmentKind(a),
+        });
       }
     }
     return out.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [messages, filter]);
+  }, [messages]);
 
-  const images = items.filter((i) => i.att.isImage).map((i) => i.att);
+  const media = useMemo(() => files.filter((i) => i.kind === "media"), [files]);
+  const docs = useMemo(() => files.filter((i) => i.kind === "docs"), [files]);
+  const audio = useMemo(() => files.filter((i) => i.kind === "audio"), [files]);
+  const images = useMemo(
+    () => media.filter((i) => i.att.isImage).map((i) => i.att),
+    [media],
+  );
+
+  const links = useMemo(() => {
+    const out: { url: string; authorName: string; createdAt: string }[] = [];
+    const seen = new Set<string>();
+    for (const m of messages) {
+      for (const url of extractUrls(m.body ?? "")) {
+        const key = `${url}|${m.createdAt}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ url, authorName: m.authorName, createdAt: m.createdAt });
+      }
+    }
+    return out.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }, [messages]);
+
+  const emptyLabel =
+    tab === "media"
+      ? "No media"
+      : tab === "docs"
+        ? "No documents"
+        : tab === "links"
+          ? "No links"
+          : "No audio";
+
+  const isEmpty =
+    tab === "media"
+      ? media.length === 0
+      : tab === "docs"
+        ? docs.length === 0
+        : tab === "links"
+          ? links.length === 0
+          : audio.length === 0;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col border-s border-border/60">
-      <div className="flex app-top-bar-tall shrink-0 items-center justify-between border-b border-border/60 px-4">
-        <span className="text-s font-semibold">Shared Files</span>
-        <button
-          type="button"
-          onClick={onClose}
-          className="grid size-8 place-items-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
-          aria-label="Close"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="flex shrink-0 items-center gap-1 border-b border-border/60 px-4 py-2">
-        {FILTERS.map((f) => (
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-background">
+      <div className="flex shrink-0 border-b border-border/60">
+        {TABS.map((t) => (
           <button
-            key={f.id}
-            onClick={() => setFilter(f.id)}
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
             className={cn(
-              "rounded-full px-3 py-1.5 text-s transition-colors",
-              filter === f.id
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-surface hover:text-foreground",
+              "flex-1 border-b-2 py-2.5 text-s font-medium transition-colors",
+              tab === t.id
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
-            {f.label}
+            {t.label}
           </button>
         ))}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
-        {items.length === 0 ? (
-          <div className="py-16 text-center text-s text-muted-foreground">
-            No {filter === "all" ? "files" : filter + "s"} shared yet.
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        {isEmpty ? (
+          <div className="px-6 py-16 text-center text-s text-muted-foreground">
+            {emptyLabel} shared yet.
           </div>
-        ) : filter === "image" ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {items.map(({ att }) => (
-              <button
-                key={att.id}
-                onClick={() => lb.open(att, images)}
-                className="group relative overflow-hidden rounded-lg bg-surface"
-                style={{ aspectRatio: "1 / 1" }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={att.url}
-                  alt={att.name}
-                  loading="lazy"
-                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                />
-              </button>
+        ) : tab === "media" ? (
+          <div className="flex flex-col">
+            {groupByMonth(media).map((g) => (
+              <section key={g.key}>
+                <h3 className="px-3 py-2 text-s font-medium text-muted-foreground">
+                  {g.label}
+                </h3>
+                <div className="grid grid-cols-3 gap-0.5">
+                  {g.items.map(({ att }) => {
+                    const video = isVideoAttachment(att);
+                    return (
+                      <button
+                        key={att.id}
+                        type="button"
+                        onClick={() =>
+                          video
+                            ? setPlayingVideo(att)
+                            : lb.open(att, images)
+                        }
+                        className="relative aspect-square overflow-hidden bg-surface"
+                      >
+                        {video ? (
+                          <>
+                            <video
+                              src={att.url}
+                              className="h-full w-full object-cover"
+                              muted
+                              playsInline
+                              preload="metadata"
+                            />
+                            <span className="absolute inset-0 grid place-items-center bg-black/25">
+                              <Play className="h-7 w-7 fill-white text-white" />
+                            </span>
+                          </>
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={att.url}
+                            alt={att.name}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
             ))}
           </div>
+        ) : tab === "links" ? (
+          <ul className="flex flex-col">
+            {groupByMonth(links).map((g) => (
+              <li key={g.key}>
+                <h3 className="px-4 py-2 text-s font-medium text-muted-foreground">
+                  {g.label}
+                </h3>
+                <ul>
+                  {g.items.map((item) => (
+                    <li key={`${item.url}-${item.createdAt}`}>
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface/60"
+                      >
+                        <span className="grid size-10 shrink-0 place-items-center rounded-md bg-primary/15 text-primary">
+                          <Link2 className="h-5 w-5" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-s font-medium">
+                            {hostnameOf(item.url)}
+                          </span>
+                          <span className="block truncate text-s text-muted-foreground">
+                            {item.authorName} ·{" "}
+                            {new Date(item.createdAt).toLocaleDateString([], {
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </span>
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
         ) : (
-          <ul className="flex flex-col gap-1">
-            {items.map(({ att, authorName, createdAt }) => {
+          <FileList
+            rows={tab === "docs" ? docs : audio}
+            onOpenImage={(att) => lb.open(att, images)}
+            onOpenVideo={setPlayingVideo}
+          />
+        )}
+      </div>
+      {lb.state && (
+        <Lightbox
+          images={lb.state.images}
+          index={lb.state.index}
+          onClose={lb.close}
+          onIndex={lb.setIndex}
+        />
+      )}
+      {playingVideo ? (
+        <VideoOverlay
+          attachment={playingVideo}
+          onClose={() => setPlayingVideo(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function FileList({
+  rows,
+  onOpenImage,
+  onOpenVideo,
+}: {
+  rows: FileRow[];
+  onOpenImage: (att: MessageAttachment) => void;
+  onOpenVideo: (att: MessageAttachment) => void;
+}) {
+  return (
+    <ul className="flex flex-col">
+      {groupByMonth(rows).map((g) => (
+        <li key={g.key}>
+          <h3 className="px-4 py-2 text-s font-medium text-muted-foreground">
+            {g.label}
+          </h3>
+          <ul>
+            {g.items.map(({ att, authorName, createdAt }) => {
               const Icon = att.isImage ? FileIcon : fileIconFor(att);
+              const isVideo = isVideoAttachment(att);
+              const openMedia = att.isImage
+                ? () => onOpenImage(att)
+                : isVideo
+                  ? () => onOpenVideo(att)
+                  : null;
               return (
                 <li key={att.id}>
-                  <div className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-surface/60">
+                  <div className="flex items-center gap-3 px-4 py-2 transition-colors hover:bg-surface/60">
                     {att.isImage ? (
                       <button
-                        onClick={() => lb.open(att, images)}
+                        type="button"
+                        onClick={openMedia ?? undefined}
                         className="size-10 shrink-0 overflow-hidden rounded-md bg-surface"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -616,11 +1083,21 @@ export function FilesPanel({
                         />
                       </button>
                     ) : (
-                      <div className="grid size-10 shrink-0 place-items-center rounded-md bg-primary/15 text-primary">
+                      <button
+                        type="button"
+                        onClick={openMedia ?? undefined}
+                        disabled={!openMedia}
+                        className="grid size-10 shrink-0 place-items-center rounded-md bg-primary/15 text-primary disabled:cursor-default"
+                      >
                         <Icon className="h-5 w-5" />
-                      </div>
+                      </button>
                     )}
-                    <div className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      onClick={openMedia ?? undefined}
+                      disabled={!openMedia}
+                      className="min-w-0 flex-1 text-start disabled:cursor-default"
+                    >
                       <div className="truncate text-s font-medium">
                         {att.name}
                       </div>
@@ -632,7 +1109,7 @@ export function FilesPanel({
                         })}
                         {att.sizeBytes ? ` · ${formatBytes(att.sizeBytes)}` : ""}
                       </div>
-                    </div>
+                    </button>
                     <a
                       href={att.url}
                       download={att.name}
@@ -648,16 +1125,8 @@ export function FilesPanel({
               );
             })}
           </ul>
-        )}
-      </div>
-      {lb.state && (
-        <Lightbox
-          images={lb.state.images}
-          index={lb.state.index}
-          onClose={lb.close}
-          onIndex={lb.setIndex}
-        />
-      )}
-    </div>
+        </li>
+      ))}
+    </ul>
   );
 }

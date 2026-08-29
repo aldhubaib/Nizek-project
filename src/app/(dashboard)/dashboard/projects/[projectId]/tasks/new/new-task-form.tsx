@@ -4,11 +4,11 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Wrench, Bug, AlertCircle, Palette, Loader2 } from "lucide-react";
+import { Sparkles, Wrench, Bug, AlertCircle, Palette, Loader2 } from "lucide-react";
 import { createTask } from "@/actions/task";
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
 import { cn } from "@/lib/utils";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageBackButton } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 
 type TaskType = "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
@@ -93,17 +93,16 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
   return (
     <div>
       <PageHeader>
-        <button
-          onClick={() => router.back()}
-          className="text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
+        <PageBackButton
+          href={`/dashboard/projects/${projectId}`}
+          label="Back to project"
+        />
         <PageBreadcrumb
           items={[
+            { label: "Projects", href: "/dashboard/projects" },
             {
               label: projectName,
-              onClick: () => router.push(`/dashboard/projects/${projectId}`),
+              href: `/dashboard/projects/${projectId}`,
             },
             { label: "New Task" },
           ]}

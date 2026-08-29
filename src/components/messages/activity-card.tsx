@@ -61,12 +61,12 @@ export function ActivityCard({
   return (
     <div
       className={cn(
-        "w-full overflow-hidden rounded-xl border bg-card/95 shadow-sm ring-1 ring-inset",
+        "w-full rounded-xl border bg-card shadow-sm ring-1 ring-inset",
         theme.border,
         theme.ring,
       )}
     >
-      <div className={cn("h-0.5 w-full bg-current opacity-60", theme.accent)} />
+      <div className={cn("h-0.5 w-full rounded-t-[11px] bg-current opacity-60", theme.accent)} />
 
       <div className="space-y-3 p-3.5">
         <div className="flex items-start gap-s">

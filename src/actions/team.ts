@@ -2,10 +2,11 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { applyPendingInvite, logPendingInviteError, removeFromAllowlistIfUnused } from "@/lib/pending-invite";
+import { applyPendingInvite, logPendingInviteError, removeFromAllowlistIfUnused, syncInviteDisplayName } from "@/lib/pending-invite";
 import { revalidatePath } from "next/cache";
 import { cache } from "react";
 import type { SystemRole, TeamRole } from "@/generated/prisma/client";
+import { membershipRoleFromProjectRole } from "@/lib/client-role";
 
 async function requireAdmin() {
   const user = await requireUser();
@@ -233,6 +234,27 @@ export async function updateUserEmail(userId: string, email: string) {
   return {};
 }
 
+export async function updateUserName(userId: string, name: string) {
+  await requireAdmin();
+
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Name is required" };
+
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } });
+  if (!target) return { error: "User not found" };
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { name: trimmed },
+  });
+  await syncInviteDisplayName(target.email, trimmed);
+
+  revalidatePath("/dashboard/team");
+  revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/account");
+  return {};
+}
+
 const reconcileSignedUpInvites = cache(async () => {
   try {
     const [invitations, teamInvites] = await Promise.all([
@@ -321,27 +343,39 @@ export async function inviteToTeam(data: {
   });
 
   const assignments = (data.projects ?? []).filter((p) => p.projectId && p.roleId);
+  const assignedRoles = assignments.length
+    ? await prisma.projectRole.findMany({
+        where: { id: { in: assignments.map((a) => a.roleId) } },
+      })
+    : [];
+  const roleById = new Map(assignedRoles.map((r) => [r.id, r]));
+  const asClient =
+    data.systemRole === "CLIENT" || assignedRoles.some((r) => r.isClient);
 
-  if (data.systemRole === "CLIENT" && assignments.length > 0) {
+  const displayName = `${firstName} ${lastName}`.trim();
+
+  if (asClient && assignments.length > 0) {
     const { inviteMember } = await import("@/actions/project");
     for (const a of assignments) {
-      await inviteMember({ projectId: a.projectId, email, roleId: a.roleId });
+      await inviteMember({ projectId: a.projectId, email, roleId: a.roleId, name: displayName });
     }
   } else {
     for (const a of assignments) {
-      const pRole = await prisma.projectRole.findUnique({ where: { id: a.roleId } });
+      const pRole = roleById.get(a.roleId);
       if (!pRole) throw new Error("Invalid project role");
       await prisma.invitation.upsert({
         where: { email_projectId: { email, projectId: a.projectId } },
         update: {
-          role: pRole.isAdmin ? "ADMIN" : "MEMBER",
+          role: membershipRoleFromProjectRole(pRole),
           roleId: a.roleId,
           status: "PENDING",
+          name: displayName,
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
         create: {
           email,
-          role: pRole.isAdmin ? "ADMIN" : "MEMBER",
+          name: displayName,
+          role: membershipRoleFromProjectRole(pRole),
           roleId: a.roleId,
           projectId: a.projectId,
           invitedById: currentUser.id,
@@ -363,6 +397,24 @@ export async function getPendingTeamInvites() {
   });
 
   return invites;
+}
+
+export async function updatePendingTeamInviteName(inviteId: string, name: string) {
+  await requireAdmin();
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Name is required" };
+
+  const invite = await prisma.pendingTeamInvite.findUnique({
+    where: { id: inviteId },
+    select: { id: true, email: true },
+  });
+  if (!invite) return { error: "Invite not found" };
+
+  await syncInviteDisplayName(invite.email, trimmed);
+
+  revalidatePath("/dashboard/team");
+  revalidatePath("/dashboard/admin");
+  return {};
 }
 
 export async function getProjectsWithRoles() {

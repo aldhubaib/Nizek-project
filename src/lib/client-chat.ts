@@ -280,6 +280,40 @@ export async function canAccessClientConversation(
   };
 }
 
+/**
+ * Make sure this client is in every enabled client room for their projects.
+ * Invite-time sync can miss them because the User row doesn't exist yet.
+ */
+export async function ensureClientInbox(userId: string) {
+  const memberships = await prisma.projectMember.findMany({
+    where: {
+      userId,
+      OR: [{ role: "CLIENT" }, { projectRole: { isClient: true } }],
+    },
+    select: { projectId: true },
+  });
+  if (memberships.length === 0) return;
+
+  const enabled = await prisma.project.findMany({
+    where: {
+      id: { in: memberships.map((m) => m.projectId) },
+      clientChatEnabled: true,
+    },
+    select: { id: true },
+  });
+
+  await Promise.all(
+    enabled.map(async (p) => {
+      const convo = await getClientConversation(p.id);
+      if (!convo) {
+        await enableClientChat(p.id);
+        return;
+      }
+      await syncClientConversationParticipants(p.id);
+    }),
+  );
+}
+
 export async function assertCanAccessClientConversation(
   conversationId: string,
   user: { id: string; systemRole: string },

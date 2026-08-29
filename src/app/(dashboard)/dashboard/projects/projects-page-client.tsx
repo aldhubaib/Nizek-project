@@ -130,7 +130,9 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader className="justify-between">
-        <PageName>Projects</PageName>
+        <div className="flex min-w-0 items-center gap-s">
+          <PageName>Projects</PageName>
+        </div>
         <CreateProjectDialog teams={teams} contractPrefixes={contractPrefixes} />
       </PageHeader>
 

@@ -6,9 +6,10 @@ import { Users, Mail, Clock, FolderKanban, Search, X, Ban, Trash2, ShieldCheck, 
 import { cn } from "@/lib/utils";
 import { AddButton } from "@/components/add-button";
 import { formatDistanceToNow } from "date-fns";
-import { updateUserAdmin, updateUserEmail, inviteToTeam, toggleBlockUser, cancelTeamInvite, getUserTaskSummary } from "@/actions/team";
-import { updateMemberRole, removeMember } from "@/actions/project";
-import { startImpersonation } from "@/actions/impersonation";
+import { updateUserAdmin, updateUserEmail, updateUserName, inviteToTeam, toggleBlockUser, cancelTeamInvite, getUserTaskSummary, updatePendingTeamInviteName } from "@/actions/team";
+import { updateMemberRole, removeMember, updateInvitationName } from "@/actions/project";
+import { startImpersonation, startImpersonationByEmail } from "@/actions/impersonation";
+import { joinDisplayName } from "@/lib/display-name";
 
 interface MemberProject {
   id: string;
@@ -35,6 +36,7 @@ interface Member {
 interface Invitation {
   id: string;
   email: string;
+  name: string | null;
   role: string;
   status: string;
   createdAt: Date;
@@ -46,6 +48,8 @@ interface Invitation {
 interface TeamInvite {
   id: string;
   email: string;
+  firstName: string | null;
+  lastName: string | null;
   systemRole: string;
   createdAt: Date;
   team?: { id: string; name: string } | null;
@@ -152,6 +156,54 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
       setEmailEdit({
         ...emailEdit,
         error: (err as Error).message || "Failed to update email",
+        saving: false,
+      });
+    }
+  }
+
+  const [nameEdit, setNameEdit] = useState<{
+    kind: "member" | "invitation" | "team";
+    id: string;
+    projectId?: string;
+    value: string;
+    error: string | null;
+    saving: boolean;
+  } | null>(null);
+
+  async function handleNameSave() {
+    if (!nameEdit || nameEdit.saving) return;
+    const trimmed = nameEdit.value.trim();
+    if (!trimmed) {
+      setNameEdit({ ...nameEdit, error: "Name is required" });
+      return;
+    }
+    setNameEdit({ ...nameEdit, error: null, saving: true });
+    try {
+      let res: { error?: string } | { ok?: true } | void;
+      if (nameEdit.kind === "member") {
+        res = await updateUserName(nameEdit.id, trimmed);
+      } else if (nameEdit.kind === "team") {
+        res = await updatePendingTeamInviteName(nameEdit.id, trimmed);
+      } else {
+        if (!nameEdit.projectId) {
+          setNameEdit({ ...nameEdit, error: "Missing project", saving: false });
+          return;
+        }
+        res = await updateInvitationName({
+          projectId: nameEdit.projectId,
+          invitationId: nameEdit.id,
+          name: trimmed,
+        });
+      }
+      if (res && "error" in res && res.error) {
+        setNameEdit({ ...nameEdit, error: res.error, saving: false });
+        return;
+      }
+      setNameEdit(null);
+    } catch (err) {
+      setNameEdit({
+        ...nameEdit,
+        error: (err as Error).message || "Failed to update name",
         saving: false,
       });
     }
@@ -266,7 +318,23 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
         return;
       }
       // Full reload so every cache and realtime subscription belongs to them.
-      window.location.href = "/dashboard";
+      window.location.href = res.redirectTo ?? "/dashboard";
+    } catch (err) {
+      alert((err as Error).message || "Failed to sign in as user");
+      setActionLoading(null);
+    }
+  }
+
+  async function handleSignInAsEmail(email: string) {
+    setActionLoading(email);
+    try {
+      const res = await startImpersonationByEmail(email);
+      if (res?.error) {
+        alert(res.error);
+        setActionLoading(null);
+        return;
+      }
+      window.location.href = res.redirectTo ?? "/dashboard";
     } catch (err) {
       alert((err as Error).message || "Failed to sign in as user");
       setActionLoading(null);
@@ -290,11 +358,13 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
   );
 
   const filteredInvitations = invitations.filter((inv) =>
-    inv.email.toLowerCase().includes(search.toLowerCase())
+    inv.email.toLowerCase().includes(search.toLowerCase()) ||
+    (inv.name?.toLowerCase().includes(search.toLowerCase()) ?? false)
   );
 
   const filteredTeamInvites = teamInvites.filter((inv) =>
-    inv.email.toLowerCase().includes(search.toLowerCase())
+    inv.email.toLowerCase().includes(search.toLowerCase()) ||
+    joinDisplayName(inv.firstName, inv.lastName).toLowerCase().includes(search.toLowerCase())
   );
 
   const totalPending = invitations.length + teamInvites.length;
@@ -635,21 +705,74 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
               )}
 
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-s font-medium text-foreground truncate">
-                    {member.name || member.email}
-                  </span>
-                  {member.systemRole === "ADMIN" && (
-                    <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-purple bg-purple/15 border-purple/30">
-                      Admin
+                {nameEdit?.kind === "member" && nameEdit.id === member.id ? (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleNameSave();
+                    }}
+                    className="flex items-center gap-xs mb-1"
+                  >
+                    <input
+                      type="text"
+                      value={nameEdit.value}
+                      autoFocus
+                      disabled={nameEdit.saving}
+                      onChange={(e) => setNameEdit({ ...nameEdit, value: e.target.value, error: null })}
+                      onKeyDown={(e) => e.key === "Escape" && setNameEdit(null)}
+                      className="h-6 w-56 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-muted-foreground/50 disabled:opacity-50"
+                    />
+                    <button
+                      type="submit"
+                      disabled={nameEdit.saving}
+                      className="h-6 px-2 rounded-md text-xs font-medium bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50"
+                    >
+                      {nameEdit.saving ? "Saving..." : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNameEdit(null)}
+                      disabled={nameEdit.saving}
+                      className="h-6 px-2 rounded-md text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    {nameEdit.error && <span className="text-xs text-destructive">{nameEdit.error}</span>}
+                  </form>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-s font-medium text-foreground truncate">
+                      {member.name || member.email}
                     </span>
-                  )}
-                  {member.blocked && (
-                    <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-destructive bg-destructive/15 border-destructive/30">
-                      Blocked
-                    </span>
-                  )}
-                </div>
+                    {isAdmin && (
+                      <button
+                        onClick={() =>
+                          setNameEdit({
+                            kind: "member",
+                            id: member.id,
+                            value: member.name ?? "",
+                            error: null,
+                            saving: false,
+                          })
+                        }
+                        title="Edit name"
+                        className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    )}
+                    {member.systemRole === "ADMIN" && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-purple bg-purple/15 border-purple/30">
+                        Admin
+                      </span>
+                    )}
+                    {member.blocked && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-destructive bg-destructive/15 border-destructive/30">
+                        Blocked
+                      </span>
+                    )}
+                  </div>
+                )}
                 {emailEdit?.userId === member.id ? (
                   <form
                     onSubmit={(e) => {
@@ -800,14 +923,63 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
         <div>
           <h2 className="text-s font-semibold text-foreground mb-3">Awaiting Sign In</h2>
           <div className="space-y-1">
-            {filteredTeamInvites.map((inv) => (
+            {filteredTeamInvites.map((inv) => {
+              const displayName = joinDisplayName(inv.firstName, inv.lastName);
+              return (
               <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors">
                 <div className="w-8 h-8 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
                   <Mail className="w-3.5 h-3.5 text-orange" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="text-s font-medium text-foreground truncate block">{inv.email}</span>
+                  {nameEdit?.kind === "team" && nameEdit.id === inv.id ? (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleNameSave();
+                      }}
+                      className="flex items-center gap-xs mb-1"
+                    >
+                      <input
+                        type="text"
+                        value={nameEdit.value}
+                        autoFocus
+                        disabled={nameEdit.saving}
+                        onChange={(e) => setNameEdit({ ...nameEdit, value: e.target.value, error: null })}
+                        onKeyDown={(e) => e.key === "Escape" && setNameEdit(null)}
+                        className="h-6 w-56 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-muted-foreground/50 disabled:opacity-50"
+                      />
+                      <button type="submit" disabled={nameEdit.saving} className="h-6 px-2 rounded-md text-xs font-medium bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50">
+                        {nameEdit.saving ? "Saving..." : "Save"}
+                      </button>
+                      <button type="button" onClick={() => setNameEdit(null)} disabled={nameEdit.saving} className="h-6 px-2 rounded-md text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50">
+                        Cancel
+                      </button>
+                      {nameEdit.error && <span className="text-xs text-destructive">{nameEdit.error}</span>}
+                    </form>
+                  ) : (
+                    <span className="text-s font-medium text-foreground truncate flex items-center gap-1">
+                      <span className="truncate">{displayName || inv.email}</span>
+                      {isAdmin && (
+                        <button
+                          onClick={() =>
+                            setNameEdit({
+                              kind: "team",
+                              id: inv.id,
+                              value: displayName,
+                              error: null,
+                              saving: false,
+                            })
+                          }
+                          title="Edit name"
+                          className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
+                    </span>
+                  )}
                   <div className="flex items-center gap-2 mt-0.5">
+                    {displayName && <span className="text-xs text-muted-foreground truncate">{inv.email}</span>}
                     {inv.systemRole === "ADMIN" && (
                       <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-purple bg-purple/15 border-purple/30">Admin</span>
                     )}
@@ -821,6 +993,14 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                 </div>
                 {isAdmin && (
                   <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => handleSignInAsEmail(inv.email)}
+                      disabled={actionLoading === inv.email || actionLoading === inv.id}
+                      title={`Sign in as ${inv.email}`}
+                      className="w-7 h-7 rounded-md flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
                     <button onClick={() => handleCancelInvite(inv.id)} disabled={actionLoading === inv.id} title="Remove from allowlist"
                       className="w-7 h-7 rounded-md flex items-center justify-center bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50">
                       <Trash2 className="w-3.5 h-3.5" />
@@ -828,15 +1008,66 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                   </div>
                 )}
               </div>
-            ))}
-            {filteredInvitations.map((inv) => (
+            );
+            })}
+            {filteredInvitations.map((inv) => {
+              const displayName = inv.name?.trim() || "";
+              return (
               <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors">
                 <div className="w-8 h-8 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
                   <Mail className="w-3.5 h-3.5 text-orange" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="text-s font-medium text-foreground truncate block">{inv.email}</span>
+                  {nameEdit?.kind === "invitation" && nameEdit.id === inv.id ? (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleNameSave();
+                      }}
+                      className="flex items-center gap-xs mb-1"
+                    >
+                      <input
+                        type="text"
+                        value={nameEdit.value}
+                        autoFocus
+                        disabled={nameEdit.saving}
+                        onChange={(e) => setNameEdit({ ...nameEdit, value: e.target.value, error: null })}
+                        onKeyDown={(e) => e.key === "Escape" && setNameEdit(null)}
+                        className="h-6 w-56 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-muted-foreground/50 disabled:opacity-50"
+                      />
+                      <button type="submit" disabled={nameEdit.saving} className="h-6 px-2 rounded-md text-xs font-medium bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50">
+                        {nameEdit.saving ? "Saving..." : "Save"}
+                      </button>
+                      <button type="button" onClick={() => setNameEdit(null)} disabled={nameEdit.saving} className="h-6 px-2 rounded-md text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50">
+                        Cancel
+                      </button>
+                      {nameEdit.error && <span className="text-xs text-destructive">{nameEdit.error}</span>}
+                    </form>
+                  ) : (
+                    <span className="text-s font-medium text-foreground truncate flex items-center gap-1">
+                      <span className="truncate">{displayName || inv.email}</span>
+                      {isAdmin && (
+                        <button
+                          onClick={() =>
+                            setNameEdit({
+                              kind: "invitation",
+                              id: inv.id,
+                              projectId: inv.project.id,
+                              value: displayName,
+                              error: null,
+                              saving: false,
+                            })
+                          }
+                          title="Edit name"
+                          className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
+                    </span>
+                  )}
                   <div className="flex items-center gap-2 mt-0.5">
+                    {displayName && <span className="text-xs text-muted-foreground truncate">{inv.email}</span>}
                     <span className="text-xs px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground">{inv.project.name}</span>
                     <span className={cn(
                       "text-xs px-1.5 py-0.5 rounded-full border",
@@ -849,8 +1080,19 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                     </span>
                   </div>
                 </div>
+                {isAdmin && (
+                  <button
+                    onClick={() => handleSignInAsEmail(inv.email)}
+                    disabled={actionLoading === inv.email}
+                    title={`Sign in as ${inv.email}`}
+                    className="w-7 h-7 rounded-md flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50 shrink-0"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       )}

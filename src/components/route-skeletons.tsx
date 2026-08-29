@@ -1,6 +1,29 @@
 import type { ReactNode } from "react";
-import { PageHeader, PageName } from "@/components/page-header";
+import { PageHeader, PageName, PageBackButton } from "@/components/page-header";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { Skeleton } from "@/components/ui/skeleton";
+
+function TitleCrumbs({
+  parent,
+  current,
+  backHref = "/dashboard",
+  backLabel = "Back to dashboard",
+}: {
+  /** Omitted on section landing pages — those show their own name alone. */
+  parent?: string;
+  current: string;
+  backHref?: string;
+  backLabel?: string;
+}) {
+  // No parent means a section landing page: nothing to go back to.
+  if (!parent) return <PageBreadcrumb items={[{ label: current }]} />;
+  return (
+    <>
+      <PageBackButton href={backHref} label={backLabel} />
+      <PageBreadcrumb items={[{ label: parent }, { label: current }]} />
+    </>
+  );
+}
 
 function CardShell({ children }: { children: ReactNode }) {
   return (
@@ -71,7 +94,9 @@ export function ProjectsListSkeleton() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader className="justify-between">
-        <PageName>Projects</PageName>
+        <div className="flex min-w-0 items-center gap-s">
+          <TitleCrumbs current="Projects" />
+        </div>
         <Skeleton className="h-8 w-28 rounded-lg" />
       </PageHeader>
       <div className="px-app py-l">
@@ -102,8 +127,12 @@ export function ProjectDetailSkeleton() {
     <div>
       <PageHeader hasMenu className="relative w-full min-w-0">
         <div className="flex min-w-0 items-center gap-s">
-          <Skeleton className="size-5 rounded bg-muted/40" />
-          <Skeleton className="h-5 w-36" />
+          <TitleCrumbs
+            parent="Projects"
+            current="Project"
+            backHref="/dashboard/projects"
+            backLabel="Back to all projects"
+          />
         </div>
       </PageHeader>
       <div className="hidden gap-s border-b border-border px-app py-s lg:flex">
@@ -137,7 +166,7 @@ export function InboxSkeleton() {
     <div className="flex h-dvh min-h-0 text-foreground">
       <aside className="flex w-full shrink-0 flex-col border-r border-border/60 lg:w-[320px]">
         <div className="flex h-14 items-center gap-3 border-b border-border/60 px-4">
-          <Skeleton className="h-5 w-16" />
+          <TitleCrumbs current="Inbox" />
           <Skeleton className="ml-auto size-8 rounded-full bg-muted/40" />
         </div>
         <div className="px-4 py-3">
@@ -176,8 +205,7 @@ export function EquitySkeleton() {
   return (
     <div>
       <PageHeader hasMenu>
-        <Skeleton className="size-4 rounded bg-muted/40" />
-        <PageName className="flex-1">Equity</PageName>
+        <TitleCrumbs current="Equity" />
       </PageHeader>
       <div className="px-app py-l">
         <div className="mb-l flex gap-s">
@@ -209,7 +237,7 @@ export function VaultSkeleton() {
   return (
     <div>
       <PageHeader>
-        <PageName>Vault</PageName>
+        <TitleCrumbs current="Vault" />
       </PageHeader>
       <div className="px-app py-l">
         <Skeleton className="mb-l h-10 w-full rounded-xl bg-muted/40" />
@@ -236,7 +264,7 @@ export function SettingsSkeleton() {
   return (
     <div>
       <PageHeader>
-        <PageName>Settings</PageName>
+        <TitleCrumbs current="Settings" />
       </PageHeader>
       <div className="px-app py-l space-y-3">
         {Array.from({ length: 5 }, (_, i) => (

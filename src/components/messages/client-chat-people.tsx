@@ -59,11 +59,16 @@ export function ClientChatPeopleManager({
   projectId,
   enabled,
   compact = false,
+  clientView = false,
+  projectName,
 }: {
   projectId: string;
   enabled: boolean;
   /** Tighter layout for the thread side panel */
   compact?: boolean;
+  /** Client-facing labels: Nizek team / {project} team */
+  clientView?: boolean;
+  projectName?: string;
 }) {
   const [people, setPeople] = useState<ClientChatPerson[]>([]);
   const [addable, setAddable] = useState<ClientChatPerson[]>([]);
@@ -103,29 +108,38 @@ export function ClientChatPeopleManager({
   const clients = people.filter((p) => p.kind === "client");
   const staff = people.filter((p) => p.kind === "staff");
 
+  const staffLabel = clientView
+    ? "Nizek team"
+    : `Your team (${staff.length})`;
+  const clientLabel = clientView
+    ? `${projectName?.trim() || "Project"} team`
+    : `Clients (${clients.length})`;
+
   return (
     <div className={cn(!compact && "mt-3 space-y-3 border-t border-border/50 pt-3")}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-xs text-s font-semibold">
-            <Users className="h-3.5 w-3.5 text-muted-foreground" />
-            People in client chat
+      {!clientView && (
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-xs text-s font-semibold">
+              <Users className="h-3.5 w-3.5 text-muted-foreground" />
+              People in client chat
+            </div>
+            {!compact && (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Clients on the project are added automatically. Add staff from your
+                side who should talk to the client.
+              </p>
+            )}
           </div>
-          {!compact && (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Clients on the project are added automatically. Add staff from your
-              side who should talk to the client.
-            </p>
+          {canManage && (
+            <AddButton
+              label="Add staff"
+              disabled={pending || addable.length === 0}
+              onClick={() => setAddOpen(true)}
+            />
           )}
         </div>
-        {canManage && (
-          <AddButton
-            label="Add staff"
-            disabled={pending || addable.length === 0}
-            onClick={() => setAddOpen(true)}
-          />
-        )}
-      </div>
+      )}
 
       {loading ? (
         <div className="flex items-center gap-2 py-4 text-s text-muted-foreground">
@@ -138,8 +152,13 @@ export function ClientChatPeopleManager({
         <div className={cn("divide-y divide-border/40", compact && "max-h-80 overflow-y-auto")}>
           {staff.length > 0 && (
             <div className="pb-1">
-              <div className="py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Your team ({staff.length})
+              <div
+                className={cn(
+                  "py-1 text-xs font-semibold tracking-wide text-muted-foreground",
+                  !clientView && "uppercase",
+                )}
+              >
+                {staffLabel}
               </div>
               {staff.map((p) => (
                 <PersonRow
@@ -175,8 +194,13 @@ export function ClientChatPeopleManager({
           )}
           {clients.length > 0 && (
             <div className="pb-1">
-              <div className="py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Clients ({clients.length})
+              <div
+                className={cn(
+                  "py-1 text-xs font-semibold tracking-wide text-muted-foreground",
+                  !clientView && "uppercase",
+                )}
+              >
+                {clientLabel}
               </div>
               {clients.map((p) => (
                 <PersonRow key={p.id} person={p} />

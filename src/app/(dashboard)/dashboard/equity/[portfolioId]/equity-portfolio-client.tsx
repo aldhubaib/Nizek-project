@@ -21,7 +21,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  ArrowLeft,
   BarChart3,
   GripVertical,
   Trash2,
@@ -51,7 +50,8 @@ import {
 import { PortfolioMenu } from "@/components/equity/portfolio-menu";
 import { PerformanceSection } from "@/components/equity/performance-section";
 import { TeamSection } from "@/components/equity/team-section";
-import { PageHeader, PageName } from "@/components/page-header";
+import { PageHeader, PageBackButton } from "@/components/page-header";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { AddButton } from "@/components/add-button";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
@@ -176,13 +176,7 @@ export function EquityPortfolioClient({
   return (
     <div>
       <PageHeader hasMenu>
-        <Link
-          href="/dashboard/equity"
-          aria-label="Back to equity"
-          className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground transition-colors no-underline shrink-0"
-        >
-          <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
-        </Link>
+        <PageBackButton href="/dashboard/equity" label="Back to equity" />
         {portfolio.project.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -195,7 +189,12 @@ export function EquityPortfolioClient({
             {portfolio.project.name[0]?.toUpperCase()}
           </div>
         )}
-        <PageName>{portfolio.project.name}</PageName>
+        <PageBreadcrumb
+          items={[
+            { label: "Equity", href: "/dashboard/equity" },
+            { label: portfolio.project.name },
+          ]}
+        />
         <PortfolioMenu
           portfolioId={portfolio.id}
           projectName={portfolio.project.name}

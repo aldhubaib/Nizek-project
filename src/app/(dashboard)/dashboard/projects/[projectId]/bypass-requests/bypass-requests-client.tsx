@@ -1,9 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import type { ProofBypassRequest } from "@/actions/proof-of-work";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageBackButton } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { BypassRequestList } from "@/components/project/bypass-request-list";
 
@@ -25,19 +24,16 @@ export function BypassRequestsClient({
   return (
     <div>
       <PageHeader>
-        <button
-          type="button"
-          onClick={() => router.push(`/dashboard/projects/${projectId}`)}
-          className="text-muted-foreground hover:text-foreground transition-colors"
-          aria-label="Back to project"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
+        <PageBackButton
+          href={`/dashboard/projects/${projectId}`}
+          label="Back to project"
+        />
         <PageBreadcrumb
           items={[
+            { label: "Projects", href: "/dashboard/projects" },
             {
               label: projectName,
-              onClick: () => router.push(`/dashboard/projects/${projectId}`),
+              href: `/dashboard/projects/${projectId}`,
             },
             { label: "Video bypass requests" },
           ]}

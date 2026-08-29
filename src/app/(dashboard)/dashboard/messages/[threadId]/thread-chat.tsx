@@ -1,8 +1,7 @@
 "use client";
 
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, Fragment } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, Fragment } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import {
   ArrowLeft,
   Paperclip,
@@ -20,21 +19,18 @@ import {
   Reply,
   Copy,
   Trash2,
-  Clock,
-  RotateCcw,
-  AlertCircle,
-  AlertOctagon,
-  ArrowUpRight,
   CheckSquare,
   Users,
   Bell,
   BellOff,
-  Check,
-  CheckCheck,
   Pencil,
   Camera,
   Image as ImageIcon,
   Star,
+  ChevronUp,
+  ChevronDown,
+  Map as MapIcon,
+  LayoutDashboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -47,12 +43,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
 } from "@/components/ui/popover";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { AccountMenuItems, SignOutDialog } from "@/components/user-menu";
+import { ProfileDialog } from "@/components/profile-dialog";
+import { ClientRoadmapPanel } from "@/components/messages/client-roadmap-panel";
+import { ClientProjectPanel } from "@/components/messages/client-project-panel";
 import { cn } from "@/lib/utils";
-import { shouldCommitSwipeReply } from "@/lib/swipe-reply";
 import { ClientChatPeopleManager } from "@/components/messages/client-chat-people";
 import {
   toggleReaction,
@@ -60,12 +57,9 @@ import {
   editMessage,
   getThreadMessages,
   getProjectTaskRefs,
-  markThreadRead,
   toggleImportantMessage,
   listImportantMessages,
-  type MessageDTO,
   type MessageAttachment,
-  type MessageTaskRef,
   type ReactionSummary,
   type TaskPickerItem,
   type ImportantMessageDTO,
@@ -75,17 +69,13 @@ import {
   type CreateTaskFromMessagePayload,
 } from "@/components/messages/create-task-from-message";
 import { useVisualViewportFrame } from "@/hooks/use-visual-viewport-frame";
-import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import {
   isThreadMuted,
   setThreadMuted,
 } from "@/actions/notification-preferences";
-import { useChannel, usePresence, useTyping } from "@/components/realtime/hooks";
+import { usePresence, useTyping } from "@/components/realtime/hooks";
 import {
-  AttachmentBubble,
-  isVoiceAttachment,
-  isVideoAttachment,
   Lightbox,
   useLightbox,
   FilesPanel,
@@ -98,1172 +88,48 @@ import {
   retryOutboxEntry,
   discardOutboxEntry,
   useThreadOutbox,
-  subscribeDelivered,
-  type OutboxEntry,
 } from "@/lib/message-outbox";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/upload-limits";
-import { DeadlineReminderCard } from "@/components/messages/deadline-reminder-card";
 import {
-  ChatPostAvatar,
-  chatPostAuthorLabel,
 } from "@/components/messages/activity-card";
-import dynamic from "next/dynamic";
-import { NoteCommentCard } from "@/components/messages/note-comment-card";
-import { TaskCommentCard } from "@/components/messages/task-comment-card";
-import { NoteActivityCard } from "@/components/messages/note-activity-card";
-import { TaskRejectionCard } from "@/components/messages/task-rejection-card";
-import { TaskInboxSlideOver } from "@/components/messages/task-inbox-slide-over";
-import {
-  ProofOfWorkCard,
-  isProofOfWorkChatMessage,
-} from "@/components/messages/proof-of-work-card";
-import type { DeadlineReminderPayload } from "@/lib/deadline-reminder-payload";
-import type { NoteCommentPayload } from "@/lib/note-comment-payload";
-import type { TaskCommentPayload } from "@/lib/task-comment-payload";
-import type { NoteActivityPayload } from "@/lib/note-activity-payload";
-import type { ProofBypassPayload } from "@/lib/proof-bypass-payload";
+import { NoteSlideOver } from "@/components/project/note-slide-over";
 
-const ProofBypassCard = dynamic(
-  () => import("@/components/messages/proof-bypass-card").then((m) => m.ProofBypassCard),
-  { ssr: false },
-);
-import { closePushBannersByTags } from "@/lib/close-push-banners";
-import { threadPushTag } from "@/lib/notification-read";
-import { updateAppBadge } from "@/lib/app-badge";
 import { mergeThreadMessages } from "@/lib/merge-thread-messages";
 import {
   peekThreadCache,
   putThreadCache,
   threadIdFromTarget,
 } from "@/lib/thread-cache";
-import { useNotificationStore } from "@/store/notifications";
-import { firstUnreadMessageId, formatUnreadSeparator } from "@/lib/chat-unread";
+import { firstUnreadMessageId } from "@/lib/chat-unread";
 import {
   ALL_MENTION_ID,
   ALL_MENTION_NAME,
   ALL_MENTION_TEXT_RE,
   ALL_MENTION_TOKEN,
 } from "@/lib/mentions";
+import {
+  fmtTaskNumber,
+  isFeedMessage,
+  renderComposerHighlight,
+  sameDay,
+  type ChatMessage,
+  type PendingFile,
+  type ThreadTarget,
+} from "./thread-shared";
 
-const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+import { OutboxBubble } from "./outbox-bubble";
+import { MessageRow, UnreadSeparator } from "./message-row";
+import { VoiceVisualizer } from "./voice-visualizer";
+import { useVoiceRecorder } from "./use-voice-recorder";
+import { useThreadRealtime } from "./use-thread-realtime";
+import { useThreadSearch } from "./use-thread-search";
+import { ImageActionsMenu } from "./message-actions";
 
-// Number of bars in the live recording waveform.
-const VOICE_BAR_COUNT = 40;
+export type { ChatMessage, ThreadTarget } from "./thread-shared";
 
-// Live recording waveform. Runs its own RAF loop and writes bar heights straight
-// to the DOM via refs, so the ~60fps updates never re-render the (huge) chat
-// component. Only mounts while recording.
-function VoiceVisualizer({
-  analyserRef,
-  pausedRef,
-  paused,
-}: {
-  analyserRef: React.RefObject<AnalyserNode | null>;
-  pausedRef: React.RefObject<boolean>;
-  paused: boolean;
-}) {
-  const barsRef = useRef<(HTMLSpanElement | null)[]>([]);
-  const levelsRef = useRef<number[]>(new Array(VOICE_BAR_COUNT).fill(0));
+/** Floor on the load-older spinner so the transition is legible. */
+const MIN_LOAD_MS = 450;
 
-  useEffect(() => {
-    const analyser = analyserRef.current;
-    let raf = 0;
-    const data = analyser ? new Uint8Array(analyser.fftSize) : null;
-    const apply = (v: number, el: HTMLSpanElement | null) => {
-      if (!el) return;
-      el.style.height = `${Math.max(3, Math.round(v * 26))}px`;
-      el.style.opacity = String(pausedRef.current ? 0.35 : 0.5 + v * 0.5);
-    };
-    const loop = () => {
-      if (analyser && data && !pausedRef.current) {
-        analyser.getByteTimeDomainData(data);
-        let peak = 0;
-        for (let i = 0; i < data.length; i++) {
-          const v = Math.abs(data[i] - 128) / 128;
-          if (v > peak) peak = v;
-        }
-        const level = Math.min(1, peak * 2.5);
-        const shifted = levelsRef.current.slice(1);
-        shifted.push(level);
-        levelsRef.current = shifted;
-        for (let i = 0; i < barsRef.current.length; i++) apply(shifted[i], barsRef.current[i]);
-      }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [analyserRef, pausedRef]);
-
-  return (
-    <div
-      className="flex min-w-0 flex-1 items-center justify-center gap-[2px]"
-      aria-hidden
-    >
-      {Array.from({ length: VOICE_BAR_COUNT }).map((_, i) => (
-        <span
-          key={i}
-          ref={(el) => {
-            barsRef.current[i] = el;
-          }}
-          className="w-[2px] rounded-full bg-muted-foreground/70"
-          style={{
-            height: "3px",
-            opacity: paused ? 0.35 : 0.5,
-            transition: "height 90ms linear",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-export type ChatMessage = {
-  id: string;
-  authorId: string;
-  authorName: string;
-  authorImageUrl?: string | null;
-  body: string;
-  createdAt: string;
-  updatedAt?: string;
-  edited?: boolean;
-  attachments: MessageAttachment[];
-  reactions: ReactionSummary[];
-  replyToId?: string | null;
-  kind?: string;
-  /** Task this message belongs to — rendered as a reference card in project channels. */
-  task?: MessageTaskRef | null;
-  /** Display names mentioned in the body, highlighted as @chips. */
-  mentions?: string[];
-  deadlineReminder?: DeadlineReminderPayload | null;
-  noteComment?: NoteCommentPayload | null;
-  taskComment?: TaskCommentPayload | null;
-  noteActivity?: NoteActivityPayload | null;
-  proofBypass?: ProofBypassPayload | null;
-  important?: boolean;
-};
-
-function isFeedCardKind(kind?: string) {
-  return (
-    kind === "deadline_reminder" ||
-    kind === "note_activity" ||
-    kind === "note_comment" ||
-    kind === "task_comment" ||
-    kind === "proof_bypass" ||
-    kind === "rejection"
-  );
-}
-
-function isFeedMessage(m: ChatMessage) {
-  return isFeedCardKind(m.kind) || isProofOfWorkChatMessage(m);
-}
-
-const fmtTaskNumber = (n: number) => `T-${String(n).padStart(3, "0")}`;
-
-// Highlights "@Name" runs within a plain-text segment (no URLs) as chips.
-function highlightMentions(
-  text: string,
-  mentions: string[] | undefined,
-  mine: boolean,
-  keyPrefix: string,
-): React.ReactNode[] {
-  if (!mentions || mentions.length === 0) return [text];
-  const pattern = new RegExp(
-    `@(${mentions
-      .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .join("|")})`,
-    "g",
-  );
-  const parts: React.ReactNode[] = [];
-  let last = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > last) parts.push(text.slice(last, match.index));
-    parts.push(
-      <span
-        key={`${keyPrefix}-mn-${key++}`}
-        className={cn(
-          "rounded px-1 font-medium",
-          mine
-            ? "bg-primary-foreground/20 text-primary-foreground"
-            : "bg-primary/15 text-primary",
-        )}
-      >
-        @{match[1]}
-      </span>,
-    );
-    last = match.index + match[0].length;
-  }
-  if (last < text.length) parts.push(text.slice(last));
-  return parts;
-}
-
-// Renders a message body with clickable links and highlighted @mentions.
-function renderMessageBody(
-  text: string,
-  mentions: string[] | undefined,
-  mine: boolean,
-) {
-  const parts: React.ReactNode[] = [];
-  const urlRe = /(https?:\/\/[^\s<]+)/gi;
-  let last = 0;
-  let key = 0;
-  let match: RegExpExecArray | null;
-  while ((match = urlRe.exec(text)) !== null) {
-    if (match.index > last) {
-      parts.push(
-        ...highlightMentions(text.slice(last, match.index), mentions, mine, `s${key}`),
-      );
-    }
-    let url = match[1];
-    const trailing = url.match(/[)\].,;:!?'"]+$/)?.[0] ?? "";
-    if (trailing) url = url.slice(0, url.length - trailing.length);
-    parts.push(
-      <a
-        key={`lnk-${key++}`}
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => e.stopPropagation()}
-        className={cn(
-          "break-all underline underline-offset-2",
-          mine ? "text-primary-foreground" : "text-primary",
-        )}
-      >
-        {url}
-      </a>,
-    );
-    if (trailing) parts.push(trailing);
-    last = match.index + match[1].length;
-  }
-  if (last < text.length) {
-    parts.push(...highlightMentions(text.slice(last), mentions, mine, `s${key}`));
-  }
-  return <>{parts}</>;
-}
-
-// Highlights picked "@Name" mentions in blue inside the composer overlay.
-function renderComposerHighlight(text: string, names: string[]) {
-  if (names.length === 0) return text;
-  const pattern = new RegExp(
-    `@(${names
-      .slice()
-      .sort((a, b) => b.length - a.length)
-      .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .join("|")})`,
-    "g",
-  );
-  const parts: React.ReactNode[] = [];
-  let last = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > last) parts.push(text.slice(last, match.index));
-    parts.push(
-      <span key={`cm-${key++}`} className="font-medium text-primary">
-        @{match[1]}
-      </span>,
-    );
-    last = match.index + match[0].length;
-  }
-  if (last < text.length) parts.push(text.slice(last));
-  return <>{parts}</>;
-}
-
-export type ThreadTarget = {
-  taskId?: string | null;
-  projectId?: string | null;
-  conversationId?: string | null;
-};
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatDay(iso: string) {
-  const d = new Date(iso);
-  const today = new Date();
-  const yest = new Date();
-  yest.setDate(today.getDate() - 1);
-  const same = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate();
-  if (same(d, today)) return "Today";
-  if (same(d, yest)) return "Yesterday";
-  const diff = Math.round((today.getTime() - d.getTime()) / 86400000);
-  if (diff < 7) return d.toLocaleDateString([], { weekday: "long" });
-  return d.toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function sameDay(a: string, b: string) {
-  const da = new Date(a);
-  const db = new Date(b);
-  return (
-    da.getFullYear() === db.getFullYear() &&
-    da.getMonth() === db.getMonth() &&
-    da.getDate() === db.getDate()
-  );
-}
-
-function UnreadSeparator({ count }: { count: number }) {
-  const label = formatUnreadSeparator(count);
-  if (!label) return null;
-  return (
-    <div
-      id="unread-separator"
-      className="my-3 flex items-center gap-3"
-      role="separator"
-      aria-label={label}
-    >
-      <div className="h-px flex-1 bg-primary/40" />
-      <span className="shrink-0 rounded-full bg-primary/15 px-3 py-0.5 text-xs font-semibold text-primary">
-        {label}
-      </span>
-      <div className="h-px flex-1 bg-primary/40" />
-    </div>
-  );
-}
-
-function initialsFrom(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
-
-function ReactionChips({
-  reactions,
-  mine,
-  currentMemberId,
-  memberNames,
-  onToggle,
-}: {
-  reactions: ReactionSummary[];
-  mine: boolean;
-  currentMemberId: string;
-  memberNames: Record<string, string>;
-  onToggle: (emoji: string) => void;
-}) {
-  return (
-    <div className={cn("flex flex-wrap gap-1", mine ? "justify-end" : "justify-start")}>
-      {reactions.map((r) => {
-        const mineReacted = r.memberIds.includes(currentMemberId);
-        const ids = [...r.memberIds].sort((a, b) => {
-          if (a === currentMemberId) return -1;
-          if (b === currentMemberId) return 1;
-          return (memberNames[a] ?? "").localeCompare(memberNames[b] ?? "");
-        });
-        const stop = (e: React.SyntheticEvent) => e.stopPropagation();
-        return (
-          <Popover key={r.emoji}>
-            <PopoverTrigger
-              onClick={stop}
-              onPointerDown={stop}
-              onTouchStart={stop}
-              aria-label={
-                r.memberIds.length === 1
-                  ? `${r.emoji} 1 reaction`
-                  : `${r.emoji} ${r.memberIds.length} reactions`
-              }
-              className={cn(
-                "flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-s leading-none transition-colors",
-                mineReacted
-                  ? "border-primary/50 bg-primary/15 text-foreground"
-                  : "border-border/60 bg-surface/60 text-muted-foreground hover:bg-surface",
-              )}
-            >
-              <span>{r.emoji}</span>
-              <span className="text-xs font-medium">{r.memberIds.length}</span>
-            </PopoverTrigger>
-            <PopoverContent
-              align={mine ? "end" : "start"}
-              side="top"
-              className="w-56 gap-0 p-1.5"
-            >
-              <div className="px-2 py-1.5 text-s font-medium text-muted-foreground">
-                {r.emoji}{" "}
-                {r.memberIds.length === 1
-                  ? "1 reaction"
-                  : `${r.memberIds.length} reactions`}
-              </div>
-              <ul className="max-h-56 overflow-y-auto">
-                {ids.map((id) => {
-                  const fullName = memberNames[id] ?? "Someone";
-                  const label = id === currentMemberId ? "You" : fullName;
-                  return (
-                    <li
-                      key={id}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5"
-                    >
-                      <div
-                        className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/20 text-xs font-semibold text-primary"
-                        aria-hidden
-                      >
-                        {initialsFrom(
-                          id === currentMemberId
-                            ? (memberNames[id] ?? "You")
-                            : fullName,
-                        )}
-                      </div>
-                      <span className="min-w-0 flex-1 truncate text-s">
-                        {label}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-              <button
-                type="button"
-                onClick={() => onToggle(r.emoji)}
-                className="mt-0.5 w-full rounded-md px-2 py-2 text-left text-s text-muted-foreground hover:bg-surface hover:text-foreground"
-              >
-                {mineReacted ? "Remove your reaction" : `React with ${r.emoji}`}
-              </button>
-            </PopoverContent>
-          </Popover>
-        );
-      })}
-    </div>
-  );
-}
-
-// A file picked in the composer, held locally until the user presses Send.
-type PendingFile = { key: string; file: File; previewUrl: string | null };
-
-// Sent-but-not-delivered messages (the outbox) live in the app-wide manager in
-// lib/message-outbox.ts, NOT in this component — so uploads keep going and the
-// message still delivers when the user switches threads or pages mid-upload.
-
-// One chat message. Memoized so unrelated parent re-renders (typing indicator,
-// presence, composer keystrokes, recording timer) don't re-render every row —
-// a row only re-renders when its own `m`/derived props change. Callbacks are
-// stable (useCallback in the parent), so `memo` holds.
-function MessageMeta({
-  createdAt,
-  edited,
-  mine,
-  blue,
-  peerLastReadAt,
-  important,
-}: {
-  createdAt: string;
-  edited?: boolean;
-  mine: boolean;
-  blue: boolean;
-  peerLastReadAt?: string | null;
-  important?: boolean;
-}) {
-  const read =
-    mine &&
-    peerLastReadAt != null &&
-    new Date(createdAt).getTime() <= new Date(peerLastReadAt).getTime();
-  return (
-    <span
-      className={cn(
-        "ml-1 inline-flex shrink-0 translate-y-0.5 items-center gap-0.5 text-xs leading-none",
-        blue ? "text-primary-foreground/70" : "text-muted-foreground",
-      )}
-    >
-      {important && (
-        <Star
-          className="h-3 w-3 fill-orange text-orange"
-          aria-label="Important"
-        />
-      )}
-      {edited && <span className="italic opacity-80">edited</span>}
-      <span>{formatTime(createdAt)}</span>
-      {mine &&
-        (read ? (
-          <CheckCheck className="h-3 w-3" aria-label="Read" />
-        ) : (
-          <Check className="h-3 w-3" aria-label="Sent" />
-        ))}
-    </span>
-  );
-}
-
-const MessageRow = memo(function MessageRow({
-  m,
-  mine,
-  showDay,
-  newGroup,
-  showAuthor,
-  notFirst,
-  dimmed,
-  replied,
-  showTaskCard,
-  currentMemberId,
-  peerLastReadAt,
-  canCreateTask,
-  selected,
-  onSelect,
-  editing,
-  editDraft,
-  react,
-  handleReply,
-  handleCopy,
-  handleDelete,
-  handleEdit,
-  handleCreateTask,
-  handleToggleImportant,
-  onEditDraftChange,
-  onSaveEdit,
-  onCancelEdit,
-  scrollToMessage,
-  openImage,
-  memberNames,
-}: {
-  m: ChatMessage;
-  mine: boolean;
-  showDay: boolean;
-  newGroup: boolean;
-  showAuthor: boolean;
-  notFirst: boolean;
-  dimmed: boolean;
-  replied: ChatMessage | null | undefined;
-  showTaskCard: boolean;
-  currentMemberId: string;
-  peerLastReadAt?: string | null;
-  canCreateTask?: boolean;
-  /** Mobile selection mode (WhatsApp-style). */
-  selected: boolean;
-  onSelect: (id: string | null) => void;
-  editing: boolean;
-  editDraft: string;
-  react: (id: string, emoji: string) => void;
-  handleReply: (id: string) => void;
-  handleCopy: (text: string) => void;
-  handleDelete: (id: string) => void;
-  handleEdit: (id: string) => void;
-  handleCreateTask: (m: ChatMessage) => void;
-  handleToggleImportant: (id: string) => void;
-  onEditDraftChange: (v: string) => void;
-  onSaveEdit: () => void;
-  onCancelEdit: () => void;
-  scrollToMessage: (id: string) => void;
-  openImage: (att: MessageAttachment) => void;
-  memberNames: Record<string, string>;
-}) {
-  const imageAtts = m.attachments.filter((a) => a.isImage);
-  const videoAtts = m.attachments.filter((a) => isVideoAttachment(a));
-  const fileAtts = m.attachments.filter((a) => !a.isImage && !isVideoAttachment(a));
-  const nestMedia =
-    (imageAtts.length > 0 || videoAtts.length > 0) &&
-    Boolean(m.body || editing) &&
-    m.kind !== "rejection";
-  const [taskPanelOpen, setTaskPanelOpen] = useState(false);
-  const [swipeX, setSwipeX] = useState(0);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
-  const swipeXRef = useRef(0);
-  const lastDelta = useRef({ dx: 0, dy: 0 });
-  const swiped = useRef(false);
-
-  const clearLongPress = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  };
-
-  const actionHandlers: MessageActionHandlers = {
-    onReact: (emoji) => react(m.id, emoji),
-    onReply: () => handleReply(m.id),
-    onCopy: () => handleCopy(m.body),
-    onDelete: () => handleDelete(m.id),
-    onEdit: mine && m.kind !== "rejection" ? () => handleEdit(m.id) : undefined,
-    onCreateTask: canCreateTask ? () => handleCreateTask(m) : undefined,
-    onToggleImportant: () => handleToggleImportant(m.id),
-    important: Boolean(m.important),
-  };
-
-  const onTouchStart = (e: React.TouchEvent) => {
-    // Desktop hover menu handles actions; mobile long-press enters selection.
-    if (window.matchMedia("(min-width: 1024px)").matches) return;
-    const t = e.touches[0];
-    touchStart.current = { x: t.clientX, y: t.clientY };
-    lastDelta.current = { dx: 0, dy: 0 };
-    swipeXRef.current = 0;
-    swiped.current = false;
-    clearLongPress();
-    longPressTimer.current = setTimeout(() => {
-      longPressTimer.current = null;
-      if (!swiped.current) {
-        onSelect(m.id);
-        if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-          try {
-            navigator.vibrate(12);
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-    }, 450);
-  };
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    if (!touchStart.current) return;
-    const t = e.touches[0];
-    const dx = t.clientX - touchStart.current.x;
-    const dy = t.clientY - touchStart.current.y;
-    lastDelta.current = { dx, dy };
-    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearLongPress();
-    // Vertical scroll — drop any in-progress swipe so it can't become a reply.
-    if (Math.abs(dy) > Math.abs(dx)) {
-      if (swipeXRef.current !== 0) {
-        swipeXRef.current = 0;
-        setSwipeX(0);
-      }
-      return;
-    }
-    if (dx > 0) {
-      swiped.current = true;
-      const next = Math.min(80, dx);
-      swipeXRef.current = next;
-      setSwipeX(next);
-    }
-  };
-
-  const onTouchEnd = () => {
-    clearLongPress();
-    const { dx, dy } = lastDelta.current;
-    swipeXRef.current = 0;
-    lastDelta.current = { dx: 0, dy: 0 };
-    setSwipeX(0);
-    touchStart.current = null;
-    if (swiped.current && shouldCommitSwipeReply(dx, dy)) handleReply(m.id);
-    swiped.current = false;
-  };
-
-  if (m.noteActivity || m.noteComment || m.taskComment || m.deadlineReminder || m.proofBypass || m.kind === "proof_bypass" || m.kind === "rejection" || isProofOfWorkChatMessage(m)) {
-    const authorLabel = chatPostAuthorLabel(m.authorId, m.authorName);
-    return (
-      <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
-        {showDay && (
-          <div className="my-2 flex items-center justify-center">
-            <span className="rounded-full bg-surface px-3 py-1 text-xs font-medium text-muted-foreground">
-              {formatDay(m.createdAt)}
-            </span>
-          </div>
-        )}
-        <div
-          className={cn(
-            "flex w-full gap-2 justify-start",
-            newGroup && !showDay && notFirst && "mt-3",
-          )}
-        >
-          <ChatPostAvatar
-            show={showAuthor}
-            authorId={m.authorId}
-            authorName={m.authorName}
-            authorImageUrl={m.authorImageUrl}
-          />
-          <div className="flex min-w-0 w-full max-w-[420px] flex-col gap-1">
-            {showAuthor && (
-              <div className="px-1 text-xs text-muted-foreground">{authorLabel}</div>
-            )}
-            {m.deadlineReminder ? (
-              <DeadlineReminderCard payload={m.deadlineReminder} createdAt={m.createdAt} />
-            ) : m.noteActivity ? (
-              <NoteActivityCard payload={m.noteActivity} createdAt={m.createdAt} />
-            ) : m.taskComment ? (
-              <TaskCommentCard payload={m.taskComment} createdAt={m.createdAt} />
-            ) : m.kind === "rejection" ? (
-              <TaskRejectionCard
-                title={m.task?.title ?? "Task"}
-                taskNumber={m.task?.number}
-                projectId={m.task?.projectId}
-                taskId={m.task?.id}
-                body={m.body}
-                mentions={m.mentions}
-                attachments={m.attachments}
-                createdAt={m.createdAt}
-                onOpenImage={openImage}
-              />
-            ) : m.kind === "proof_bypass" || m.proofBypass ? (
-              m.proofBypass ? (
-                <ProofBypassCard
-                  payload={m.proofBypass}
-                  createdAt={m.createdAt}
-                  currentUserId={currentMemberId}
-                />
-              ) : (
-                <p className="text-s text-muted-foreground">Video bypass request</p>
-              )
-            ) : isProofOfWorkChatMessage(m) && m.task ? (
-              <ProofOfWorkCard
-                taskId={m.task.id}
-                projectId={m.task.projectId}
-                taskNumber={m.task.number}
-                taskTitle={m.task.title}
-                body={m.body}
-                videos={videoAtts}
-                createdAt={m.createdAt}
-              />
-            ) : (
-              <NoteCommentCard payload={m.noteComment!} createdAt={m.createdAt} />
-            )}
-            {imageAtts.length > 0 && m.kind !== "rejection" && (
-              <div className="flex max-w-full flex-wrap gap-xs justify-start">
-                {imageAtts.map((a) => (
-                  <AttachmentBubble
-                    key={a.id}
-                    attachment={a}
-                    mine={false}
-                    onOpenImage={openImage}
-                  />
-                ))}
-              </div>
-            )}
-            {videoAtts.length > 0 && !isProofOfWorkChatMessage(m) && m.kind !== "rejection" && (
-              <div
-                className={cn(
-                  "max-w-full",
-                  videoAtts.length > 1
-                    ? "grid w-full max-w-[20rem] grid-cols-2 gap-1.5"
-                    : "flex w-full max-w-[20rem] flex-col",
-                )}
-              >
-                {videoAtts.map((a) => (
-                  <AttachmentBubble
-                    key={a.id}
-                    attachment={a}
-                    mine={false}
-                    onOpenImage={openImage}
-                  />
-                ))}
-              </div>
-            )}
-            {fileAtts.length > 0 && m.kind !== "rejection" && (
-              <div className="flex max-w-full flex-wrap gap-xs justify-start">
-                {fileAtts.map((a) => (
-                  <AttachmentBubble
-                    key={a.id}
-                    attachment={a}
-                    mine={false}
-                    onOpenImage={openImage}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
-      {showDay && (
-        <div className="my-2 flex items-center justify-center">
-          <span className="rounded-full bg-surface px-3 py-1 text-xs font-medium text-muted-foreground">
-            {formatDay(m.createdAt)}
-          </span>
-        </div>
-      )}
-      <div
-        className={cn(
-          "relative flex gap-2 touch-pan-y rounded-xl transition-colors",
-          mine ? "justify-end" : "justify-start",
-          newGroup && !showDay && notFirst && "mt-3",
-          // WhatsApp-style selection wash across the row on mobile.
-          selected && "bg-primary/15 ring-1 ring-inset ring-primary/25 lg:bg-transparent lg:ring-0",
-        )}
-        style={swipeX ? { transform: `translateX(${swipeX}px)` } : undefined}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        onTouchCancel={() => {
-          clearLongPress();
-          swipeXRef.current = 0;
-          lastDelta.current = { dx: 0, dy: 0 };
-          swiped.current = false;
-          setSwipeX(0);
-          touchStart.current = null;
-        }}
-      >
-        {!mine && (
-          <div className="w-8 shrink-0 self-start">
-            {showAuthor && (
-              m.authorImageUrl ? (
-                <Image
-                  src={m.authorImageUrl}
-                  alt=""
-                  width={32}
-                  height={32}
-                  className="h-8 w-8 rounded-full object-cover"
-                />
-              ) : (
-                <div
-                  className="grid h-8 w-8 place-items-center rounded-full bg-primary/20 text-xs font-semibold text-primary"
-                  aria-hidden
-                >
-                  {m.authorName
-                    .split(" ")
-                    .map((s) => s[0])
-                    .slice(0, 2)
-                    .join("")
-                    .toUpperCase()}
-                </div>
-              )
-            )}
-          </div>
-        )}
-        <div className={cn("relative flex min-w-0 max-w-[70%] flex-col gap-xs", mine ? "ml-auto items-end" : "items-start")}>
-          {selected && (
-            <div
-              className={cn(
-                "absolute z-20 flex -translate-y-[calc(100%+6px)] items-center gap-0.5 rounded-full border border-border/60 bg-popover px-1.5 py-1 shadow-lg lg:hidden",
-                mine ? "right-0" : "left-0",
-              )}
-            >
-              {QUICK_EMOJIS.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => {
-                    react(m.id, e);
-                    onSelect(null);
-                  }}
-                  className="grid size-10 place-items-center rounded-full text-xl transition-transform active:scale-125"
-                  aria-label={`React ${e}`}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
-          )}
-          {showAuthor && (
-            <div className="px-1 text-xs text-muted-foreground">{m.authorName}</div>
-          )}
-          {(replied || m.body || (m.task && showTaskCard) || editing) && (() => {
-            const notice = (!!m.task && showTaskCard) || m.kind === "rejection";
-            const blue = mine && !notice;
-            const hasBubble = Boolean(m.body || (m.task && showTaskCard) || editing);
-            return (
-            <div
-              className={cn(
-                "flex min-w-0 max-w-full flex-col gap-1",
-                mine ? "items-end" : "items-start",
-              )}
-            >
-              {replied && (
-                <ReplyContext
-                  authorLabel={
-                    replied.authorId === currentMemberId ? "You" : replied.authorName
-                  }
-                  body={replied.body}
-                  attachments={replied.attachments}
-                  mine={mine}
-                  onClick={() => scrollToMessage(m.replyToId!)}
-                />
-              )}
-              {hasBubble && (
-            <div
-              className={cn(
-                "group relative max-w-full",
-                nestMedia && "w-80 max-w-full",
-                mine ? "self-end" : "self-start",
-              )}
-            >
-              <div
-                className={cn(
-                  "flex max-w-full flex-col text-s leading-relaxed",
-                  notice
-                    ? "w-full min-w-64 gap-xs rounded-xl border border-border/60 bg-surface-2/80 p-2.5 text-foreground"
-                    : nestMedia
-                      ? "w-full gap-2 p-2"
-                      : "gap-xs px-3.5 py-2",
-                  !notice && "rounded-2xl",
-                  !notice &&
-                    (blue
-                      ? "rounded-br-md bg-primary text-primary-foreground"
-                      : "rounded-bl-md bg-surface-2 text-foreground"),
-                )}
-              >
-                {m.task && showTaskCard && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setTaskPanelOpen(true);
-                    }}
-                    className="flex w-full items-center gap-2 rounded-lg border border-border/60 bg-field/60 px-2.5 py-2 text-left transition-colors hover:bg-field"
-                  >
-                    <CheckSquare className="h-4 w-4 shrink-0 text-primary" />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        Task · #{fmtTaskNumber(m.task.number)}
-                      </div>
-                      <div className="truncate text-s font-semibold text-foreground">
-                        {m.task.title}
-                      </div>
-                    </div>
-                    <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  </button>
-                )}
-                {editing ? (
-                  <div className="flex flex-col gap-2">
-                    <textarea
-                      value={editDraft}
-                      onChange={(e) => onEditDraftChange(e.target.value)}
-                      className="min-h-[4rem] w-full resize-none rounded-md border border-border/60 bg-background px-2 py-1.5 text-s text-foreground"
-                      rows={3}
-                      autoFocus
-                    />
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={onCancelEdit}
-                        className="rounded-full px-3 py-1 text-s text-muted-foreground hover:bg-surface"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onSaveEdit}
-                        className="rounded-full bg-primary px-3 py-1 text-s font-medium text-primary-foreground"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  m.body &&
-                  (m.kind === "rejection" ? (
-                    (() => {
-                      const who = (m.mentions ?? []).find((n) =>
-                        m.body.startsWith(`@${n}`),
-                      );
-                      const reason = who
-                        ? m.body.slice(who.length + 1).trim()
-                        : m.body;
-                      return (
-                        <>
-                          <div className="flex items-start gap-2 rounded-lg border-l-2 border-destructive bg-destructive/10 px-2.5 py-2 text-s">
-                            <AlertOctagon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs font-bold uppercase tracking-wider text-destructive">
-                                Rejected
-                              </div>
-                              {reason && (
-                                <div className="mt-0.5 whitespace-pre-wrap break-words text-foreground/90">
-                                  {reason}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-end gap-2 px-0.5">
-                            {who && (
-                              <span className="rounded bg-primary/15 px-1 py-0.5 text-s font-medium text-primary">
-                                @{who}
-                              </span>
-                            )}
-                            <span className="ml-auto shrink-0 text-xs leading-none text-muted-foreground">
-                              {formatTime(m.createdAt)}
-                            </span>
-                          </div>
-                        </>
-                      );
-                    })()
-                  ) : (
-                    <div className={cn("flex items-end gap-2", notice && "px-0.5", nestMedia && "px-1.5 pt-0.5")}>
-                      <span className="whitespace-pre-wrap break-words">
-                        {renderMessageBody(m.body, m.mentions, blue)}
-                      </span>
-                      <MessageMeta
-                        createdAt={m.createdAt}
-                        edited={m.edited}
-                        mine={mine}
-                        blue={blue}
-                        peerLastReadAt={peerLastReadAt}
-                        important={m.important}
-                      />
-                    </div>
-                  ))
-                )}
-                {nestMedia && (
-                  <div className="flex flex-col gap-1.5">
-                    {imageAtts.map((a) => (
-                      <AttachmentBubble
-                        key={a.id}
-                        attachment={a}
-                        mine={mine}
-                        embedded
-                        onOpenImage={openImage}
-                        menu={
-                          <span className="hidden lg:contents">
-                            <ImageActionsMenu {...actionHandlers} />
-                          </span>
-                        }
-                      />
-                    ))}
-                    {videoAtts.length > 0 && (
-                      <div
-                        className={cn(
-                          videoAtts.length > 1
-                            ? "grid grid-cols-2 gap-1.5"
-                            : "flex flex-col",
-                        )}
-                      >
-                        {videoAtts.map((a) => (
-                          <AttachmentBubble
-                            key={a.id}
-                            attachment={a}
-                            mine={mine}
-                            embedded
-                            onOpenImage={openImage}
-                            menu={
-                              <span className="hidden lg:contents">
-                                <FileCaretMenu {...actionHandlers} />
-                              </span>
-                            }
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              {/* Desktop only — WhatsApp hover ⋮. Mobile uses selection header. */}
-              <MessageCaret mine={mine} {...actionHandlers} />
-            </div>
-              )}
-              {replied &&
-                !hasBubble &&
-                imageAtts.length === 0 &&
-                fileAtts.length === 0 && (
-                  <MessageMeta
-                    createdAt={m.createdAt}
-                    edited={m.edited}
-                    mine={mine}
-                    blue={false}
-                    peerLastReadAt={peerLastReadAt}
-                    important={m.important}
-                  />
-                )}
-            </div>
-            );
-          })()}
-          {m.kind !== "rejection" && (() => {
-            const previewUrl = firstUrl(m.body);
-            return previewUrl ? (
-              <LinkPreviewCard url={previewUrl} mine={mine} />
-            ) : null;
-          })()}
-          {imageAtts.length > 0 && !nestMedia && (
-            <div
-              className={cn(
-                "flex max-w-full flex-wrap gap-xs",
-                mine ? "justify-end" : "justify-start",
-              )}
-            >
-              {imageAtts.map((a) => (
-                <AttachmentBubble
-                  key={a.id}
-                  attachment={a}
-                  mine={mine}
-                  onOpenImage={openImage}
-                  menu={
-                    <span className="hidden lg:contents">
-                      <ImageActionsMenu {...actionHandlers} />
-                    </span>
-                  }
-                />
-              ))}
-            </div>
-          )}
-          {videoAtts.length > 0 && !nestMedia && (
-            <div
-              className={cn(
-                "max-w-full",
-                videoAtts.length > 1
-                  ? "grid w-80 max-w-full grid-cols-2 gap-1.5"
-                  : "flex w-80 max-w-full flex-col",
-                mine ? "self-end" : "self-start",
-              )}
-            >
-              {videoAtts.map((a) => (
-                <AttachmentBubble
-                  key={a.id}
-                  attachment={a}
-                  mine={mine}
-                  onOpenImage={openImage}
-                  menu={
-                    <span className="hidden lg:contents">
-                      <FileCaretMenu {...actionHandlers} />
-                    </span>
-                  }
-                />
-              ))}
-            </div>
-          )}
-          {fileAtts.length > 0 && (
-            <div className="flex max-w-full flex-col gap-xs">
-              {fileAtts.map((a) => (
-                <AttachmentBubble
-                  key={a.id}
-                  attachment={a}
-                  mine={mine}
-                  onOpenImage={openImage}
-                  timeLabel={
-                    // Own attachment-only voice uses MessageMeta (read receipts).
-                    isVoiceAttachment(a) && !(!m.body && mine)
-                      ? formatTime(m.createdAt)
-                      : undefined
-                  }
-                  menu={
-                    <span className="hidden lg:contents">
-                      <FileCaretMenu {...actionHandlers} />
-                    </span>
-                  }
-                />
-              ))}
-            </div>
-          )}
-          {/* Attachment-only bubbles: time + read receipts for mine. */}
-          {!m.body && !editing && (imageAtts.length > 0 || videoAtts.length > 0 || fileAtts.length > 0) && (
-            <div className={cn("px-1", mine && "self-end")}>
-              <MessageMeta
-                createdAt={m.createdAt}
-                edited={m.edited}
-                mine={mine}
-                blue={false}
-                peerLastReadAt={peerLastReadAt}
-                important={m.important}
-              />
-            </div>
-          )}
-          {m.reactions.length > 0 && (
-            <ReactionChips
-              reactions={m.reactions}
-              mine={mine}
-              currentMemberId={currentMemberId}
-              memberNames={memberNames}
-              onToggle={(emoji) => react(m.id, emoji)}
-            />
-          )}
-        </div>
-      </div>
-      {taskPanelOpen && m.task ? (
-        <TaskInboxSlideOver
-          taskId={m.task.id}
-          href={`/dashboard/projects/${m.task.projectId}/tasks/${m.task.id}`}
-          title={m.task.title}
-          onClose={() => setTaskPanelOpen(false)}
-        />
-      ) : null}
-    </div>
-  );
-});
 
 export function ThreadChat({
   channel,
@@ -1279,6 +145,7 @@ export function ThreadChat({
   mentionables = [],
   inactive = false,
   readOnly = false,
+  replyOnly = false,
   canCreateTask = false,
   allowedTaskTypes = [],
   activeContractType = null,
@@ -1287,6 +154,8 @@ export function ThreadChat({
   lastReadAt: initialLastReadAt = null,
   unreadCount: initialUnreadCount = 0,
   isClientRoom = false,
+  isClientUser: clientUser = false,
+  showInboxBack = true,
   focusMessageId,
 }: {
   channel: string;
@@ -1303,6 +172,8 @@ export function ThreadChat({
   mentionables?: { id: string; name: string }[];
   inactive?: boolean;
   readOnly?: boolean;
+  /** Announcements: reactions and replies only — no new top-level messages. */
+  replyOnly?: boolean;
   canCreateTask?: boolean;
   allowedTaskTypes?: string[];
   activeContractType?: string | null;
@@ -1313,6 +184,10 @@ export function ThreadChat({
   unreadCount?: number;
   /** Isolated client-facing room — shows curated people manager. */
   isClientRoom?: boolean;
+  /** Viewing as a CLIENT user — hide staff inbox chrome. */
+  isClientUser?: boolean;
+  /** Mobile back-to-list. Hidden when a client has only one chat. */
+  showInboxBack?: boolean;
   /** Scroll to this message after open (inbox Important tab). */
   focusMessageId?: string;
 }) {
@@ -1335,12 +210,20 @@ export function ThreadChat({
       ? mergeThreadMessages(cached!.snapshot.messages, initialMessages)
       : initialMessages,
   );
+  // The cached snapshot is the better source: it already accounts for pages the
+  // user paged back through, and those reach further than the server's newest
+  // page. OR-ing the server flag in here would resurrect "load older" on a
+  // thread whose history is fully loaded.
   const [hasMore, setHasMore] = useState(
-    restoreFromCache
-      ? cached!.snapshot.hasMoreOlder || hasMoreOlder
-      : hasMoreOlder,
+    restoreFromCache ? cached!.snapshot.hasMoreOlder : hasMoreOlder,
+  );
+  /** Latched once we know nothing older exists, so an RSC update can't undo it. */
+  const reachedOldestRef = useRef(
+    !(restoreFromCache ? cached!.snapshot.hasMoreOlder : hasMoreOlder),
   );
   const [loadingOlder, setLoadingOlder] = useState(false);
+  /** Synchronous mirror of loadingOlder — scroll events fire faster than state. */
+  const loadingOlderRef = useRef(false);
   const openUnreadCount = restoreFromCache ? 0 : initialUnreadCount;
   const openLastReadAt = restoreFromCache
     ? cached!.snapshot.lastReadAt
@@ -1352,7 +235,6 @@ export function ThreadChat({
   );
   const didInitialPinRef = useRef(false);
   const unreadSeekLoadsRef = useRef(0);
-  const [threadOpened, setThreadOpened] = useState(!seekingUnread || restoreFromCache);
   const [unreadSeekExhausted, setUnreadSeekExhausted] = useState(false);
   const [nearBottom, setNearBottom] = useState(
     restoreFromCache ? cached!.nearBottom : !seekingUnread,
@@ -1371,10 +253,12 @@ export function ThreadChat({
   const [fileError, setFileError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const [dragging, setDragging] = useState(false);
-  const [view, setView] = useState<"chat" | "files" | "important">("chat");
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [view, setView] = useState<
+    "chat" | "files" | "important" | "roadmap" | "project"
+  >("chat");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
-  useScrollLock(searchOpen || peopleOpen || view === "files" || view === "important");
   const [importantList, setImportantList] = useState<ImportantMessageDTO[]>([]);
   const [importantLoading, setImportantLoading] = useState(false);
   const pendingFocusRef = useRef<string | null>(focusMessageId ?? null);
@@ -1387,15 +271,6 @@ export function ThreadChat({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createTaskPayload, setCreateTaskPayload] =
     useState<CreateTaskFromMessagePayload | null>(null);
-  const [holdRecording, setHoldRecording] = useState(false);
-  const [slideCancelArmed, setSlideCancelArmed] = useState(false);
-  const holdStartXRef = useRef<number | null>(null);
-  /** Set when pointer-up happens before MediaRecorder is ready. */
-  const holdEndedRef = useRef<{ ended: boolean; cancel: boolean }>({
-    ended: false,
-    cancel: false,
-  });
-  const topSentinelRef = useRef<HTMLDivElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const photosInputRef = useRef<HTMLInputElement>(null);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1414,7 +289,74 @@ export function ThreadChat({
     setMuted(next);
     void setThreadMuted(threadKey, next).catch(() => setMuted(!next));
   }, [threadKey, muted]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+  const scrollToMessage = useCallback((id: string, opts?: { flash?: boolean }) => {
+    const scroller = scrollerRef.current;
+    const el = document.getElementById(`msg-${id}`);
+    if (!scroller || !el) return false;
+    nearBottomRef.current = false;
+    setNearBottom(false);
+    skipAutoScrollRef.current = true;
+    const sRect = scroller.getBoundingClientRect();
+    const eRect = el.getBoundingClientRect();
+    const top =
+      eRect.top - sRect.top + scroller.scrollTop - (scroller.clientHeight - el.offsetHeight) / 2;
+    scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    if (opts?.flash !== false) {
+      el.classList.remove("message-flash");
+      // Reflow, so re-targeting the same message replays the animation.
+      void el.offsetWidth;
+      el.classList.add("message-flash");
+      window.setTimeout(() => el.classList.remove("message-flash"), 1500);
+    }
+    return true;
+  }, []);
+
+  const {
+    searchOpen,
+    searchQuery,
+    setSearchQuery,
+    searchCursorId,
+    searchInputRef,
+    sq,
+    searchMatches,
+    searchMatchIndex,
+    canGoOlder,
+    canGoNewer,
+    goSearchMatch,
+    openSearch: openSearchPanel,
+    closeSearch,
+  } = useThreadSearch({ messages, scrollToMessage, pendingFocusRef });
+
+  const closeThreadPanels = useCallback(() => {
+    closeSearch();
+    setPeopleOpen(false);
+    setView("chat");
+  }, [closeSearch]);
+  const openSearch = useCallback(() => {
+    if (searchOpen) {
+      closeThreadPanels();
+      return;
+    }
+    setPeopleOpen(false);
+    setView("chat");
+    openSearchPanel();
+  }, [searchOpen, closeThreadPanels, openSearchPanel]);
+  const openThreadPanel = useCallback(
+    (panel: "files" | "important" | "people" | "roadmap" | "project") => {
+      const already =
+        (panel === "people" && peopleOpen) || (panel !== "people" && view === panel);
+      if (already) {
+        closeThreadPanels();
+        return;
+      }
+      closeSearch();
+      setPeopleOpen(panel === "people");
+      setView(panel === "people" ? "chat" : panel);
+    },
+    [peopleOpen, view, closeThreadPanels, closeSearch],
+  );
   const [replyTo, setReplyTo] = useState<string | null>(null);
   // URL the composer preview was dismissed for (X) — hides it until it changes.
   const [dismissedPreview, setDismissedPreview] = useState<string | null>(null);
@@ -1425,9 +367,7 @@ export function ThreadChat({
   const [pendingTaskRef, setPendingTaskRef] = useState<TaskPickerItem | null>(null);
   const [pickerIndex, setPickerIndex] = useState(0);
   const dragDepth = useRef(0);
-  const scrollerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
   const lb = useLightbox();
@@ -1443,7 +383,7 @@ export function ThreadChat({
   if (prevInitial !== initialMessages) {
     setPrevInitial(initialMessages);
     setMessages(mergeThreadMessages(messages, initialMessages));
-    setHasMore(hasMore || hasMoreOlder);
+    setHasMore(!reachedOldestRef.current && (hasMore || hasMoreOlder));
   }
 
   const [prevPeerRead, setPrevPeerRead] = useState(initialPeerLastReadAt);
@@ -1509,6 +449,9 @@ export function ThreadChat({
   const cacheSnapshotRef = useRef(cacheSnapshot);
   cacheSnapshotRef.current = cacheSnapshot;
 
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
   useEffect(() => {
     if (!threadKey) return;
     putThreadCache(threadKey, {
@@ -1535,23 +478,40 @@ export function ThreadChat({
   // Fetch the previous page (older messages) and prepend it, keeping the
   // viewport anchored so the list doesn't jump.
   const loadOlder = useCallback(async () => {
-    if (loadingOlder || !hasMore || messages.length === 0) return;
-    const el = scrollerRef.current;
-    const prevHeight = el?.scrollHeight ?? 0;
-    const prevTop = el?.scrollTop ?? 0;
+    if (loadingOlderRef.current || !hasMore || messages.length === 0) return;
+    const startedAt = Date.now();
+    loadingOlderRef.current = true;
     setLoadingOlder(true);
     try {
       const page = await getThreadMessages({
         ...target,
         cursorId: messages[0].id,
       });
+      // A cached page can resolve in a few ms, which would make the spinner
+      // flash rather than read as loading.
+      const remaining = MIN_LOAD_MS - (Date.now() - startedAt);
+      if (remaining > 0) {
+        await new Promise((resolve) => setTimeout(resolve, remaining));
+      }
+      // Measured after the wait so a message arriving meanwhile is accounted for.
+      const el = scrollerRef.current;
+      const prevHeight = el?.scrollHeight ?? 0;
+      const prevTop = el?.scrollTop ?? 0;
       skipAutoScrollRef.current = true;
+      // Realtime only ever appends newer messages, so counting against the
+      // rendered list is accurate for the older end.
+      const held = new Set(messages.map((m) => m.id));
+      const added = page.messages.filter((m) => !held.has(m.id)).length;
       setMessages((prev) => {
         const existing = new Set(prev.map((m) => m.id));
         const older = page.messages.filter((m) => !existing.has(m.id));
         return [...older, ...prev];
       });
-      setHasMore(page.hasMore);
+      // A page that adds nothing means the cursor can't move any further back —
+      // treat that as the end rather than leaving a button that does nothing.
+      const more = page.hasMore && added > 0;
+      reachedOldestRef.current = !more;
+      setHasMore(more);
       requestAnimationFrame(() => {
         const scroller = scrollerRef.current;
         if (scroller) {
@@ -1561,10 +521,11 @@ export function ThreadChat({
     } catch {
       // Best-effort — the button stays available for a retry.
     } finally {
+      loadingOlderRef.current = false;
       setLoadingOlder(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadingOlder, hasMore, messages, target.taskId, target.projectId, target.conversationId]);
+  }, [hasMore, messages, target.taskId, target.projectId, target.conversationId]);
 
   // Free preview object URLs if the user leaves the thread without sending.
   const pendingRef = useRef(pending);
@@ -1578,220 +539,17 @@ export function ThreadChat({
     [],
   );
 
-  // When the outbox manager finishes delivering one of this thread's messages,
-  // append the server-confirmed message (no refetch). If the user is on
-  // another page at that moment, nothing is subscribed and the message is
-  // simply included in the next server render of the thread.
-  useEffect(() => {
-    if (!threadKey) return;
-    return subscribeDelivered(threadKey, (m, replyToId) => {
-      setMessages((prev) =>
-        prev.some((x) => x.id === m.id)
-          ? prev
-          : [
-              ...prev,
-              {
-                id: m.id,
-                authorId: m.authorId,
-                authorName: m.authorName,
-                authorImageUrl: m.authorImageUrl ?? null,
-                body: m.body,
-                createdAt: m.createdAt,
-                updatedAt: (m as { updatedAt?: string }).updatedAt,
-                edited: (m as { edited?: boolean }).edited,
-                attachments: m.attachments,
-                reactions: [],
-                replyToId,
-                kind: m.kind,
-                task: m.task ?? null,
-                mentions: m.mentions ?? [],
-                important: false,
-                noteComment: m.noteComment ?? null,
-                taskComment: m.taskComment ?? null,
-                noteActivity: m.noteActivity ?? null,
-                proofBypass: m.proofBypass ?? null,
-              },
-            ],
-      );
-    });
-  }, [threadKey]);
+  useThreadRealtime({
+    channel,
+    target,
+    threadKey,
+    currentMemberId,
+    setMessages,
+    setNewBelow,
+    setPeerLastReadAt,
+    nearBottomRef,
+  });
 
-  // Reconcile with the server after a gap in realtime coverage — failed
-  // history recovery on the channel, or coming back from a long background —
-  // by fetching the newest page and appending whatever we don't have. This is
-  // what used to require a manual refresh: a DM sent while the phone was
-  // locked reconnected to a channel whose replay window had passed, and
-  // nothing ever refetched.
-  const refreshingRef = useRef(false);
-  const refreshLatest = useCallback(async () => {
-    if (refreshingRef.current) return;
-    refreshingRef.current = true;
-    try {
-      const page = await getThreadMessages(target);
-      setMessages((prev) => {
-        const seen = new Set(prev.map((m) => m.id));
-        const fresh = page.messages.filter((m) => !seen.has(m.id));
-        if (fresh.length === 0) return prev;
-        return [...prev, ...fresh].sort(
-          (a, b) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-        );
-      });
-    } catch {
-      // Best-effort — the next navigation reconciles.
-    } finally {
-      refreshingRef.current = false;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.taskId, target.projectId, target.conversationId]);
-
-  // Mark this thread's notifications read — but only while someone is actually
-  // looking at it. The server component deliberately no longer marks anything
-  // (link prefetch was silently marking threads read), so read-state is owned
-  // here: on open in a visible tab, whenever the tab becomes visible again,
-  // and (debounced) when messages arrive while the user is watching.
-  const markRead = useCallback(() => {
-    if (document.visibilityState !== "visible") return;
-    if (threadKey) {
-      useNotificationStore.getState().clearThreadUnread(threadKey);
-    }
-    const tag = threadPushTag(target);
-    if (tag) void closePushBannersByTags([tag]);
-    void markThreadRead(target)
-      .then((counts) => {
-        if (counts && typeof counts.unread === "number") {
-          useNotificationStore.getState().reconcileCounts(counts);
-          updateAppBadge(Math.max(0, counts.unread));
-        }
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.taskId, target.projectId, target.conversationId, threadKey]);
-
-  const hiddenAtRef = useRef<number | null>(null);
-  useEffect(() => {
-    markRead();
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        hiddenAtRef.current = Date.now();
-        return;
-      }
-      markRead();
-      // Backgrounded long enough for the WebSocket to have been dropped (or
-      // killed by the OS) — catch up on anything published meanwhile.
-      if (hiddenAtRef.current && Date.now() - hiddenAtRef.current > 10_000) {
-        void refreshLatest();
-      }
-      hiddenAtRef.current = null;
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [markRead, refreshLatest]);
-
-  const markReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const requestMarkRead = useCallback(() => {
-    if (markReadTimerRef.current) return;
-    markReadTimerRef.current = setTimeout(() => {
-      markReadTimerRef.current = null;
-      markRead();
-    }, 800);
-  }, [markRead]);
-  useEffect(
-    () => () => {
-      if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current);
-    },
-    [],
-  );
-
-  useChannel(channel, (data) => {
-    const d = data as
-      | {
-          type?: string;
-          message?: MessageDTO;
-          messageId?: string;
-          reactions?: ReactionSummary[];
-          body?: string;
-          updatedAt?: string;
-          edited?: boolean;
-          memberId?: string;
-          lastReadAt?: string;
-        }
-      | null;
-    if (!d) return;
-    if (d.type === "message.new" && d.message) {
-      const m = d.message;
-      // A message arriving while the user is watching this thread counts as
-      // read — otherwise it stays unread in the DB until the next page load.
-      if (m.authorId !== currentMemberId) {
-        requestMarkRead();
-        if (!nearBottomRef.current) {
-          setNewBelow((n) => n + 1);
-        }
-      }
-      setMessages((prev) => {
-        if (prev.some((x) => x.id === m.id)) return prev;
-        return [
-          ...prev,
-          {
-            id: m.id,
-            authorId: m.authorId,
-            authorName: m.authorName,
-            authorImageUrl: m.authorImageUrl ?? null,
-            body: m.body,
-            createdAt: m.createdAt,
-            updatedAt: (m as MessageDTO & { updatedAt?: string }).updatedAt,
-            edited: (m as MessageDTO & { edited?: boolean }).edited,
-            attachments: m.attachments ?? [],
-            reactions: [],
-            replyToId: m.replyToId ?? null,
-            kind: m.kind,
-            task: m.task ?? null,
-            mentions: m.mentions ?? [],
-            deadlineReminder: m.deadlineReminder ?? null,
-            noteComment: m.noteComment ?? null,
-            taskComment: m.taskComment ?? null,
-            noteActivity: m.noteActivity ?? null,
-            proofBypass: m.proofBypass ?? null,
-            important: false,
-          },
-        ];
-      });
-    } else if (d.type === "message.updated" && d.messageId) {
-      const { messageId, body, updatedAt, edited } = d;
-      setMessages((prev) =>
-        prev.map((x) =>
-          x.id === messageId
-            ? {
-                ...x,
-                body: body ?? x.body,
-                updatedAt: updatedAt ?? x.updatedAt,
-                edited: edited ?? true,
-              }
-            : x,
-        ),
-      );
-    } else if (d.type === "thread.read" && d.memberId && d.memberId !== currentMemberId) {
-      if (d.lastReadAt) {
-        setPeerLastReadAt((prev) => {
-          if (!prev) return d.lastReadAt!;
-          return new Date(d.lastReadAt!).getTime() > new Date(prev).getTime()
-            ? d.lastReadAt!
-            : prev;
-        });
-      }
-    } else if (d.type === "reaction.updated" && d.messageId) {
-      const { messageId, reactions } = d;
-      setMessages((prev) =>
-        prev.map((x) =>
-          x.id === messageId ? { ...x, reactions: reactions ?? [] } : x,
-        ),
-      );
-    } else if (d.type === "message.deleted" && d.messageId) {
-      const { messageId } = d;
-      setMessages((prev) => prev.filter((x) => x.id !== messageId));
-    }
-    // Reconnected but the missed events couldn't be replayed — refetch.
-  }, () => void refreshLatest());
 
   // Track whether the user is near the bottom of the scroller.
   useEffect(() => {
@@ -1825,6 +583,18 @@ export function ThreadChat({
       el.scrollTop = el.scrollHeight;
     });
   }, [messages.length, typing.length, outbox.length]);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    const inner = el?.firstElementChild;
+    if (!el || !(inner instanceof HTMLElement)) return;
+    const ro = new ResizeObserver(() => {
+      if (!nearBottomRef.current) return;
+      el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, []);
 
   const firstUnreadId = useMemo(
     () =>
@@ -1873,7 +643,6 @@ export function ThreadChat({
       if (didInitialPinRef.current) return;
       if (!pinScroller(mode)) return;
       didInitialPinRef.current = true;
-      setThreadOpened(true);
     },
     [pinScroller],
   );
@@ -1883,17 +652,21 @@ export function ThreadChat({
     if (pendingFocusRef.current) return;
     if (restoreFromCache && scrollerRef.current) {
       const el = scrollerRef.current;
-      if (cached?.nearBottom) {
+      if (typeof cached?.scrollTop === "number") {
+        el.scrollTop = cached.scrollTop;
+      }
+      const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+      const pinBottom =
+        cached?.nearBottom || dist < Math.max(400, el.clientHeight * 1.2);
+      if (pinBottom) {
         el.scrollTop = el.scrollHeight;
         nearBottomRef.current = true;
         setNearBottom(true);
-      } else if (typeof cached?.scrollTop === "number") {
-        el.scrollTop = cached.scrollTop;
+      } else {
         nearBottomRef.current = false;
         setNearBottom(false);
       }
       didInitialPinRef.current = true;
-      setThreadOpened(true);
       skipAutoScrollRef.current = true;
       return;
     }
@@ -1934,20 +707,6 @@ export function ThreadChat({
     finishOpen,
   ]);
 
-  // Infinite load older via top sentinel.
-  useEffect(() => {
-    const root = scrollerRef.current;
-    const sentinel = topSentinelRef.current;
-    if (!root || !sentinel || !hasMore || !threadOpened) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) void loadOlder();
-      },
-      { root, rootMargin: "120px 0px 0px 0px", threshold: 0 },
-    );
-    io.observe(sentinel);
-    return () => io.disconnect();
-  }, [hasMore, loadOlder, threadOpened]);
 
   const scrollToBottom = useCallback(() => {
     const el = scrollerRef.current;
@@ -2181,21 +940,6 @@ export function ThreadChat({
     scrollToBottom();
   };
 
-  // --- Voice messages ---
-  const [recording, setRecording] = useState(false);
-  const [recordPaused, setRecordPaused] = useState(false);
-  const [recordSecs, setRecordSecs] = useState(0);
-  const [recordError, setRecordError] = useState<string | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const recordChunksRef = useRef<Blob[]>([]);
-  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const discardRecordingRef = useRef(false);
-  const recordStartedAtRef = useRef(0);
-  const recordAccumulatedRef = useRef(0);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const recordPausedRef = useRef(false);
-
   // Send a finished recording through the normal attachment pipeline.
   const sendVoice = useCallback(
     (file: File) => {
@@ -2215,133 +959,19 @@ export function ThreadChat({
     [replyTo, threadKey, target.taskId, target.projectId, target.conversationId, scrollToBottom],
   );
 
-  const cleanupRecordingResources = () => {
-    if (recordTimerRef.current) {
-      clearInterval(recordTimerRef.current);
-      recordTimerRef.current = null;
-    }
-    audioCtxRef.current?.close().catch(() => {});
-    audioCtxRef.current = null;
-    analyserRef.current = null;
-  };
-
-  const startRecording = async () => {
-    if (recording) return;
-    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      setRecordError("Voice recording is not supported in this browser.");
-      setTimeout(() => setRecordError(null), 4000);
-      return;
-    }
-    holdEndedRef.current = { ended: false, cancel: false };
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Pointer already released while waiting for mic permission.
-      if (holdEndedRef.current.ended) {
-        stream.getTracks().forEach((t) => t.stop());
-        setHoldRecording(false);
-        return;
-      }
-      const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(
-        (t) => MediaRecorder.isTypeSupported(t),
-      );
-      const rec = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
-      recordChunksRef.current = [];
-      discardRecordingRef.current = false;
-      recordAccumulatedRef.current = 0;
-      recordPausedRef.current = false;
-      setRecordPaused(false);
-      rec.ondataavailable = (e) => {
-        if (e.data.size > 0) recordChunksRef.current.push(e.data);
-      };
-      rec.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        cleanupRecordingResources();
-        if (!discardRecordingRef.current && recordChunksRef.current.length > 0) {
-          const type = rec.mimeType || "audio/webm";
-          const ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
-          const stamp = new Date();
-          const name = `Voice message ${stamp.toLocaleDateString()} ${stamp
-            .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-            .replace(/:/g, ".")}.${ext}`;
-          const file = new File([new Blob(recordChunksRef.current, { type })], name, { type });
-          sendVoice(file);
-        }
-        recordChunksRef.current = [];
-      };
-      try {
-        const AC =
-          window.AudioContext ??
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        const ctx = new AC();
-        const src = ctx.createMediaStreamSource(stream);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
-        src.connect(analyser);
-        audioCtxRef.current = ctx;
-        analyserRef.current = analyser;
-      } catch {}
-      recorderRef.current = rec;
-      rec.start(250);
-      recordStartedAtRef.current = Date.now();
-      setRecordSecs(0);
-      setRecording(true);
-      recordTimerRef.current = setInterval(() => {
-        const running = recordStartedAtRef.current
-          ? Date.now() - recordStartedAtRef.current
-          : 0;
-        setRecordSecs(Math.floor((recordAccumulatedRef.current + running) / 1000));
-      }, 250);
-      if (holdEndedRef.current.ended) {
-        stopRecording(!holdEndedRef.current.cancel);
-      }
-    } catch {
-      setHoldRecording(false);
-      setRecordError("Microphone access was denied. Allow it in your browser settings to send voice messages.");
-      setTimeout(() => setRecordError(null), 5000);
-    }
-  };
-
-  const togglePauseRecording = () => {
-    const rec = recorderRef.current;
-    if (!rec) return;
-    if (rec.state === "recording") {
-      rec.pause();
-      recordAccumulatedRef.current += Date.now() - recordStartedAtRef.current;
-      recordStartedAtRef.current = 0;
-      recordPausedRef.current = true;
-      setRecordPaused(true);
-    } else if (rec.state === "paused") {
-      rec.resume();
-      recordStartedAtRef.current = Date.now();
-      recordPausedRef.current = false;
-      setRecordPaused(false);
-    }
-  };
-
-  const stopRecording = (sendIt: boolean) => {
-    discardRecordingRef.current = !sendIt;
-    try {
-      if (recorderRef.current?.state === "paused") recorderRef.current.resume();
-      recorderRef.current?.stop();
-    } catch {}
-    recorderRef.current = null;
-    setRecording(false);
-    setRecordPaused(false);
-    recordPausedRef.current = false;
-  };
-
-  useEffect(() => {
-    return () => {
-      discardRecordingRef.current = true;
-      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
-      audioCtxRef.current?.close().catch(() => {});
-      try {
-        recorderRef.current?.stop();
-      } catch {}
-    };
-  }, []);
+  const {
+    recording,
+    recordPaused,
+    recordSecs,
+    recordError,
+    holdRecording,
+    slideCancelArmed,
+    analyserRef,
+    recordPausedRef,
+    stopRecording,
+    togglePauseRecording,
+    onMicPointerDown,
+  } = useVoiceRecorder({ onSend: sendVoice });
 
   const react = useCallback(
     (messageId: string, emoji: string) => {
@@ -2401,16 +1031,15 @@ export function ThreadChat({
     });
   }, []);
 
-  const handleEdit = useCallback(
-    (id: string) => {
-      const msg = messages.find((m) => m.id === id);
+  // Reads through a ref so the callback identity stays stable — depending on
+  // `messages` here re-renders every memoized MessageRow on each new message.
+  const handleEdit = useCallback((id: string) => {
+    const msg = messagesRef.current.find((m) => m.id === id);
       if (!msg) return;
       setSelectedId(null);
       setEditingId(id);
       setEditDraft(msg.body);
-    },
-    [messages],
-  );
+  }, []);
 
   const onSaveEdit = useCallback(() => {
     if (!editingId) return;
@@ -2543,40 +1172,8 @@ export function ThreadChat({
     return "Several people are typing…";
   }, [typing, memberNames]);
 
-  const sq = searchQuery.trim().toLowerCase();
-  const searchMatches = useMemo(() => {
-    if (!sq) return null;
-    return messages.filter((m) => m.body.toLowerCase().includes(sq));
-  }, [messages, sq]);
-
-  const matchIds = useMemo(() => {
-    if (!searchMatches) return null;
-    return new Set(searchMatches.map((m) => m.id));
-  }, [searchMatches]);
-
-  const scrollToMessage = useCallback((id: string) => {
-    const scroller = scrollerRef.current;
-    const el = document.getElementById(`msg-${id}`);
-    if (!scroller || !el) return false;
-    nearBottomRef.current = false;
-    setNearBottom(false);
-    skipAutoScrollRef.current = true;
-    const sRect = scroller.getBoundingClientRect();
-    const eRect = el.getBoundingClientRect();
-    const top =
-      eRect.top - sRect.top + scroller.scrollTop - (scroller.clientHeight - el.offsetHeight) / 2;
-    scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-    el.classList.add("ring-2", "ring-primary/60", "rounded-2xl");
-    window.setTimeout(
-      () => el.classList.remove("ring-2", "ring-primary/60", "rounded-2xl"),
-      1500,
-    );
-    return true;
-  }, []);
-
   const jumpToMessage = useCallback((id: string) => {
-    setView("chat");
-    setSearchOpen(false);
+    closeThreadPanels();
     pendingFocusRef.current = id;
     nearBottomRef.current = false;
     skipAutoScrollRef.current = true;
@@ -2586,7 +1183,7 @@ export function ThreadChat({
         if (scrollToMessage(id)) pendingFocusRef.current = null;
       });
     });
-  }, [scrollToMessage]);
+  }, [scrollToMessage, closeThreadPanels]);
 
   useEffect(() => {
     if (focusMessageId) pendingFocusRef.current = focusMessageId;
@@ -2650,46 +1247,8 @@ export function ThreadChat({
     [lb, allImages],
   );
 
-  useEffect(() => {
-    if (searchOpen) searchInputRef.current?.focus();
-  }, [searchOpen]);
-
   const replyingTo = replyTo ? byId.get(replyTo) : null;
 
-  // Hold-to-record: track pointer on window so the composer UI can swap to the
-  // recording bar without losing pointerup / slide-to-cancel.
-  const onMicPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    holdStartXRef.current = e.clientX;
-    setSlideCancelArmed(false);
-    setHoldRecording(true);
-    let cancelled = false;
-    const onMove = (ev: PointerEvent) => {
-      if (holdStartXRef.current == null) return;
-      const dx = ev.clientX - holdStartXRef.current;
-      cancelled = dx < -80;
-      setSlideCancelArmed(cancelled);
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
-      setHoldRecording(false);
-      setSlideCancelArmed(false);
-      holdStartXRef.current = null;
-      if (recorderRef.current) {
-        stopRecording(!cancelled);
-      } else {
-        // Mic permission / recorder still starting — finish when ready.
-        holdEndedRef.current = { ended: true, cancel: cancelled };
-      }
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-    void startRecording();
-  };
 
   // First link in the draft — previewed above the composer until dismissed.
   const composerUrl = useMemo(() => {
@@ -2700,7 +1259,7 @@ export function ThreadChat({
   return (
     <div
       ref={frameRef}
-      className="relative flex min-h-0 flex-1 flex-col touch-manipulation"
+      className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden touch-manipulation"
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -2717,7 +1276,7 @@ export function ThreadChat({
 
       {/* Thread header — swaps to WhatsApp-style selection toolbar on mobile. */}
       {selectedMessage ? (
-        <div className="absolute inset-x-0 top-0 z-10 flex app-top-bar-tall items-center gap-0.5 border-b border-border/60 px-1 sm:px-2 lg:hidden">
+        <div className="flex shrink-0 app-top-bar-tall app-top-bar-solid items-center gap-0.5 border-b border-border/60 px-1 sm:px-2 lg:hidden">
           <button
             type="button"
             onClick={clearSelection}
@@ -2804,8 +1363,7 @@ export function ThreadChat({
                 <DropdownMenuItem
                   onClick={() => {
                     clearSelection();
-                    setView("chat");
-                    setSearchOpen(true);
+                    openSearch();
                   }}
                   className="min-h-11 gap-3 text-s"
                 >
@@ -2828,20 +1386,35 @@ export function ThreadChat({
       ) : null}
       <div
         className={cn(
-          "absolute inset-x-0 top-0 z-10 flex app-top-bar-tall items-center gap-2 border-b border-border/60 sm:gap-3",
+          "flex shrink-0 app-top-bar-tall app-top-bar-solid items-center gap-2 border-b border-border/60 sm:gap-3",
           selectedMessage && "hidden lg:flex",
+          !showInboxBack && !searchOpen && "ps-3",
+          // The bar has no bottom padding of its own, so the search field —
+          // taller than the title block it replaces — would sit on the divider.
+          searchOpen && "pe-3 pb-3",
         )}
       >
+        {searchOpen ? (
+          <button
+            type="button"
+            onClick={closeThreadPanels}
+            aria-label="Close search"
+            className="grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:size-8"
+          >
+            <ArrowLeft className="h-5 w-5 lg:h-4 lg:w-4" />
+          </button>
+        ) : showInboxBack ? (
         <Link
           href="/dashboard/messages"
           aria-label="Back to inbox"
-          className="grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden lg:size-8"
+          className="grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:size-8"
         >
           <ArrowLeft className="h-5 w-5 lg:h-4 lg:w-4" />
         </Link>
-        <div className="min-w-0 flex-1">
+        ) : null}
+        <div className={cn("min-w-0 flex-1", searchOpen && "hidden")}>
           <div className="flex items-center gap-2">
-            <span className="page-name truncate text-foreground">{title}</span>
+            <PageBreadcrumb items={[{ label: title }]} />
             {muted && (
               <BellOff className="h-3 w-3 shrink-0 text-muted-foreground/70" aria-label="Muted" />
             )}
@@ -2864,6 +1437,108 @@ export function ThreadChat({
           </div>
           <div className="truncate text-s text-muted-foreground">{subtitle}</div>
         </div>
+        <div
+          className={cn(
+            "relative min-w-0",
+            searchOpen
+              ? "flex-1"
+              : "pointer-events-none absolute h-11 w-48 overflow-hidden opacity-0",
+          )}
+        >
+          {searchOpen && searchQuery ? (
+            <button
+              type="button"
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setSearchQuery("");
+                searchInputRef.current?.focus();
+              }}
+              className="absolute left-1.5 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
+              aria-label="Clear"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : (
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          )}
+          <Input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                closeThreadPanels();
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                goSearchMatch(-1);
+                return;
+              }
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                goSearchMatch(1);
+                return;
+              }
+              if (e.key === "Enter") {
+                e.preventDefault();
+                goSearchMatch(e.shiftKey ? 1 : -1);
+              }
+            }}
+            inputMode="search"
+            enterKeyHint="search"
+            autoComplete="off"
+            placeholder="Search…"
+            className={cn(
+              "h-11 rounded-full border-0 bg-muted pl-9 text-[16px] shadow-none focus-visible:border-0 focus-visible:ring-0 dark:bg-muted md:h-10 md:text-s",
+              searchOpen ? "pr-[5.5rem]" : "pr-9",
+            )}
+          />
+          {searchOpen && (
+            <div className="absolute inset-y-0 right-1 flex items-center">
+              <span className="sr-only" aria-live="polite">
+                {!sq
+                  ? ""
+                  : searchMatches.length === 0
+                    ? "No messages found"
+                    : searchMatchIndex >= 0
+                      ? `Match ${searchMatchIndex + 1} of ${searchMatches.length}`
+                      : ""}
+              </span>
+              <button
+                type="button"
+                aria-label="Older match"
+                disabled={!canGoOlder}
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => goSearchMatch(-1)}
+                className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+              >
+                <ChevronUp className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="Newer match"
+                disabled={!canGoNewer}
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => goSearchMatch(1)}
+                className="grid size-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+        {!searchOpen && (
+          <>
+        <button
+          type="button"
+          aria-label="Search"
+          title="Search"
+          onClick={openSearch}
+          className="grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:size-8 lg:rounded-lg"
+        >
+          <Search className="h-5 w-5 lg:h-4 lg:w-4" />
+        </button>
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label="More options"
@@ -2871,37 +1546,36 @@ export function ThreadChat({
           >
             <MoreVertical className="h-5 w-5 lg:h-4 lg:w-4" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem onClick={() => { setView("chat"); setSearchOpen(true); }}>
-              <Search className="h-4 w-4" />
-              <span className="flex-1">Search</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setView(view === "files" ? "chat" : "files")}>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem onClick={() => openThreadPanel("files")}>
               <FilesIcon className="h-4 w-4" />
-              <span className="flex-1">Files</span>
+              <span className="flex-1">Media</span>
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                setSearchOpen(false);
-                setPeopleOpen(false);
-                setView(view === "important" ? "chat" : "important");
-              }}
-            >
+            <DropdownMenuItem onClick={() => openThreadPanel("important")}>
               <Star className="h-4 w-4" />
               <span className="flex-1">Important</span>
             </DropdownMenuItem>
-            {isClientRoom && target.projectId && (
-              <DropdownMenuItem
-                onClick={() => {
-                  setPeopleOpen(true);
-                  setSearchOpen(false);
-                }}
-              >
+            {isClientRoom && target.projectId ? (
+              <DropdownMenuItem onClick={() => openThreadPanel("people")}>
                 <Users className="h-4 w-4" />
                 <span className="flex-1">People</span>
               </DropdownMenuItem>
-            )}
-            {threadKey && (
+            ) : null}
+            {clientUser && isClientRoom && target.projectId ? (
+              <>
+                <DropdownMenuItem onClick={() => openThreadPanel("project")}>
+                  <LayoutDashboard className="h-4 w-4" />
+                  <span className="flex-1">My project</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openThreadPanel("roadmap")}>
+                  <MapIcon className="h-4 w-4" />
+                  <span className="flex-1">Road map</span>
+                </DropdownMenuItem>
+              </>
+            ) : null}
+            {threadKey ? (
+              <>
+                <DropdownMenuSeparator />
               <DropdownMenuItem onClick={toggleMute}>
                 {muted ? (
                   <Bell className="h-4 w-4" />
@@ -2910,30 +1584,60 @@ export function ThreadChat({
                 )}
                 <span className="flex-1">{muted ? "Unmute" : "Mute"}</span>
               </DropdownMenuItem>
-            )}
+              </>
+            ) : null}
+            {/* Clients have no sidebar, so their account lives here. */}
+            {clientUser ? (
+              <>
+                <DropdownMenuSeparator />
+                <AccountMenuItems
+                  profileLabel={null}
+                  onProfile={() => setProfileOpen(true)}
+                />
+              </>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
+          </>
+        )}
       </div>
+      {clientUser && (
+        <>
+          <ProfileDialog
+            open={profileOpen}
+            onOpenChange={setProfileOpen}
+            onSignOut={() => {
+              setProfileOpen(false);
+              setSignOutOpen(true);
+            }}
+          />
+          <SignOutDialog open={signOutOpen} onOpenChange={setSignOutOpen} />
+        </>
+      )}
 
-      {/* Messages — absolute fill so this pane scrolls instead of growing the page. */}
-      <div className="relative min-h-0 flex-1">
+      {/* Messages */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
         <div
           ref={scrollerRef}
           data-scroll-lock-root
-          className="app-scroll-under-tall absolute inset-0 overflow-y-auto overscroll-contain px-app pb-4 lg:px-8"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-app pt-2 lg:px-8"
         >
           <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-xs">
-            <div ref={topSentinelRef} className="h-px w-full" aria-hidden />
+            {/* Sits above the oldest message, so it only comes into view once
+                the user has scrolled the whole loaded history. */}
             {hasMore && (
-              <div className="flex justify-center pb-2">
+              <div className="flex shrink-0 justify-center py-3">
                 <button
                   type="button"
+                  data-load-older-pill="1"
                   onClick={loadOlder}
                   disabled={loadingOlder}
-                  className="flex items-center gap-2 rounded-full border border-border/60 bg-surface/60 px-4 py-1.5 text-s font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground disabled:opacity-60"
+                  className="flex animate-in items-center gap-2 rounded-full bg-primary px-4 py-1.5 text-s font-medium text-primary-foreground shadow-sm duration-200 fade-in transition-colors hover:bg-primary/90 disabled:opacity-100"
                 >
-                  {loadingOlder && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  {loadingOlder ? "Loading…" : "Load earlier messages"}
+                  {loadingOlder && (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  )}
+                  {loadingOlder ? "Loading older messages…" : "Load older messages"}
                 </button>
               </div>
             )}
@@ -2961,7 +1665,7 @@ export function ThreadChat({
                   newGroup={newGroup}
                   showAuthor={!mine && newGroup}
                   notFirst={i > 0}
-                  dimmed={Boolean(sq && matchIds && !matchIds.has(m.id))}
+                  dimmed={false}
                   replied={m.replyToId ? byId.get(m.replyToId) : null}
                   showTaskCard={!target.taskId}
                   currentMemberId={currentMemberId}
@@ -2986,6 +1690,8 @@ export function ThreadChat({
                   scrollToMessage={jumpToMessage}
                   openImage={openImage}
                   memberNames={peopleNames}
+                  searchQuery={sq || undefined}
+                  searchCurrent={searchCursorId === m.id}
                 />
                 </Fragment>
               );
@@ -2996,8 +1702,8 @@ export function ThreadChat({
                 entry={o}
                 replied={o.replyToId ? byId.get(o.replyToId) : null}
                 currentMemberId={currentMemberId}
-                onRetry={() => retryOutboxEntry(o.tempId)}
-                onDiscard={() => discardOutboxEntry(o.tempId)}
+                onRetry={retryOutboxEntry}
+                onDiscard={discardOutboxEntry}
               />
             ))}
             {messages.length === 0 && outbox.length === 0 && (
@@ -3025,6 +1731,8 @@ export function ThreadChat({
                 </div>
               </div>
             )}
+            {/* Real spacer — iOS ignores padding-bottom on overflow scrollers. */}
+            <div className="h-8 w-full shrink-0" aria-hidden />
           </div>
         </div>
         {newBelow > 0 && !nearBottom && (
@@ -3038,14 +1746,17 @@ export function ThreadChat({
         )}
       </div>
 
-      {/* Composer */}
+      {/* Composer — hidden while searching so the keyboard stays on the find field. */}
+      {!searchOpen && (
       <div className="shrink-0 border-t border-border/60 px-app pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:px-8">
         <div className="mx-auto w-full max-w-[1100px]">
-          {inactive || readOnly ? (
-            <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-surface/30 px-4 py-3 text-s text-muted-foreground">
+          {inactive || readOnly || (replyOnly && !replyTo) ? (
+            <div className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-surface/30 px-4 py-3 text-center text-s text-muted-foreground">
               {inactive
                 ? "This project is not active. The channel is read-only."
-                : "You have read-only access to this chat."}
+                : readOnly
+                  ? "You have read-only access to this chat."
+                  : "Only admins post here — react, or reply to an announcement."}
             </div>
           ) : (
           <>
@@ -3225,7 +1936,7 @@ export function ThreadChat({
             </div>
           )}
           {recording ? (
-            <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-surface/40 p-2 sm:gap-3">
+            <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-[#131317] p-2 sm:gap-3">
               {holdRecording ? (
                 <>
                   <div className="flex shrink-0 items-center gap-xs text-s">
@@ -3311,7 +2022,7 @@ export function ThreadChat({
               )}
             </div>
           ) : (
-          <div className="flex items-end gap-2 rounded-2xl border border-border/60 bg-surface/40 p-2">
+          <div className="flex items-end gap-2 rounded-2xl border border-border/60 bg-[#131317] p-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -3529,6 +2240,7 @@ export function ThreadChat({
           )}
         </div>
       </div>
+      )}
 
       {lb.state && (
         <Lightbox
@@ -3578,115 +2290,28 @@ export function ThreadChat({
           }}
         />
       )}
-      {searchOpen && (
-        <div
-          data-scroll-lock-root
-          className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80"
-        >
-          <div className="flex app-top-bar-tall shrink-0 items-center gap-2 border-b border-border/60 px-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full"
-              onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
-              aria-label="Close search"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-            <span className="page-name text-foreground">Search messages</span>
-          </div>
-          <div className="shrink-0 border-b border-border/60 px-3 py-3">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                ref={searchInputRef}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Escape") { setSearchOpen(false); setSearchQuery(""); } }}
-                placeholder="Search"
-                className="h-10 rounded-full pl-9 pr-9 text-s"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-full text-muted-foreground hover:bg-surface hover:text-foreground"
-                  aria-label="Clear"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            {!sq && (
-              <div className="px-6 py-10 text-center text-s text-muted-foreground">
-                Search for messages in this conversation.
-              </div>
-            )}
-            {sq && searchMatches && searchMatches.length === 0 && (
-              <div className="px-6 py-10 text-center text-s text-muted-foreground">
-                No messages found.
-              </div>
-            )}
-            {sq && searchMatches && searchMatches.length > 0 && (
-              <>
-                <div className="px-4 pb-1 pt-3 text-s font-medium text-muted-foreground">
-                  {searchMatches.length} result{searchMatches.length === 1 ? "" : "s"}
-                </div>
-                <ul className="flex flex-col">
-                  {searchMatches.map((m) => (
-                    <li key={m.id}>
-                      <button
-                        type="button"
-                        onClick={() => scrollToMessage(m.id)}
-                        className="flex w-full flex-col gap-1 border-b border-border/40 px-4 py-3 text-left hover:bg-surface/60"
-                      >
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(m.createdAt).toLocaleDateString([], { day: "2-digit", month: "2-digit", year: "numeric" })}
-                        </span>
-                        <span className="line-clamp-2 text-s text-foreground">
-                          <span className="text-muted-foreground">{m.authorName}:</span>{" "}
-                          {m.body}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
-        </div>
-      )}
       {view === "files" && (
-        <div
-          data-scroll-lock-root
-          className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80"
+        <NoteSlideOver
+          title="Media"
+          onClose={closeThreadPanels}
+          bodyClassName="flex flex-col overflow-hidden"
         >
-          <FilesPanel
-            messages={messages.filter((m) => m.attachments.length > 0)}
-            onClose={() => setView("chat")}
-          />
-        </div>
+          <FilesPanel messages={messages} />
+        </NoteSlideOver>
+      )}
+      {view === "project" && target.projectId && (
+        <NoteSlideOver title="My project" onClose={closeThreadPanels}>
+          <ClientProjectPanel projectId={target.projectId} />
+        </NoteSlideOver>
+      )}
+
+      {view === "roadmap" && target.projectId && (
+        <NoteSlideOver title="Road map" onClose={closeThreadPanels}>
+          <ClientRoadmapPanel projectId={target.projectId} />
+        </NoteSlideOver>
       )}
       {view === "important" && (
-        <div
-          data-scroll-lock-root
-          className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80"
-        >
-          <div className="flex app-top-bar-tall shrink-0 items-center gap-2 border-b border-border/60 px-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full"
-              onClick={() => setView("chat")}
-              aria-label="Close important"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-            <span className="page-name text-foreground">Important</span>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <NoteSlideOver title="Important" onClose={closeThreadPanels}>
             {importantLoading && (
               <div className="flex justify-center py-10">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -3723,35 +2348,21 @@ export function ThreadChat({
                 ))}
               </ul>
             )}
-          </div>
-        </div>
+        </NoteSlideOver>
       )}
 
       {peopleOpen && isClientRoom && target.projectId && (
-        <div
-          data-scroll-lock-root
-          className="absolute inset-y-0 right-0 z-30 flex w-80 flex-col border-l border-border/60 bg-background shadow-xl max-lg:inset-0 max-lg:w-full lg:inset-y-0 lg:right-0 lg:w-80"
-        >
-          <div className="flex app-top-bar-tall shrink-0 items-center gap-2 border-b border-border/60 px-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full"
-              onClick={() => setPeopleOpen(false)}
-              aria-label="Close people"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-            <span className="page-name text-foreground">People</span>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
+        <NoteSlideOver title="People" onClose={closeThreadPanels}>
+          <div className="px-3 py-2">
             <ClientChatPeopleManager
               projectId={target.projectId}
               enabled
               compact
+              clientView={clientUser}
+              projectName={projectName ?? title}
             />
           </div>
-        </div>
+        </NoteSlideOver>
       )}
 
       <CreateTaskFromMessageDialog
@@ -3782,293 +2393,5 @@ export function ThreadChat({
         }}
       />
     </div>
-  );
-}
-
-// An optimistically-sent message still uploading/delivering, rendered as a
-// "mine" bubble with per-file progress — the WhatsApp send experience.
-function OutboxBubble({
-  entry,
-  replied,
-  currentMemberId,
-  onRetry,
-  onDiscard,
-}: {
-  entry: OutboxEntry;
-  replied: ChatMessage | null | undefined;
-  currentMemberId: string;
-  onRetry: () => void;
-  onDiscard: () => void;
-}) {
-  const failed = entry.status === "error";
-  const imageFiles = entry.files.filter(
-    (f) => f.contentType?.startsWith("image/") && f.previewUrl,
-  );
-  const otherFiles = entry.files.filter(
-    (f) => !(f.contentType?.startsWith("image/") && f.previewUrl),
-  );
-  const nestImages = Boolean(entry.body) && imageFiles.length > 0;
-
-  const pendingImage = (f: (typeof entry.files)[number], embedded: boolean) => {
-    const pct = f.status === "done" ? 100 : f.progress;
-    return (
-      <div
-        key={f.key}
-        className={cn(
-          "relative overflow-hidden rounded-xl",
-          embedded ? "w-full" : "border border-border/50 bg-surface",
-        )}
-        style={embedded ? undefined : { maxWidth: 240 }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={f.previewUrl!}
-          alt={f.name}
-          className={cn(
-            "object-cover",
-            embedded ? "max-h-80 w-full" : "max-h-60 w-auto max-w-[240px]",
-          )}
-        />
-        {!failed && entry.status === "uploading" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50">
-            <Loader2 className="h-6 w-6 animate-spin text-white" />
-            <span className="text-s font-semibold text-white">{pct}%</span>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  return (
-    <div className="flex justify-end gap-2">
-      <div className="flex max-w-[70%] flex-col items-end gap-1">
-        {otherFiles.length > 0 && (
-          <div className="flex max-w-full flex-col gap-xs">
-            {otherFiles.map((f) => {
-              const pct = f.status === "done" ? 100 : f.progress;
-              return (
-                <div
-                  key={f.key}
-                  className="flex items-center gap-s rounded-xl border border-primary-foreground/20 bg-primary/80 px-3 py-2 text-s text-primary-foreground"
-                >
-                  {entry.status === "uploading" && !failed ? (
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-                  ) : (
-                    <FileText className="h-4 w-4 shrink-0 opacity-80" />
-                  )}
-                  <span className="max-w-[200px] truncate font-medium">
-                    {f.name}
-                  </span>
-                  {entry.status === "uploading" && !failed && (
-                    <span className="shrink-0 text-xs opacity-80">{pct}%</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {!nestImages && imageFiles.length > 0 && (
-          <div className="flex max-w-full flex-col gap-xs">
-            {imageFiles.map((f) => pendingImage(f, false))}
-          </div>
-        )}
-        {(entry.body || replied) && (
-          <div className="flex min-w-0 max-w-full flex-col items-end gap-1">
-            {replied && (
-              <ReplyContext
-                authorLabel={
-                  replied.authorId === currentMemberId ? "You" : replied.authorName
-                }
-                body={replied.body}
-                attachments={replied.attachments}
-                mine
-              />
-            )}
-            {entry.body && (
-              <div
-                className={cn(
-                  "flex max-w-full rounded-2xl rounded-br-md bg-primary text-s leading-relaxed text-primary-foreground opacity-90",
-                  nestImages
-                    ? "w-[min(100%,20rem)] flex-col gap-2 p-2"
-                    : "flex-row items-end gap-2 px-3.5 py-2",
-                )}
-              >
-                <div className={cn("flex items-end gap-2", nestImages && "px-1.5 pt-0.5")}>
-                  <span className="whitespace-pre-wrap break-words">{entry.body}</span>
-                  <Clock className="ml-1 h-3 w-3 shrink-0 translate-y-0.5 opacity-70" />
-                </div>
-                {nestImages && (
-                  <div className="flex flex-col gap-1.5">
-                    {imageFiles.map((f) => pendingImage(f, true))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-        {entry.body &&
-          (() => {
-            const previewUrl = firstUrl(entry.body);
-            return previewUrl ? <LinkPreviewCard url={previewUrl} mine /> : null;
-          })()}
-        {failed ? (
-          <div className="flex max-w-full flex-wrap items-center justify-end gap-2 text-s text-destructive">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            <span className="min-w-0 break-words text-right">
-              {entry.errorMessage || "Failed to send"}
-            </span>
-            <button
-              type="button"
-              onClick={onRetry}
-              className="flex items-center gap-1 font-medium underline-offset-2 hover:underline"
-            >
-              <RotateCcw className="h-3 w-3" />
-              Retry
-            </button>
-            <button
-              type="button"
-              onClick={onDiscard}
-              className="font-medium text-muted-foreground underline-offset-2 hover:underline"
-            >
-              Discard
-            </button>
-          </div>
-        ) : (
-          <div className="px-1 text-xs text-muted-foreground">
-            {entry.status === "uploading" ? "Uploading…" : "Sending…"}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-type MessageActionHandlers = {
-  onReact: (emoji: string) => void;
-  onReply: () => void;
-  onCopy: () => void;
-  onDelete: () => void;
-  onEdit?: () => void;
-  onCreateTask?: () => void;
-  onToggleImportant?: () => void;
-  important?: boolean;
-};
-
-function ActionsMenuContent({
-  onReact,
-  onReply,
-  onCopy,
-  onDelete,
-  onEdit,
-  onCreateTask,
-  onToggleImportant,
-  important,
-}: MessageActionHandlers) {
-  return (
-    <DropdownMenuContent align="end" className="min-w-56 p-1.5" sideOffset={6}>
-      <div className="flex items-center gap-0.5 px-1 py-1.5">
-        {QUICK_EMOJIS.map((e) => (
-          <button
-            key={e}
-            type="button"
-            onClick={() => onReact(e)}
-            className="grid size-9 place-items-center rounded-full text-lg transition-transform hover:scale-125 hover:bg-surface"
-            aria-label={`React ${e}`}
-          >
-            {e}
-          </button>
-        ))}
-      </div>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem onClick={onReply} className="min-h-10 gap-3 text-s">
-        <Reply className="h-4 w-4" />
-        <span className="flex-1">Reply</span>
-      </DropdownMenuItem>
-      <DropdownMenuItem onClick={onCopy} className="min-h-10 gap-3 text-s">
-        <Copy className="h-4 w-4" />
-        <span className="flex-1">Copy</span>
-      </DropdownMenuItem>
-      {onToggleImportant && (
-        <DropdownMenuItem onClick={onToggleImportant} className="min-h-10 gap-3 text-s">
-          <Star
-            className={cn(
-              "h-4 w-4",
-              important && "fill-orange text-orange",
-            )}
-          />
-          <span className="flex-1">
-            {important ? "Remove from important" : "Mark as important"}
-          </span>
-        </DropdownMenuItem>
-      )}
-      {onEdit && (
-        <DropdownMenuItem onClick={onEdit} className="min-h-10 gap-3 text-s">
-          <Pencil className="h-4 w-4" />
-          <span className="flex-1">Edit</span>
-        </DropdownMenuItem>
-      )}
-      {onCreateTask && (
-        <DropdownMenuItem onClick={onCreateTask} className="min-h-10 gap-3 text-s">
-          <CheckSquare className="h-4 w-4" />
-          <span className="flex-1">Create task</span>
-        </DropdownMenuItem>
-      )}
-      <DropdownMenuSeparator />
-      <DropdownMenuItem onClick={onDelete} variant="destructive" className="min-h-10 gap-3 text-s">
-        <Trash2 className="h-4 w-4" />
-        <span className="flex-1">Delete</span>
-      </DropdownMenuItem>
-    </DropdownMenuContent>
-  );
-}
-
-const messageCaretTriggerClass =
-  "hidden size-8 place-items-center bg-transparent text-white opacity-0 shadow-none outline-none transition-opacity hover:bg-transparent hover:text-white focus-visible:opacity-100 group-hover:opacity-100 data-[popup-open]:opacity-100 lg:grid";
-
-/** Desktop hover ⋮ only — mobile uses the selection header instead. */
-function MessageCaret({
-  mine: _mine,
-  ...handlers
-}: { mine: boolean } & MessageActionHandlers) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label="Message actions"
-        className={cn("absolute top-1 right-1", messageCaretTriggerClass)}
-      >
-        <MoreVertical className="h-4 w-4" />
-      </DropdownMenuTrigger>
-      <ActionsMenuContent {...handlers} />
-    </DropdownMenu>
-  );
-}
-
-function FileCaretMenu(handlers: MessageActionHandlers) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        onClick={(e) => e.stopPropagation()}
-        aria-label="Message actions"
-        className={messageCaretTriggerClass}
-      >
-        <MoreVertical className="h-4 w-4" />
-      </DropdownMenuTrigger>
-      <ActionsMenuContent {...handlers} />
-    </DropdownMenu>
-  );
-}
-
-function ImageActionsMenu(handlers: MessageActionHandlers) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        onClick={(e) => e.stopPropagation()}
-        aria-label="Message actions"
-        className="grid size-9 place-items-center rounded-full bg-overlay text-white backdrop-blur-sm transition-colors hover:bg-black/80"
-      >
-        <MoreVertical className="h-4 w-4" />
-      </DropdownMenuTrigger>
-      <ActionsMenuContent {...handlers} />
-    </DropdownMenu>
   );
 }

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import {
-  ArrowLeft,
   AlertTriangle,
   XCircle,
   CalendarClock,
@@ -23,7 +22,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageBackButton } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -93,16 +92,10 @@ export function ReportClient({ report }: { report: AuditReportDTO }) {
     <div>
       <PageHeader className="justify-between">
         <div className="flex min-w-0 items-center gap-3">
-          <Link
-            href="/dashboard/audit"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            aria-label="Back to reports"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+          <PageBackButton href="/dashboard/audit" label="Back to reports" />
           <PageBreadcrumb
             items={[
-              { label: "Reports", onClick: () => router.push("/dashboard/audit") },
+              { label: "Task Audit", href: "/dashboard/audit" },
               { label: format(new Date(report.auditDate), "EEEE, MMM d, yyyy") },
             ]}
           />

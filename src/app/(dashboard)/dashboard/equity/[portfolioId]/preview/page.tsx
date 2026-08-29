@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { canAccessEquity } from "@/lib/equity-access";
 import { getEquityPortfolio, listEquityMetrics } from "@/actions/equity";
-import { PageHeader, PageName } from "@/components/page-header";
+import { PageHeader, PageBackButton } from "@/components/page-header";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { PortfolioPitch } from "@/components/equity/portfolio-pitch";
 
 /**
@@ -33,17 +32,20 @@ export default async function EquityPreviewPage({
   return (
     <div>
       <PageHeader hasMenu>
-        <Link
+        <PageBackButton
           href={`/dashboard/equity/${portfolioId}`}
-          aria-label="Back to the portfolio"
-          className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground transition-colors no-underline shrink-0"
-        >
-          <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
-        </Link>
-        <PageName>{portfolio.project.name}</PageName>
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
-          Pitch preview
-        </span>
+          label="Back to the portfolio"
+        />
+        <PageBreadcrumb
+          items={[
+            { label: "Equity", href: "/dashboard/equity" },
+            {
+              label: portfolio.project.name,
+              href: `/dashboard/equity/${portfolioId}`,
+            },
+            { label: "Pitch preview" },
+          ]}
+        />
         {/* No actions menu here: the preview is for reading, and everything
             the menu does — including delete — belongs on the portfolio page. */}
       </PageHeader>

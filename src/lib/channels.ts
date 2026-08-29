@@ -26,6 +26,9 @@ export function globalPresenceChannel(): string {
 // the "use server" action module, where only async functions may be exported).
 export const NOTIFICATION_SOUND_EVENT = "notification-sound-changed";
 
+/** Ephemeral presence on a chat channel. Not stored in history. */
+export const TYPING_EVENT = "typing";
+
 // Notification events published on a user's channel. The bell consumes these
 // as payload-driven deltas (no refetch) and to keep read-state in sync across
 // every device/tab the user has open.

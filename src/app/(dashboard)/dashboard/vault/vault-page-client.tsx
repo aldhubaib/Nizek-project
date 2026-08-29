@@ -3,10 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowLeft,
   ChevronRight,
   Folder,
-  KeyRound,
   Search,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -15,7 +13,8 @@ import type {
   VaultCredentialDTO,
   VaultProjectFolderDTO,
 } from "@/actions/vault";
-import { PageHeader, PageName } from "@/components/page-header";
+import { PageHeader, PageBackButton, PageName } from "@/components/page-header";
+import { PageBreadcrumb } from "@/components/page-breadcrumb";
 
 function credentialMatches(c: VaultCredentialDTO, q: string) {
   return (
@@ -71,15 +70,24 @@ export function VaultPageClient({
     router.replace(`/dashboard/vault?${params.toString()}`);
   }
 
-  function backToFolders() {
-    router.replace("/dashboard/vault");
-  }
-
   return (
     <div>
       <PageHeader>
-        <KeyRound className="h-4 w-4 text-muted-foreground" />
-        <PageName>Vault</PageName>
+        {openFolder ? (
+          <>
+            <PageBackButton href="/dashboard/vault" label="Back to vault" />
+            <PageBreadcrumb
+              items={[
+                { label: "Vault", href: "/dashboard/vault" },
+                { label: openFolder.name },
+              ]}
+            />
+          </>
+        ) : (
+          <>
+            <PageName>Vault</PageName>
+          </>
+        )}
       </PageHeader>
       <div className="mx-auto max-w-3xl space-y-6 px-app py-8">
       <p className="text-s text-muted-foreground">
@@ -90,15 +98,6 @@ export function VaultPageClient({
 
       {openFolder ? (
         <div className="space-y-4">
-          <button
-            type="button"
-            onClick={backToFolders}
-            className="inline-flex items-center gap-xs text-s font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            All projects
-          </button>
-
           <div className="flex items-center gap-s">
             <ProjectGlyph name={openFolder.name} logoUrl={openFolder.logoUrl} />
             <div className="min-w-0">
