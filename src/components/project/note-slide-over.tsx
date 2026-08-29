@@ -42,6 +42,7 @@ export function NoteSlideOver({
   className,
   bodyClassName,
   allowOverflowX = false,
+  instant = false,
 }: {
   title: ReactNode;
   headerRight?: ReactNode;
@@ -49,8 +50,10 @@ export function NoteSlideOver({
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
-  /** Let the body scroll sideways (road map in a slide-over). */
+  /** Let the body scroll sideways from lg (road map). Mobile stays vertical. */
   allowOverflowX?: boolean;
+  /** Skip the slide-in — used when the panel is restored from the URL. */
+  instant?: boolean;
 }) {
   useScrollLock(true);
 
@@ -83,7 +86,7 @@ export function NoteSlideOver({
       <div
         className={cn(
           "relative z-10 flex h-full min-h-0 min-w-0 w-full flex-col overscroll-none bg-background",
-          "animate-in slide-in-from-right duration-200",
+          !instant && "animate-in slide-in-from-right duration-200",
           className,
         )}
       >
@@ -113,7 +116,7 @@ export function NoteSlideOver({
           className={cn(
             "min-h-0 min-w-0 flex-1 overscroll-contain bg-background",
             allowOverflowX
-              ? "overflow-x-scroll overflow-y-hidden"
+              ? "overflow-y-auto overflow-x-hidden lg:overflow-x-scroll lg:overflow-y-hidden"
               : "overflow-y-auto",
             bodyClassName,
           )}

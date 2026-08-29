@@ -577,9 +577,11 @@ export function ProjectDetailClient({
           "min-w-0",
           noteFullscreen
             ? "px-0 py-0"
-            : (activeTab === "sprints" || activeTab === "roadmap")
+            : activeTab === "sprints"
               ? "flex min-h-0 flex-col overflow-hidden px-app pt-4 pb-4 lg:flex-1 lg:basis-0 lg:pb-0"
-              : "px-app py-4",
+              : activeTab === "roadmap"
+                ? "flex min-h-0 flex-col px-app pt-4 pb-4 lg:flex-1 lg:basis-0 lg:overflow-hidden lg:pb-0"
+                : "px-app py-4",
         )}
       >
           <TabsContent value="sprints" className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -604,7 +606,7 @@ export function ProjectDetailClient({
             ))}
           </TabsContent>
 
-          <TabsContent value="roadmap" className="flex min-h-0 flex-1 flex-col">
+          <TabsContent value="roadmap" className="flex min-h-0 w-full flex-1 flex-col overflow-visible lg:overflow-hidden">
             {activeTab === "roadmap" && (loadingSprints || !sprints ? (
               <TabSpinner />
             ) : (

@@ -40,6 +40,7 @@ const COLUMN_IDS = new Set<string>([
   "IN_DEVELOPMENT",
   "INTERNAL_REVIEW",
   "CLIENT_REVIEW",
+  "READY_FOR_RELEASE",
   "DONE",
 ]);
 
@@ -56,6 +57,7 @@ const STAGES: { id: Stage; label: string; color: string }[] = [
   { id: "IN_DEVELOPMENT", label: stageLabel("IN_DEVELOPMENT"), color: "bg-sky" },
   { id: "INTERNAL_REVIEW", label: stageLabel("INTERNAL_REVIEW"), color: "bg-orange" },
   { id: "CLIENT_REVIEW", label: stageLabel("CLIENT_REVIEW"), color: "bg-orange" },
+  { id: "READY_FOR_RELEASE", label: stageLabel("READY_FOR_RELEASE"), color: "bg-emerald-400" },
   { id: "DONE", label: stageLabel("DONE"), color: "bg-success" },
 ];
 
@@ -100,8 +102,10 @@ function visibleStage(
   if (pipelineOnly && stage === "CLIENT_REVIEW") {
     return "INTERNAL_REVIEW";
   }
+  if (pipelineOnly && stage === "READY_FOR_RELEASE") {
+    return "DONE";
+  }
   if (stage === "CLARIFICATION") return "NEW_REQUEST";
-  if (stage === "READY_FOR_RELEASE") return "DONE";
   return stage;
 }
 
@@ -371,7 +375,12 @@ export function KanbanBoard({
   const boardStages = useMemo(
     () =>
       pipelineOnly
-        ? STAGES.filter((s) => s.id !== "NEW_REQUEST" && s.id !== "CLIENT_REVIEW")
+        ? STAGES.filter(
+            (s) =>
+              s.id !== "NEW_REQUEST" &&
+              s.id !== "CLIENT_REVIEW" &&
+              s.id !== "READY_FOR_RELEASE",
+          )
         : STAGES,
     [pipelineOnly],
   );

@@ -45,10 +45,10 @@ export default async function ThreadPage({
   searchParams,
 }: {
   params: Promise<{ threadId: string }>;
-  searchParams: Promise<{ msg?: string }>;
+  searchParams: Promise<{ msg?: string; panel?: string; tab?: string }>;
 }) {
   const { threadId } = await params;
-  const { msg: focusMessageId } = await searchParams;
+  const { msg: focusMessageId, panel, tab } = await searchParams;
   const user = await requireUser();
   const client = isClientUser(user);
 
@@ -364,6 +364,8 @@ export default async function ThreadPage({
       isClientUser={client}
       showInboxBack={!client || clientThreadCount > 1}
       focusMessageId={focusMessageId}
+      initialPanel={panel}
+      initialProjectTab={tab}
     />
   );
 }

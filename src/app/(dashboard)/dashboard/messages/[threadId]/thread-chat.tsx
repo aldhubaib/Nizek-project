@@ -48,7 +48,10 @@ import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { AccountMenuItems, SignOutDialog } from "@/components/user-menu";
 import { ProfileDialog } from "@/components/profile-dialog";
 import { ClientRoadmapPanel } from "@/components/messages/client-roadmap-panel";
-import { ClientProjectPanel } from "@/components/messages/client-project-panel";
+import {
+  mountThreadProjectOverlay,
+  unmountThreadProjectOverlay,
+} from "@/components/messages/thread-project-overlay";
 import { cn } from "@/lib/utils";
 import { ClientChatPeopleManager } from "@/components/messages/client-chat-people";
 import {
@@ -130,6 +133,51 @@ export type { ChatMessage, ThreadTarget } from "./thread-shared";
 /** Floor on the load-older spinner so the transition is legible. */
 const MIN_LOAD_MS = 450;
 
+type ThreadPanel = "chat" | "files" | "important" | "roadmap" | "project";
+type ProjectPanelTab = "dashboard" | "roadmap";
+
+function parseThreadPanel(value: string | null | undefined): ThreadPanel {
+  if (value === "files" || value === "important" || value === "roadmap" || value === "project") {
+    return value;
+  }
+  return "chat";
+}
+
+function parseProjectTab(value: string | null | undefined): ProjectPanelTab {
+  return value === "roadmap" ? "roadmap" : "dashboard";
+}
+
+function panelFromLocation(projectId?: string): ThreadPanel {
+  if (typeof window === "undefined") return "chat";
+  const panel = parseThreadPanel(new URLSearchParams(window.location.search).get("panel"));
+  if ((panel === "project" || panel === "roadmap") && !projectId) return "chat";
+  return panel;
+}
+
+function projectTabFromLocation(): ProjectPanelTab {
+  if (typeof window === "undefined") return "dashboard";
+  return parseProjectTab(new URLSearchParams(window.location.search).get("tab"));
+}
+
+/** Keep ?panel= in the bar without a Next navigation (that remounts the overlay). */
+function syncThreadPanelUrl(view: ThreadPanel, projectTab: ProjectPanelTab) {
+  if (typeof window === "undefined") return;
+  const next = new URLSearchParams(window.location.search);
+  const wantPanel = view === "chat" ? null : view;
+  const wantTab = view === "project" && projectTab === "roadmap" ? "roadmap" : null;
+  if (next.get("panel") === wantPanel && next.get("tab") === wantTab) return;
+  if (wantPanel) next.set("panel", wantPanel);
+  else next.delete("panel");
+  if (wantTab) next.set("tab", wantTab);
+  else next.delete("tab");
+  const qs = next.toString();
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`,
+  );
+}
+
 
 export function ThreadChat({
   channel,
@@ -157,6 +205,8 @@ export function ThreadChat({
   isClientUser: clientUser = false,
   showInboxBack = true,
   focusMessageId,
+  initialPanel,
+  initialProjectTab,
 }: {
   channel: string;
   presenceChannel: string | null;
@@ -190,6 +240,9 @@ export function ThreadChat({
   showInboxBack?: boolean;
   /** Scroll to this message after open (inbox Important tab). */
   focusMessageId?: string;
+  /** Restore a slide-over after refresh (`?panel=`). */
+  initialPanel?: string;
+  initialProjectTab?: string;
 }) {
   const threadKey = threadIdFromTarget(target);
   const cached = threadKey ? peekThreadCache(threadKey) : null;
@@ -253,10 +306,24 @@ export function ThreadChat({
   const [fileError, setFileError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const [dragging, setDragging] = useState(false);
-  const [view, setView] = useState<
-    "chat" | "files" | "important" | "roadmap" | "project"
-  >("chat");
-  const [projectTab, setProjectTab] = useState<"dashboard" | "roadmap">("dashboard");
+  const [view, setView] = useState<ThreadPanel>(() => {
+    const fromUrl = parseThreadPanel(initialPanel);
+    if (fromUrl !== "chat") {
+      if ((fromUrl === "project" || fromUrl === "roadmap") && !target.projectId) {
+        return "chat";
+      }
+      return fromUrl;
+    }
+    return panelFromLocation(target.projectId);
+  });
+  const [projectTab, setProjectTab] = useState<ProjectPanelTab>(() => {
+    if (parseProjectTab(initialProjectTab) === "roadmap") return "roadmap";
+    return projectTabFromLocation();
+  });
+
+  useEffect(() => {
+    syncThreadPanelUrl(view, projectTab);
+  }, [view, projectTab]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
@@ -336,6 +403,21 @@ export function ThreadChat({
     setProjectTab("dashboard");
     setView("chat");
   }, [closeSearch]);
+
+  useLayoutEffect(() => {
+    if (view === "project" && target.projectId) {
+      mountThreadProjectOverlay({
+        projectId: target.projectId,
+        tab: projectTab,
+        onTabChange: setProjectTab,
+        onClose: closeThreadPanels,
+        instant: initialPanel === "project",
+      });
+    } else {
+      unmountThreadProjectOverlay();
+    }
+    return () => unmountThreadProjectOverlay();
+  }, [view, projectTab, target.projectId, closeThreadPanels, initialPanel]);
   const openSearch = useCallback(() => {
     if (searchOpen) {
       closeThreadPanels();
@@ -2302,36 +2384,6 @@ export function ThreadChat({
           <FilesPanel messages={messages} />
         </NoteSlideOver>
       )}
-      {view === "project" && target.projectId && (
-        <NoteSlideOver
-          title="My project"
-          onClose={closeThreadPanels}
-          allowOverflowX={projectTab === "roadmap"}
-          bodyClassName={
-            projectTab === "roadmap"
-              ? undefined
-              : "flex min-h-0 min-w-0 flex-col overflow-hidden"
-          }
-          headerRight={
-            <Button
-              type="button"
-              size="sm"
-              onClick={() =>
-                setProjectTab((tab) => (tab === "dashboard" ? "roadmap" : "dashboard"))
-              }
-            >
-              {projectTab === "dashboard" ? "Road map" : "Dashboard"}
-            </Button>
-          }
-        >
-          <ClientProjectPanel
-            projectId={target.projectId}
-            tab={projectTab}
-            onTabChange={setProjectTab}
-          />
-        </NoteSlideOver>
-      )}
-
       {view === "roadmap" && target.projectId && (
         <NoteSlideOver title="Road map" onClose={closeThreadPanels}>
           <ClientRoadmapPanel projectId={target.projectId} />

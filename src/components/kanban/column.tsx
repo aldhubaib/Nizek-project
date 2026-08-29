@@ -37,7 +37,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
     if (!dragFromStage) return false;
     const stageIds = pipelineOnly
       ? ["READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "DONE"]
-      : ["NEW_REQUEST", "READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW", "DONE"];
+      : ["NEW_REQUEST", "READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW", "READY_FOR_RELEASE", "DONE"];
     const fromIdx = stageIds.indexOf(dragFromStage);
     const toIdx = stageIds.indexOf(stage.id);
     if (toIdx === fromIdx + 1) return true;

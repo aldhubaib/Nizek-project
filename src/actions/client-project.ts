@@ -87,6 +87,9 @@ export type ClientProjectOverview = {
     goal: string | null;
     total: number;
     done: number;
+    stageBreakdown: Record<string, number>;
+    /** Stage → task type → count, for the current-sprint bars. */
+    stageTypeBreakdown: Record<string, Record<string, number>>;
   } | null;
   nextSprint: {
     id: string;
@@ -253,11 +256,36 @@ export async function getClientProjectOverview(
   const activeTasks = active
     ? tasks.filter((t) => t.sprintId === active.id)
     : [];
+  const activeStageBreakdown: Record<string, number> = {};
+  const activeStageTypeBreakdown: Record<string, Record<string, number>> = {};
+  for (const task of activeTasks) {
+    const key =
+      task.stage === "NEW_REQUEST" || task.stage === "CLARIFICATION"
+        ? "READY_FOR_DEV"
+        : task.stage === "CLIENT_REVIEW"
+          ? "INTERNAL_REVIEW"
+          : task.stage === "READY_FOR_RELEASE"
+            ? "DONE"
+            : task.stage;
+    if (
+      key !== "READY_FOR_DEV" &&
+      key !== "IN_DEVELOPMENT" &&
+      key !== "INTERNAL_REVIEW" &&
+      key !== "DONE"
+    ) {
+      continue;
+    }
+    activeStageBreakdown[key] = (activeStageBreakdown[key] ?? 0) + 1;
+    const byType = activeStageTypeBreakdown[key] ?? {};
+    byType[task.taskType] = (byType[task.taskType] ?? 0) + 1;
+    activeStageTypeBreakdown[key] = byType;
+  }
 
   const stageBreakdown: Record<string, number> = {};
   const typeBreakdown: Record<string, number> = {};
   for (const task of tasks) {
-    stageBreakdown[task.stage] = (stageBreakdown[task.stage] ?? 0) + 1;
+    const stage = task.stage === "READY_FOR_RELEASE" ? "DONE" : task.stage;
+    stageBreakdown[stage] = (stageBreakdown[stage] ?? 0) + 1;
     typeBreakdown[task.taskType] = (typeBreakdown[task.taskType] ?? 0) + 1;
   }
 
@@ -290,7 +318,7 @@ export async function getClientProjectOverview(
       taskNumber: t.taskNumber,
       title: t.title,
       taskType: t.taskType,
-      stage: t.stage,
+      stage: t.stage === "READY_FOR_RELEASE" ? "DONE" : t.stage,
       sprintCount: t.sprintCount,
     }));
 
@@ -314,6 +342,8 @@ export async function getClientProjectOverview(
           goal: active.goal,
           total: activeTasks.length,
           done: activeTasks.filter((t) => t.stage === "DONE").length,
+          stageBreakdown: activeStageBreakdown,
+          stageTypeBreakdown: activeStageTypeBreakdown,
         }
       : null,
     nextSprint: next

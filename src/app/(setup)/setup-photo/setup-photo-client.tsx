@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Loader2 } from "lucide-react";
+import { Loader2, Upload } from "lucide-react";
 import { updateMyAvatar } from "@/actions/account";
 import { useAppLogo } from "@/components/branding-provider";
 import { authClient } from "@/lib/auth-client";
@@ -116,7 +116,7 @@ export function SetupPhotoClient({
               {uploading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Camera className="h-4 w-4" />
+                <Upload className="h-4 w-4" />
               )}
             </span>
           </button>
@@ -125,7 +125,6 @@ export function SetupPhotoClient({
             ref={fileRef}
             type="file"
             accept="image/*"
-            capture="user"
             className="hidden"
             onChange={(e) => {
               void pickAvatar(e.target.files?.[0] ?? null);

@@ -696,8 +696,8 @@ export function CompletedSprintsTab({
     <div
       className={
         embedInScrollParent
-          ? "flex h-full min-h-0 w-max flex-col gap-4"
-          : "flex min-h-0 min-w-0 flex-1 flex-col gap-4"
+          ? "flex min-h-0 w-full flex-col gap-4 lg:h-full lg:w-max"
+          : "flex w-full min-w-0 flex-col gap-4 lg:min-h-0 lg:flex-1"
       }
     >
       {error ? <p className="text-s text-destructive">{error}</p> : null}
@@ -713,8 +713,8 @@ export function CompletedSprintsTab({
         <div
           className={
             embedInScrollParent
-              ? "flex h-full min-h-0 w-max gap-4 pb-4"
-              : "flex min-h-0 min-w-0 flex-1 gap-4 overflow-x-auto overscroll-x-contain pb-4"
+              ? "flex w-full flex-col gap-4 pb-4 lg:h-full lg:min-h-0 lg:w-max lg:flex-row"
+              : "flex w-full flex-col gap-4 pb-4 lg:min-h-0 lg:min-w-0 lg:flex-1 lg:flex-row lg:overflow-x-auto lg:overflow-y-hidden lg:overscroll-x-contain"
           }
         >
           <TaskPoolColumn
@@ -1087,7 +1087,7 @@ function TaskPoolColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex w-72 shrink-0 flex-col rounded-lg border border-border/50 bg-muted/30 lg:min-h-0 lg:w-[400px]",
+        "flex w-full max-h-[70dvh] shrink-0 flex-col overflow-hidden rounded-lg border border-border/50 bg-muted/30 lg:h-full lg:max-h-none lg:min-h-0 lg:w-[400px] lg:self-stretch",
         isOver && "border-success/60 bg-success/5",
       )}
     >
@@ -1199,8 +1199,8 @@ function SprintColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        // Matches the kanban column width so both boards read as one system.
-        "flex w-72 shrink-0 flex-col rounded-lg border border-border/50 bg-muted/30 lg:min-h-0 lg:w-[400px]",
+        // Stacked full-width on mobile; 400px columns beside each other from lg.
+        "flex w-full max-h-[70dvh] shrink-0 flex-col overflow-hidden rounded-lg border border-border/50 bg-muted/30 lg:h-full lg:max-h-none lg:min-h-0 lg:w-[400px] lg:self-stretch",
         isOver && !dropBlocked && "border-success/60 bg-success/5",
         isOver && dropBlocked && "border-destructive/50 bg-destructive/5",
       )}

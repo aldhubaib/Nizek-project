@@ -31,8 +31,27 @@ export default function ThreadLoading() {
   const params = useParams<{ threadId: string }>();
   const threadId = typeof params?.threadId === "string" ? params.threadId : "";
   const cached = peekThreadCache(threadId);
-  if (cached?.opened && cached.snapshot.channel && cached.snapshot.currentMemberId) {
-    return <ThreadChat key={threadId} {...cached.snapshot} />;
+  const query =
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search);
+  const panel = query?.get("panel");
+  // A cached ThreadChat here remounts when the page arrives and replays the
+  // slide-over. Keep the pane empty when My project is already in the URL.
+  if (
+    panel !== "project" &&
+    cached?.opened &&
+    cached.snapshot.channel &&
+    cached.snapshot.currentMemberId
+  ) {
+    return (
+      <ThreadChat
+        key={threadId}
+        {...cached.snapshot}
+        initialPanel={panel ?? undefined}
+        initialProjectTab={query?.get("tab") ?? undefined}
+      />
+    );
   }
   return <ThreadPaneSkeleton />;
 }

@@ -80,17 +80,13 @@ export function SprintDocDashboard({
       label: "Bugs",
       color: "text-destructive",
     },
-    ...(stats.design > 0
-      ? [
-          {
-            key: "des",
-            icon: Palette,
-            value: String(stats.design),
-            label: "Design",
-            color: "text-cyan",
-          },
-        ]
-      : []),
+    {
+      key: "des",
+      icon: Palette,
+      value: String(stats.design),
+      label: "Design",
+      color: "text-cyan",
+    },
     {
       key: "time",
       icon: Clock,

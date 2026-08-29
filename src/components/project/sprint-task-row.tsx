@@ -135,24 +135,26 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
 
     const row = (
       <>
-        <TaskTypeBadge taskType={task.taskType} />
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="min-w-0 truncate text-s" title={task.title}>
-            {task.title.split(/\s+/).length > 15
-              ? task.title.split(/\s+/).slice(0, 15).join(" ") + "…"
-              : task.title}
-          </span>
-          {!compact && (task.sprintCount ?? 0) >= 2 && (
-            <span
-              title={`In ${task.sprintCount} sprints`}
-              className="inline-flex shrink-0 items-center rounded-lg border border-border px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground"
-            >
-              {task.sprintCount}x
+        <span className="flex min-w-0 flex-1 items-center gap-3">
+          <TaskTypeBadge taskType={task.taskType} />
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="min-w-0 truncate text-s" title={task.title}>
+              {task.title.split(/\s+/).length > 15
+                ? task.title.split(/\s+/).slice(0, 15).join(" ") + "…"
+                : task.title}
             </span>
-          )}
+            {!compact && (task.sprintCount ?? 0) >= 2 && (
+              <span
+                title={`In ${task.sprintCount} sprints`}
+                className="inline-flex shrink-0 items-center rounded-lg border border-border px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground"
+              >
+                {task.sprintCount}x
+              </span>
+            )}
+          </span>
         </span>
         {(showExtra || showStatus || showAssignee || incomplete) && (
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 max-sm:w-full max-sm:pl-7">
             {showExtra ? extra : null}
             {incomplete ? (
               <span
@@ -193,14 +195,22 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
         {...(as === "button" ? { type: "button" as const } : {})}
         className={cn(
           "flex w-full rounded-md border border-border bg-field px-3 text-start",
-          compact ? "min-h-12 items-center gap-3 py-3" : "min-h-16 py-4",
-          footer ? "flex-col items-stretch gap-3" : !compact && "items-center gap-3",
+          compact ? "min-h-12 py-3" : "min-h-16 py-4",
+          footer
+            ? "flex-col items-stretch gap-3"
+            : "flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3",
           !disableHoverBorder && "hover:border-foreground/40",
           className,
         )}
         {...props}
       >
-        {footer ? <div className="flex w-full items-center gap-3">{row}</div> : row}
+        {footer ? (
+          <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
+            {row}
+          </div>
+        ) : (
+          row
+        )}
         {footer}
       </Comp>
     );
