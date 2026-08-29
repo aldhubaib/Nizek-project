@@ -47,6 +47,11 @@ describe("pwaIconToken", () => {
     expect(pwaIconToken({ androidAny512: { updatedAt: newer } })).toBe(newer);
   });
 
+  it("advances when only the app logo (webLogo) changes", () => {
+    const newer = PWA_ICON_FORCE_TOKEN + 8;
+    expect(pwaIconToken({ webLogo: { updatedAt: newer } })).toBe(newer);
+  });
+
   it("is 0 when nothing is uploaded", () => {
     expect(pwaIconToken({})).toBe(0);
   });

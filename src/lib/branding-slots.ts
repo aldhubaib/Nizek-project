@@ -144,7 +144,7 @@ export const BRANDING_SLOTS: BrandingSlotConfig[] = [
   },
   {
     id: "webLogo",
-    title: "Web app logo (sidebar / login)",
+    title: "Web app logo (sidebar / login / Android home screen)",
     formats: ["image/svg+xml", "image/png"],
     formatsLabel: "SVG or PNG",
     accept: ".svg,.png,image/svg+xml,image/png",
@@ -152,6 +152,7 @@ export const BRANDING_SLOTS: BrandingSlotConfig[] = [
     sizesLabel: "Flexible, ~512×512 or SVG",
     previewClass: "h-20 w-20",
     previewShape: "square",
+    note: "Also rebuilds the Android and iOS home-screen icons so the installed PWA picks up the new mark.",
   },
   {
     id: "ogImage",

@@ -8,7 +8,7 @@ import type { BrandingStorageSlot } from "@/lib/branding-slots";
  * Do not bump on routine deploys — that would re-prompt every installed app.
  * Bump only when we need to force a home-screen glyph refresh.
  */
-export const PWA_ICON_FORCE_TOKEN = 1_786_803_602_759;
+export const PWA_ICON_FORCE_TOKEN = 1_788_050_000_000;
 
 function stamp(updatedAt: number | null | undefined): string {
   if (!updatedAt || updatedAt <= 0) return "0";
@@ -86,6 +86,7 @@ export const PWA_ICON_TOKEN_SLOTS: BrandingStorageSlot[] = [
   "androidMaskable512",
   "androidMonochrome",
   "homeScreenSource",
+  "webLogo",
 ];
 
 export function pwaIconToken(

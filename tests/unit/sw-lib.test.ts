@@ -187,8 +187,14 @@ describe("classifyRequest (PWA cache strategy)", () => {
     ).toBe("static");
   });
 
-  it("uses stale-while-revalidate for icons, images, and the manifest", () => {
-    expect(swLib.classifyRequest(req(`${ORIGIN}/manifest.json`), ORIGIN)).toBe("asset");
+  it("never caches the manifest so Android can pick up a new launcher icon", () => {
+    expect(swLib.classifyRequest(req(`${ORIGIN}/manifest.json`), ORIGIN)).toBeNull();
+    expect(
+      swLib.classifyRequest(req(`${ORIGIN}/manifest.json?v=9`), ORIGIN),
+    ).toBeNull();
+  });
+
+  it("uses stale-while-revalidate for icons and images", () => {
     expect(swLib.classifyRequest(req(`${ORIGIN}/favicon.ico`), ORIGIN)).toBe("asset");
     expect(swLib.classifyRequest(req(`${ORIGIN}/pwa-icons/v1/icon-192.png`), ORIGIN)).toBe(
       "asset",

@@ -175,6 +175,51 @@ async function upsertAsset(
   if (existing) await deleteFromR2(existing.r2Key).catch(() => {});
 }
 
+async function applyGeneratedPwaSet(set: Awaited<ReturnType<typeof generatePwaSetFromSource>>) {
+  await upsertAsset("androidAny192", {
+    bytes: set.any192,
+    mime: "image/png",
+    fileName: "icon-192.png",
+    width: 192,
+    height: 192,
+  });
+  await upsertAsset("androidAny512", {
+    bytes: set.any512,
+    mime: "image/png",
+    fileName: "icon-512.png",
+    width: 512,
+    height: 512,
+  });
+  await upsertAsset("androidMaskable192", {
+    bytes: set.maskable192,
+    mime: "image/png",
+    fileName: "icon-maskable-192.png",
+    width: 192,
+    height: 192,
+  });
+  await upsertAsset("androidMaskable512", {
+    bytes: set.maskable512,
+    mime: "image/png",
+    fileName: "icon-maskable-512.png",
+    width: 512,
+    height: 512,
+  });
+  await upsertAsset("appleTouchIcon", {
+    bytes: set.appleTouch,
+    mime: "image/png",
+    fileName: "apple-touch-icon.png",
+    width: 180,
+    height: 180,
+  });
+  await upsertAsset("favicon", {
+    bytes: set.faviconIco,
+    mime: "image/x-icon",
+    fileName: "favicon.ico",
+    width: 32,
+    height: 32,
+  });
+}
+
 export async function setBrandingAsset(formData: FormData): Promise<void> {
   await requireBrandingEditor();
 
@@ -215,6 +260,24 @@ export async function setBrandingAsset(formData: FormData): Promise<void> {
       .toBuffer();
   }
 
+  if (slot.id === "webLogo") {
+    await upsertAsset("webLogo", {
+      bytes: finalBytes,
+      mime,
+      fileName: file.name,
+      width: dims.width,
+      height: dims.height,
+    });
+    try {
+      const set = await generatePwaSetFromSource(bytes);
+      await applyGeneratedPwaSet(set);
+    } catch {
+      // SVG/odd artwork still saves as the sidebar logo even if derivatives fail.
+    }
+    invalidateBrandingCache();
+    return;
+  }
+
   if (slot.id === "homeScreenSource") {
     const set = await generatePwaSetFromSource(bytes);
     await upsertAsset("homeScreenSource", {
@@ -224,48 +287,7 @@ export async function setBrandingAsset(formData: FormData): Promise<void> {
       width: dims.width,
       height: dims.height,
     });
-    await upsertAsset("androidAny192", {
-      bytes: set.any192,
-      mime: "image/png",
-      fileName: "icon-192.png",
-      width: 192,
-      height: 192,
-    });
-    await upsertAsset("androidAny512", {
-      bytes: set.any512,
-      mime: "image/png",
-      fileName: "icon-512.png",
-      width: 512,
-      height: 512,
-    });
-    await upsertAsset("androidMaskable192", {
-      bytes: set.maskable192,
-      mime: "image/png",
-      fileName: "icon-maskable-192.png",
-      width: 192,
-      height: 192,
-    });
-    await upsertAsset("androidMaskable512", {
-      bytes: set.maskable512,
-      mime: "image/png",
-      fileName: "icon-maskable-512.png",
-      width: 512,
-      height: 512,
-    });
-    await upsertAsset("appleTouchIcon", {
-      bytes: set.appleTouch,
-      mime: "image/png",
-      fileName: "apple-touch-icon.png",
-      width: 180,
-      height: 180,
-    });
-    await upsertAsset("favicon", {
-      bytes: set.faviconIco,
-      mime: "image/x-icon",
-      fileName: "favicon.ico",
-      width: 32,
-      height: 32,
-    });
+    await applyGeneratedPwaSet(set);
     invalidateBrandingCache();
     return;
   }

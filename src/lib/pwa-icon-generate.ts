@@ -97,4 +97,29 @@ export async function generatePwaSetFromSource(
   };
 }
 
+/** One derived PWA file from the app logo — used when serving if webLogo is newer. */
+export async function renderPwaFileFromSource(
+  file: string,
+  source: Buffer,
+): Promise<{ bytes: Buffer; contentType: string } | null> {
+  switch (file) {
+    case "icon-192.png":
+      return { bytes: await flattenResize(source, 192), contentType: "image/png" };
+    case "icon-512.png":
+      return { bytes: await flattenResize(source, 512), contentType: "image/png" };
+    case "icon-maskable-192.png":
+      return { bytes: await maskableSquare(source, 192), contentType: "image/png" };
+    case "icon-maskable-512.png":
+      return { bytes: await maskableSquare(source, 512), contentType: "image/png" };
+    case "apple-touch-icon.png":
+      return { bytes: await flattenResize(source, 180), contentType: "image/png" };
+    case "favicon.ico": {
+      const png = await flattenResize(source, 32);
+      return { bytes: pngToIco(png, 32), contentType: "image/x-icon" };
+    }
+    default:
+      return null;
+  }
+}
+
 export { padForMaskable };

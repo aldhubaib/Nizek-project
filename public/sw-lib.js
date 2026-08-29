@@ -167,8 +167,11 @@
 
     if (pathname.indexOf("/_next/") === 0) return null;
 
+    // Manifest must always come from the network. Chrome's WebAPK reads it to
+    // refresh the Android launcher icon; a cached copy keeps the old glyph.
+    if (pathname === "/manifest.json") return null;
+
     if (
-      pathname === "/manifest.json" ||
       pathname === "/offline.html" ||
       pathname === "/favicon.ico" ||
       pathname.indexOf("/icon-") === 0 ||
