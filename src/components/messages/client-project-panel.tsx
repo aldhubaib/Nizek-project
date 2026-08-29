@@ -365,7 +365,9 @@ function ClientRoadmapBoard({ projectId }: { projectId: string }) {
     <CompletedSprintsTab
       projectId={projectId}
       sprints={sprints}
-      onSprintsChange={setSprints}
+      onSprintsChange={(next) =>
+        setSprints((prev) => (typeof next === "function" ? next(prev ?? []) : next))
+      }
       initialTasks={tasks}
       canManage={false}
       canMoveTasks={false}

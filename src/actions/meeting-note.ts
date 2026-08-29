@@ -739,9 +739,11 @@ export async function getTaskNotes(taskId: string) {
   });
 }
 
-const TASK_NOTE_TYPES = {
-  notIn: ["SPRINT_PLANNING", "SPRINT_REVIEW", "DEADLINE"] as const,
-};
+const TASK_NOTE_EXCLUDED: Array<"SPRINT_PLANNING" | "SPRINT_REVIEW" | "DEADLINE"> = [
+  "SPRINT_PLANNING",
+  "SPRINT_REVIEW",
+  "DEADLINE",
+];
 
 /**
  * The one free-form note that belongs to a task. Reuses the oldest attached
@@ -758,7 +760,7 @@ export async function getOrCreateTaskNote(taskId: string) {
 
   const existing = await prisma.meetingNote.findFirst({
     where: {
-      noteType: TASK_NOTE_TYPES,
+      noteType: { notIn: TASK_NOTE_EXCLUDED },
       OR: [{ taskId }, { taskLinks: { some: { taskId } } }],
     },
     orderBy: { createdAt: "asc" },

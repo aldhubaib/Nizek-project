@@ -14,10 +14,10 @@ export function SprintDocHeaderLeft({ children }: { children: ReactNode }) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   useLayoutEffect(() => {
     const root = probe.current?.closest("[data-slide-over]");
-    setSlot(
-      (root?.querySelector(`[${HEADER_LEFT_SLOT}]`) as HTMLElement | null) ??
-        document.querySelector(`[${HEADER_LEFT_SLOT}]`),
-    );
+    const found =
+      root?.querySelector(`[${HEADER_LEFT_SLOT}]`) ??
+      document.querySelector(`[${HEADER_LEFT_SLOT}]`);
+    setSlot(found instanceof HTMLElement ? found : null);
   }, []);
   if (!children) return null;
   return (
