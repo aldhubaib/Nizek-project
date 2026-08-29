@@ -60,7 +60,7 @@ import { useKanbanStore, type KanbanTask } from "@/store/kanban";
 import { NoteSlideOver } from "@/components/project/note-slide-over";
 import { NoteFullScreenCreate } from "@/components/project/note-full-screen-create";
 import { TaskInboxSlideOver } from "@/components/messages/task-inbox-slide-over";
-import { OverflowTabBar } from "@/components/overflow-tab-bar";
+import { Button } from "@/components/ui/button";
 
 const COLUMN_IDS = new Set<string>(SPRINT_BOARD_COLUMNS.map((c) => c.id));
 const BACKLOG_ZONE = "backlog";
@@ -967,8 +967,8 @@ export function CompletedSprintsTab({
 type SprintDocKind = "planning" | "review";
 
 /**
- * A finished sprint's planning and review share one panel. Tabs switch between
- * them so neither document is buried under the other.
+ * A finished sprint's planning and review share one panel. The header button
+ * switches to the other document.
  */
 function ClosedSprintDocs({
   projectId,
@@ -983,48 +983,43 @@ function ClosedSprintDocs({
 
   return (
     <NoteSlideOver
-      title={sprint.name}
+      title="Sprint documents"
       onClose={onClose}
-      bodyClassName="flex flex-col overflow-hidden"
+      headerRight={
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => setKind(kind === "planning" ? "review" : "planning")}
+        >
+          {kind === "planning" ? "Sprint Review" : "Sprint Planning"}
+        </Button>
+      }
     >
-      <div className="shrink-0 border-b border-border px-app py-2">
-        <OverflowTabBar
-          items={[
-            { id: "planning", label: "Planning" },
-            { id: "review", label: "Review" },
-          ]}
-          value={kind}
-          onChange={setKind}
-          justify="start"
+      {kind === "planning" ? (
+        <NoteFullScreenCreate
+          key={`${sprint.id}-planning`}
+          projectId={projectId}
+          createTypes={["SPRINT_PLANNING"]}
+          initialTitle={`${sprint.name} planning`}
+          sprintId={sprint.id}
+          sprintStatus={sprint.status}
+          autoFocusTitle={false}
+          saveInHeader={false}
+          onCreated={() => {}}
         />
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {kind === "planning" ? (
-          <NoteFullScreenCreate
-            key={`${sprint.id}-planning`}
-            projectId={projectId}
-            createTypes={["SPRINT_PLANNING"]}
-            initialTitle={`${sprint.name} planning`}
-            sprintId={sprint.id}
-            sprintStatus={sprint.status}
-            autoFocusTitle={false}
-            saveInHeader={false}
-            onCreated={() => {}}
-          />
-        ) : (
-          <NoteFullScreenCreate
-            key={`${sprint.id}-review`}
-            projectId={projectId}
-            createTypes={["SPRINT_REVIEW"]}
-            initialTitle={`${sprint.name} review`}
-            sprintId={sprint.id}
-            sprintStatus={sprint.status}
-            autoFocusTitle={false}
-            saveInHeader={false}
-            onCreated={() => {}}
-          />
-        )}
-      </div>
+      ) : (
+        <NoteFullScreenCreate
+          key={`${sprint.id}-review`}
+          projectId={projectId}
+          createTypes={["SPRINT_REVIEW"]}
+          initialTitle={`${sprint.name} review`}
+          sprintId={sprint.id}
+          sprintStatus={sprint.status}
+          autoFocusTitle={false}
+          saveInHeader={false}
+          onCreated={() => {}}
+        />
+      )}
     </NoteSlideOver>
   );
 }
