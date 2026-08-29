@@ -29,7 +29,6 @@ import {
   Star,
   ChevronUp,
   ChevronDown,
-  Map as MapIcon,
   LayoutDashboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -47,7 +46,6 @@ import {
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { AccountMenuItems, SignOutDialog } from "@/components/user-menu";
 import { ProfileDialog } from "@/components/profile-dialog";
-import { ClientRoadmapPanel } from "@/components/messages/client-roadmap-panel";
 import {
   mountThreadProjectOverlay,
   unmountThreadProjectOverlay,
@@ -133,30 +131,34 @@ export type { ChatMessage, ThreadTarget } from "./thread-shared";
 /** Floor on the load-older spinner so the transition is legible. */
 const MIN_LOAD_MS = 450;
 
-type ThreadPanel = "chat" | "files" | "important" | "roadmap" | "project";
+type ThreadPanel = "chat" | "files" | "important" | "project";
 type ProjectPanelTab = "dashboard" | "roadmap";
 
 function parseThreadPanel(value: string | null | undefined): ThreadPanel {
-  if (value === "files" || value === "important" || value === "roadmap" || value === "project") {
-    return value;
-  }
+  if (value === "roadmap" || value === "project") return "project";
+  if (value === "files" || value === "important") return value;
   return "chat";
 }
 
-function parseProjectTab(value: string | null | undefined): ProjectPanelTab {
-  return value === "roadmap" ? "roadmap" : "dashboard";
+function parseProjectTab(
+  value: string | null | undefined,
+  panel?: string | null,
+): ProjectPanelTab {
+  if (panel === "roadmap" || value === "roadmap") return "roadmap";
+  return "dashboard";
 }
 
 function panelFromLocation(projectId?: string): ThreadPanel {
   if (typeof window === "undefined") return "chat";
   const panel = parseThreadPanel(new URLSearchParams(window.location.search).get("panel"));
-  if ((panel === "project" || panel === "roadmap") && !projectId) return "chat";
+  if (panel === "project" && !projectId) return "chat";
   return panel;
 }
 
 function projectTabFromLocation(): ProjectPanelTab {
   if (typeof window === "undefined") return "dashboard";
-  return parseProjectTab(new URLSearchParams(window.location.search).get("tab"));
+  const params = new URLSearchParams(window.location.search);
+  return parseProjectTab(params.get("tab"), params.get("panel"));
 }
 
 /** Keep ?panel= in the bar without a Next navigation (that remounts the overlay). */
@@ -309,7 +311,7 @@ export function ThreadChat({
   const [view, setView] = useState<ThreadPanel>(() => {
     const fromUrl = parseThreadPanel(initialPanel);
     if (fromUrl !== "chat") {
-      if ((fromUrl === "project" || fromUrl === "roadmap") && !target.projectId) {
+      if (fromUrl === "project" && !target.projectId) {
         return "chat";
       }
       return fromUrl;
@@ -317,7 +319,7 @@ export function ThreadChat({
     return panelFromLocation(target.projectId);
   });
   const [projectTab, setProjectTab] = useState<ProjectPanelTab>(() => {
-    if (parseProjectTab(initialProjectTab) === "roadmap") return "roadmap";
+    if (parseProjectTab(initialProjectTab, initialPanel) === "roadmap") return "roadmap";
     return projectTabFromLocation();
   });
 
@@ -428,7 +430,7 @@ export function ThreadChat({
     openSearchPanel();
   }, [searchOpen, closeThreadPanels, openSearchPanel]);
   const openThreadPanel = useCallback(
-    (panel: "files" | "important" | "people" | "roadmap" | "project") => {
+    (panel: "files" | "important" | "people" | "project") => {
       const already =
         (panel === "people" && peopleOpen) || (panel !== "people" && view === panel);
       if (already) {
@@ -1646,16 +1648,10 @@ export function ThreadChat({
               </DropdownMenuItem>
             ) : null}
             {clientUser && isClientRoom && target.projectId ? (
-              <>
-                <DropdownMenuItem onClick={() => openThreadPanel("project")}>
-                  <LayoutDashboard className="h-4 w-4" />
-                  <span className="flex-1">My project</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => openThreadPanel("roadmap")}>
-                  <MapIcon className="h-4 w-4" />
-                  <span className="flex-1">Road map</span>
-                </DropdownMenuItem>
-              </>
+              <DropdownMenuItem onClick={() => openThreadPanel("project")}>
+                <LayoutDashboard className="h-4 w-4" />
+                <span className="flex-1">My project</span>
+              </DropdownMenuItem>
             ) : null}
             {threadKey ? (
               <>
@@ -2382,11 +2378,6 @@ export function ThreadChat({
           bodyClassName="flex flex-col overflow-hidden"
         >
           <FilesPanel messages={messages} />
-        </NoteSlideOver>
-      )}
-      {view === "roadmap" && target.projectId && (
-        <NoteSlideOver title="Road map" onClose={closeThreadPanels}>
-          <ClientRoadmapPanel projectId={target.projectId} />
         </NoteSlideOver>
       )}
       {view === "important" && (

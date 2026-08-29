@@ -24,6 +24,9 @@ export async function middleware(request: NextRequest) {
 
   if (pathname.startsWith(uploadPath)) return NextResponse.next();
 
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", pathname);
+
   if (!isPublicRoute(pathname)) {
     const sessionCookie = getSessionCookie(request);
     if (!sessionCookie) {
@@ -34,7 +37,9 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  return NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 }
 
 export const config = {

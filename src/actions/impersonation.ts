@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getRealUser, IMPERSONATE_COOKIE } from "@/lib/auth";
 import { provisionUserFromPendingInvite } from "@/lib/pending-invite";
+import { isClientAccount, promoteUserToClient } from "@/lib/client-role";
 
 async function setImpersonationCookie(userId: string) {
   (await cookies()).set(IMPERSONATE_COOKIE, userId, {
@@ -15,8 +16,14 @@ async function setImpersonationCookie(userId: string) {
   });
 }
 
-function redirectFor(systemRole: string) {
-  return systemRole === "CLIENT" ? "/dashboard/messages" : "/dashboard";
+async function redirectFor(userId: string, systemRole: string) {
+  const isClient =
+    systemRole === "CLIENT" || (await isClientAccount(userId));
+  if (isClient) {
+    await promoteUserToClient(userId);
+    return "/dashboard/messages";
+  }
+  return "/dashboard";
 }
 
 // Admin-only "sign in as user": sets an httpOnly cookie that getCurrentUser
@@ -40,7 +47,7 @@ export async function startImpersonation(
   if (target.blocked) return { error: "This user is blocked — unblock them first to view as them" };
 
   await setImpersonationCookie(target.id);
-  return { redirectTo: redirectFor(target.systemRole) };
+  return { redirectTo: await redirectFor(target.id, target.systemRole) };
 }
 
 /** View as a pending invitee before they sign in with Google. */
@@ -66,7 +73,7 @@ export async function startImpersonationByEmail(
   if (target.blocked) return { error: "This user is blocked — unblock them first to view as them" };
 
   await setImpersonationCookie(target.id);
-  return { redirectTo: redirectFor(target.systemRole) };
+  return { redirectTo: await redirectFor(target.id, target.systemRole) };
 }
 
 export async function stopImpersonation() {

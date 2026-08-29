@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth-server";
 import { cache } from "react";
 import { applyPendingInvite, logPendingInviteError } from "@/lib/pending-invite";
+import { withEffectiveClientRole } from "@/lib/client-role";
 
 export { acceptPendingInvitations, applyPendingInvite } from "@/lib/pending-invite";
 
@@ -47,14 +48,14 @@ export const getRealUser = cache(async () => {
 export const getCurrentUser = cache(async () => {
   const real = await getRealUser();
   if (!real) return null;
-  if (real.systemRole !== "ADMIN") return real;
+  if (real.systemRole !== "ADMIN") return withEffectiveClientRole(real);
 
   const targetId = (await cookies()).get(IMPERSONATE_COOKIE)?.value;
   if (!targetId || targetId === real.id) return real;
 
   const target = await prisma.user.findUnique({ where: { id: targetId } });
   if (!target || target.blocked) return real;
-  return target;
+  return withEffectiveClientRole(target);
 });
 
 export const getImpersonation = cache(async () => {

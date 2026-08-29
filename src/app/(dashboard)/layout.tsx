@@ -3,11 +3,13 @@ import { DashboardShell } from "@/components/dashboard-shell";
 import { ClientShell } from "@/components/client-shell";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { CurrentUserProvider } from "@/components/current-user-provider";
+import { headers } from "next/headers";
 import { getCurrentUser, getImpersonation, needsProfilePhoto, getSession } from "@/lib/auth";
 import { canAccessEquity } from "@/lib/equity-access";
 import { canAccessAnyVault } from "@/lib/vault-access";
 import { getNotificationSoundUrl, getBrandingMap, brandingUrlWithBust } from "@/lib/branding";
 import { isClientUser } from "@/lib/client-chat";
+import { isClientAllowedPath } from "@/lib/client-routes";
 import { prisma } from "@/lib/prisma";
 import { BlockedAccountPage } from "@/components/auth/blocked-account-page";
 
@@ -30,6 +32,10 @@ export default async function DashboardLayout({
 
   const isClient = isClientUser(user);
   const isAdmin = user?.systemRole === "ADMIN";
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  if (isClient && pathname.startsWith("/dashboard") && !isClientAllowedPath(pathname)) {
+    redirect("/dashboard/messages");
+  }
 
   const [notificationSoundUrl, impersonation, branding, canAudit, canEquity, canVault] =
     await Promise.all([

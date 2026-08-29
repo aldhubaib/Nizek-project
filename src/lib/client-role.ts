@@ -34,6 +34,43 @@ export function clientRoleWriteData(isClient: boolean) {
   };
 }
 
+export async function hasClientProjectMembership(userId: string): Promise<boolean> {
+  const row = await prisma.projectMember.findFirst({
+    where: {
+      userId,
+      OR: [{ role: "CLIENT" }, { projectRole: { isClient: true } }],
+    },
+    select: { id: true },
+  });
+  return Boolean(row);
+}
+
+export async function isClientAccount(userId: string): Promise<boolean> {
+  if (await hasClientProjectMembership(userId)) return true;
+  const onClientsTeam = await prisma.teamMember.findFirst({
+    where: {
+      userId,
+      team: { name: CLIENT_TEAM_NAME, isDefault: true },
+    },
+    select: { id: true },
+  });
+  return Boolean(onClientsTeam);
+}
+
+/**
+ * Clients are chat-only. If their system role drifted but they still sit on a
+ * client project seat, treat them as CLIENT so view-as matches a real login.
+ */
+export async function withEffectiveClientRole<T extends { id: string; systemRole: string }>(
+  user: T,
+): Promise<T> {
+  if (user.systemRole === "CLIENT" || user.systemRole === "ADMIN") return user;
+  if (await isClientAccount(user.id)) {
+    return { ...user, systemRole: "CLIENT" };
+  }
+  return user;
+}
+
 export async function promoteUserToClient(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },

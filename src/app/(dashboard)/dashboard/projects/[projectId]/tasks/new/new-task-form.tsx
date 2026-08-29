@@ -131,11 +131,11 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
                     type="button"
                     onClick={() => handleTypeChange(t.id)}
                     className={cn(
-                      "flex items-center gap-2 rounded-lg border px-4 py-2.5 text-s font-medium transition-colors",
+                      "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
                       isActive ? t.activeColor : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
                     )}
                   >
-                    <Icon className="w-4 h-4" strokeWidth={1.5} />
+                    <Icon className="size-3.5" strokeWidth={1.5} />
                     {t.label}
                   </button>
                 );

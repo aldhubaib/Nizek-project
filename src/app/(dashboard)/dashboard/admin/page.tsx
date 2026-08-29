@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { requireUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { isClientUser } from "@/lib/client-chat";
 import { getTeams, ensureDefaultTeams, getPendingInvitesForTeam, getTeamMembers, getPendingInvitations, getPendingTeamInvites } from "@/actions/team";
 import { getRoles } from "@/actions/role";
 import { getProjectOptions } from "@/actions/project";
@@ -13,6 +14,7 @@ import { AdminPageClient } from "./admin-page-client";
 
 export default async function AdminPage() {
   const user = await requireUser();
+  if (isClientUser(user)) redirect("/dashboard/messages");
   if (user.systemRole !== "ADMIN") redirect("/dashboard");
 
   await ensureDefaultTeams();
