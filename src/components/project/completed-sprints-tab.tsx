@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition, type Dispatch, type SetStateAction, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type Dispatch, type SetStateAction, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -22,17 +22,23 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { MoreHorizontal } from "lucide-react";
-import { RoadmapTaskRow } from "@/components/project/sprint-task-row";
+import { AlertCircle, ClipboardCheck, MoreHorizontal, Play } from "lucide-react";
+import { RoadmapTaskRow, SprintTaskRow } from "@/components/project/sprint-task-row";
 import {
+  createSprint,
   deleteSprint,
   getSprintSnapshots,
   reorderPlannedSprints,
   setSprintBoardStatus,
+  setTaskSprint,
   startSprint,
   type SprintDTO,
   type SprintSnapshotTask,
 } from "@/actions/sprint";
+import { moveTask as moveTaskAction } from "@/actions/task";
+import { isMissingDataTask } from "@/lib/task-readiness";
+import { promoteToBacklogBottom } from "@/lib/backlog-placement";
+import { AddToActiveSprintDialog } from "@/components/project/add-to-active-sprint-dialog";
 import { CollapsibleSection } from "@/components/project/collapsible-section";
 import {
   DropdownMenu,
@@ -57,6 +63,10 @@ import { TaskInboxSlideOver } from "@/components/messages/task-inbox-slide-over"
 import { OverflowTabBar } from "@/components/overflow-tab-bar";
 
 const COLUMN_IDS = new Set<string>(SPRINT_BOARD_COLUMNS.map((c) => c.id));
+const BACKLOG_ZONE = "backlog";
+const MISSING_ZONE = "missing-data";
+const TASK_ZONES = new Set([BACKLOG_ZONE, MISSING_ZONE, "PLANNED", "NEXT"]);
+const SPRINT_CARD_COLUMNS = new Set<SprintBoardColumn>(["ACTIVE", "COMPLETED", "SHIPPED"]);
 
 const COLUMN_COLOR: Record<SprintBoardColumn, string> = {
   PLANNED: "bg-muted-foreground",
@@ -66,10 +76,35 @@ const COLUMN_COLOR: Record<SprintBoardColumn, string> = {
   SHIPPED: "bg-success",
 };
 
-const sprintFirstThenColumn: CollisionDetection = (args) => {
+const COLUMN_HEADER_CLASS =
+  "flex h-12 shrink-0 items-center gap-2 border-b border-border/50 px-3";
+
+const boardCollision: CollisionDetection = (args) => {
   const pointerHits = pointerWithin(args);
+  const draggingSprint = String(args.active.id).startsWith("sprint:");
+
+  if (draggingSprint) {
+    const sprintHit = pointerHits.find((hit) => String(hit.id).startsWith("sprint:"));
+    if (sprintHit) return [sprintHit];
+    const columnHit = pointerHits.find((hit) => COLUMN_IDS.has(String(hit.id)));
+    if (columnHit) return [columnHit];
+    return closestCorners(args);
+  }
+
   const sprintHit = pointerHits.find((hit) => String(hit.id).startsWith("sprint:"));
   if (sprintHit) return [sprintHit];
+  const taskHit = pointerHits.find((hit) => {
+    const id = String(hit.id);
+    return (
+      id !== String(args.active.id) &&
+      !id.startsWith("sprint:") &&
+      !COLUMN_IDS.has(id) &&
+      !TASK_ZONES.has(id)
+    );
+  });
+  if (taskHit) return [taskHit];
+  const zoneHit = pointerHits.find((hit) => TASK_ZONES.has(String(hit.id)));
+  if (zoneHit) return [zoneHit];
   const columnHit = pointerHits.find((hit) => COLUMN_IDS.has(String(hit.id)));
   if (columnHit) return [columnHit];
   return closestCorners(args);
@@ -81,6 +116,10 @@ interface Props {
   onSprintsChange: Dispatch<SetStateAction<SprintDTO[]>>;
   initialTasks: KanbanTask[];
   canManage: boolean;
+  canMoveTasks?: boolean;
+  canStartSprint?: boolean;
+  canEndSprint?: boolean;
+  canCreateSprintPlanning?: boolean;
   isProjectActive: boolean;
 }
 
@@ -92,12 +131,35 @@ function sprintIdFromDrag(id: string) {
   return id.startsWith("sprint:") ? id.slice("sprint:".length) : "";
 }
 
+function nextSprintName(sprints: SprintDTO[]): string {
+  let max = 0;
+  for (const sprint of sprints) {
+    const match = sprint.name.match(/^Sprint\s+(\d+)$/i);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `Sprint ${max + 1}`;
+}
+
+function defaultSprintDates() {
+  const start = new Date();
+  const end = new Date();
+  end.setUTCDate(end.getUTCDate() + 13);
+  return {
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+  };
+}
+
 export function CompletedSprintsTab({
   projectId,
   sprints,
   onSprintsChange,
   initialTasks,
   canManage,
+  canMoveTasks = false,
+  canStartSprint = false,
+  canEndSprint = false,
+  canCreateSprintPlanning = false,
   isProjectActive,
 }: Props) {
   const router = useRouter();
@@ -107,8 +169,15 @@ export function CompletedSprintsTab({
   const [snapshots, setSnapshots] = useState<Record<string, SprintSnapshotTask[]> | null>(null);
   const storeTasks = useKanbanStore((s) => s.tasks);
   const storeProjectId = useKanbanStore((s) => s.projectId);
+  const setTasks = useKanbanStore((s) => s.setTasks);
   const updateTask = useKanbanStore((s) => s.updateTask);
   const liveTasks = storeProjectId === projectId && storeTasks.length > 0 ? storeTasks : initialTasks;
+  const taskById = useMemo(() => new Map(liveTasks.map((t) => [t.id, t])), [liveTasks]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [addToActive, setAddToActive] = useState<{
+    task: KanbanTask;
+    sprint: SprintDTO;
+  } | null>(null);
   const [reviewSprint, setReviewSprint] = useState<SprintDTO | null>(null);
   const [planningSprint, setPlanningSprint] = useState<SprintDTO | null>(null);
   const [docsSprint, setDocsSprint] = useState<SprintDTO | null>(null);
@@ -116,6 +185,7 @@ export function CompletedSprintsTab({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const canDrag = canManage && isProjectActive;
+  const canDragTasks = canMoveTasks && isProjectActive;
   const activeSprint = useMemo(() => {
     if (!activeId?.startsWith("sprint:")) return null;
     return sprints.find((s) => s.id === activeId.slice("sprint:".length)) ?? null;
@@ -139,10 +209,78 @@ export function CompletedSprintsTab({
   const closedCount = sprints.filter((s) => isClosedSprint(s.status)).length;
 
   useEffect(() => {
+    const store = useKanbanStore.getState();
+    if (store.projectId !== projectId || store.tasks.length === 0) {
+      setTasks(initialTasks, projectId);
+      return;
+    }
+    setTasks((prev) => {
+      const incoming = new Map(initialTasks.map((t) => [t.id, t]));
+      return prev.map((t) => {
+        const next = incoming.get(t.id);
+        if (!next || t.isReadyForTransition === next.isReadyForTransition) return t;
+        return { ...t, isReadyForTransition: next.isReadyForTransition };
+      });
+    }, projectId);
+  }, [initialTasks, projectId, setTasks]);
+
+  useEffect(() => {
     if (closedCount > 0 && snapshots === null) {
       getSprintSnapshots(projectId).then(setSnapshots);
     }
   }, [closedCount, projectId, snapshots]);
+
+  const missingTasks = useMemo(
+    () =>
+      liveTasks
+        .filter((t) => !t.sprintId && t.stage !== "DONE" && isMissingDataTask(t))
+        .sort((a, b) => a.order - b.order),
+    [liveTasks],
+  );
+  const backlogTasks = useMemo(
+    () =>
+      liveTasks
+        .filter((t) => !t.sprintId && t.stage !== "DONE" && !isMissingDataTask(t))
+        .sort((a, b) => a.order - b.order),
+    [liveTasks],
+  );
+  const plannedSprintIds = useMemo(
+    () => new Set(sprints.filter((s) => s.status === "PLANNED").map((s) => s.id)),
+    [sprints],
+  );
+  const nextSprint = useMemo(
+    () => sprints.find((s) => s.status === "NEXT") ?? null,
+    [sprints],
+  );
+  const plannedTasks = useMemo(
+    () =>
+      liveTasks
+        .filter((t) => t.sprintId && plannedSprintIds.has(t.sprintId) && t.stage !== "DONE")
+        .sort((a, b) => a.order - b.order),
+    [liveTasks, plannedSprintIds],
+  );
+  const nextTasks = useMemo(
+    () =>
+      liveTasks
+        .filter((t) => t.sprintId && t.sprintId === nextSprint?.id && t.stage !== "DONE")
+        .sort((a, b) => a.order - b.order),
+    [liveTasks, nextSprint],
+  );
+
+  const prevReadyRef = useRef<Map<string, boolean>>(new Map());
+  useEffect(() => {
+    const prev = prevReadyRef.current;
+    const next = new Map<string, boolean>();
+    for (const task of liveTasks) {
+      const isReady = Boolean(task.isReadyForTransition);
+      next.set(task.id, isReady);
+      if (prev.size === 0) continue;
+      if (prev.get(task.id) === false && isReady) {
+        promoteToBacklogBottom(task.id);
+      }
+    }
+    prevReadyRef.current = next;
+  }, [liveTasks]);
 
   const byColumn = useMemo(() => {
     const groups: Record<SprintBoardColumn, SprintDTO[]> = {
@@ -196,11 +334,234 @@ export function CompletedSprintsTab({
     setActiveId(null);
   }
 
+  function nextSprintCount(task: KanbanTask, nextSprintId: string | null): number {
+    const current = task.sprintCount ?? 0;
+    const hadSprint = Boolean(task.sprintId);
+    const willHaveSprint = Boolean(nextSprintId);
+    if (!hadSprint && willHaveSprint) return current + 1;
+    if (hadSprint && !willHaveSprint) return Math.max(0, current - 1);
+    return current;
+  }
+
+  function bumpSprintCount(sprintId: string | null, delta: number) {
+    if (!sprintId) return;
+    onSprintsChange((prev) =>
+      prev.map((s) =>
+        s.id === sprintId ? { ...s, taskCount: Math.max(0, s.taskCount + delta) } : s,
+      ),
+    );
+  }
+
+  function assignTaskToSprint(task: KanbanTask, nextSprintId: string | null, estimatedMinutes?: number | null) {
+    if (nextSprintId && isClosedSprint(sprints.find((s) => s.id === nextSprintId)?.status ?? "")) {
+      return;
+    }
+    const prevSprintId = task.sprintId ?? null;
+    if (prevSprintId === nextSprintId) return;
+    const sprintName = nextSprintId
+      ? (sprints.find((s) => s.id === nextSprintId)?.name ?? null)
+      : null;
+    const prevSprintCount = task.sprintCount;
+    updateTask(task.id, {
+      sprintId: nextSprintId,
+      sprintName,
+      sprintCount: nextSprintCount(task, nextSprintId),
+      ...(nextSprintId
+        ? { estimatedMinutes: estimatedMinutes ?? null, stage: "NEW_REQUEST" }
+        : { assignee: null, estimatedMinutes: null }),
+    });
+    bumpSprintCount(prevSprintId, -1);
+    bumpSprintCount(nextSprintId, 1);
+    startTransition(async () => {
+      try {
+        await setTaskSprint(task.id, nextSprintId, estimatedMinutes ?? null);
+        router.refresh();
+      } catch (err) {
+        updateTask(task.id, {
+          sprintId: prevSprintId,
+          sprintName: task.sprintName ?? null,
+          sprintCount: prevSprintCount,
+          assignee: task.assignee,
+          estimatedMinutes: task.estimatedMinutes,
+        });
+        bumpSprintCount(nextSprintId, -1);
+        bumpSprintCount(prevSprintId, 1);
+        setError(err instanceof Error ? err.message : "Could not move task");
+      }
+    });
+  }
+
+  async function ensureColumnSprint(column: "PLANNED" | "NEXT"): Promise<SprintDTO> {
+    const existing =
+      column === "NEXT"
+        ? nextSprint
+        : sprints.filter((s) => s.status === "PLANNED").slice().sort(comparePlannedSprints)[0];
+    if (existing) return existing;
+    const dates = defaultSprintDates();
+    const created = await createSprint({
+      projectId,
+      name: nextSprintName(sprints),
+      startDate: dates.startDate,
+      endDate: dates.endDate,
+    });
+    const sprint =
+      column === "NEXT" ? await setSprintBoardStatus(created.id, "NEXT") : created;
+    onSprintsChange((prev) =>
+      prev.some((s) => s.id === sprint.id) ? prev.map((s) => (s.id === sprint.id ? sprint : s)) : [...prev, sprint],
+    );
+    return sprint;
+  }
+
+  function reorderBacklog(list: KanbanTask[], activeTaskId: string, overTaskId: string) {
+    const oldIndex = list.findIndex((t) => t.id === activeTaskId);
+    const newIndex = list.findIndex((t) => t.id === overTaskId);
+    if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+    const reordered = arrayMove(list, oldIndex, newIndex);
+    const updates = reordered
+      .map((t, order) => ({ task: t, order }))
+      .filter(({ task, order }) => task.order !== order);
+    if (updates.length === 0) return;
+    for (const { task, order } of updates) {
+      updateTask(task.id, { order });
+    }
+    startTransition(async () => {
+      const results = await Promise.all(
+        updates.map(({ task, order }) =>
+          moveTaskAction({ taskId: task.id, stage: task.stage, order }),
+        ),
+      );
+      if (results.some((r) => !r.success)) {
+        setError("Could not reorder tasks");
+        router.refresh();
+      }
+    });
+  }
+
+  function resolveTaskDropSprint(overId: string): SprintDTO | null {
+    const fromSprintId = sprintIdFromDrag(overId);
+    if (fromSprintId) {
+      return sprints.find((s) => s.id === fromSprintId) ?? null;
+    }
+    if (overId === "NEXT") {
+      return nextSprint;
+    }
+    if (overId === "PLANNED") {
+      return sprints.filter((s) => s.status === "PLANNED").slice().sort(comparePlannedSprints)[0] ?? null;
+    }
+    if (overId === "ACTIVE") {
+      return sprints.find((s) => s.status === "ACTIVE") ?? null;
+    }
+    const overTask = taskById.get(overId);
+    if (overTask?.sprintId) {
+      return sprints.find((s) => s.id === overTask.sprintId) ?? null;
+    }
+    return null;
+  }
+
+  function handleTaskDragEnd(task: KanbanTask, overId: string) {
+    if (overId === MISSING_ZONE) return;
+
+    if (overId === BACKLOG_ZONE || backlogTasks.some((t) => t.id === overId)) {
+      if (isMissingDataTask(task)) {
+        setNotice(
+          "This task still has missing data. Fill in all required fields before moving it to the Backlog.",
+        );
+        return;
+      }
+      if (backlogTasks.some((t) => t.id === overId) && !task.sprintId) {
+        reorderBacklog(backlogTasks, task.id, overId);
+        return;
+      }
+      if (!task.sprintId) return;
+      assignTaskToSprint(task, null);
+      return;
+    }
+
+    const inPlanned = Boolean(task.sprintId && plannedSprintIds.has(task.sprintId));
+    const inNext = Boolean(nextSprint && task.sprintId === nextSprint.id);
+    if (overId === "PLANNED" || plannedTasks.some((t) => t.id === overId)) {
+      if (isMissingDataTask(task)) {
+        setNotice(
+          "This task still has missing data. Fill in all required fields before planning it.",
+        );
+        return;
+      }
+      if (plannedTasks.some((t) => t.id === overId) && inPlanned) {
+        reorderBacklog(plannedTasks, task.id, overId);
+        return;
+      }
+      const existing = resolveTaskDropSprint("PLANNED");
+      if (existing) {
+        assignTaskToSprint(task, existing.id);
+        return;
+      }
+      startTransition(async () => {
+        try {
+          const sprint = await ensureColumnSprint("PLANNED");
+          assignTaskToSprint(task, sprint.id);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Could not add task to Planned");
+        }
+      });
+      return;
+    }
+    if (overId === "NEXT" || nextTasks.some((t) => t.id === overId)) {
+      if (isMissingDataTask(task)) {
+        setNotice(
+          "This task still has missing data. Fill in all required fields before adding it to Next.",
+        );
+        return;
+      }
+      if (nextTasks.some((t) => t.id === overId) && inNext) {
+        reorderBacklog(nextTasks, task.id, overId);
+        return;
+      }
+      if (nextSprint) {
+        assignTaskToSprint(task, nextSprint.id);
+        return;
+      }
+      startTransition(async () => {
+        try {
+          const sprint = await ensureColumnSprint("NEXT");
+          assignTaskToSprint(task, sprint.id);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Could not add task to Next");
+        }
+      });
+      return;
+    }
+
+    const target = resolveTaskDropSprint(overId);
+    if (!target) {
+      return;
+    }
+    if (isClosedSprint(target.status)) return;
+    if (isMissingDataTask(task)) {
+      setNotice(
+        "This task still has missing data. Fill in all required fields before planning it into a sprint.",
+      );
+      return;
+    }
+    if (target.status === "ACTIVE" && task.sprintId !== target.id) {
+      setAddToActive({ task, sprint: target });
+      return;
+    }
+    assignTaskToSprint(task, target.id);
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     setActiveId(null);
-    if (!over || !canDrag) return;
-    const sprintId = sprintIdFromDrag(String(active.id));
+    if (!over) return;
+    const activeId = String(active.id);
+    if (!activeId.startsWith("sprint:")) {
+      if (!canDragTasks) return;
+      const task = taskById.get(activeId);
+      if (task) handleTaskDragEnd(task, String(over.id));
+      return;
+    }
+    if (!canDrag) return;
+    const sprintId = sprintIdFromDrag(activeId);
     const sprint = sprints.find((s) => s.id === sprintId);
     if (!sprint) return;
 
@@ -279,8 +640,8 @@ export function CompletedSprintsTab({
         return;
       }
 
-      if (column === "COMPLETED" && sprint.status === "ACTIVE") {
-        setError("Complete the sprint from the review or backlog first.");
+      if (sprint.status === "ACTIVE") {
+        setReviewSprint(sprint);
         return;
       }
 
@@ -321,30 +682,132 @@ export function CompletedSprintsTab({
     router.refresh();
   }
 
-  if (sprints.length === 0) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-center">
-        <p className="text-s text-muted-foreground">No sprints yet</p>
-        <p className="text-xs text-muted-foreground">
-          Create a sprint from the Backlog to see it here.
-        </p>
-      </div>
-    );
-  }
+  const overlayTask = activeId && !activeId.startsWith("sprint:")
+    ? taskById.get(activeId) ?? null
+    : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       {error ? <p className="text-s text-destructive">{error}</p> : null}
+      {notice ? <MissingDataNotice message={notice} onClose={() => setNotice(null)} /> : null}
 
       <DndContext
         sensors={sensors}
-        collisionDetection={sprintFirstThenColumn}
+        collisionDetection={boardCollision}
         onDragStart={handleDragStart}
         onDragCancel={handleDragCancel}
         onDragEnd={handleDragEnd}
       >
         <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overscroll-x-contain pb-4">
-          {SPRINT_BOARD_COLUMNS.map((column) => {
+          <TaskPoolColumn
+            id={MISSING_ZONE}
+            title="Missing data"
+            count={missingTasks.length}
+            color="bg-orange"
+            emptyLabel="No tasks with missing data."
+          >
+            <div className="space-y-2">
+              {missingTasks.map((task) => (
+                <SprintTaskRow
+                  key={task.id}
+                  as="button"
+                  hideAssignee
+                  disableHoverBorder
+                  task={task}
+                  onClick={() => setOpenTask({ id: task.id, title: task.title })}
+                />
+              ))}
+            </div>
+          </TaskPoolColumn>
+          <TaskPoolColumn
+            id={BACKLOG_ZONE}
+            title="Backlog"
+            count={backlogTasks.length}
+            color="bg-muted-foreground"
+            emptyLabel="Drag completed items here. Higher in the list is higher priority."
+          >
+            <SortableContext
+              items={backlogTasks.map((t) => t.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-2">
+                {backlogTasks.map((task) => (
+                  <BacklogTaskRow
+                    key={task.id}
+                    task={task}
+                    disabled={!canDragTasks}
+                    onOpen={() => setOpenTask({ id: task.id, title: task.title })}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </TaskPoolColumn>
+          <TaskPoolColumn
+            id="PLANNED"
+            title="Planned"
+            count={plannedTasks.length}
+            color={COLUMN_COLOR.PLANNED}
+            emptyLabel="Drop ready tasks here."
+          >
+            <SortableContext
+              items={plannedTasks.map((t) => t.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-2">
+                {plannedTasks.map((task) => (
+                  <BacklogTaskRow
+                    key={task.id}
+                    task={task}
+                    disabled={!canDragTasks}
+                    onOpen={() => setOpenTask({ id: task.id, title: task.title })}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </TaskPoolColumn>
+          <TaskPoolColumn
+            id="NEXT"
+            title="Next"
+            count={nextTasks.length}
+            color={COLUMN_COLOR.NEXT}
+            emptyLabel="Drop tasks here to include them in the next sprint."
+            action={
+              (canStartSprint || canCreateSprintPlanning) && isProjectActive ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!nextSprint) {
+                      setError("Add at least one task to Next, then start the sprint.");
+                      return;
+                    }
+                    setPlanningSprint(nextSprint);
+                  }}
+                  aria-label="Start sprint"
+                  title="Start sprint"
+                  className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <Play className="size-4" />
+                </button>
+              ) : null
+            }
+          >
+            <SortableContext
+              items={nextTasks.map((t) => t.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-2">
+                {nextTasks.map((task) => (
+                  <BacklogTaskRow
+                    key={task.id}
+                    task={task}
+                    disabled={!canDragTasks}
+                    onOpen={() => setOpenTask({ id: task.id, title: task.title })}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </TaskPoolColumn>
+          {SPRINT_BOARD_COLUMNS.filter((column) => SPRINT_CARD_COLUMNS.has(column.id)).map((column) => {
             const cards = byColumn[column.id].map((sprint) => {
               const items = tasksForSprint(sprint.id);
               const isCollapsed = collapsed[sprint.id] ?? true;
@@ -375,30 +838,29 @@ export function CompletedSprintsTab({
               key={column.id}
               column={column}
               sprints={byColumn[column.id]}
-              emptyLabel={
-                column.id === "NEXT"
-                  ? "Drop one sprint here."
-                  : "Drop a sprint here."
-              }
-              dropBlocked={
-                column.id === "NEXT" &&
-                Boolean(
-                  activeSprint &&
-                    sprintBoardColumn(activeSprint.status) !== "NEXT" &&
-                    byColumn.NEXT.some((s) => s.id !== activeSprint.id),
-                )
+              emptyLabel="Drop a sprint here."
+              action={
+                column.id === "ACTIVE" && canEndSprint && isProjectActive ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const active = byColumn.ACTIVE[0];
+                      if (!active) {
+                        setError("Start a sprint before opening the review.");
+                        return;
+                      }
+                      setReviewSprint(active);
+                    }}
+                    aria-label="Sprint review"
+                    title="Sprint review"
+                    className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <ClipboardCheck className="size-4" />
+                  </button>
+                ) : null
               }
             >
-              {column.id === "PLANNED" ? (
-                <SortableContext
-                  items={byColumn.PLANNED.map((s) => sprintDragId(s.id))}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {cards}
-                </SortableContext>
-              ) : (
-                cards
-              )}
+              {cards}
             </SprintColumn>
             );
           })}
@@ -406,11 +868,33 @@ export function CompletedSprintsTab({
         <DragOverlay dropAnimation={null}>
           {activeSprint ? (
             <div className="rounded-lg border border-border/50 bg-card px-3 py-4 text-s font-semibold shadow-lg">
-              {activeSprint.name}
+              {activeSprint.name} ({tasksForSprint(activeSprint.id).length})
             </div>
+          ) : overlayTask ? (
+            <SprintTaskRow
+              task={overlayTask}
+              hideAssignee
+              className="border-primary/40 bg-card shadow-xl"
+            />
           ) : null}
         </DragOverlay>
       </DndContext>
+    <AddToActiveSprintDialog
+      key={addToActive?.task.id ?? "idle"}
+      open={addToActive != null}
+      projectId={projectId}
+      sprintName={addToActive?.sprint.name ?? ""}
+      task={addToActive?.task ?? null}
+      onOpenChange={(open) => {
+        if (!open) setAddToActive(null);
+      }}
+      onConfirm={(estimatedMinutes) => {
+        if (!addToActive) return;
+        const pendingAdd = addToActive;
+        setAddToActive(null);
+        assignTaskToSprint(pendingAdd.task, pendingAdd.sprint.id, estimatedMinutes);
+      }}
+    />
     {deletingSprint ? (
       <ConfirmDeleteDialog
         key={deletingSprint.id}
@@ -442,6 +926,8 @@ export function CompletedSprintsTab({
           createTypes={["SPRINT_REVIEW"]}
           initialTitle={`${reviewSprint.name} review`}
           sprintId={reviewSprint.id}
+          canEndSprint={canEndSprint}
+          canEditSprintDoc={canEndSprint}
           onCancel={closeReview}
           saveInHeader={false}
           onCreated={() => {}}
@@ -466,6 +952,8 @@ export function CompletedSprintsTab({
           initialTitle={`${planningSprint.name} planning`}
           sprintId={planningSprint.id}
           sprintStatus={planningSprint.status}
+          canStartSprint={canStartSprint}
+          canEditSprintDoc={canCreateSprintPlanning}
           onCancel={closePlanning}
           saveInHeader={false}
           onCreated={() => {}}
@@ -541,17 +1029,133 @@ function ClosedSprintDocs({
   );
 }
 
+function TaskPoolColumn({
+  id,
+  title,
+  count,
+  color,
+  emptyLabel,
+  action,
+  children,
+}: {
+  id: string;
+  title: string;
+  count: number;
+  color: string;
+  emptyLabel: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex w-[min(100%,18rem)] shrink-0 flex-col rounded-lg border border-border/50 bg-muted/30 lg:min-h-0 lg:w-[400px]",
+        isOver && "border-success/60 bg-success/5",
+      )}
+    >
+      <div className={COLUMN_HEADER_CLASS}>
+        <div className={cn("h-2.5 w-2.5 rounded-full", color)} />
+        <h3 className="text-s font-medium">{title}</h3>
+        <span className="text-s text-muted-foreground">{count}</span>
+        {action ? <div className="ml-auto">{action}</div> : null}
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
+        {count === 0 ? (
+          <p className="px-1 py-6 text-center text-xs text-muted-foreground">{emptyLabel}</p>
+        ) : (
+          children
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BacklogTaskRow({
+  task,
+  disabled,
+  onOpen,
+}: {
+  task: KanbanTask;
+  disabled?: boolean;
+  onOpen: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id, disabled });
+  const wasDragged = useRef(false);
+  useEffect(() => {
+    if (isDragging) wasDragged.current = true;
+  }, [isDragging]);
+
+  return (
+    <SprintTaskRow
+      ref={setNodeRef}
+      task={task}
+      hideAssignee
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      {...attributes}
+      {...listeners}
+      onClick={() => {
+        if (wasDragged.current) {
+          wasDragged.current = false;
+          return;
+        }
+        onOpen();
+      }}
+      className={cn(
+        isDragging && "opacity-50",
+        disabled ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
+      )}
+    />
+  );
+}
+
+function MissingDataNotice({ message, onClose }: { message: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm">
+      <div className="mx-4 w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-2xl">
+        <div className="mb-3 flex items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-orange/15">
+            <AlertCircle className="size-5 text-orange" strokeWidth={2} />
+          </div>
+          <h3 className="text-s font-semibold text-foreground">Missing data</h3>
+        </div>
+        <p className="mb-5 text-s text-muted-foreground">{message}</p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full rounded-lg bg-primary py-2 text-s font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SprintColumn({
   column,
   sprints,
   emptyLabel,
   dropBlocked,
+  action,
   children,
 }: {
   column: (typeof SPRINT_BOARD_COLUMNS)[number];
   sprints: SprintDTO[];
   emptyLabel: string;
   dropBlocked?: boolean;
+  action?: ReactNode;
   children: ReactNode;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
@@ -565,10 +1169,11 @@ function SprintColumn({
         isOver && dropBlocked && "border-destructive/50 bg-destructive/5",
       )}
     >
-      <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2.5">
+      <div className={COLUMN_HEADER_CLASS}>
         <div className={cn("h-2.5 w-2.5 rounded-full", COLUMN_COLOR[column.id])} />
         <h3 className="text-s font-medium">{column.label}</h3>
         <span className="text-s text-muted-foreground">{sprints.length}</span>
+        {action ? <div className="ml-auto">{action}</div> : null}
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
         {sprints.length === 0 ? (
@@ -633,7 +1238,7 @@ function SprintBoardCard({
       className={cn(isDragging && "opacity-40")}
     >
       <CollapsibleSection
-        title={sprint.name}
+        title={`${sprint.name} (${items.length})`}
         collapsed={collapsed}
         onToggle={onToggle}
         actions={
@@ -678,23 +1283,19 @@ function SprintBoardCard({
             No tasks recorded for this sprint.
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {items.map((task) => (
-              <div key={task.id} className="space-y-1.5">
-                <RoadmapTaskRow
-                  task={task}
-                  missingData={false}
-                  onClick={() => onOpenTask(task)}
-                />
-                {task.incompleteReason ? (
-                  <p className="rounded-lg border border-border/60 bg-surface/60 px-3 py-2 text-s leading-relaxed text-muted-foreground">
-                    <span className="mb-0.5 block text-xs font-medium uppercase tracking-wider">
-                      Incomplete because
-                    </span>
-                    <span className="text-foreground">{task.incompleteReason}</span>
-                  </p>
-                ) : null}
-              </div>
+              <RoadmapTaskRow
+                key={task.id}
+                task={task}
+                missingData={false}
+                incomplete={
+                  Boolean(task.incompleteReason) ||
+                  (isClosedSprint(sprint.status) && task.stage !== "DONE")
+                }
+                incompleteReason={task.incompleteReason}
+                onClick={() => onOpenTask(task)}
+              />
             ))}
           </div>
         )}

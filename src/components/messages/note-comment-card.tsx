@@ -17,9 +17,11 @@ const COMMENT_THEME = {
 export function NoteCommentCard({
   payload,
   createdAt,
+  projectName,
 }: {
   payload: NoteCommentPayload;
   createdAt: string;
+  projectName?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -30,6 +32,7 @@ export function NoteCommentCard({
         icon={MessageSquareText}
         category="Note comment"
         title={payload.noteTitle}
+        projectName={payload.projectName || projectName}
         onAction={() => setOpen(true)}
         actionLabel="Reply on the highlight"
         createdAt={createdAt}

@@ -103,12 +103,7 @@ export function ClientRoadmapPanel({ projectId }: { projectId: string }) {
                 >
                   <div className="flex items-baseline gap-2">
                     <span className="min-w-0 flex-1 truncate text-s font-medium">
-                      {sprint.name}
-                    </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {sprint.taskCount === 1
-                        ? "1 task"
-                        : `${sprint.taskCount} tasks`}
+                      {sprint.name} ({sprint.taskCount})
                     </span>
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">

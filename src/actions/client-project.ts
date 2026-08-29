@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
 import { sprintIdFromPlanningHtml } from "@/lib/sprint-planning-doc";
+import { reviewDateBySprintId } from "@/lib/sprint-review-doc";
 import { isMissingDataTask } from "@/lib/task-readiness";
 import {
   compareClosedSprints,
@@ -56,7 +57,9 @@ export type ClientBacklogTask = {
 
 export type ClientSprintTask = ClientBacklogTask & {
   stage: string;
+  sprintId?: string | null;
   sprintCount?: number;
+  isReadyForTransition?: boolean;
 };
 
 export type ClientDeadline = {
@@ -129,6 +132,7 @@ type SprintOrderRow = {
   status: string;
   sortOrder: number;
   startDate: Date;
+  reviewDate?: string | Date | null;
   completedAt: Date | null;
   updatedAt: Date;
 };
@@ -151,6 +155,9 @@ const IN_PROGRESS_STAGES = new Set([
   "CLIENT_REVIEW",
   "READY_FOR_RELEASE",
 ]);
+
+/** Sprint-board columns — these never belong in the type / backlog lists. */
+const SPRINT_BOARD_STAGES = new Set([...IN_PROGRESS_STAGES, "DONE"]);
 
 export async function getClientProjectOverview(
   projectId: string,
@@ -189,6 +196,7 @@ export async function getClientProjectOverview(
         title: true,
         noteType: true,
         content: true,
+        date: true,
         createdAt: true,
       },
       orderBy: { date: "desc" },
@@ -229,10 +237,15 @@ export async function getClientProjectOverview(
     taskCounts.set(task.sprintId, (taskCounts.get(task.sprintId) ?? 0) + 1);
   }
 
-  // Same two rules the planner's Backlog zone uses: not in a sprint, not done,
-  // and past triage — half-filled new requests sit in Missing Data, not here.
+  // Same rules the planner's Backlog zone uses: not on the sprint board,
+  // not missing spec data, and not already assigned to a sprint.
   const backlog = tasks
-    .filter((t) => !t.sprintId && t.stage !== "DONE" && !isMissingDataTask(t))
+    .filter(
+      (t) =>
+        !t.sprintId &&
+        !SPRINT_BOARD_STAGES.has(t.stage) &&
+        !isMissingDataTask(t),
+    )
     .sort((a, b) => a.order - b.order);
 
   const active = sprints.find((s) => s.status === "ACTIVE") ?? null;
@@ -257,8 +270,16 @@ export async function getClientProjectOverview(
       title: t.title,
       taskType: t.taskType,
       stage: t.stage,
+      sprintId: t.sprintId,
       sprintCount: t.sprintCount,
+      isReadyForTransition: t.isReadyForTransition,
     }));
+
+  const reviewDates = reviewDateBySprintId(
+    notes
+      .filter((n) => n.noteType === "SPRINT_REVIEW")
+      .map((n) => ({ content: n.content, date: n.date })),
+  );
 
   const sprintTasks = (active ? activeTasks : tasks.filter((t) => IN_PROGRESS_STAGES.has(t.stage)))
     .filter((t) => t.stage !== "DONE")
@@ -314,7 +335,12 @@ export async function getClientProjectOverview(
       })),
     sprints: sprints
       .slice()
-      .sort(compareForBrowsing)
+      .sort((a, b) =>
+        compareForBrowsing(
+          { ...a, reviewDate: reviewDates.get(a.id) ?? null },
+          { ...b, reviewDate: reviewDates.get(b.id) ?? null },
+        ),
+      )
       .map((s) => ({
         id: s.id,
         name: s.name,

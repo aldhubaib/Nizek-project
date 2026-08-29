@@ -732,7 +732,8 @@ export function NoteFullScreenDetail({
     noteId: note.id,
     title,
     content,
-    enabled: liveEdit && !collabEnabled,
+    enabled: liveEdit,
+    persistContent: !collabEnabled,
   });
 
   useEffect(() => {

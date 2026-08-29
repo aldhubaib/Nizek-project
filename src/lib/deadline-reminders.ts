@@ -121,6 +121,7 @@ export async function sendDeadlineReminderForNote(options: {
   const payload = {
     noteId: note.id,
     projectId: note.projectId,
+    projectName: note.project.name,
     title: note.title,
     dueDate: note.dueDate.toISOString(),
     offsetDays: options.offsetDays,

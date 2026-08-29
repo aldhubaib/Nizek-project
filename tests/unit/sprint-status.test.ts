@@ -58,4 +58,18 @@ describe("compareClosedSprints", () => {
     const legacy = { completedAt: null, updatedAt: "2026-04-01T00:00:00.000Z" };
     expect(compareClosedSprints(legacy, withReview)).toBeLessThan(0);
   });
+
+  it("prefers the sprint review document date over completedAt", () => {
+    const olderReview = {
+      reviewDate: "2026-01-15",
+      completedAt: "2026-06-01T00:00:00.000Z",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+    };
+    const newerReview = {
+      reviewDate: "2026-04-01",
+      completedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(compareClosedSprints(newerReview, olderReview)).toBeLessThan(0);
+  });
 });

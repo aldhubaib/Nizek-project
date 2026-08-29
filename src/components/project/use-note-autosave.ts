@@ -9,16 +9,19 @@ export function useNoteAutosave({
   title,
   content,
   enabled,
+  persistContent = true,
 }: {
   noteId: string | null;
   title: string;
   content: string;
   enabled: boolean;
+  /** When false, only the title is written (collab owns the body). */
+  persistContent?: boolean;
 }) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const skipFirst = useRef(true);
-  const latest = useRef({ title, content, noteId, enabled });
-  latest.current = { title, content, noteId, enabled };
+  const latest = useRef({ title, content, noteId, enabled, persistContent });
+  latest.current = { title, content, noteId, enabled, persistContent };
 
   useEffect(() => {
     skipFirst.current = true;
@@ -37,8 +40,12 @@ export function useNoteAutosave({
         await updateMeetingNote({
           noteId,
           title: nextTitle,
-          content: latest.current.content,
-          date: documentDateIsoFromPlanningHtml(latest.current.content) ?? undefined,
+          ...(latest.current.persistContent
+            ? {
+                content: latest.current.content,
+                date: documentDateIsoFromPlanningHtml(latest.current.content) ?? undefined,
+              }
+            : {}),
         });
         setSaveError(null);
       } catch (err) {
@@ -46,17 +53,19 @@ export function useNoteAutosave({
       }
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [enabled, noteId, title, content]);
+  }, [enabled, noteId, title, persistContent ? content : null, persistContent]);
 
   useEffect(() => {
     return () => {
-      const { noteId: id, title: t, content: c, enabled: on } = latest.current;
+      const { noteId: id, title: t, content: c, enabled: on, persistContent: writeBody } =
+        latest.current;
       if (!on || !id || !t.trim()) return;
       void updateMeetingNote({
         noteId: id,
         title: t.trim(),
-        content: c,
-        date: documentDateIsoFromPlanningHtml(c) ?? undefined,
+        ...(writeBody
+          ? { content: c, date: documentDateIsoFromPlanningHtml(c) ?? undefined }
+          : {}),
       });
     };
   }, [enabled]);

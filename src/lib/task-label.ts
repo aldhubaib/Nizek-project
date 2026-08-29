@@ -85,23 +85,13 @@ export function sprintStatusBadge(status: string) {
   );
 }
 
-export function sprintTabForStatus(status: string): "board" | "sprints" | "roadmap" {
+export function sprintTabForStatus(status: string): "sprints" | "roadmap" {
   if (status === "ACTIVE") return "sprints";
-  if (
-    status === "COMPLETED" ||
-    status === "PARTIALLY_COMPLETED" ||
-    status === "SHIPPED" ||
-    status === "NEXT"
-  ) {
-    return "roadmap";
-  }
-  return "board";
+  return "roadmap";
 }
 
 export function normalizeProjectTab(tab: string | null | undefined): string {
-  if (!tab) return "board";
-  // Old All-sprints URL.
-  if (tab === "completed") return "roadmap";
+  if (!tab || tab === "board" || tab === "completed") return "roadmap";
   return tab;
 }
 
@@ -134,13 +124,13 @@ export function projectHrefForTaskReturn(
   sprintStatus?: string | null,
 ): string {
   const tab = isProjectReturnTab(from)
-    ? from === "completed"
+    ? from === "completed" || from === "board"
       ? "roadmap"
       : from
     : sprintStatus
       ? sprintTabForStatus(sprintStatus)
-      : "board";
-  if (tab === "board") return `/dashboard/projects/${projectId}`;
+      : "roadmap";
+  if (tab === "roadmap") return `/dashboard/projects/${projectId}`;
   return `/dashboard/projects/${projectId}?tab=${tab}`;
 }
 

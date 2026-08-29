@@ -15,8 +15,8 @@ describe("sprintTabForStatus", () => {
     expect(sprintTabForStatus("SHIPPED")).toBe("roadmap");
   });
 
-  it("sends planned work to the backlog", () => {
-    expect(sprintTabForStatus("PLANNED")).toBe("board");
+  it("sends planned work to the road map", () => {
+    expect(sprintTabForStatus("PLANNED")).toBe("roadmap");
   });
 });
 
@@ -49,11 +49,17 @@ describe("projectHrefForTaskReturn", () => {
 
   it("maps the old completed tab onto roadmap", () => {
     expect(projectHrefForTaskReturn("p1", "completed")).toBe(
-      "/dashboard/projects/p1?tab=roadmap",
+      "/dashboard/projects/p1",
     );
   });
 
-  it("returns the backlog when there is no sprint", () => {
+  it("returns the road map when there is no sprint", () => {
     expect(projectHrefForTaskReturn("p1")).toBe("/dashboard/projects/p1");
+  });
+
+  it("maps the old backlog tab onto roadmap", () => {
+    expect(projectHrefForTaskReturn("p1", "board")).toBe(
+      "/dashboard/projects/p1",
+    );
   });
 });

@@ -252,7 +252,7 @@ function SprintMiniCard({ sprint, nowMs }: { sprint: ActiveSprint; nowMs: number
 function ProjectRow({ project }: { project: ProjectSummary }) {
   return (
     <Link
-      href={`/dashboard/projects/${project.id}?tab=board`}
+      href={`/dashboard/projects/${project.id}`}
       className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-accent/60"
     >
       {project.logoUrl ? (

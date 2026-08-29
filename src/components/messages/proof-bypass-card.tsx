@@ -83,6 +83,7 @@ export function ProofBypassCard({
         icon={Film}
         category={category(status)}
         title={title}
+        projectName={payload.projectName}
         createdAt={createdAt}
         actionLabel="Open task"
         onAction={() => setPanelOpen(true)}

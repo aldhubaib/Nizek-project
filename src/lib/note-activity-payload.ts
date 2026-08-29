@@ -5,6 +5,7 @@ const PAYLOAD_PREFIX = "<!--note-activity:";
 export type NoteActivityPayload = {
   noteId: string;
   projectId: string;
+  projectName?: string;
   noteTitle: string;
   noteType: string;
   action: "created" | "updated" | "published";

@@ -17,12 +17,13 @@ import { countWorkingDays } from "@/lib/working-days";
 import { logTaskActivity } from "@/lib/activity";
 import { broadcastTaskEvent, publish, projectChannel } from "@/lib/centrifugo";
 import {
+  documentDateIsoFromPlanningHtml,
   formatPlanningDate,
   planningDateIso,
   type SprintPlanningInfo,
   type SprintPlanningTask,
 } from "@/lib/sprint-planning-doc";
-import { incompleteReasonsFromReviewHtml } from "@/lib/sprint-review-doc";
+import { incompleteReasonsFromReviewHtml, reviewDateBySprintId } from "@/lib/sprint-review-doc";
 import { announceSprintNoteToChat } from "@/actions/meeting-note";
 
 const SPRINT_SELECT = {
@@ -59,6 +60,7 @@ function serializeSprint(
     updatedAt: Date;
     _count: { tasks: number };
   },
+  reviewDate?: string | null,
 ) {
   return {
     id: sprint.id,
@@ -69,6 +71,7 @@ function serializeSprint(
     status: sprint.status,
     incompleteReason: sprint.incompleteReason,
     completedAt: sprint.completedAt?.toISOString() ?? null,
+    reviewDate: reviewDate ?? null,
     sortOrder: sprint.sortOrder,
     projectId: sprint.projectId,
     createdAt: sprint.createdAt.toISOString(),
@@ -154,11 +157,19 @@ function parseDay(value: string): Date {
 
 export async function listSprints(projectId: string): Promise<SprintDTO[]> {
   await requireProjectMember(projectId);
-  const sprints = await prisma.sprint.findMany({
-    where: { projectId },
-    select: SPRINT_SELECT,
-    orderBy: [{ status: "asc" }, { startDate: "desc" }],
-  });
+  const [sprints, reviewNotes] = await Promise.all([
+    prisma.sprint.findMany({
+      where: { projectId },
+      select: SPRINT_SELECT,
+      orderBy: [{ status: "asc" }, { startDate: "desc" }],
+    }),
+    prisma.meetingNote.findMany({
+      where: { projectId, noteType: "SPRINT_REVIEW" },
+      select: { content: true, date: true },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+  const reviewDates = reviewDateBySprintId(reviewNotes);
   const rank: Record<SprintStatus, number> = {
     ACTIVE: 0,
     NEXT: 1,
@@ -170,17 +181,19 @@ export async function listSprints(projectId: string): Promise<SprintDTO[]> {
   return sprints
     .slice()
     .sort((a, b) => {
+      const left = { ...a, reviewDate: reviewDates.get(a.id) ?? null };
+      const right = { ...b, reviewDate: reviewDates.get(b.id) ?? null };
       const byStatus = rank[a.status] - rank[b.status];
       if (byStatus !== 0) return byStatus;
       if (isUnstartedSprint(a.status) && isUnstartedSprint(b.status)) {
         return comparePlannedSprints(a, b);
       }
       if (isClosedSprint(a.status)) {
-        return compareClosedSprints(a, b);
+        return compareClosedSprints(left, right);
       }
       return a.startDate.getTime() - b.startDate.getTime();
     })
-    .map(serializeSprint);
+    .map((sprint) => serializeSprint(sprint, reviewDates.get(sprint.id) ?? null));
 }
 
 export async function createSprint(data: {
@@ -427,6 +440,7 @@ export async function completeSprint(
   if (!review) {
     throw new Error("Fill in the sprint review before ending the sprint.");
   }
+  const reviewDateIso = documentDateIsoFromPlanningHtml(review.content);
   const fromReview = incompleteReasonsFromReviewHtml(review.content);
 
   const unfinished = sprintTasks.filter((t) => t.stage !== "DONE");
@@ -478,7 +492,9 @@ export async function completeSprint(
       data: {
         status,
         incompleteReason: sprintReason,
-        completedAt: new Date(),
+        completedAt: reviewDateIso
+          ? new Date(`${reviewDateIso}T12:00:00.000Z`)
+          : new Date(),
       },
       select: SPRINT_SELECT,
     }),
@@ -495,7 +511,7 @@ export async function completeSprint(
     sprintId,
     status,
   });
-  return serializeSprint(sprint);
+  return serializeSprint(sprint, reviewDateIso ?? null);
 }
 
 export async function deleteSprint(
@@ -779,7 +795,13 @@ export async function updateSprintPlanningTask(data: {
   if (data.assigneeId !== undefined) {
     if (data.assigneeId) {
       const member = await prisma.projectMember.findFirst({
-        where: { projectId: task.projectId, userId: data.assigneeId },
+        where: {
+          projectId: task.projectId,
+          userId: data.assigneeId,
+          role: { not: "CLIENT" },
+          user: { systemRole: { not: "CLIENT" } },
+          NOT: { projectRole: { isClient: true } },
+        },
         select: { user: { select: { id: true, name: true, imageUrl: true } } },
       });
       if (!member) throw new Error("That person is not on this project");

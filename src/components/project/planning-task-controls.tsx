@@ -181,7 +181,7 @@ export function PlanningAssigneePicker({
     if (!open) return;
     let cancelled = false;
     setLoading(true);
-    getProjectMembersForMention(projectId)
+    getProjectMembersForMention(projectId, { excludeClients: true })
       .then((res) => {
         if (!cancelled) setMembers(res.members);
       })
@@ -237,10 +237,12 @@ export function PlanningAssigneePicker({
         title={local?.name ?? "Assign"}
         aria-label={local?.name ?? "Assign"}
         onClick={(e) => {
+          e.preventDefault();
           e.stopPropagation();
           if (!disabled) setOpen((v) => !v);
         }}
         onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
         className={cn(
           "inline-flex size-5 shrink-0 items-center justify-center rounded-full transition-shadow",
           !disabled && "cursor-pointer hover:ring-2 hover:ring-primary/50",
@@ -251,14 +253,14 @@ export function PlanningAssigneePicker({
       {open && rect && createPortal(
         <>
           <div
-            className="fixed inset-0 z-[300]"
+            className="fixed inset-0 z-[980]"
             onClick={() => {
               setOpen(false);
               setQuery("");
             }}
           />
           <div
-            className="fixed z-[301] w-64 overflow-hidden rounded-xl border border-border bg-popover shadow-2xl"
+            className="fixed z-[981] w-64 overflow-hidden rounded-xl border border-border bg-popover shadow-2xl"
             style={{
               top: Math.min(rect.bottom + 8, window.innerHeight - 280),
               left: Math.max(8, rect.right - 256),

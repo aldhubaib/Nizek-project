@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createMeetingNote, getMeetingNote, getSprintPlanningNote, getSprintReviewNote } from "@/actions/meeting-note";
+import { createMeetingNote, getMeetingNote, getSprintPlanningNote, getSprintReviewNote, updateMeetingNote } from "@/actions/meeting-note";
 import { getSprintPlanningTasks, getSprintReviewTasks } from "@/actions/sprint";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { PageHeaderActions } from "@/components/page-header-actions";
@@ -15,6 +15,7 @@ import {
   blankPlanningSchedule,
   documentDateIsoFromPlanningHtml,
   overlayPlanningTaskAssignees,
+  sprintDocTitle,
   sprintPlanningDocHtml,
   sprintPlanningIsLocked,
   syncPlanningDocTasks,
@@ -103,7 +104,8 @@ export function NoteFullScreenCreate({
     noteId,
     title,
     content,
-    enabled: isSprintDoc && !planningLocked && !collabEnabled,
+    enabled: isSprintDoc && (!planningLocked || isSprintReview),
+    persistContent: !collabEnabled && !planningLocked,
   });
   const planningError = saveError ?? autoSaveError;
 
@@ -113,13 +115,18 @@ export function NoteFullScreenCreate({
     (async () => {
       try {
         if (isSprintReview) {
-          const [existing, review] = await Promise.all([
+          const [existing, review, planning] = await Promise.all([
             getSprintReviewNote(projectId, sprintId),
             getSprintReviewTasks(sprintId),
+            getSprintPlanningNote(projectId, sprintId),
           ]);
           if (cancelled) return;
           const allTasks = [...review.completed, ...review.incomplete];
           setSprintTasks(allTasks);
+          const reviewTitle = sprintDocTitle(
+            planning?.title || initialTitle || review.sprintName,
+            "review",
+          );
 
           if (existing && isClosedSprint(review.status)) {
             setNoteId(existing.id);
@@ -139,16 +146,19 @@ export function NoteFullScreenCreate({
 
           if (existing) {
             setNoteId(existing.id);
-            setTitle(existing.title);
+            setTitle(reviewTitle);
             setContent(html);
+            if (existing.title !== reviewTitle) {
+              void updateMeetingNote({ noteId: existing.id, title: reviewTitle });
+            }
             return;
           }
 
           setContent(html);
-          setTitle(initialTitle || `${review.sprintName} review`);
+          setTitle(reviewTitle);
           const created = await createMeetingNote({
             projectId,
-            title: (initialTitle || `${review.sprintName} review`).trim(),
+            title: reviewTitle,
             content: html,
             date: info.documentDateIso,
             noteType: "SPRINT_REVIEW",
@@ -341,16 +351,16 @@ export function NoteFullScreenCreate({
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            readOnly={planningLocked}
+            readOnly={planningLocked && !isSprintReview}
             placeholder={placeholders[noteType ?? "MEETING_NOTE"] ?? "Title..."}
             className={cn(
               "w-full bg-transparent border-none outline-none placeholder:text-muted-foreground/30",
               isSprintDoc
                 ? "mb-10 text-center text-4xl font-bold leading-tight"
                 : "mb-4 text-m font-bold",
-              planningLocked && "pointer-events-none",
+              planningLocked && !isSprintReview && "pointer-events-none",
             )}
-            autoFocus={autoFocusTitle && !planningLocked}
+            autoFocus={autoFocusTitle && !(planningLocked && !isSprintReview)}
           />
 
           {isSprintDoc ? <SprintDocDashboard tasks={sprintTasks} review={isSprintReview} /> : null}

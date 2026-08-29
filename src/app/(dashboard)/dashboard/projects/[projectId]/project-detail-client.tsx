@@ -7,7 +7,6 @@ import { OverflowTabBar, type OverflowTabItem } from "@/components/overflow-tab-
 import { MeetingNotesTab } from "@/components/project/meeting-notes-tab";
 import { SprintsTab } from "@/components/project/sprints-tab";
 import { CompletedSprintsTab } from "@/components/project/completed-sprints-tab";
-import { BacklogPlanner } from "@/components/project/backlog-planner";
 import { AssetsTab } from "@/components/project/assets-tab";
 import { MemberList } from "@/components/team/member-list";
 import { InviteMemberDialog } from "@/components/team/invite-member-dialog";
@@ -32,6 +31,8 @@ import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { outlineBadge, normalizeProjectTab } from "@/lib/task-label";
 import { PageHeader, PageBackButton } from "@/components/page-header";
+import { PageHeaderActions } from "@/components/page-header-actions";
+import { AddButton } from "@/components/add-button";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 
 const PROJECT_TAB_CLASS =
@@ -222,11 +223,15 @@ export function ProjectDetailClient({
 }: Props) {
   const canEdit = userPermissions.canModifyTask || userPermissions.isAdmin;
   const isAdmin = userPermissions.isAdmin;
+  const canCreateTask =
+    userPermissions.isAdmin ||
+    userPermissions.canCreateTask ||
+    (userPermissions.createStages ?? []).includes("NEW_REQUEST");
   const canManageTeam = userPermissions.canInviteMembers || userPermissions.canInviteClients;
   const router = useRouter();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTabState] = useState(() => {
-    const tab = searchParams.get("tab") ?? "board";
+    const tab = searchParams.get("tab") ?? "roadmap";
     return normalizeProjectTab(tab);
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -292,7 +297,8 @@ export function ProjectDetailClient({
   }, []);
 
   useEffect(() => {
-    if (searchParams.get("tab") !== "completed") return;
+    const tab = searchParams.get("tab");
+    if (tab !== "completed" && tab !== "board") return;
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", "roadmap");
     window.history.replaceState(null, "", `?${params.toString()}`);
@@ -324,7 +330,7 @@ export function ProjectDetailClient({
 
   useEffect(() => {
     if (
-      (activeTab === "sprints" || activeTab === "board" || activeTab === "roadmap") &&
+      (activeTab === "sprints" || activeTab === "roadmap") &&
       sprints === null
     ) {
       startSprintsTransition(async () => {
@@ -413,9 +419,8 @@ export function ProjectDetailClient({
   const assetsCount = assets ? assets.length : project._count.assets;
 
   const projectTabs: OverflowTabItem<string>[] = [
-    { id: "board", label: "Backlog" },
-    { id: "sprints", label: "Active sprint" },
     { id: "roadmap", label: "Road map" },
+    { id: "sprints", label: "Active sprint" },
     { id: "notes", label: "Notes", count: notesCount },
     { id: "assets", label: "Assets", count: assetsCount },
   ];
@@ -423,7 +428,7 @@ export function ProjectDetailClient({
   return (
     <div
       className={cn(
-        (activeTab === "board" || activeTab === "sprints" || activeTab === "roadmap") &&
+        (activeTab === "sprints" || activeTab === "roadmap") &&
           !noteFullscreen &&
           "lg:flex lg:h-dvh lg:min-h-0 lg:flex-col lg:overflow-hidden",
       )}
@@ -479,12 +484,20 @@ export function ProjectDetailClient({
           <span className="flex-1">Settings</span>
         </DropdownMenuItem>
       </PageOverflowItems>
+      {canCreateTask && isActive && !noteFullscreen && activeTab !== "notes" ? (
+        <PageHeaderActions>
+          <AddButton
+            label="New task"
+            onClick={() => router.push(`/dashboard/projects/${project.id}/tasks/new`)}
+          />
+        </PageHeaderActions>
+      ) : null}
       <Tabs
         value={activeTab}
         onValueChange={(val) => setActiveTab(val as string)}
         className={cn(
           "w-full min-w-0 gap-0",
-          (activeTab === "board" || activeTab === "sprints" || activeTab === "roadmap") &&
+          (activeTab === "sprints" || activeTab === "roadmap") &&
             !noteFullscreen &&
             "lg:min-h-0 lg:h-full lg:flex-1 lg:overflow-hidden",
         )}
@@ -548,9 +561,8 @@ export function ProjectDetailClient({
             />
           </div>
           <TabsList className="hidden">
-            <TabsTrigger value="board" className={PROJECT_TAB_CLASS} />
-            <TabsTrigger value="sprints" className={PROJECT_TAB_CLASS} />
             <TabsTrigger value="roadmap" className={PROJECT_TAB_CLASS} />
+            <TabsTrigger value="sprints" className={PROJECT_TAB_CLASS} />
             <TabsTrigger value="notes" className={PROJECT_TAB_CLASS} />
             <TabsTrigger value="assets" className={PROJECT_TAB_CLASS} />
             {canManageTeam && <TabsTrigger value="team" className={PROJECT_TAB_CLASS} />}
@@ -565,34 +577,11 @@ export function ProjectDetailClient({
           "min-w-0",
           noteFullscreen
             ? "px-0 py-0"
-            : (activeTab === "board" || activeTab === "sprints" || activeTab === "roadmap")
+            : (activeTab === "sprints" || activeTab === "roadmap")
               ? "flex min-h-0 flex-col overflow-hidden px-app pt-4 pb-4 lg:flex-1 lg:basis-0 lg:pb-0"
               : "px-app py-4",
         )}
       >
-          <TabsContent value="board" className="flex min-h-0 flex-1 flex-col">
-            {activeTab === "board" && (loadingSprints || !sprints ? (
-              <TabSpinner />
-            ) : (
-              <BacklogPlanner
-                projectId={project.id}
-                sprints={sprints}
-                onSprintsChange={handleSprintsChange}
-                initialTasks={tasks as unknown as KanbanTask[]}
-                isProjectActive={isActive}
-                canManage={canEdit}
-                isAdmin={isAdmin}
-                canCreateSprintPlanning={userPermissions.isAdmin || userPermissions.canCreateSprintPlanning}
-                canStartSprint={userPermissions.isAdmin || userPermissions.canStartSprint}
-                canEndSprint={userPermissions.isAdmin || userPermissions.canEndSprint}
-                canDeleteSprint={userPermissions.isAdmin || userPermissions.canDeleteSprint}
-                canCreateTask={userPermissions.isAdmin || (userPermissions.createStages ?? []).includes("NEW_REQUEST")}
-                onFullscreenChange={handleNoteFullscreen}
-                onNoteCreated={(note) => handleNotesChange((prev) => [note as unknown as MeetingNote, ...prev])}
-              />
-            ))}
-          </TabsContent>
-
           <TabsContent value="sprints" className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
             {activeTab === "sprints" && (loadingSprints || !sprints ? (
               <TabSpinner />
@@ -610,7 +599,7 @@ export function ProjectDetailClient({
                 allowedTaskTypes={allowedTaskTypes}
                 activeContractType={activeContractType}
                 canManage={canEdit}
-                onOpenBacklog={() => setActiveTab("board")}
+                onOpenBacklog={() => setActiveTab("roadmap")}
               />
             ))}
           </TabsContent>
@@ -625,6 +614,10 @@ export function ProjectDetailClient({
                 onSprintsChange={handleSprintsChange}
                 initialTasks={tasks as unknown as KanbanTask[]}
                 canManage={userPermissions.isAdmin || userPermissions.canDeleteSprint}
+                canMoveTasks={canEdit}
+                canStartSprint={userPermissions.isAdmin || userPermissions.canStartSprint}
+                canEndSprint={userPermissions.isAdmin || userPermissions.canEndSprint}
+                canCreateSprintPlanning={userPermissions.isAdmin || userPermissions.canCreateSprintPlanning}
                 isProjectActive={isActive}
               />
             ))}

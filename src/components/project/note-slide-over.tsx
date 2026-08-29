@@ -1,10 +1,23 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRight } from "lucide-react";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
+
+const HEADER_LEFT_SLOT = "data-sprint-doc-header-left";
+
+/** Renders in the slide-over header, on the right, when that slot exists. */
+export function SprintDocHeaderLeft({ children }: { children: ReactNode }) {
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    setSlot(document.querySelector(`[${HEADER_LEFT_SLOT}]`));
+  }, []);
+  if (!children) return null;
+  if (slot) return createPortal(children, slot);
+  return <>{children}</>;
+}
 
 const SLIDE_OVER_THEME_COLOR = "#1c1c1e";
 
@@ -62,24 +75,26 @@ export function NoteSlideOver({
           className,
         )}
       >
-        <header className="z-10 flex app-top-bar-tall shrink-0 items-center gap-xs border-b border-border bg-background px-2 sm:px-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:size-9 lg:rounded-md"
-            aria-label="Close"
-          >
-            {/* Points the way the panel leaves — it slides back off the right. */}
-            <ArrowRight className="h-4 w-4" />
-          </button>
-          <div className="min-w-0 flex-1">
-            {typeof title === "string" ? (
-              <div className="truncate text-s font-semibold">{title}</div>
-            ) : (
-              title
-            )}
+        <header className="z-10 shrink-0 border-b border-border bg-background pt-[env(safe-area-inset-top,0px)]">
+          <div className="flex h-14 items-center gap-2 px-2 sm:px-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="grid size-9 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <div className="min-w-0 flex-1">
+              {typeof title === "string" ? (
+                <div className="truncate text-s font-semibold">{title}</div>
+              ) : (
+                title
+              )}
+            </div>
+            <div data-sprint-doc-header-left className="flex shrink-0 items-center" />
+            {headerRight ? <div className="flex shrink-0 items-center">{headerRight}</div> : null}
           </div>
-          {headerRight}
         </header>
         <div
           className={cn(

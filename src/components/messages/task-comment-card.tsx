@@ -15,12 +15,15 @@ function formatTime(iso: string) {
 export function TaskCommentCard({
   payload,
   createdAt,
+  projectName,
 }: {
   payload: TaskCommentPayload;
   createdAt: string;
+  projectName?: string;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const taskUrl = taskCommentUrl(payload.projectId, payload.taskId, payload.threadId);
+  const shownProject = payload.projectName || projectName;
 
   return (
     <>
@@ -35,6 +38,11 @@ export function TaskCommentCard({
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Task comment
               </p>
+              {shownProject?.trim() ? (
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {shownProject.trim()}
+                </p>
+              ) : null}
               <h3 className="mt-0.5 text-s font-semibold leading-snug text-foreground">
                 {payload.taskTitle}
               </h3>

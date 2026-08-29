@@ -17,7 +17,12 @@ export async function createComment(data: {
   try {
     const task = await prisma.task.findUnique({
       where: { id: data.taskId },
-      select: { projectId: true, taskNumber: true, title: true },
+      select: {
+        projectId: true,
+        taskNumber: true,
+        title: true,
+        project: { select: { name: true } },
+      },
     });
     if (!task) return { success: false, error: "Task not found" };
 
@@ -81,6 +86,7 @@ export async function createComment(data: {
           {
             taskId: data.taskId,
             projectId: task.projectId,
+            projectName: task.project.name,
             taskTitle: `#${task.taskNumber} ${task.title}`,
             comment: data.content,
           },
@@ -219,11 +225,23 @@ export async function deleteComment(commentId: string) {
   }
 }
 
-export async function getProjectMembersForMention(projectId: string) {
+export async function getProjectMembersForMention(
+  projectId: string,
+  options?: { excludeClients?: boolean },
+) {
   const { user } = await requireProjectMember(projectId);
 
   const members = await prisma.projectMember.findMany({
-    where: { projectId },
+    where: {
+      projectId,
+      ...(options?.excludeClients
+        ? {
+            role: { not: "CLIENT" },
+            user: { systemRole: { not: "CLIENT" } },
+            NOT: { projectRole: { isClient: true } },
+          }
+        : {}),
+    },
     include: { user: { select: { id: true, name: true, imageUrl: true } } },
   });
 

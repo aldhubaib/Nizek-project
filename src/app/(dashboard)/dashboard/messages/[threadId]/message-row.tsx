@@ -265,6 +265,7 @@ export const MessageRow = memo(function MessageRow({
   memberNames,
   searchQuery,
   searchCurrent,
+  projectName,
 }: {
   m: ChatMessage;
   mine: boolean;
@@ -298,6 +299,7 @@ export const MessageRow = memo(function MessageRow({
   memberNames: Record<string, string>;
   searchQuery?: string;
   searchCurrent?: boolean;
+  projectName?: string;
 }) {
   const imageAtts = m.attachments.filter((a) => a.isImage);
   const videoAtts = m.attachments.filter((a) => isVideoAttachment(a));
@@ -423,16 +425,29 @@ export const MessageRow = memo(function MessageRow({
               <div className="px-1 text-xs text-muted-foreground">{authorLabel}</div>
             )}
             {m.deadlineReminder ? (
-              <DeadlineReminderCard payload={m.deadlineReminder} createdAt={m.createdAt} />
+              <DeadlineReminderCard
+                payload={m.deadlineReminder}
+                createdAt={m.createdAt}
+                projectName={projectName}
+              />
             ) : m.noteActivity ? (
-              <NoteActivityCard payload={m.noteActivity} createdAt={m.createdAt} />
+              <NoteActivityCard
+                payload={m.noteActivity}
+                createdAt={m.createdAt}
+                projectName={projectName}
+              />
             ) : m.taskComment ? (
-              <TaskCommentCard payload={m.taskComment} createdAt={m.createdAt} />
+              <TaskCommentCard
+                payload={m.taskComment}
+                createdAt={m.createdAt}
+                projectName={projectName}
+              />
             ) : m.kind === "rejection" ? (
               <TaskRejectionCard
                 title={m.task?.title ?? "Task"}
                 taskNumber={m.task?.number}
                 projectId={m.task?.projectId}
+                projectName={projectName}
                 taskId={m.task?.id}
                 body={m.body}
                 mentions={m.mentions}
@@ -454,6 +469,7 @@ export const MessageRow = memo(function MessageRow({
               <ProofOfWorkCard
                 taskId={m.task.id}
                 projectId={m.task.projectId}
+                projectName={projectName}
                 taskNumber={m.task.number}
                 taskTitle={m.task.title}
                 body={m.body}
@@ -461,7 +477,11 @@ export const MessageRow = memo(function MessageRow({
                 createdAt={m.createdAt}
               />
             ) : (
-              <NoteCommentCard payload={m.noteComment!} createdAt={m.createdAt} />
+              <NoteCommentCard
+                payload={m.noteComment!}
+                createdAt={m.createdAt}
+                projectName={projectName}
+              />
             )}
             {imageAtts.length > 0 && m.kind !== "rejection" && (
               <div className="flex max-w-full flex-wrap gap-xs justify-start">

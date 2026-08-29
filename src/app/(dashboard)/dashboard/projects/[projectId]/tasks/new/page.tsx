@@ -21,7 +21,7 @@ export default async function NewTaskPage({ params }: Props) {
 
   const activeContract = getActiveContract(project.contracts);
   if (!activeContract) {
-    redirect(`/dashboard/projects/${projectId}?tab=board`);
+    redirect(`/dashboard/projects/${projectId}`);
   }
 
   const allowedTaskTypes = getAllowedTaskTypes(

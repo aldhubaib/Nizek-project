@@ -40,16 +40,27 @@ export function comparePlannedSprints(
 }
 
 function closedAtMs(sprint: {
+  reviewDate?: string | Date | null;
   completedAt: string | Date | null;
   updatedAt: string | Date;
 }): number {
-  return new Date(sprint.completedAt ?? sprint.updatedAt).getTime();
+  const raw = sprint.reviewDate || sprint.completedAt || sprint.updatedAt;
+  const ms = new Date(raw).getTime();
+  return Number.isFinite(ms) ? ms : 0;
 }
 
-/** Newest sprint-review completion first (`completedAt` is set when the review ends the sprint). */
+/** Newest sprint-review document date first, then when the review ended. */
 export function compareClosedSprints(
-  a: { completedAt: string | Date | null; updatedAt: string | Date },
-  b: { completedAt: string | Date | null; updatedAt: string | Date },
+  a: {
+    reviewDate?: string | Date | null;
+    completedAt: string | Date | null;
+    updatedAt: string | Date;
+  },
+  b: {
+    reviewDate?: string | Date | null;
+    completedAt: string | Date | null;
+    updatedAt: string | Date;
+  },
 ): number {
   return closedAtMs(b) - closedAtMs(a);
 }

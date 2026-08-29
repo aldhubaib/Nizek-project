@@ -82,7 +82,7 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
         answers: answersList.length > 0 ? answersList : undefined,
       });
 
-      router.push(`/dashboard/projects/${projectId}?tab=board`);
+      router.push(`/dashboard/projects/${projectId}`);
       router.refresh();
     } catch (err) {
       console.error(err);

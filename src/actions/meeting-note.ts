@@ -28,7 +28,7 @@ import {
   type RoadmapStatus,
 } from "@/lib/roadmap-status";
 import { addWorkingDays, parseWorkingDays, startOfLocalDay, parseDateInputValue, toDateInputValue } from "@/lib/working-days";
-import { sprintIdFromPlanningHtml } from "@/lib/sprint-planning-doc";
+import { sprintDocTitle, sprintIdFromPlanningHtml } from "@/lib/sprint-planning-doc";
 
 export async function createMeetingNote(data: {
   projectId: string;
@@ -349,6 +349,17 @@ export async function updateMeetingNote(data: {
         }),
       },
     });
+    if (
+      data.title &&
+      (note.noteType === "SPRINT_PLANNING" || note.noteType === "SPRINT_REVIEW")
+    ) {
+      await syncSprintDocPeerTitle(
+        note.projectId,
+        data.content ?? note.content,
+        note.noteType,
+        data.title,
+      );
+    }
     revalidatePath(`/dashboard/projects/${note.projectId}`);
     return updated;
   }
@@ -453,6 +464,19 @@ export async function updateMeetingNote(data: {
       ? [prisma.noteHistory.createMany({ data: historyEntries })]
       : []),
   ]);
+
+  if (
+    data.title &&
+    data.title !== note.title &&
+    (note.noteType === "SPRINT_PLANNING" || note.noteType === "SPRINT_REVIEW")
+  ) {
+    await syncSprintDocPeerTitle(
+      note.projectId,
+      data.content ?? note.content,
+      note.noteType,
+      data.title,
+    );
+  }
 
   revalidatePath(`/dashboard/projects/${note.projectId}`);
   if (historyEntries.length > 0) {
@@ -598,6 +622,29 @@ async function getSprintTypedNote(
     orderBy: { createdAt: "desc" },
   });
   return notes.find((n) => n.content.includes(sprintId)) ?? null;
+}
+
+async function syncSprintDocPeerTitle(
+  projectId: string,
+  html: string,
+  fromType: "SPRINT_PLANNING" | "SPRINT_REVIEW",
+  title: string,
+) {
+  const sprintId = sprintIdFromPlanningHtml(html);
+  if (!sprintId) return;
+  const peerType = fromType === "SPRINT_PLANNING" ? "SPRINT_REVIEW" : "SPRINT_PLANNING";
+  const peerTitle = sprintDocTitle(title, peerType === "SPRINT_REVIEW" ? "review" : "planning");
+  const peer = await prisma.meetingNote.findMany({
+    where: { projectId, noteType: peerType },
+    select: { id: true, title: true, content: true },
+  });
+  const match = peer.find((n) => n.content.includes(sprintId));
+  if (match && match.title !== peerTitle) {
+    await prisma.meetingNote.update({
+      where: { id: match.id },
+      data: { title: peerTitle },
+    });
+  }
 }
 
 export async function getSprintPlanningNote(projectId: string, sprintId: string) {
@@ -917,7 +964,20 @@ async function postNoteActivityToChat(payload: {
   excerpt?: string;
   mentionAll?: boolean;
 }) {
-  const encoded = encodeNoteActivityBody(payload);
+  const project = await prisma.project.findUnique({
+    where: { id: payload.projectId },
+    select: { name: true },
+  });
+  const encoded = encodeNoteActivityBody({
+    projectId: payload.projectId,
+    noteId: payload.noteId,
+    projectName: project?.name,
+    noteTitle: payload.noteTitle,
+    noteType: payload.noteType,
+    action: payload.action,
+    fields: payload.fields,
+    excerpt: payload.excerpt,
+  });
   const sent = await sendMessage({
     projectId: payload.projectId,
     body: payload.mentionAll ? `${encoded}\n${ALL_MENTION_TOKEN}` : encoded,

@@ -5,6 +5,7 @@ const PAYLOAD_PREFIX = "<!--note-comment:";
 export type NoteCommentPayload = {
   noteId: string;
   projectId: string;
+  projectName?: string;
   threadId: string;
   noteTitle: string;
   quoteText: string;

@@ -38,6 +38,7 @@ function fmtTaskNumber(n: number) {
 export function ProofOfWorkCard({
   taskId,
   projectId,
+  projectName,
   taskNumber,
   taskTitle,
   body,
@@ -46,6 +47,7 @@ export function ProofOfWorkCard({
 }: {
   taskId: string;
   projectId: string;
+  projectName?: string;
   taskNumber: number;
   taskTitle: string;
   body: string;
@@ -64,6 +66,7 @@ export function ProofOfWorkCard({
         icon={Film}
         category="Proof of work"
         title={title}
+        projectName={projectName}
         createdAt={createdAt}
         actionLabel="Open task"
         onAction={() => setPanelOpen(true)}

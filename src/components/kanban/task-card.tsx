@@ -147,7 +147,7 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
     }
     if (!projectId || isOverlay) return;
     const tab = searchParams.get("tab");
-    const from = tab ?? "board";
+    const from = tab ?? "roadmap";
     router.push(taskDetailHref(projectId, task.id, from));
   };
 

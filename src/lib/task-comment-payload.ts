@@ -3,6 +3,7 @@ const PAYLOAD_PREFIX = "<!--task-comment:";
 export type TaskCommentPayload = {
   taskId: string;
   projectId: string;
+  projectName?: string;
   threadId?: string;
   taskTitle: string;
   quoteText?: string;

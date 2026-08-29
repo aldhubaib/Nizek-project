@@ -1,6 +1,8 @@
 import {
   documentDateIsoFromPlanningHtml,
   formatPlanningDate,
+  planningDateIso,
+  sprintIdFromPlanningHtml,
   sprintInfoNodeHtml,
   sprintTaskNodeHtml,
   type SprintPlanningInfo,
@@ -18,7 +20,23 @@ function unescapeAttr(value: string) {
 
 export function sprintIdFromReviewHtml(html: string): string | null {
   const match = html.match(/data-sprint-id="([^"]+)"/) || html.match(/"sprintId":"([^"]+)"/);
-  return match?.[1] ?? null;
+  return match?.[1] ?? sprintIdFromPlanningHtml(html);
+}
+
+/** Review document date keyed by sprint, newest note wins if several exist. */
+export function reviewDateBySprintId(
+  notes: { content: string; date?: Date | string | null }[],
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const note of notes) {
+    const sprintId = sprintIdFromReviewHtml(note.content);
+    if (!sprintId || map.has(sprintId)) continue;
+    const iso =
+      documentDateIsoFromPlanningHtml(note.content) ||
+      (note.date ? planningDateIso(note.date) : null);
+    if (iso) map.set(sprintId, iso);
+  }
+  return map;
 }
 
 export function incompleteReasonsFromReviewHtml(html: string): Record<string, string> {

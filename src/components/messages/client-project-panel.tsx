@@ -408,6 +408,10 @@ function DashboardTab({
       done: tasks.filter((t) => t.stage === "DONE").length,
     };
   }).filter((g) => g.tasks.length > 0);
+  const openTypeGroups = TYPE_RING.map((slice) => ({
+    ...slice,
+    tasks: data.backlog.filter((t) => t.taskType === slice.key),
+  })).filter((g) => g.tasks.length > 0);
 
   return (
     <div>
@@ -494,18 +498,18 @@ function DashboardTab({
         </Card>
       </div>
 
-      {typeGroups.length === 0 ? (
+      {openTypeGroups.length === 0 ? (
         <div className="mb-6">
           <Card>
             <CardTitle>Tasks by type</CardTitle>
             <p className="py-6 text-center text-xs text-muted-foreground">
-              No tasks yet
+              No open tasks outside a sprint
             </p>
           </Card>
         </div>
       ) : (
         <div className="mb-6 space-y-4">
-          {typeGroups.map((group) => {
+          {openTypeGroups.map((group) => {
             const { icon: Icon, color } = getTypeIcon(group.key);
             return (
               <Card key={group.key}>
@@ -514,9 +518,6 @@ function DashboardTab({
                   <h2 className="text-s font-semibold text-foreground">
                     {group.label}
                   </h2>
-                  <span className="text-xs tabular-nums text-muted-foreground">
-                    {group.done} completed
-                  </span>
                 </div>
                 <div className="space-y-2">
                   {group.tasks.map((task) => (
@@ -525,7 +526,11 @@ function DashboardTab({
                       as="div"
                       hideAssignee
                       disableHoverBorder
-                      task={task}
+                      task={{
+                        title: task.title,
+                        taskType: task.taskType,
+                        stage: "BACKLOG",
+                      }}
                     />
                   ))}
                 </div>

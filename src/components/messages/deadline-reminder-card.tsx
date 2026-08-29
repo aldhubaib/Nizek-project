@@ -20,9 +20,11 @@ export { NizekBotAvatar } from "@/components/messages/activity-card";
 export function DeadlineReminderCard({
   payload,
   createdAt,
+  projectName,
 }: {
   payload: DeadlineReminderPayload;
   createdAt: string;
+  projectName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const theme = deadlineReminderTheme(payload.offsetDays);
@@ -42,6 +44,7 @@ export function DeadlineReminderCard({
         icon={AlarmClock}
         category={theme.category}
         title={payload.title}
+        projectName={payload.projectName || projectName}
         status={theme.statusLabel}
         onAction={() => setOpen(true)}
         actionLabel={`Open note · ${payload.title}`}

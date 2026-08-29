@@ -7,6 +7,7 @@ import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from 
 import { CheckCircle2, Play } from "lucide-react";
 import { completeSprint, getSprintPlanningTasks, getSprintReviewTasks, startSprint, updateSprint } from "@/actions/sprint";
 import { Button } from "@/components/ui/button";
+import { SprintDocHeaderLeft } from "@/components/project/note-slide-over";
 import { StartSprintDialog } from "@/components/project/start-sprint-dialog";
 import { ConfirmCompleteSprintDialog } from "@/components/project/confirm-complete-sprint-dialog";
 import { useKanbanStore } from "@/store/kanban";
@@ -425,10 +426,11 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
       className="not-prose my-10"
     >
       {canStart ? (
-        <div className="mb-8 space-y-2">
+        <SprintDocHeaderLeft>
           <Button
             type="button"
             size="sm"
+            variant={activeSprintName ? "destructive" : "default"}
             onClick={() => void requestStart()}
             disabled={starting || startBlocked}
             title={startBlockedReason ?? "Start sprint"}
@@ -436,13 +438,10 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
             <Play className="size-3.5" />
             {starting ? "Starting…" : "Start sprint"}
           </Button>
-          {startBlockedReason ? (
-            <p className="text-s text-muted-foreground">{startBlockedReason}</p>
-          ) : null}
-        </div>
+        </SprintDocHeaderLeft>
       ) : null}
       {canEnd ? (
-        <div className="mb-8">
+        <SprintDocHeaderLeft>
           <Button
             type="button"
             size="sm"
@@ -453,7 +452,7 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
             <CheckCircle2 className="size-3.5" />
             {ending ? "Ending…" : "End sprint"}
           </Button>
-        </div>
+        </SprintDocHeaderLeft>
       ) : null}
       <h2 className="mb-6 text-2xl font-semibold leading-snug text-foreground">
         Sprint Information

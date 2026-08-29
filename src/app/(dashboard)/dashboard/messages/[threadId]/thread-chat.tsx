@@ -1692,6 +1692,7 @@ export function ThreadChat({
                   memberNames={peopleNames}
                   searchQuery={sq || undefined}
                   searchCurrent={searchCursorId === m.id}
+                  projectName={projectName}
                 />
                 </Fragment>
               );

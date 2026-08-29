@@ -71,7 +71,15 @@ export async function createNoteComment(data: {
 }) {
   const note = await prisma.meetingNote.findUnique({
     where: { id: data.noteId },
-    select: { id: true, title: true, content: true, projectId: true, authorId: true, noteType: true },
+    select: {
+      id: true,
+      title: true,
+      content: true,
+      projectId: true,
+      authorId: true,
+      noteType: true,
+      project: { select: { name: true } },
+    },
   });
   if (!note) throw new Error("Note not found");
 
@@ -159,6 +167,7 @@ export async function createNoteComment(data: {
         {
           noteId: note.id,
           projectId: note.projectId,
+          projectName: note.project.name,
           threadId: thread.id,
           noteTitle: note.title,
           quoteText: thread.quoteText,

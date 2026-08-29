@@ -27,6 +27,17 @@ export function sprintPlanningIsLocked(status: string | undefined, isAdmin: bool
   return Boolean(status) && status !== "PLANNED" && status !== "NEXT" && !isAdmin;
 }
 
+/** Shared stem of a sprint planning/review document title. */
+export function stripSprintDocKind(title: string): string {
+  return title.replace(/\s+(planning|review)\s*$/i, "").trim();
+}
+
+/** Planning title with the kind swapped, e.g. "Sprint 16 planning" → "Sprint 16 review". */
+export function sprintDocTitle(name: string, kind: "planning" | "review"): string {
+  const stem = stripSprintDocKind(name) || name.trim();
+  return stem ? `${stem} ${kind}` : kind;
+}
+
 export function planningDateIso(value: Date | string): string {
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.slice(0, 10))) {
     return value.slice(0, 10);

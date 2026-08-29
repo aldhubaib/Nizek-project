@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
-import { AlertCircle, Bug, Clock, Palette, Sparkles, UserRound, Wrench } from "lucide-react";
+import { AlertCircle, Bug, CircleAlert, Clock, Palette, Sparkles, UserRound, Wrench } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { isMissingDataTask } from "@/lib/task-readiness";
 import { taskStageBadge } from "@/lib/task-label";
@@ -98,7 +98,9 @@ interface SprintTaskRowProps extends HTMLAttributes<HTMLElement> {
   hideStatus?: boolean;
   hideAssignee?: boolean;
   disableHoverBorder?: boolean;
-  /** Backlog keeps estimate / status / assignee. Roadmap is icon + name only. */
+  incomplete?: boolean;
+  incompleteReason?: string | null;
+  /** Backlog keeps estimate / assignee. Roadmap shows status on the right. */
   variant?: "backlog" | "roadmap";
 }
 
@@ -114,6 +116,8 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
       hideStatus,
       hideAssignee,
       disableHoverBorder,
+      incomplete,
+      incompleteReason,
       variant = "backlog",
       className,
       ...props
@@ -125,7 +129,7 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
     const Comp = as === "div" ? "div" : "button";
     const showMissing = missingData ?? isMissingDataTask(task);
     const compact = variant === "roadmap";
-    const showStatus = !compact && !hideStatus;
+    const showStatus = !hideStatus;
     const showAssignee = !compact && !hideAssignee;
     const showExtra = !compact && extra;
 
@@ -147,10 +151,20 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
             </span>
           )}
         </span>
-        {(showExtra || showStatus || showAssignee) && (
+        {(showExtra || showStatus || showAssignee || incomplete) && (
           <div className="flex shrink-0 items-center gap-2">
             {showExtra ? extra : null}
-            {showStatus && <StatusBadge config={taskStageBadge(task.stage, showMissing)} />}
+            {incomplete ? (
+              <span
+                title={incompleteReason?.trim() || "Incomplete"}
+                className="grid size-6 shrink-0 place-items-center text-orange"
+              >
+                <CircleAlert className="size-4" />
+              </span>
+            ) : null}
+            {showStatus && !incomplete && (
+              <StatusBadge config={taskStageBadge(task.stage, showMissing)} />
+            )}
             {showAssignee && (assigneeSlot ?? (
               task.assignee ? (
                 task.assignee.imageUrl ? (
@@ -193,7 +207,7 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
   },
 );
 
-/** Road map list row — same card as backlog, icon + name only. */
+/** Road map list row — type icon, name, and status. */
 export const RoadmapTaskRow = forwardRef<HTMLElement, Omit<SprintTaskRowProps, "variant">>(
   function RoadmapTaskRow(props, ref) {
     return <SprintTaskRow ref={ref} variant="roadmap" {...props} />;

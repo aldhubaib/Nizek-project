@@ -29,6 +29,7 @@ export function TaskRejectionCard({
   title,
   taskNumber,
   projectId,
+  projectName,
   taskId,
   body,
   mentions,
@@ -39,6 +40,7 @@ export function TaskRejectionCard({
   title: string;
   taskNumber?: number | null;
   projectId?: string | null;
+  projectName?: string;
   taskId?: string | null;
   body: string;
   mentions?: string[];
@@ -64,6 +66,7 @@ export function TaskRejectionCard({
         icon={Gavel}
         category="Task rejected"
         title={heading}
+        projectName={projectName}
         createdAt={createdAt}
         actionLabel="Open task"
         onAction={taskId ? () => setPanelOpen(true) : undefined}

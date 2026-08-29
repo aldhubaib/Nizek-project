@@ -85,11 +85,11 @@ export function SprintsTab({
         <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-center">
           <p className="text-s text-muted-foreground">No active sprint</p>
           <p className="text-xs text-muted-foreground">
-            Start a sprint from the Backlog to see it here.
+            Start a sprint from the Road map to see it here.
           </p>
           {onOpenBacklog && (
             <Button size="sm" variant="outline" className="mt-2" onClick={onOpenBacklog}>
-              Go to Backlog
+              Go to Road map
             </Button>
           )}
         </div>
@@ -100,7 +100,9 @@ export function SprintsTab({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <h2 className="min-w-0 text-s font-semibold">{active.name}</h2>
+        <h2 className="min-w-0 text-s font-semibold">
+          {active.name} ({tasks.filter((t) => t.sprintId === active.id).length})
+        </h2>
         <SprintStatusControl status={active.status} endDate={active.endDate} />
         <BypassRequestsPopover projectId={projectId} currentUserId={currentUserId} />
       </div>

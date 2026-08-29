@@ -152,9 +152,11 @@ const NOTE_THEME: Record<string, { icon: LucideIcon; theme: ActivityCardTheme }>
 export function NoteActivityCard({
   payload,
   createdAt,
+  projectName,
 }: {
   payload: NoteActivityPayload;
   createdAt: string;
+  projectName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const visual = NOTE_THEME[payload.noteType] ?? { icon: FileText, theme: PRIMARY };
@@ -170,6 +172,7 @@ export function NoteActivityCard({
         icon={visual.icon}
         category={category}
         title={payload.noteTitle.trim() || "Untitled"}
+        projectName={payload.projectName || projectName}
         onAction={() => setOpen(true)}
         actionLabel="Open original note"
         createdAt={createdAt}

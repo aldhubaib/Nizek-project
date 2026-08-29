@@ -78,6 +78,7 @@ export async function createTaskHighlightComment(data: {
       projectId: true,
       createdById: true,
       assigneeId: true,
+      project: { select: { name: true } },
     },
   });
   if (!task) throw new Error("Task not found");
@@ -166,6 +167,7 @@ export async function createTaskHighlightComment(data: {
         {
           taskId: task.id,
           projectId: task.projectId,
+          projectName: task.project.name,
           threadId: thread.id,
           taskTitle: task.title,
           quoteText: thread.quoteText,

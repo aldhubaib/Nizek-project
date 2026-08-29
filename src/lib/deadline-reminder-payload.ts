@@ -12,6 +12,7 @@ const LEGACY_PAYLOAD_PREFIX = "\x00deadline-reminder:";
 export type DeadlineReminderPayload = {
   noteId: string;
   projectId: string;
+  projectName?: string;
   title: string;
   dueDate: string;
   offsetDays: number;

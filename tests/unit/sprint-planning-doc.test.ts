@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   overlayPlanningTaskAssignees,
   planningTaskIdsFromHtml,
+  sprintDocTitle,
   sprintPlanningDocHtml,
   sprintTaskNodeHtml,
   summarizeSprintTasks,
@@ -117,6 +118,12 @@ describe("summarizeSprintTasks", () => {
         { taskType: "ENHANCEMENT", stage: "DONE", estimatedMinutes: 20 },
       ]),
     ).toMatchObject({ completed: 2, uncompleted: 1, taskCount: 3 });
+  });
+
+  it("builds a review title from the planning name", () => {
+    expect(sprintDocTitle("Sprint 16 planning", "review")).toBe("Sprint 16 review");
+    expect(sprintDocTitle("Q3 Launch", "review")).toBe("Q3 Launch review");
+    expect(sprintDocTitle("Sprint 16 review", "planning")).toBe("Sprint 16 planning");
   });
 
   it("returns zeros for an empty sprint", () => {

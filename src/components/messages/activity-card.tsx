@@ -24,6 +24,7 @@ export function ActivityCard({
   icon: Icon,
   category,
   title,
+  projectName,
   status,
   children,
   href,
@@ -37,6 +38,7 @@ export function ActivityCard({
   icon: LucideIcon;
   category: string;
   title: string;
+  projectName?: string;
   status?: string;
   children?: React.ReactNode;
   href?: string;
@@ -82,6 +84,11 @@ export function ActivityCard({
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {category}
             </p>
+            {projectName?.trim() ? (
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {projectName.trim()}
+              </p>
+            ) : null}
             <h3 className="mt-0.5 text-s font-semibold leading-snug text-foreground">
               {title}
             </h3>

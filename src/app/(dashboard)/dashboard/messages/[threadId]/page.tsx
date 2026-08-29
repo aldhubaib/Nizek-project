@@ -253,6 +253,7 @@ export default async function ThreadPage({
           .sort((a, b) => a.name.localeCompare(b.name));
         subtitle = `${convo.noteCommentThread.note.project.name} · Note comment`;
         title = convo.noteCommentThread.note.title;
+        projectName = convo.noteCommentThread.note.project.name;
       } else if (convo.taskHighlightThread) {
         const projectId = convo.taskHighlightThread.task.projectId;
         const members = await prisma.projectMember.findMany({
@@ -268,6 +269,7 @@ export default async function ThreadPage({
           .sort((a, b) => a.name.localeCompare(b.name));
         subtitle = `${convo.taskHighlightThread.task.project.name} · Task comment`;
         title = convo.taskHighlightThread.task.title;
+        projectName = convo.taskHighlightThread.task.project.name;
       }
       target = { conversationId: convo.id };
       channel = conversationChannel(convo.id);
