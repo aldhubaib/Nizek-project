@@ -59,6 +59,7 @@ import { cn } from "@/lib/utils";
 import { useKanbanStore, type KanbanTask } from "@/store/kanban";
 import { NoteSlideOver } from "@/components/project/note-slide-over";
 import { NoteFullScreenCreate } from "@/components/project/note-full-screen-create";
+import { ClientSprintCard } from "@/components/project/client-sprint-card";
 import { TaskInboxSlideOver } from "@/components/messages/task-inbox-slide-over";
 import { Button } from "@/components/ui/button";
 
@@ -121,6 +122,9 @@ interface Props {
   canEndSprint?: boolean;
   canCreateSprintPlanning?: boolean;
   isProjectActive: boolean;
+  hideAssignees?: boolean;
+  /** Board is as wide as its columns; a parent scroller moves sideways. */
+  embedInScrollParent?: boolean;
 }
 
 function sprintDragId(id: string) {
@@ -161,6 +165,8 @@ export function CompletedSprintsTab({
   canEndSprint = false,
   canCreateSprintPlanning = false,
   isProjectActive,
+  hideAssignees = false,
+  embedInScrollParent = false,
 }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -687,7 +693,13 @@ export function CompletedSprintsTab({
     : null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div
+      className={
+        embedInScrollParent
+          ? "flex h-full min-h-0 w-max flex-col gap-4"
+          : "flex min-h-0 min-w-0 flex-1 flex-col gap-4"
+      }
+    >
       {error ? <p className="text-s text-destructive">{error}</p> : null}
       {notice ? <MissingDataNotice message={notice} onClose={() => setNotice(null)} /> : null}
 
@@ -698,7 +710,13 @@ export function CompletedSprintsTab({
         onDragCancel={handleDragCancel}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overscroll-x-contain pb-4">
+        <div
+          className={
+            embedInScrollParent
+              ? "flex h-full min-h-0 w-max gap-4 pb-4"
+              : "flex min-h-0 min-w-0 flex-1 gap-4 overflow-x-auto overscroll-x-contain pb-4"
+          }
+        >
           <TaskPoolColumn
             id={MISSING_ZONE}
             title="Missing data"
@@ -811,6 +829,20 @@ export function CompletedSprintsTab({
             const cards = byColumn[column.id].map((sprint) => {
               const items = tasksForSprint(sprint.id);
               const isCollapsed = collapsed[sprint.id] ?? true;
+              if (hideAssignees) {
+                return (
+                  <ClientSprintCard
+                    key={sprint.id}
+                    sprint={sprint}
+                    taskCount={items.length}
+                    onOpen={() =>
+                      isClosedSprint(sprint.status)
+                        ? setDocsSprint(sprint)
+                        : setPlanningSprint(sprint)
+                    }
+                  />
+                );
+              }
               return (
                 <SprintBoardCard
                   key={sprint.id}
@@ -928,6 +960,7 @@ export function CompletedSprintsTab({
           sprintId={reviewSprint.id}
           canEndSprint={canEndSprint}
           canEditSprintDoc={canEndSprint}
+          hideAssignees={hideAssignees}
           onCancel={closeReview}
           saveInHeader={false}
           onCreated={() => {}}
@@ -938,6 +971,7 @@ export function CompletedSprintsTab({
       <ClosedSprintDocs
         projectId={projectId}
         sprint={docsSprint}
+        hideAssignees={hideAssignees}
         onClose={closeDocs}
       />
     ) : null}
@@ -954,6 +988,7 @@ export function CompletedSprintsTab({
           sprintStatus={planningSprint.status}
           canStartSprint={canStartSprint}
           canEditSprintDoc={canCreateSprintPlanning}
+          hideAssignees={hideAssignees}
           onCancel={closePlanning}
           saveInHeader={false}
           onCreated={() => {}}
@@ -973,10 +1008,12 @@ type SprintDocKind = "planning" | "review";
 function ClosedSprintDocs({
   projectId,
   sprint,
+  hideAssignees = false,
   onClose,
 }: {
   projectId: string;
   sprint: SprintDTO;
+  hideAssignees?: boolean;
   onClose: () => void;
 }) {
   const [kind, setKind] = useState<SprintDocKind>("planning");
@@ -1003,6 +1040,8 @@ function ClosedSprintDocs({
           initialTitle={`${sprint.name} planning`}
           sprintId={sprint.id}
           sprintStatus={sprint.status}
+          hideAssignees={hideAssignees}
+          canEditSprintDoc={!hideAssignees}
           autoFocusTitle={false}
           saveInHeader={false}
           onCreated={() => {}}
@@ -1015,6 +1054,8 @@ function ClosedSprintDocs({
           initialTitle={`${sprint.name} review`}
           sprintId={sprint.id}
           sprintStatus={sprint.status}
+          hideAssignees={hideAssignees}
+          canEditSprintDoc={!hideAssignees}
           autoFocusTitle={false}
           saveInHeader={false}
           onCreated={() => {}}
@@ -1046,7 +1087,7 @@ function TaskPoolColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex w-[min(100%,18rem)] shrink-0 flex-col rounded-lg border border-border/50 bg-muted/30 lg:min-h-0 lg:w-[400px]",
+        "flex w-72 shrink-0 flex-col rounded-lg border border-border/50 bg-muted/30 lg:min-h-0 lg:w-[400px]",
         isOver && "border-success/60 bg-success/5",
       )}
     >
@@ -1159,7 +1200,7 @@ function SprintColumn({
       ref={setNodeRef}
       className={cn(
         // Matches the kanban column width so both boards read as one system.
-        "flex w-[min(100%,18rem)] shrink-0 flex-col rounded-lg border border-border/50 bg-muted/30 lg:min-h-0 lg:w-[400px]",
+        "flex w-72 shrink-0 flex-col rounded-lg border border-border/50 bg-muted/30 lg:min-h-0 lg:w-[400px]",
         isOver && !dropBlocked && "border-success/60 bg-success/5",
         isOver && dropBlocked && "border-destructive/50 bg-destructive/5",
       )}

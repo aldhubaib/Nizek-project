@@ -739,6 +739,52 @@ export async function getTaskNotes(taskId: string) {
   });
 }
 
+const TASK_NOTE_TYPES = {
+  notIn: ["SPRINT_PLANNING", "SPRINT_REVIEW", "DEADLINE"] as const,
+};
+
+/**
+ * The one free-form note that belongs to a task. Reuses the oldest attached
+ * write-up if it exists; otherwise creates an empty one (no chat ping).
+ */
+export async function getOrCreateTaskNote(taskId: string) {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { id: true, title: true, projectId: true },
+  });
+  if (!task) throw new Error("Task not found");
+
+  const { user, member } = await requireProjectMember(task.projectId);
+
+  const existing = await prisma.meetingNote.findFirst({
+    where: {
+      noteType: TASK_NOTE_TYPES,
+      OR: [{ taskId }, { taskLinks: { some: { taskId } } }],
+    },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, title: true, content: true },
+  });
+  if (existing) return existing;
+  if (member.role === "CLIENT") throw new Error("No note on this task");
+
+  const note = await prisma.meetingNote.create({
+    data: {
+      title: task.title,
+      content: "",
+      date: new Date(),
+      noteType: "MEETING_NOTE",
+      projectId: task.projectId,
+      authorId: user.id,
+      taskId,
+    },
+    select: { id: true, title: true, content: true },
+  });
+  await prisma.noteTaskLink.create({
+    data: { noteId: note.id, taskId, createdById: user.id },
+  });
+  return note;
+}
+
 /** @deprecated Prefer getMeetingNote for full timeline data. */
 export async function getNoteHistory(noteId: string) {
   const note = await getMeetingNote(noteId);

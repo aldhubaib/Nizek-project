@@ -139,6 +139,7 @@ export interface RichTextEditorProps {
   canStartSprint?: boolean;
   canEndSprint?: boolean;
   sprintTasks?: SprintPlanningTask[];
+  hideAssignees?: boolean;
   onSprintTaskPatch?: (taskId: string, patch: Partial<SprintPlanningTask>) => void;
   onSprintStatusChange?: (status: string) => void;
   ydoc?: Y.Doc | null;
@@ -158,6 +159,7 @@ export function RichTextEditor({
   canStartSprint = false,
   canEndSprint = false,
   sprintTasks = [],
+  hideAssignees = false,
   onSprintTaskPatch,
   onSprintStatusChange,
   ydoc,
@@ -211,6 +213,7 @@ export function RichTextEditor({
       SprintTaskBlock.configure({
         projectId,
         sprintTasks,
+        hideAssignee: hideAssignees,
         onTasksPatched: (taskId, patch) => onSprintTaskPatchRef.current?.(taskId, patch),
       }),
       ...(isCollaborative && ydoc
@@ -530,10 +533,11 @@ export function RichTextEditor({
     const ext = editor.extensionManager.extensions.find((item) => item.name === "sprintTask");
     if (!ext) return;
     ext.options.sprintTasks = sprintTasks;
+    ext.options.hideAssignee = hideAssignees;
     ext.options.onTasksPatched = (taskId: string, patch: Partial<SprintPlanningTask>) =>
       onSprintTaskPatchRef.current?.(taskId, patch);
     editor.view.dispatch(editor.state.tr.setMeta("sprintTasks", sprintTasks.length));
-  }, [editor, sprintTasks]);
+  }, [editor, sprintTasks, hideAssignees]);
 
   useEffect(() => {
     if (!editor) return;

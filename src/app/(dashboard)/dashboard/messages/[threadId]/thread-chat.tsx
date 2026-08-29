@@ -256,6 +256,7 @@ export function ThreadChat({
   const [view, setView] = useState<
     "chat" | "files" | "important" | "roadmap" | "project"
   >("chat");
+  const [projectTab, setProjectTab] = useState<"dashboard" | "roadmap">("dashboard");
   const [profileOpen, setProfileOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
@@ -332,6 +333,7 @@ export function ThreadChat({
   const closeThreadPanels = useCallback(() => {
     closeSearch();
     setPeopleOpen(false);
+    setProjectTab("dashboard");
     setView("chat");
   }, [closeSearch]);
   const openSearch = useCallback(() => {
@@ -2301,8 +2303,32 @@ export function ThreadChat({
         </NoteSlideOver>
       )}
       {view === "project" && target.projectId && (
-        <NoteSlideOver title="My project" onClose={closeThreadPanels}>
-          <ClientProjectPanel projectId={target.projectId} />
+        <NoteSlideOver
+          title="My project"
+          onClose={closeThreadPanels}
+          allowOverflowX={projectTab === "roadmap"}
+          bodyClassName={
+            projectTab === "roadmap"
+              ? undefined
+              : "flex min-h-0 min-w-0 flex-col overflow-hidden"
+          }
+          headerRight={
+            <Button
+              type="button"
+              size="sm"
+              onClick={() =>
+                setProjectTab((tab) => (tab === "dashboard" ? "roadmap" : "dashboard"))
+              }
+            >
+              {projectTab === "dashboard" ? "Road map" : "Dashboard"}
+            </Button>
+          }
+        >
+          <ClientProjectPanel
+            projectId={target.projectId}
+            tab={projectTab}
+            onTabChange={setProjectTab}
+          />
         </NoteSlideOver>
       )}
 

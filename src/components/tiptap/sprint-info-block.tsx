@@ -23,6 +23,8 @@ import { useChannel } from "@/components/realtime/hooks";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { projectChannel } from "@/lib/channels";
 
+const DATE_RANGE_ERROR = "End date must be on or after the start date";
+
 const cellInputClass =
   "w-full bg-transparent text-s text-foreground outline-none placeholder:text-muted-foreground/40 read-only:cursor-default disabled:cursor-default disabled:opacity-70";
 
@@ -203,16 +205,22 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
   const workingDaysEmpty =
     info.workingDays === "" || info.workingDays == null || Number(info.workingDays) < 1;
   const infoIncomplete = documentDateEmpty || startEmpty || endEmpty || workingDaysEmpty;
+  const datesInvalid = Boolean(info.startIso && info.endIso && info.endIso < info.startIso);
   const startBlockedReason = !canStart
     ? null
-    : sprintStartBlockedReason({
-        activeSprintName,
-        infoIncomplete,
-        missingEstimates,
-        missingAssignees,
-        docIncomplete,
-      });
+    : datesInvalid
+      ? DATE_RANGE_ERROR
+      : sprintStartBlockedReason({
+          activeSprintName,
+          infoIncomplete,
+          missingEstimates,
+          missingAssignees,
+          docIncomplete,
+        });
   const startBlocked = Boolean(startBlockedReason);
+  const startButtonError = canStart
+    ? (error ?? (datesInvalid ? DATE_RANGE_ERROR : null))
+    : null;
   const endBlockedReason = !canEnd
     ? null
     : infoIncomplete
@@ -224,6 +232,10 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
 
   function persistDates(startIso: string, endIso: string) {
     if (!info?.sprintId || info.locked) return;
+    if (startIso && endIso && endIso < startIso) {
+      if (persistTimer.current) window.clearTimeout(persistTimer.current);
+      return;
+    }
     if (persistTimer.current) window.clearTimeout(persistTimer.current);
     persistTimer.current = window.setTimeout(() => {
       startTransition(async () => {
@@ -427,17 +439,24 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
     >
       {canStart ? (
         <SprintDocHeaderLeft>
-          <Button
-            type="button"
-            size="sm"
-            variant={activeSprintName ? "destructive" : "default"}
-            onClick={() => void requestStart()}
-            disabled={starting || startBlocked}
-            title={startBlockedReason ?? "Start sprint"}
-          >
-            <Play className="size-3.5" />
-            {starting ? "Starting…" : "Start sprint"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {startButtonError ? (
+              <p className="max-w-[16rem] text-end text-xs leading-tight text-destructive">
+                {startButtonError}
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant={activeSprintName || startButtonError ? "destructive" : "default"}
+              onClick={() => void requestStart()}
+              disabled={starting || startBlocked}
+              title={startButtonError ?? startBlockedReason ?? "Start sprint"}
+            >
+              <Play className="size-3.5" />
+              {starting ? "Starting…" : "Start sprint"}
+            </Button>
+          </div>
         </SprintDocHeaderLeft>
       ) : null}
       {canEnd ? (
@@ -531,7 +550,9 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
           </>
         ) : null}
       </div>
-      {error ? <p className="mt-4 text-s text-destructive">{error}</p> : null}
+      {error && !canStart ? (
+        <p className="mt-4 text-s text-destructive">{error}</p>
+      ) : null}
       <StartSprintDialog
         open={confirmOpen}
         sprintName={sprintName || "this sprint"}

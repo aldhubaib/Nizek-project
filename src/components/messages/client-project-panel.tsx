@@ -1,43 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { ArrowLeft, CalendarClock, CheckCircle2, FileText, Loader2 } from "lucide-react";
-import { NoteImage } from "@/components/tiptap/note-image";
-import { TextDirection } from "@/components/tiptap/text-direction";
-import { AttendanceBlock } from "@/components/tiptap/attendance-block";
-import { SprintInfoBlock } from "@/components/tiptap/sprint-info-block";
-import { SprintTaskBlock } from "@/components/tiptap/sprint-task-block";
-import { OverflowTabBar } from "@/components/overflow-tab-bar";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { NOTE_TYPE_CONFIG, type NoteType } from "@/components/project/note-types";
+import { useEffect, useState } from "react";
+import { CalendarClock, CheckCircle2, Loader2 } from "lucide-react";
 import { getTypeIcon, SprintTaskRow } from "@/components/project/sprint-task-row";
-import {
-  SPRINT_BOARD_COLUMNS,
-  sprintBoardColumn,
-  type SprintBoardColumn,
-} from "@/lib/sprint-status";
 import { cn } from "@/lib/utils";
 import {
   getClientProjectOverview,
-  getClientSprintDoc,
   type ClientProjectOverview,
-  type ClientSprintDocRef,
-  type ClientSprintEntry,
 } from "@/actions/client-project";
+import { listSprints, type SprintDTO } from "@/actions/sprint";
+import { getTasksByProject } from "@/actions/task";
+import { CompletedSprintsTab } from "@/components/project/completed-sprints-tab";
+import { type KanbanTask } from "@/store/kanban";
 
-type PanelTab = "dashboard" | "sprints" | "completed" | "backlog";
-
-/** Work in flight, in progress first — the Sprints tab opens on that group. */
-const OPEN_COLUMNS: SprintBoardColumn[] = ["ACTIVE", "NEXT", "PLANNED"];
-
-/** Finished work, kept on its own tab so history never buries current work. */
-const CLOSED_COLUMNS: SprintBoardColumn[] = ["COMPLETED", "SHIPPED"];
-
-const COLUMN_LABEL = Object.fromEntries(
-  SPRINT_BOARD_COLUMNS.map((c) => [c.id, c.label]),
-) as Record<SprintBoardColumn, string>;
+type PanelTab = "dashboard" | "roadmap";
 
 function formatDay(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -295,13 +271,19 @@ function SprintRingCard({
 /**
  * The client's own view of their project, opened from the chat's 3-dot menu.
  * Everything here is read-only: clients have no project page to visit, so this
- * is where progress, the sprint documents and the backlog are visible to them.
+ * is where progress and the road map are visible to them.
  */
-export function ClientProjectPanel({ projectId }: { projectId: string }) {
+export function ClientProjectPanel({
+  projectId,
+  tab,
+  onTabChange,
+}: {
+  projectId: string;
+  tab: PanelTab;
+  onTabChange: (tab: PanelTab) => void;
+}) {
   const [data, setData] = useState<ClientProjectOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<PanelTab>("dashboard");
-  const [openDoc, setOpenDoc] = useState<ClientSprintDocRef | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -317,6 +299,14 @@ export function ClientProjectPanel({ projectId }: { projectId: string }) {
     };
   }, [projectId]);
 
+  if (tab === "roadmap") {
+    return (
+      <div className="flex h-full min-h-full w-max min-w-full flex-col px-app py-4">
+        <ClientRoadmapBoard projectId={projectId} />
+      </div>
+    );
+  }
+
   if (error) {
     return <p className="px-app py-6 text-s text-destructive">{error}</p>;
   }
@@ -329,62 +319,63 @@ export function ClientProjectPanel({ projectId }: { projectId: string }) {
     );
   }
 
-  if (openDoc) {
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto w-full max-w-5xl px-app py-4">
+        <DashboardTab data={data} onOpenTab={onTabChange} />
+      </div>
+    </div>
+  );
+}
+
+function ClientRoadmapBoard({ projectId }: { projectId: string }) {
+  const [sprints, setSprints] = useState<SprintDTO[] | null>(null);
+  const [tasks, setTasks] = useState<KanbanTask[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([listSprints(projectId), getTasksByProject(projectId)])
+      .then(([nextSprints, nextTasks]) => {
+        if (cancelled) return;
+        setSprints(nextSprints);
+        setTasks(nextTasks as unknown as KanbanTask[]);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Couldn't load the road map.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  if (error) {
+    return <p className="px-1 text-s text-destructive">{error}</p>;
+  }
+
+  if (!sprints || !tasks) {
     return (
-      <div className="mx-auto w-full max-w-[52rem] px-app py-4">
-        <button
-          type="button"
-          onClick={() => setOpenDoc(null)}
-          className="mb-4 inline-flex items-center gap-1.5 text-s text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </button>
-        <h2 className="text-xl font-bold">{openDoc.title}</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {formatDay(openDoc.date)}
-        </p>
-        <div className="mt-4">
-          <SprintDoc noteId={openDoc.id} projectId={projectId} />
-        </div>
+      <div className="flex flex-1 items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-app py-4">
-      <OverflowTabBar
-        items={[
-          { id: "dashboard", label: "Dashboard" },
-          { id: "sprints", label: "Sprints" },
-          { id: "completed", label: "Completed" },
-          { id: "backlog", label: "Backlog", count: data.backlog.length },
-        ]}
-        value={tab}
-        onChange={setTab}
-        justify="start"
-        className="pb-4"
-      />
-
-      {tab === "dashboard" && <DashboardTab data={data} onOpenTab={setTab} />}
-      {tab === "sprints" && (
-        <SprintsTab
-          sprints={data.sprints}
-          columns={OPEN_COLUMNS}
-          emptyLabel="No sprint documents yet."
-          onOpen={setOpenDoc}
-        />
-      )}
-      {tab === "completed" && (
-        <SprintsTab
-          sprints={data.sprints}
-          columns={CLOSED_COLUMNS}
-          emptyLabel="No completed sprints yet."
-          onOpen={setOpenDoc}
-        />
-      )}
-      {tab === "backlog" && <BacklogTab backlog={data.backlog} />}
-    </div>
+    <CompletedSprintsTab
+      projectId={projectId}
+      sprints={sprints}
+      onSprintsChange={setSprints}
+      initialTasks={tasks}
+      canManage={false}
+      canMoveTasks={false}
+      canStartSprint={false}
+      canEndSprint={false}
+      canCreateSprintPlanning={false}
+      isProjectActive={false}
+      hideAssignees
+      embedInScrollParent
+    />
   );
 }
 
@@ -549,7 +540,7 @@ function DashboardTab({
             {data.activeSprint && (
               <button
                 type="button"
-                onClick={() => onOpenTab("sprints")}
+                onClick={() => onOpenTab("roadmap")}
                 className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
                 Documents
@@ -614,7 +605,7 @@ function DashboardTab({
               <h2 className="text-s font-semibold text-foreground">Backlog</h2>
               <button
                 type="button"
-                onClick={() => onOpenTab("backlog")}
+                onClick={() => onOpenTab("roadmap")}
                 className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
                 All
@@ -646,222 +637,4 @@ function DashboardTab({
       </div>
     </div>
   );
-}
-
-/**
- * Sprint documents as cards, the way the project's Notes tab shows them, split
- * by the roadmap's own grouping so the client starts on the sprint in progress
- * and can step across to what's planned or already finished.
- */
-function SprintsTab({
-  sprints,
-  columns,
-  emptyLabel,
-  onOpen,
-}: {
-  sprints: ClientSprintEntry[];
-  columns: SprintBoardColumn[];
-  emptyLabel: string;
-  onOpen: (doc: ClientSprintDocRef) => void;
-}) {
-  const groups = useMemo(() => {
-    const documented = sprints.filter((s) => s.docs.length > 0);
-    return columns
-      .map((column) => ({
-        column,
-        sprints: documented.filter(
-          (s) => sprintBoardColumn(s.status) === column,
-        ),
-      }))
-      .filter((g) => g.sprints.length > 0);
-  }, [sprints, columns]);
-
-  const [column, setColumn] = useState<SprintBoardColumn | null>(null);
-  const current = groups.find((g) => g.column === column) ?? groups[0] ?? null;
-
-  if (!current) {
-    return <p className="px-1 text-s text-muted-foreground">{emptyLabel}</p>;
-  }
-
-  return (
-    <div>
-      {groups.length > 1 && (
-        <OverflowTabBar
-          items={groups.map((g) => ({
-            id: g.column,
-            label: COLUMN_LABEL[g.column],
-            count: g.sprints.reduce((n, s) => n + s.docs.length, 0),
-          }))}
-          value={current.column}
-          onChange={setColumn}
-          justify="start"
-          className="pb-4"
-        />
-      )}
-
-      <div className="grid grid-cols-2 gap-s sm:[grid-template-columns:repeat(auto-fill,minmax(15.75rem,1fr))]">
-        {current.sprints.flatMap((sprint) =>
-          sprint.docs.map((doc) => (
-            <DocCard
-              key={doc.id}
-              doc={doc}
-              sprint={sprint}
-              onOpen={() => onOpen(doc)}
-            />
-          )),
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DocCard({
-  doc,
-  sprint,
-  onOpen,
-}: {
-  doc: ClientSprintDocRef;
-  sprint: ClientSprintEntry;
-  onOpen: () => void;
-}) {
-  const cfg = NOTE_TYPE_CONFIG[doc.kind as NoteType];
-  const Icon = cfg?.icon ?? FileText;
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onOpen();
-        }
-      }}
-      className="flex aspect-[3/4] cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/60 bg-card p-3 text-start transition-colors hover:border-border"
-    >
-      {cfg && <StatusBadge config={cfg} icon={Icon} className="w-fit" />}
-
-      <h3 className="mt-2.5 line-clamp-4 text-s font-bold leading-snug">
-        {doc.title}
-      </h3>
-
-      {doc.preview ? (
-        <div className="relative mt-2 min-h-0 flex-1 overflow-hidden">
-          <p className="text-s leading-relaxed text-muted-foreground">
-            {doc.preview}
-          </p>
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-card to-transparent" />
-        </div>
-      ) : (
-        <div className="min-h-0 flex-1" />
-      )}
-
-      <div className="mt-auto shrink-0 pt-3">
-        <p className="truncate text-xs text-muted-foreground">{sprint.name}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground/70">
-          {formatDay(doc.date)}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function BacklogTab({
-  backlog,
-}: {
-  backlog: ClientProjectOverview["backlog"];
-}) {
-  if (backlog.length === 0) {
-    return (
-      <p className="px-1 text-s text-muted-foreground">
-        Nothing waiting in the backlog.
-      </p>
-    );
-  }
-
-  return (
-    <ul className="space-y-2">
-      {backlog.map((task) => (
-        <li key={task.id}>
-          <SprintTaskRow
-            as="div"
-            hideAssignee
-            disableHoverBorder
-            task={{
-              title: task.title,
-              taskType: task.taskType,
-              stage: "BACKLOG",
-            }}
-          />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** One sprint document, rendered read-only with the blocks staff wrote in it. */
-function SprintDoc({
-  noteId,
-  projectId,
-}: {
-  noteId: string;
-  projectId: string;
-}) {
-  const [html, setHtml] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setHtml(null);
-    setError(null);
-    getClientSprintDoc(noteId)
-      .then((row) => {
-        if (!cancelled) setHtml(row.content);
-      })
-      .catch(() => {
-        if (!cancelled) setError("Couldn't open this document.");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [noteId]);
-
-  const editor = useEditor(
-    {
-      immediatelyRender: false,
-      editable: false,
-      extensions: [
-        StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-        NoteImage.configure({ inline: false }),
-        TextDirection,
-        AttendanceBlock,
-        SprintInfoBlock,
-        SprintTaskBlock.configure({ projectId }),
-      ],
-      content: html ?? "",
-      editorProps: {
-        attributes: {
-          class: cn(
-            "focus:outline-none prose prose-invert max-w-none text-m leading-relaxed",
-            "prose-headings:font-bold prose-h1:text-2xl prose-h2:text-xl prose-h3:text-base",
-            "prose-img:rounded-lg prose-img:max-w-full",
-          ),
-        },
-      },
-    },
-    [html, projectId],
-  );
-
-  if (error) return <p className="text-s text-destructive">{error}</p>;
-
-  if (html === null) {
-    return (
-      <div className="flex justify-center py-10">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  return <EditorContent editor={editor} />;
 }

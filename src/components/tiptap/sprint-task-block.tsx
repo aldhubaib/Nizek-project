@@ -20,8 +20,10 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
   const options = extension.options as {
     projectId?: string;
     sprintTasks?: SprintPlanningTask[];
+    hideAssignee?: boolean;
     onTasksPatched?: (taskId: string, patch: Partial<SprintPlanningTask>) => void;
   };
+  const hideAssignee = Boolean(options.hideAssignee);
   const projectId = options.projectId;
   const liveTasks = options.sprintTasks ?? [];
   const live = task ? liveTasks.find((item) => item.id === task.id) : undefined;
@@ -64,6 +66,7 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
         task={rowTask}
         missingData={false}
         hideStatus
+        hideAssignee={hideAssignee}
         disableHoverBorder
         extra={
           canEditFields ? (
@@ -77,7 +80,7 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
           )
         }
         assigneeSlot={
-          canEditFields && projectId ? (
+          !hideAssignee && canEditFields && projectId ? (
             <PlanningAssigneePicker
               projectId={projectId}
               taskId={task.id}
@@ -166,6 +169,7 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
 export const SprintTaskBlock = Node.create<{
   projectId?: string;
   sprintTasks?: SprintPlanningTask[];
+  hideAssignee?: boolean;
   onTasksPatched?: (taskId: string, patch: Partial<SprintPlanningTask>) => void;
 }>({
   name: "sprintTask",
@@ -175,7 +179,7 @@ export const SprintTaskBlock = Node.create<{
   selectable: true,
   draggable: false,
   addOptions() {
-    return { projectId: "", sprintTasks: [], onTasksPatched: undefined };
+    return { projectId: "", sprintTasks: [], hideAssignee: false, onTasksPatched: undefined };
   },
   addAttributes() {
     return {

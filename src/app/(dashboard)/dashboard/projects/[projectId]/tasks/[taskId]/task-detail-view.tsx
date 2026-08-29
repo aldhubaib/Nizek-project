@@ -9,13 +9,13 @@ import { AddButton } from "@/components/add-button";
 import {
   Loader2, MessageCircleQuestion, History, MessageSquare,
   ChevronRight, ChevronLeft, ChevronDown, Pencil, Check, Undo2,
-  FileText, Paperclip, X, MoreVertical, Trash2, Zap, Info, Plus,
+  FileText, Paperclip, X, MoreVertical, Trash2, Zap, Info,
 } from "lucide-react";
 import { getTaskAnswers, saveTaskAnswers } from "@/actions/task-question";
 import { updateTask, moveTask as moveTaskAction, declineTask, deleteTask, assignTaskToMe } from "@/actions/task";
 import { getTaskNotes } from "@/actions/meeting-note";
 import { AttachExistingNoteDialog } from "@/components/project/attach-existing-note-dialog";
-import { NoteFullScreenCreate, NOTES_CREATE_TYPES } from "@/components/project/note-full-screen-create";
+import { TaskIssueNote } from "@/components/project/task-issue-note";
 import { getNoteTypeConfig } from "@/components/project/note-types";
 import { NoteCommentReplyDialog } from "@/components/messages/note-comment-reply-dialog";
 import { formatDistanceToNow } from "date-fns";
@@ -39,6 +39,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { PageHeader, PageBackButton } from "@/components/page-header";
+import { PageHeaderActions } from "@/components/page-header-actions";
+import { PageOverflowItems } from "@/components/page-overflow-menu";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { SprintDocHeaderLeft } from "@/components/project/note-slide-over";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
@@ -130,6 +134,7 @@ interface Props {
   backToTab?: string | null;
   embedded?: boolean;
   onClose?: () => void;
+  initialNoteView?: boolean;
 }
 
 export function TaskDetailPage({
@@ -147,6 +152,7 @@ export function TaskDetailPage({
   backToTab = null,
   embedded = false,
   onClose,
+  initialNoteView = false,
 }: Props) {
   const router = useRouter();
   const questions = allQuestions.filter((q) => q.taskType === initialTask.taskType);
@@ -239,9 +245,38 @@ export function TaskDetailPage({
 
   // Notes + roadmap (same NoteTaskLink; split by noteType)
   const [notes, setNotes] = useState<NoteData[]>(initialNotes);
-  const [noteEditorOpen, setNoteEditorOpen] = useState(false);
+  const [noteEditorOpen, setNoteEditorOpen] = useState(initialNoteView);
   const [viewingNote, setViewingNote] = useState<{ id: string; title: string } | null>(null);
   const [attachNoteOpen, setAttachNoteOpen] = useState(false);
+
+  function taskPageHref(view?: "note") {
+    const params = new URLSearchParams();
+    if (initialThreadId) params.set("threadId", initialThreadId);
+    if (backToNoteId) {
+      params.set("from", "note");
+      params.set("noteId", backToNoteId);
+    } else if (backToTab) {
+      params.set("from", backToTab);
+    }
+    if (view === "note") params.set("view", "note");
+    const query = params.toString();
+    return `/dashboard/projects/${projectId}/tasks/${initialTask.id}${query ? `?${query}` : ""}`;
+  }
+
+  function openNoteEditor() {
+    if (embedded) {
+      router.push(taskPageHref("note"));
+      onClose?.();
+      return;
+    }
+    setNoteEditorOpen(true);
+    router.replace(taskPageHref("note"), { scroll: false });
+  }
+
+  function closeNoteEditor() {
+    setNoteEditorOpen(false);
+    router.replace(taskPageHref(), { scroll: false });
+  }
 
   const currentStageIndex = STAGES.findIndex((s) => s.id === taskStage);
   const nextStage = currentStageIndex < STAGES.length - 1 ? STAGES[currentStageIndex + 1] : null;
@@ -485,8 +520,18 @@ export function TaskDetailPage({
 
   const attachedNotes = notes.filter((n) => !isRoadmapNote(n.noteType));
 
+  const viewSwitchButton = (
+    <Button
+      type="button"
+      size="sm"
+      onClick={() => (noteEditorOpen ? closeNoteEditor() : openNoteEditor())}
+    >
+      {noteEditorOpen ? "Task details" : "Notes"}
+    </Button>
+  );
+
   const actionsMenu = (
-    <div className={cn("relative", !embedded && "ms-auto", noteEditorOpen && "hidden")} ref={menuRef}>
+    <div className={cn("relative", noteEditorOpen && "hidden")} ref={menuRef}>
       <button
         onClick={() => setShowMenu((v) => !v)}
         disabled={deleting}
@@ -521,16 +566,46 @@ export function TaskDetailPage({
     </div>
   );
 
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      {viewSwitchButton}
+      {actionsMenu}
+    </div>
+  );
+
   return (
     <div className={cn(!embedded && "min-h-screen")}>
+      {!embedded ? (
+        <>
+          <PageHeaderActions>{viewSwitchButton}</PageHeaderActions>
+          <PageOverflowItems id="task-actions" order={0}>
+            <DropdownMenuItem
+              onClick={() => setShowHistory(true)}
+            >
+              <History className="h-4 w-4" />
+              <span className="flex-1">History</span>
+            </DropdownMenuItem>
+            {canDelete ? (
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={deleting}
+                onClick={() => void handleDeleteTask()}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="flex-1">Delete task</span>
+              </DropdownMenuItem>
+            ) : null}
+          </PageOverflowItems>
+        </>
+      ) : null}
       {embedded ? (
-        <div className="flex justify-end px-app pt-3">{actionsMenu}</div>
+        <SprintDocHeaderLeft>{headerActions}</SprintDocHeaderLeft>
       ) : (
-      <PageHeader>
+      <PageHeader hasMenu>
         <PageBackButton
           onClick={() => {
             if (noteEditorOpen) {
-              setNoteEditorOpen(false);
+              closeNoteEditor();
               return;
             }
             router.push(projectBackHref);
@@ -550,32 +625,22 @@ export function TaskDetailPage({
               label: projectName,
               href: noteEditorOpen ? undefined : projectBackHref,
               onClick: noteEditorOpen
-                ? () => setNoteEditorOpen(false)
+                ? () => closeNoteEditor()
                 : undefined,
             },
             {
               label: `${taskTypeMeta.prefix}-${String(initialTask.taskNumber).padStart(3, "0")}`,
               className: taskTypeMeta.color,
-              onClick: noteEditorOpen ? () => setNoteEditorOpen(false) : undefined,
+              onClick: noteEditorOpen ? () => closeNoteEditor() : undefined,
             },
-            ...(noteEditorOpen ? [{ label: "New note" }] : []),
+            ...(noteEditorOpen ? [{ label: "Note" }] : []),
           ]}
         />
-        {actionsMenu}
       </PageHeader>
       )}
 
       {noteEditorOpen ? (
-        <NoteFullScreenCreate
-          projectId={projectId}
-          createTypes={NOTES_CREATE_TYPES}
-          taskId={initialTask.id}
-          onCreated={() => {
-            setNoteEditorOpen(false);
-            void refreshNotes();
-            setActivityKey((k) => k + 1);
-          }}
-        />
+        <TaskIssueNote taskId={initialTask.id} fallbackTitle={titleValue} />
       ) : (
       <div className="mx-auto max-w-[54.6rem] px-app py-8 space-y-6">
         {/* Title */}
@@ -780,9 +845,6 @@ export function TaskDetailPage({
             <div className="flex items-center gap-1">
               <Button size="sm" variant="ghost" onClick={() => setAttachNoteOpen(true)} className="h-7 w-7 p-0" title="Attach existing note">
                 <Paperclip className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setNoteEditorOpen(true)} className="h-7 w-7 p-0" title="New note">
-                <Plus className="h-4 w-4" />
               </Button>
             </div>
           </div>

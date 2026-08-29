@@ -46,6 +46,7 @@ export function NoteFullScreenCreate({
   canStartSprint = false,
   canEndSprint = false,
   canEditSprintDoc,
+  hideAssignees = false,
   onCancel,
   saveInHeader = true,
   autoFocusTitle = true,
@@ -64,6 +65,8 @@ export function NoteFullScreenCreate({
   canStartSprint?: boolean;
   canEndSprint?: boolean;
   canEditSprintDoc?: boolean;
+  /** Hide assignees in planning/review task rows (client view). */
+  hideAssignees?: boolean;
   onCancel?: () => void;
   /** Portal Save into the shell header. Turn off when this form sits under an overlay that covers that slot. */
   saveInHeader?: boolean;
@@ -93,18 +96,19 @@ export function NoteFullScreenCreate({
   const isSprintPlanning = noteType === "SPRINT_PLANNING";
   const isSprintReview = noteType === "SPRINT_REVIEW";
   const isSprintDoc = isSprintPlanning || isSprintReview;
+  const readOnly = hideAssignees || canEditSprintDoc === false;
   const planningLocked =
     (sprintPlanningIsLocked(sprintStatus, isAdmin) && isSprintPlanning) ||
-    (isSprintDoc && canEditSprintDoc === false);
+    readOnly;
 
   const { ydoc, provider: collabProvider, synced: collabSynced, enabled: collabEnabled } =
-    useCollaboration(isSprintDoc && noteId ? noteId : null);
+    useCollaboration(isSprintDoc && noteId && !readOnly ? noteId : null);
 
   const { saveError: autoSaveError } = useNoteAutosave({
     noteId,
     title,
     content,
-    enabled: isSprintDoc && (!planningLocked || isSprintReview),
+    enabled: isSprintDoc && !planningLocked,
     persistContent: !collabEnabled && !planningLocked,
   });
   const planningError = saveError ?? autoSaveError;
@@ -148,7 +152,7 @@ export function NoteFullScreenCreate({
             setNoteId(existing.id);
             setTitle(reviewTitle);
             setContent(html);
-            if (existing.title !== reviewTitle) {
+            if (!readOnly && existing.title !== reviewTitle) {
               void updateMeetingNote({ noteId: existing.id, title: reviewTitle });
             }
             return;
@@ -156,6 +160,7 @@ export function NoteFullScreenCreate({
 
           setContent(html);
           setTitle(reviewTitle);
+          if (readOnly) return;
           const created = await createMeetingNote({
             projectId,
             title: reviewTitle,
@@ -187,6 +192,7 @@ export function NoteFullScreenCreate({
         const html = sprintPlanningDocHtml(planning.tasks, info);
         setContent(html);
         setTitle(initialTitle || `${planning.sprintName} planning`);
+        if (readOnly) return;
         const created = await createMeetingNote({
           projectId,
           title: (initialTitle || `${planning.sprintName} planning`).trim(),
@@ -209,7 +215,7 @@ export function NoteFullScreenCreate({
     return () => {
       cancelled = true;
     };
-  }, [sprintId, projectId, initialTitle, isSprintDoc, isSprintReview]);
+  }, [sprintId, projectId, initialTitle, isSprintDoc, isSprintReview, readOnly]);
 
   useEffect(() => {
     if (!sprintId || !isSprintPlanning) return;
@@ -378,7 +384,7 @@ export function NoteFullScreenCreate({
           ) : isSprintDoc ? (
             planningError ? (
               <p className="mb-8 text-xs text-destructive">{planningError}</p>
-            ) : planningLocked ? (
+            ) : planningLocked && !hideAssignees ? (
               <p className="mb-8 text-center text-xs text-muted-foreground">
                 This planning document is locked. Only an admin can edit it after the sprint starts.
               </p>
@@ -399,6 +405,7 @@ export function NoteFullScreenCreate({
               isAdmin={isAdmin}
               canStartSprint={canStartSprint}
               canEndSprint={canEndSprint}
+              hideAssignees={hideAssignees}
               projectId={projectId}
               sprintTasks={sprintTasks}
               onSprintStatusChange={setSprintStatus}

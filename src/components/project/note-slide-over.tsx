@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -8,15 +8,24 @@ import { useScrollLock } from "@/hooks/use-scroll-lock";
 
 const HEADER_LEFT_SLOT = "data-sprint-doc-header-left";
 
-/** Renders in the slide-over header, on the right, when that slot exists. */
+/** Renders in the nearest slide-over header, on the right, when that slot exists. */
 export function SprintDocHeaderLeft({ children }: { children: ReactNode }) {
+  const probe = useRef<HTMLSpanElement>(null);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   useLayoutEffect(() => {
-    setSlot(document.querySelector(`[${HEADER_LEFT_SLOT}]`));
+    const root = probe.current?.closest("[data-slide-over]");
+    setSlot(
+      (root?.querySelector(`[${HEADER_LEFT_SLOT}]`) as HTMLElement | null) ??
+        document.querySelector(`[${HEADER_LEFT_SLOT}]`),
+    );
   }, []);
   if (!children) return null;
-  if (slot) return createPortal(children, slot);
-  return <>{children}</>;
+  return (
+    <>
+      <span ref={probe} hidden />
+      {slot ? createPortal(children, slot) : children}
+    </>
+  );
 }
 
 const SLIDE_OVER_THEME_COLOR = "#1c1c1e";
@@ -32,6 +41,7 @@ export function NoteSlideOver({
   children,
   className,
   bodyClassName,
+  allowOverflowX = false,
 }: {
   title: ReactNode;
   headerRight?: ReactNode;
@@ -39,6 +49,8 @@ export function NoteSlideOver({
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
+  /** Let the body scroll sideways (road map in a slide-over). */
+  allowOverflowX?: boolean;
 }) {
   useScrollLock(true);
 
@@ -70,7 +82,7 @@ export function NoteSlideOver({
     >
       <div
         className={cn(
-          "relative z-10 flex h-full min-h-0 w-full flex-col overscroll-none bg-background",
+          "relative z-10 flex h-full min-h-0 min-w-0 w-full flex-col overscroll-none bg-background",
           "animate-in slide-in-from-right duration-200",
           className,
         )}
@@ -97,8 +109,12 @@ export function NoteSlideOver({
           </div>
         </header>
         <div
+          data-allow-overflow-x={allowOverflowX ? "" : undefined}
           className={cn(
-            "min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background",
+            "min-h-0 min-w-0 flex-1 overscroll-contain bg-background",
+            allowOverflowX
+              ? "overflow-x-scroll overflow-y-hidden"
+              : "overflow-y-auto",
             bodyClassName,
           )}
         >
