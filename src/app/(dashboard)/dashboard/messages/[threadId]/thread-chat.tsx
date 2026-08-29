@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, Fragment } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Paperclip,
@@ -148,7 +149,7 @@ function parseProjectTab(
   return "dashboard";
 }
 
-function panelFromLocation(projectId?: string): ThreadPanel {
+function panelFromLocation(projectId?: string | null): ThreadPanel {
   if (typeof window === "undefined") return "chat";
   const panel = parseThreadPanel(new URLSearchParams(window.location.search).get("panel"));
   if (panel === "project" && !projectId) return "chat";
@@ -243,8 +244,8 @@ export function ThreadChat({
   /** Scroll to this message after open (inbox Important tab). */
   focusMessageId?: string;
   /** Restore a slide-over after refresh (`?panel=`). */
-  initialPanel?: string;
-  initialProjectTab?: string;
+  initialPanel?: string | null;
+  initialProjectTab?: string | null;
 }) {
   const threadKey = threadIdFromTarget(target);
   const cached = threadKey ? peekThreadCache(threadKey) : null;
@@ -399,6 +400,9 @@ export function ThreadChat({
     closeSearch,
   } = useThreadSearch({ messages, scrollToMessage, pendingFocusRef });
 
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const closeThreadPanels = useCallback(() => {
     closeSearch();
     setPeopleOpen(false);
@@ -414,12 +418,24 @@ export function ThreadChat({
         onTabChange: setProjectTab,
         onClose: closeThreadPanels,
         instant: initialPanel === "project",
+        router,
+        pathname,
+        searchParams,
       });
     } else {
       unmountThreadProjectOverlay();
     }
     return () => unmountThreadProjectOverlay();
-  }, [view, projectTab, target.projectId, closeThreadPanels, initialPanel]);
+  }, [
+    view,
+    projectTab,
+    target.projectId,
+    closeThreadPanels,
+    initialPanel,
+    router,
+    pathname,
+    searchParams,
+  ]);
   const openSearch = useCallback(() => {
     if (searchOpen) {
       closeThreadPanels();

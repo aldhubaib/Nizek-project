@@ -1,6 +1,14 @@
 "use client";
 
 import { createRoot, type Root } from "react-dom/client";
+import {
+  AppRouterContext,
+  type AppRouterInstance,
+} from "next/dist/shared/lib/app-router-context.shared-runtime";
+import {
+  PathnameContext,
+  SearchParamsContext,
+} from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { Button } from "@/components/ui/button";
 import { ClientProjectPanel } from "@/components/messages/client-project-panel";
 import { NoteSlideOver } from "@/components/project/note-slide-over";
@@ -13,6 +21,9 @@ export type ThreadProjectOverlayProps = {
   onTabChange: (tab: ProjectTab) => void;
   onClose: () => void;
   instant?: boolean;
+  router: AppRouterInstance;
+  pathname: string;
+  searchParams: URLSearchParams;
 };
 
 let host: HTMLDivElement | null = null;
@@ -26,36 +37,45 @@ function Overlay({
   onTabChange,
   onClose,
   instant,
+  router,
+  pathname,
+  searchParams,
 }: ThreadProjectOverlayProps) {
   return (
-    <NoteSlideOver
-      title="My project"
-      onClose={onClose}
-      instant={instant}
-      allowOverflowX={tab === "roadmap"}
-      bodyClassName={
-        tab === "roadmap"
-          ? undefined
-          : "flex min-h-0 min-w-0 flex-col overflow-hidden"
-      }
-      headerRight={
-        <Button
-          type="button"
-          size="sm"
-          onClick={() =>
-            onTabChange(tab === "dashboard" ? "roadmap" : "dashboard")
-          }
-        >
-          {tab === "dashboard" ? "Road map" : "Dashboard"}
-        </Button>
-      }
-    >
-      <ClientProjectPanel
-        projectId={projectId}
-        tab={tab}
-        onTabChange={onTabChange}
-      />
-    </NoteSlideOver>
+    <AppRouterContext.Provider value={router}>
+      <PathnameContext.Provider value={pathname}>
+        <SearchParamsContext.Provider value={searchParams}>
+          <NoteSlideOver
+            title="My project"
+            onClose={onClose}
+            instant={instant}
+            allowOverflowX={tab === "roadmap"}
+            bodyClassName={
+              tab === "roadmap"
+                ? undefined
+                : "flex min-h-0 min-w-0 flex-col overflow-hidden"
+            }
+            headerRight={
+              <Button
+                type="button"
+                size="sm"
+                onClick={() =>
+                  onTabChange(tab === "dashboard" ? "roadmap" : "dashboard")
+                }
+              >
+                {tab === "dashboard" ? "Road map" : "Dashboard"}
+              </Button>
+            }
+          >
+            <ClientProjectPanel
+              projectId={projectId}
+              tab={tab}
+              onTabChange={onTabChange}
+            />
+          </NoteSlideOver>
+        </SearchParamsContext.Provider>
+      </PathnameContext.Provider>
+    </AppRouterContext.Provider>
   );
 }
 

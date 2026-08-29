@@ -48,7 +48,7 @@ export async function brandingIconResponse(
       ? await renderPwaFileFromSource(fallbackFile, source)
       : null;
     if (rendered) {
-      return new NextResponse(rendered.bytes, {
+      return new NextResponse(new Uint8Array(rendered.bytes), {
         headers: {
           "Content-Type": rendered.contentType,
           "Cache-Control": cacheControl,
@@ -81,7 +81,7 @@ export async function brandingIconResponse(
     const buf = await readFile(
       join(process.cwd(), "public", "branding-defaults", fallbackFile),
     );
-    return new NextResponse(buf, {
+    return new NextResponse(new Uint8Array(buf), {
       headers: { "Content-Type": contentType, "Cache-Control": cacheControl },
     });
   } catch {
