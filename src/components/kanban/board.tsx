@@ -134,7 +134,15 @@ export function KanbanBoard({
   const user = useCurrentUser();
   const cent = useCentrifugo();
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
-  const [pendingMove, setPendingMove] = useState<{ taskId: string; fromStage: Stage; toStage: Stage; order: number; assigneeName: string | null; assigneeAvatar: string | null } | null>(null);
+  const [pendingMove, setPendingMove] = useState<{
+    taskId: string;
+    fromStage: Stage;
+    toStage: Stage;
+    order: number;
+    assigneeName: string | null;
+    assigneeAvatar: string | null;
+    missingEstimate?: boolean;
+  } | null>(null);
   const [pendingProof, setPendingProof] = useState<{ taskId: string; taskTitle: string; order: number } | null>(null);
   const [pendingDecline, setPendingDecline] = useState<{ taskId: string; fromStage: Stage; mentionName: string | null; mentionAvatar: string | null } | null>(null);
   const [assignTarget, setAssignTarget] = useState<{ taskId: string; assigneeName: string | null; assigneeAvatar: string | null } | null>(null);
@@ -495,9 +503,18 @@ export function KanbanBoard({
       return;
     }
 
-    const checkpoint = getCheckpoint(fromStage, targetStage);
+    const missingEstimate = !(task.estimatedMinutes != null && task.estimatedMinutes > 0);
+    const checkpoint = getCheckpoint(fromStage, targetStage, { missingEstimate });
     if (checkpoint) {
-      setPendingMove({ taskId: activeId, fromStage, toStage: targetStage, order: task.order, assigneeName: task.assignee?.name ?? null, assigneeAvatar: task.assignee?.imageUrl ?? null });
+      setPendingMove({
+        taskId: activeId,
+        fromStage,
+        toStage: targetStage,
+        order: task.order,
+        assigneeName: task.assignee?.name ?? null,
+        assigneeAvatar: task.assignee?.imageUrl ?? null,
+        missingEstimate,
+      });
       return;
     }
 
@@ -520,6 +537,17 @@ export function KanbanBoard({
       } else if (msg === "PROOF_REQUIRED") {
         const current = useKanbanStore.getState().tasks.find((t) => t.id === taskId);
         setPendingProof({ taskId, taskTitle: current?.title ?? "Task", order });
+      } else if (msg === "ESTIMATE_REQUIRED") {
+        const current = useKanbanStore.getState().tasks.find((t) => t.id === taskId);
+        setPendingMove({
+          taskId,
+          fromStage: (current?.stage as Stage) ?? "READY_FOR_DEV",
+          toStage: stage,
+          order,
+          assigneeName: current?.assignee?.name ?? null,
+          assigneeAvatar: current?.assignee?.imageUrl ?? null,
+          missingEstimate: true,
+        });
       } else if (msg.includes("permission") || msg.includes("Permission")) {
         setPermissionError(msg);
       } else {
@@ -675,7 +703,9 @@ export function KanbanBoard({
       ) : null}
 
       {pendingMove && (() => {
-        const checkpoint = getCheckpoint(pendingMove.fromStage, pendingMove.toStage);
+        const checkpoint = getCheckpoint(pendingMove.fromStage, pendingMove.toStage, {
+          missingEstimate: pendingMove.missingEstimate,
+        });
         return checkpoint ? (
           <StageConfirmDialog
             checkpoint={checkpoint}

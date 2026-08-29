@@ -373,14 +373,17 @@ export function CompletedSprintsTab({
       sprintName,
       sprintCount: nextSprintCount(task, nextSprintId),
       ...(nextSprintId
-        ? { estimatedMinutes: estimatedMinutes ?? null, stage: "NEW_REQUEST" }
+        ? {
+            stage: "NEW_REQUEST",
+            ...(estimatedMinutes !== undefined ? { estimatedMinutes } : {}),
+          }
         : { assignee: null, estimatedMinutes: null }),
     });
     bumpSprintCount(prevSprintId, -1);
     bumpSprintCount(nextSprintId, 1);
     startTransition(async () => {
       try {
-        await setTaskSprint(task.id, nextSprintId, estimatedMinutes ?? null);
+        await setTaskSprint(task.id, nextSprintId, estimatedMinutes);
         router.refresh();
       } catch (err) {
         updateTask(task.id, {
@@ -920,11 +923,11 @@ export function CompletedSprintsTab({
       onOpenChange={(open) => {
         if (!open) setAddToActive(null);
       }}
-      onConfirm={(estimatedMinutes) => {
+      onConfirm={() => {
         if (!addToActive) return;
         const pendingAdd = addToActive;
         setAddToActive(null);
-        assignTaskToSprint(pendingAdd.task, pendingAdd.sprint.id, estimatedMinutes);
+        assignTaskToSprint(pendingAdd.task, pendingAdd.sprint.id);
       }}
     />
     {deletingSprint ? (

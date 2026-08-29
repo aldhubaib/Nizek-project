@@ -456,9 +456,9 @@ export async function moveTask(data: {
       if (!proof) return { success: false, error: "PROOF_REQUIRED" };
     }
 
-    const isEnteringDev = oldStage !== "READY_FOR_DEV" && targetStage === "READY_FOR_DEV";
+    const isEnteringDev = oldStage !== "IN_DEVELOPMENT" && targetStage === "IN_DEVELOPMENT";
 
-    if (!isAdmin && isEnteringDev && !task.estimatedMinutes && !data.estimatedMinutes) {
+    if (isEnteringDev && !task.estimatedMinutes && !data.estimatedMinutes) {
       return { success: false, error: "ESTIMATE_REQUIRED" };
     }
 

@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,6 @@ interface TaskPreview {
   taskType: string;
   taskNumber: number;
   stage: string;
-  estimatedMinutes?: number | null;
 }
 
 interface Props {
@@ -23,7 +21,7 @@ interface Props {
   task: TaskPreview | null;
   pending?: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (estimatedMinutes: number) => void;
+  onConfirm: () => void;
 }
 
 export function AddToActiveSprintDialog({
@@ -35,22 +33,9 @@ export function AddToActiveSprintDialog({
   onOpenChange,
   onConfirm,
 }: Props) {
-  const [estimate, setEstimate] = useState("");
-
-  useEffect(() => {
-    if (!open) {
-      setEstimate("");
-      return;
-    }
-    const existing = task?.estimatedMinutes;
-    setEstimate(existing != null && existing > 0 ? String(existing) : "");
-  }, [open, task?.id, task?.estimatedMinutes]);
-
   if (!open || !task) return null;
 
   const stage = taskStageBadge(task.stage);
-  const currentEstimate = estimate ? parseInt(estimate, 10) : null;
-  const hasValidEstimate = currentEstimate != null && !isNaN(currentEstimate) && currentEstimate > 0;
 
   return (
     <>
@@ -87,38 +72,6 @@ export function AddToActiveSprintDialog({
               <span className="min-w-0 flex-1 truncate text-s">{task.title}</span>
               <StatusBadge config={stage} />
             </Link>
-
-            <div className="mt-4 space-y-2">
-              <label className="text-s font-medium text-foreground">
-                Estimation in minutes <span className="text-destructive">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min="1"
-                  name={`sprint-estimate-${task.id}`}
-                  autoComplete="off"
-                  inputMode="numeric"
-                  value={estimate}
-                  onChange={(e) => setEstimate(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && hasValidEstimate) {
-                      e.preventDefault();
-                      onConfirm(currentEstimate!);
-                    }
-                  }}
-                  placeholder="e.g. 120"
-                  autoFocus
-                  className="w-full rounded-lg border border-primary/40 bg-background py-2.5 pl-3 pr-10 text-s text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-colors [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                  min
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground/60">
-                All tasks in an active sprint must have an estimation.
-              </p>
-            </div>
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/30 px-5 py-3">
@@ -130,11 +83,7 @@ export function AddToActiveSprintDialog({
             >
               Cancel
             </Button>
-            <Button
-              size="sm"
-              onClick={() => hasValidEstimate && onConfirm(currentEstimate!)}
-              disabled={pending || !hasValidEstimate}
-            >
+            <Button size="sm" onClick={onConfirm} disabled={pending}>
               Add to sprint
             </Button>
           </div>

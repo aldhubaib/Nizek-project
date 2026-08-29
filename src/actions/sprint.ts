@@ -576,8 +576,8 @@ export async function setTaskSprint(
       ...(sprintId
         ? {
             stage: "NEW_REQUEST",
-            estimatedMinutes: estimatedMinutes ?? null,
             unplannedInSprint: sprintStatus === "ACTIVE",
+            ...(estimatedMinutes !== undefined ? { estimatedMinutes } : {}),
           }
         : { assigneeId: null, estimatedMinutes: null, unplannedInSprint: false }),
     },

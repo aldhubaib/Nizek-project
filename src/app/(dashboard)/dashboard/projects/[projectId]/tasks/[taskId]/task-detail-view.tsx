@@ -414,7 +414,9 @@ export function TaskDetailPage({
       setShowProof(true);
       return;
     }
-    const checkpoint = getCheckpoint(taskStage, nextStage.id);
+    const checkpoint = getCheckpoint(taskStage, nextStage.id, {
+      missingEstimate: !(initialTask.estimatedMinutes != null && initialTask.estimatedMinutes > 0),
+    });
     if (checkpoint) { setShowConfirm(true); return; }
     executeMove();
   }
@@ -905,7 +907,9 @@ export function TaskDetailPage({
 
       {/* Stage confirm dialog */}
       {showConfirm && nextStage && (() => {
-        const checkpoint = getCheckpoint(taskStage, nextStage.id);
+        const checkpoint = getCheckpoint(taskStage, nextStage.id, {
+          missingEstimate: !(initialTask.estimatedMinutes != null && initialTask.estimatedMinutes > 0),
+        });
         return checkpoint ? (
           <StageConfirmDialog
             checkpoint={checkpoint}

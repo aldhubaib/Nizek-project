@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useCurrentUser } from "@/components/current-user-provider";
 import { ArrowRight, UserCheck, ShieldAlert } from "lucide-react";
@@ -40,7 +40,21 @@ const CHECKPOINTS: Partial<Record<string, CheckpointConfig>> = {
   },
 };
 
-export function getCheckpoint(fromStage: Stage, toStage: Stage): CheckpointConfig | null {
+export function getCheckpoint(
+  fromStage: Stage,
+  toStage: Stage,
+  opts?: { missingEstimate?: boolean },
+): CheckpointConfig | null {
+  const enteringDev = fromStage !== "IN_DEVELOPMENT" && toStage === "IN_DEVELOPMENT";
+  if (enteringDev && opts?.missingEstimate) {
+    return {
+      title: "Estimation required",
+      message: "Enter an estimation before moving this task to In Development.",
+      confirmLabel: "Start development",
+      confirmColor: "bg-primary hover:bg-primary/90",
+      requiresEstimate: true,
+    };
+  }
   return CHECKPOINTS[`${fromStage}→${toStage}`] ?? null;
 }
 
@@ -52,15 +66,6 @@ interface Props {
   onCancel: () => void;
 }
 
-const PRESETS = [
-  { label: "30m", minutes: 30 },
-  { label: "1h", minutes: 60 },
-  { label: "2h", minutes: 120 },
-  { label: "4h", minutes: 240 },
-  { label: "1d", minutes: 480 },
-  { label: "2d", minutes: 960 },
-];
-
 export function StageConfirmDialog({
   checkpoint,
   currentAssigneeName,
@@ -70,20 +75,29 @@ export function StageConfirmDialog({
 }: Props) {
   const user = useCurrentUser();
   const [confirming, setConfirming] = useState(false);
-  const [selectedMinutes, setSelectedMinutes] = useState(0);
+  const [estimate, setEstimate] = useState("");
   const [estimateError, setEstimateError] = useState(false);
+
+  useEffect(() => {
+    setEstimate("");
+    setEstimateError(false);
+  }, [checkpoint.title]);
+
+  const currentEstimate = estimate ? parseInt(estimate, 10) : null;
+  const hasValidEstimate =
+    currentEstimate != null && !isNaN(currentEstimate) && currentEstimate > 0;
 
   const me = user?.name || "You";
   const meAvatar = user?.imageUrl || null;
 
   function handleConfirm() {
     if (checkpoint.requiresEstimate) {
-      if (selectedMinutes <= 0) {
+      if (!hasValidEstimate) {
         setEstimateError(true);
         return;
       }
       setConfirming(true);
-      onConfirm(selectedMinutes);
+      onConfirm(currentEstimate!);
     } else {
       setConfirming(true);
       onConfirm();
@@ -160,29 +174,41 @@ export function StageConfirmDialog({
         </div>
 
         {checkpoint.requiresEstimate && (
-          <div className="mt-4">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
-              Estimated Time
+          <div className="mt-4 space-y-2">
+            <label className="text-s font-medium text-foreground">
+              Estimation in minutes <span className="text-destructive">*</span>
             </label>
-            <div className="flex flex-wrap gap-xs">
-              {PRESETS.map((p) => (
-                <button
-                  key={p.label}
-                  type="button"
-                  onClick={() => { setSelectedMinutes(p.minutes); setEstimateError(false); }}
-                  className={`h-7 rounded-md border px-2.5 text-s font-medium transition-colors ${
-                    selectedMinutes === p.minutes
-                      ? "bg-primary/20 border-primary/40 text-primary"
-                      : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
+            <div className="relative">
+              <input
+                type="number"
+                min="1"
+                autoComplete="off"
+                inputMode="numeric"
+                value={estimate}
+                onChange={(e) => {
+                  setEstimate(e.target.value);
+                  setEstimateError(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleConfirm();
+                  }
+                }}
+                placeholder="e.g. 120"
+                autoFocus
+                className="w-full rounded-lg border border-primary/40 bg-background py-2.5 pl-3 pr-10 text-s text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-colors [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                min
+              </span>
             </div>
+            <p className="text-xs text-muted-foreground/60">
+              Required before work starts in In Development.
+            </p>
             {estimateError && (
-              <p className="text-xs text-destructive mt-1.5 font-medium">
-                Please select an estimated time before proceeding.
+              <p className="text-xs font-medium text-destructive">
+                Enter an estimation in minutes.
               </p>
             )}
           </div>
