@@ -2,14 +2,21 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Users, Mail, Clock, FolderKanban, Search, X, Ban, Trash2, ShieldCheck, Shield, AlertTriangle, ArrowRightLeft, ChevronDown, Check, Eye, Pencil } from "lucide-react";
+import { Mail, Clock, FolderKanban, Search, X, Ban, Trash2, ShieldCheck, Shield, AlertTriangle, ChevronDown, Eye, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddButton } from "@/components/add-button";
+import { PageHeaderActions } from "@/components/page-header-actions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { OverflowTabBar } from "@/components/overflow-tab-bar";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { outlineBadge } from "@/lib/task-label";
 import { formatDistanceToNow } from "date-fns";
-import { updateUserAdmin, updateUserEmail, updateUserName, inviteToTeam, toggleBlockUser, cancelTeamInvite, getUserTaskSummary, updatePendingTeamInviteName } from "@/actions/team";
-import { updateMemberRole, removeMember, updateInvitationName } from "@/actions/project";
+import { updateUserAdmin, updateUserName, updateUserProfile, inviteToTeam, toggleBlockUser, cancelTeamInvite, getUserTaskSummary, updatePendingTeamInviteName } from "@/actions/team";
+import { updateMemberRole, removeMember, updateInvitationName, addMemberToProject } from "@/actions/project";
 import { startImpersonation, startImpersonationByEmail } from "@/actions/impersonation";
 import { joinDisplayName } from "@/lib/display-name";
+import { MemberProfileFields, type GenderChoice } from "@/components/team/member-profile-fields";
 
 interface MemberProject {
   id: string;
@@ -28,6 +35,8 @@ interface Member {
   imageUrl: string | null;
   systemRole: string;
   blocked: boolean;
+  gender: "MALE" | "FEMALE" | null;
+  excludeFromAlias: boolean;
   createdAt: Date;
   projects: MemberProject[];
   teams: { id: string; name: string }[];
@@ -59,6 +68,7 @@ interface GlobalRole {
   id: string;
   name: string;
   isAdmin: boolean;
+  isClient?: boolean;
   _count: { members: number };
 }
 
@@ -80,9 +90,12 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [changingRole, setChangingRole] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
+  const [projectsMemberId, setProjectsMemberId] = useState<string | null>(null);
   const [inviteFirstName, setInviteFirstName] = useState("");
   const [inviteLastName, setInviteLastName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteGender, setInviteGender] = useState<GenderChoice>("");
+  const [inviteExcludeFromAlias, setInviteExcludeFromAlias] = useState(false);
   const [inviteIsAdmin, setInviteIsAdmin] = useState(false);
   const [inviteTeamId, setInviteTeamId] = useState("");
   const [inviteProjects, setInviteProjects] = useState<{ projectId: string; roleId: string }[]>([]);
@@ -92,6 +105,8 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
     setInviteFirstName("");
     setInviteLastName("");
     setInviteEmail("");
+    setInviteGender("");
+    setInviteExcludeFromAlias(false);
     setInviteIsAdmin(false);
     setInviteTeamId("");
     setInviteProjects([]);
@@ -110,7 +125,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
-    if (!inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim()) return;
+    if (!inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim() || !inviteGender) return;
     if (inviteProjects.some((p) => !p.projectId || !p.roleId)) {
       alert("Select a project and role for every row, or remove the empty rows.");
       return;
@@ -121,6 +136,10 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
         email: inviteEmail.trim(),
         firstName: inviteFirstName.trim(),
         lastName: inviteLastName.trim(),
+        gender: inviteGender,
+        excludeFromAlias:
+          inviteExcludeFromAlias ||
+          inviteProjects.some((p) => roles.find((r) => r.id === p.roleId)?.isClient),
         systemRole: inviteIsAdmin ? "ADMIN" : "DEVELOPER",
         teamId: inviteTeamId || undefined,
         projects: inviteProjects.length > 0 ? inviteProjects : undefined,
@@ -135,31 +154,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
   }
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [emailEdit, setEmailEdit] = useState<{
-    userId: string;
-    value: string;
-    error: string | null;
-    saving: boolean;
-  } | null>(null);
-
-  async function handleEmailSave() {
-    if (!emailEdit || emailEdit.saving) return;
-    setEmailEdit({ ...emailEdit, error: null, saving: true });
-    try {
-      const res = await updateUserEmail(emailEdit.userId, emailEdit.value);
-      if (res?.error) {
-        setEmailEdit({ ...emailEdit, error: res.error, saving: false });
-        return;
-      }
-      setEmailEdit(null);
-    } catch (err) {
-      setEmailEdit({
-        ...emailEdit,
-        error: (err as Error).message || "Failed to update email",
-        saving: false,
-      });
-    }
-  }
+  const [editMemberId, setEditMemberId] = useState<string | null>(null);
 
   const [nameEdit, setNameEdit] = useState<{
     kind: "member" | "invitation" | "team";
@@ -367,35 +362,22 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
     joinDisplayName(inv.firstName, inv.lastName).toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalPending = invitations.length + teamInvites.length;
+  const teamFilterItems = [
+    { id: "all", label: "All teams", count: members.length },
+    ...allTeams.map((t) => ({
+      id: t.id,
+      label: t.name,
+      count: members.filter((m) => m.teams.some((mt) => mt.id === t.id)).length,
+    })),
+  ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-s text-muted-foreground">
-            <Users className="w-4 h-4" />
-            <span>{members.length} member{members.length !== 1 ? "s" : ""}</span>
-          </div>
-          {totalPending > 0 && (
-            <div className="flex items-center gap-2 text-s text-orange">
-              <Mail className="w-4 h-4" />
-              <span>{totalPending} pending</span>
-            </div>
-          )}
-          <div className="flex items-center gap-2 text-s text-muted-foreground/60">
-            <Shield className="w-4 h-4" />
-            <span>{roles.length} role{roles.length !== 1 ? "s" : ""}</span>
-          </div>
-        </div>
-        {isAdmin && (
-          <AddButton
-            label="Add Member"
-            onClick={() => setShowInvite(true)}
-          />
-        )}
-      </div>
-
+    <div className="min-w-0 max-w-full space-y-6">
+      {isAdmin && (
+        <PageHeaderActions>
+          <AddButton label="Add Member" onClick={() => setShowInvite(true)} />
+        </PageHeaderActions>
+      )}
       {/* Invite Dialog */}
       {showInvite && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay">
@@ -445,6 +427,16 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                   className="w-full h-9 px-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
                 />
               </div>
+              <MemberProfileFields
+                gender={inviteGender}
+                onGenderChange={setInviteGender}
+                excludeFromAlias={
+                  inviteExcludeFromAlias ||
+                  inviteProjects.some((p) => roles.find((r) => r.id === p.roleId)?.isClient)
+                }
+                onExcludeFromAliasChange={setInviteExcludeFromAlias}
+                excludeLocked={inviteProjects.some((p) => roles.find((r) => r.id === p.roleId)?.isClient)}
+              />
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Team</label>
                 <select
@@ -553,7 +545,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                 </button>
                 <button
                   type="submit"
-                  disabled={inviting || !inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim() || inviteProjects.some((p) => !p.projectId || !p.roleId)}
+                  disabled={inviting || !inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim() || !inviteGender || inviteProjects.some((p) => !p.projectId || !p.roleId)}
                   className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-s font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {inviting ? "Adding..." : "Allow Sign In"}
@@ -636,515 +628,668 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
         </div>
       )}
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <input
-          type="text"
-          placeholder="Search by name or email..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full h-9 ps-9 pe-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
-        />
+      <div className="flex w-full min-w-0 max-w-full flex-col gap-3 overflow-hidden">
+        <div className="relative w-full min-w-0">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Search by name or email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="max-w-full ps-8"
+          />
+        </div>
+        {allTeams.length > 0 && (
+          <OverflowTabBar
+            items={teamFilterItems}
+            value={teamFilter}
+            onChange={setTeamFilter}
+            justify="start"
+            mobileMaxVisible={2}
+            className="w-full min-w-0 overflow-hidden"
+          />
+        )}
       </div>
 
-      {/* Team filter */}
-      {allTeams.length > 0 && (
-        <div className="flex items-center gap-xs flex-wrap -mt-2">
-          <button
-            type="button"
-            onClick={() => setTeamFilter("all")}
-            className={cn(
-              "px-2.5 py-1 rounded-full text-xs font-medium border transition-colors",
-              teamFilter === "all"
-                ? "bg-primary/15 border-primary/40 text-primary"
-                : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
-            )}
-          >
-            All teams
-          </button>
-          {allTeams.map((t) => {
-            const count = members.filter((m) => m.teams.some((mt) => mt.id === t.id)).length;
+      <div className="space-y-4">
+        <h2 className="text-s font-semibold">Team Members</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filteredMembers.map((member) => {
+            const initials =
+              member.name
+                ?.split(" ")
+                .map((n) => n[0])
+                .join("") ?? member.email[0]?.toUpperCase();
+            const isSelf = member.id === currentUserId;
+            const roleLabel = member.systemRole === "ADMIN" ? "Admin" : "Member";
+
             return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTeamFilter(teamFilter === t.id ? "all" : t.id)}
-                className={cn(
-                  "px-2.5 py-1 rounded-full text-xs font-medium border transition-colors flex items-center gap-1",
-                  teamFilter === t.id
-                    ? "bg-primary/15 border-primary/40 text-primary"
-                    : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
-                )}
+              <div
+                key={member.id}
+                className="rounded-lg bg-card border border-border p-4 hover:border-muted-foreground/20 transition-colors"
               >
-                {t.name}
-                <span className={cn("text-xs", teamFilter === t.id ? "text-primary/70" : "text-muted-foreground/50")}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Members */}
-      <div>
-        <h2 className="text-s font-semibold text-foreground mb-3">Members</h2>
-        <div className="space-y-1">
-          {filteredMembers.map((member) => (
-            <div
-              key={member.id}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors group"
-            >
-              {member.imageUrl ? (
-                <img src={member.imageUrl} alt="" className="w-8 h-8 rounded-full shrink-0" />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
-                  {(member.name?.[0] || member.email[0]).toUpperCase()}
-                </div>
-              )}
-
-              <div className="flex-1 min-w-0">
-                {nameEdit?.kind === "member" && nameEdit.id === member.id ? (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleNameSave();
-                    }}
-                    className="flex items-center gap-xs mb-1"
-                  >
-                    <input
-                      type="text"
-                      value={nameEdit.value}
-                      autoFocus
-                      disabled={nameEdit.saving}
-                      onChange={(e) => setNameEdit({ ...nameEdit, value: e.target.value, error: null })}
-                      onKeyDown={(e) => e.key === "Escape" && setNameEdit(null)}
-                      className="h-6 w-56 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-muted-foreground/50 disabled:opacity-50"
-                    />
-                    <button
-                      type="submit"
-                      disabled={nameEdit.saving}
-                      className="h-6 px-2 rounded-md text-xs font-medium bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50"
-                    >
-                      {nameEdit.saving ? "Saving..." : "Save"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNameEdit(null)}
-                      disabled={nameEdit.saving}
-                      className="h-6 px-2 rounded-md text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                    {nameEdit.error && <span className="text-xs text-destructive">{nameEdit.error}</span>}
-                  </form>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="text-s font-medium text-foreground truncate">
-                      {member.name || member.email}
-                    </span>
-                    {isAdmin && (
-                      <button
-                        onClick={() =>
-                          setNameEdit({
-                            kind: "member",
-                            id: member.id,
-                            value: member.name ?? "",
-                            error: null,
-                            saving: false,
-                          })
-                        }
-                        title="Edit name"
-                        className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors"
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </button>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-s min-w-0">
+                    {member.imageUrl ? (
+                      <img
+                        src={member.imageUrl}
+                        alt=""
+                        className="w-9 h-9 rounded-full object-cover shrink-0"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-s font-semibold text-primary shrink-0">
+                        {initials}
+                      </div>
                     )}
-                    {member.systemRole === "ADMIN" && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-purple bg-purple/15 border-purple/30">
-                        Admin
-                      </span>
-                    )}
-                    {member.blocked && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-destructive bg-destructive/15 border-destructive/30">
-                        Blocked
-                      </span>
-                    )}
-                  </div>
-                )}
-                {emailEdit?.userId === member.id ? (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleEmailSave();
-                    }}
-                    className="flex items-center gap-xs mt-1"
-                  >
-                    <input
-                      type="email"
-                      value={emailEdit.value}
-                      autoFocus
-                      disabled={emailEdit.saving}
-                      onChange={(e) => setEmailEdit({ ...emailEdit, value: e.target.value, error: null })}
-                      onKeyDown={(e) => e.key === "Escape" && setEmailEdit(null)}
-                      className="h-6 w-56 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-muted-foreground/50 disabled:opacity-50"
-                    />
-                    <button
-                      type="submit"
-                      disabled={emailEdit.saving}
-                      className="h-6 px-2 rounded-md text-xs font-medium bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50"
-                    >
-                      {emailEdit.saving ? "Saving..." : "Save"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEmailEdit(null)}
-                      disabled={emailEdit.saving}
-                      className="h-6 px-2 rounded-md text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                    <span
-                      className="text-xs text-muted-foreground/60"
-                      title="Google is the only sign-in method, so the new address has to be a Google account. Their old address keeps working either way."
-                    >
-                      {emailEdit.error ? (
-                        <span className="text-destructive">{emailEdit.error}</span>
-                      ) : (
-                        "Must be a Google account — the old one keeps working too"
-                      )}
-                    </span>
-                  </form>
-                ) : (
-                  <div className="flex items-center gap-3 mt-0.5">
-                    <span className="flex items-center gap-1 min-w-0">
-                      <span className="text-xs text-muted-foreground truncate">{member.email}</span>
-                      {isAdmin && (
-                        <button
-                          onClick={() =>
-                            setEmailEdit({ userId: member.id, value: member.email, error: null, saving: false })
-                          }
-                          title="Add another email"
-                          className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors"
-                        >
-                          <Pencil className="w-3 h-3" />
-                        </button>
-                      )}
-                    </span>
-                    <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      Joined {formatDistanceToNow(new Date(member.createdAt), { addSuffix: true })}
-                    </span>
-                  </div>
-                )}
-                {member.projects.length > 0 && (
-                  <div className="flex items-center gap-xs mt-1">
-                    <FolderKanban className="w-3 h-3 text-muted-foreground/50" />
-                    <div className="flex flex-wrap gap-1">
-                      {member.projects.map((p) =>
-                        isAdmin ? (
-                          <ProjectRoleChip
-                            key={p.id}
-                            project={p}
-                            roles={roles}
-                            userId={member.id}
-                            userName={member.name ?? member.email}
-                          />
-                        ) : (
-                          <span
-                            key={p.id}
-                            className="text-xs px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground"
-                          >
-                            {p.name}
-                            {p.roleName && (
-                              <span className="text-muted-foreground/50 ms-0.5">({p.roleName})</span>
-                            )}
-                          </span>
-                        ),
-                      )}
+                    <div className="min-w-0">
+                      <p className="text-s font-medium text-foreground truncate">
+                        {member.name || member.email}
+                        {isSelf && (
+                          <span className="ms-1 text-xs text-muted-foreground">(you)</span>
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">{member.email}</p>
+                      <p className="text-xs text-muted-foreground/50 flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3" />
+                        Joined {formatDistanceToNow(new Date(member.createdAt), { addSuffix: true })}
+                      </p>
                     </div>
                   </div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                {isAdmin && (
-                  <>
-                    {member.id !== currentUserId && !member.blocked && (
-                      <button
-                        onClick={() => handleSignInAs(member)}
-                        disabled={actionLoading === member.id}
-                        title={`Sign in as ${member.name ?? member.email}`}
-                        className="w-7 h-7 rounded-md flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
+                  {isAdmin && (
+                    <div className="flex items-center gap-0.5 shrink-0 -mt-0.5 -me-1">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setEditMemberId(member.id)}
+                        title="Edit member"
+                        className="text-muted-foreground/40 hover:text-foreground"
                       >
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                        <Pencil className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      </Button>
+                      {!isSelf && !member.blocked && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleSignInAs(member)}
+                          disabled={actionLoading === member.id}
+                          title={`Sign in as ${member.name ?? member.email}`}
+                          className="text-muted-foreground/40 hover:text-foreground"
+                        >
+                          <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleBlock(member.id)}
+                        disabled={actionLoading === member.id}
+                        title={member.blocked ? "Unblock user" : "Block user"}
+                        className={cn(
+                          "text-muted-foreground/40",
+                          member.blocked
+                            ? "hover:text-success"
+                            : "hover:text-destructive",
+                        )}
+                      >
+                        {member.blocked ? (
+                          <ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        ) : (
+                          <Ban className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {isAdmin && !isSelf ? (
                     <button
+                      type="button"
                       onClick={() => handleAdminToggle(member.id, member.systemRole !== "ADMIN")}
                       disabled={changingRole === member.id}
                       title={member.systemRole === "ADMIN" ? "Remove admin" : "Make admin"}
                       className={cn(
-                        "h-7 px-2.5 text-xs font-medium rounded-md border transition-colors disabled:opacity-50",
+                        "inline-flex h-7 items-center gap-xs rounded-full border px-2.5 text-xs font-medium transition-colors disabled:opacity-50",
                         member.systemRole === "ADMIN"
-                          ? "bg-purple/15 border-purple/30 text-purple hover:bg-purple/25"
-                          : "border-border text-muted-foreground hover:border-muted-foreground/40"
+                          ? "border-purple/30 bg-purple/15 text-purple hover:bg-purple/25"
+                          : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground",
                       )}
                     >
-                      {member.systemRole === "ADMIN" ? "Admin" : "Member"}
+                      <Shield className="w-3 h-3" strokeWidth={1.5} />
+                      {roleLabel}
                     </button>
-                    <button
-                      onClick={() => handleBlock(member.id)}
-                      disabled={actionLoading === member.id}
-                      title={member.blocked ? "Unblock user" : "Block user"}
-                      className={cn(
-                        "w-7 h-7 rounded-md flex items-center justify-center transition-colors disabled:opacity-50",
-                        member.blocked
-                          ? "bg-success/15 text-success hover:bg-success/25"
-                          : "bg-destructive/10 text-destructive hover:bg-destructive/20"
-                      )}
-                    >
-                      {member.blocked ? <ShieldCheck className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
-          {filteredMembers.length === 0 && (
-            <p className="text-s text-muted-foreground py-4 text-center">No members found.</p>
-          )}
-        </div>
-      </div>
+                  ) : (
+                    <StatusBadge
+                      size="sm"
+                      config={
+                        member.systemRole === "ADMIN"
+                          ? outlineBadge("Admin", "text-purple", "border-purple/30")
+                          : outlineBadge("Member", "text-muted-foreground", "border-border")
+                      }
+                      icon={Shield}
+                    />
+                  )}
+                  {member.blocked && (
+                    <StatusBadge
+                      size="sm"
+                      config={outlineBadge("Blocked", "text-destructive", "border-destructive/30")}
+                    />
+                  )}
+                </div>
 
-      {/* Pending Invitations */}
-      {(filteredTeamInvites.length > 0 || filteredInvitations.length > 0) && (
-        <div>
-          <h2 className="text-s font-semibold text-foreground mb-3">Awaiting Sign In</h2>
-          <div className="space-y-1">
-            {filteredTeamInvites.map((inv) => {
-              const displayName = joinDisplayName(inv.firstName, inv.lastName);
-              return (
-              <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors">
-                <div className="w-8 h-8 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
-                  <Mail className="w-3.5 h-3.5 text-orange" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  {nameEdit?.kind === "team" && nameEdit.id === inv.id ? (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        handleNameSave();
-                      }}
-                      className="flex items-center gap-xs mb-1"
-                    >
-                      <input
-                        type="text"
-                        value={nameEdit.value}
-                        autoFocus
-                        disabled={nameEdit.saving}
-                        onChange={(e) => setNameEdit({ ...nameEdit, value: e.target.value, error: null })}
-                        onKeyDown={(e) => e.key === "Escape" && setNameEdit(null)}
-                        className="h-6 w-56 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-muted-foreground/50 disabled:opacity-50"
-                      />
-                      <button type="submit" disabled={nameEdit.saving} className="h-6 px-2 rounded-md text-xs font-medium bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50">
-                        {nameEdit.saving ? "Saving..." : "Save"}
-                      </button>
-                      <button type="button" onClick={() => setNameEdit(null)} disabled={nameEdit.saving} className="h-6 px-2 rounded-md text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50">
-                        Cancel
-                      </button>
-                      {nameEdit.error && <span className="text-xs text-destructive">{nameEdit.error}</span>}
-                    </form>
-                  ) : (
-                    <span className="text-s font-medium text-foreground truncate flex items-center gap-1">
-                      <span className="truncate">{displayName || inv.email}</span>
-                      {isAdmin && (
-                        <button
-                          onClick={() =>
-                            setNameEdit({
-                              kind: "team",
-                              id: inv.id,
-                              value: displayName,
-                              error: null,
-                              saving: false,
-                            })
-                          }
-                          title="Edit name"
-                          className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors"
-                        >
-                          <Pencil className="w-3 h-3" />
-                        </button>
-                      )}
-                    </span>
-                  )}
-                  <div className="flex items-center gap-2 mt-0.5">
-                    {displayName && <span className="text-xs text-muted-foreground truncate">{inv.email}</span>}
-                    {inv.systemRole === "ADMIN" && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full border font-medium text-purple bg-purple/15 border-purple/30">Admin</span>
-                    )}
-                    {inv.team && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground">{inv.team.name}</span>
-                    )}
-                    <span className="text-xs text-muted-foreground/50">
-                      Added {formatDistanceToNow(new Date(inv.createdAt), { addSuffix: true })}
-                    </span>
-                  </div>
-                </div>
-                {isAdmin && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() => handleSignInAsEmail(inv.email)}
-                      disabled={actionLoading === inv.email || actionLoading === inv.id}
-                      title={`Sign in as ${inv.email}`}
-                      className="w-7 h-7 rounded-md flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => handleCancelInvite(inv.id)} disabled={actionLoading === inv.id} title="Remove from allowlist"
-                      className="w-7 h-7 rounded-md flex items-center justify-center bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-50">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-            })}
-            {filteredInvitations.map((inv) => {
-              const displayName = inv.name?.trim() || "";
-              return (
-              <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-card/60 transition-colors">
-                <div className="w-8 h-8 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
-                  <Mail className="w-3.5 h-3.5 text-orange" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  {nameEdit?.kind === "invitation" && nameEdit.id === inv.id ? (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        handleNameSave();
-                      }}
-                      className="flex items-center gap-xs mb-1"
-                    >
-                      <input
-                        type="text"
-                        value={nameEdit.value}
-                        autoFocus
-                        disabled={nameEdit.saving}
-                        onChange={(e) => setNameEdit({ ...nameEdit, value: e.target.value, error: null })}
-                        onKeyDown={(e) => e.key === "Escape" && setNameEdit(null)}
-                        className="h-6 w-56 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-muted-foreground/50 disabled:opacity-50"
-                      />
-                      <button type="submit" disabled={nameEdit.saving} className="h-6 px-2 rounded-md text-xs font-medium bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50">
-                        {nameEdit.saving ? "Saving..." : "Save"}
-                      </button>
-                      <button type="button" onClick={() => setNameEdit(null)} disabled={nameEdit.saving} className="h-6 px-2 rounded-md text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50">
-                        Cancel
-                      </button>
-                      {nameEdit.error && <span className="text-xs text-destructive">{nameEdit.error}</span>}
-                    </form>
-                  ) : (
-                    <span className="text-s font-medium text-foreground truncate flex items-center gap-1">
-                      <span className="truncate">{displayName || inv.email}</span>
-                      {isAdmin && (
-                        <button
-                          onClick={() =>
-                            setNameEdit({
-                              kind: "invitation",
-                              id: inv.id,
-                              projectId: inv.project.id,
-                              value: displayName,
-                              error: null,
-                              saving: false,
-                            })
-                          }
-                          title="Edit name"
-                          className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors"
-                        >
-                          <Pencil className="w-3 h-3" />
-                        </button>
-                      )}
-                    </span>
-                  )}
-                  <div className="flex items-center gap-2 mt-0.5">
-                    {displayName && <span className="text-xs text-muted-foreground truncate">{inv.email}</span>}
-                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground">{inv.project.name}</span>
-                    <span className={cn(
-                      "text-xs px-1.5 py-0.5 rounded-full border",
-                      inv.role === "ADMIN" ? "bg-primary/10 border-primary/20 text-primary" : "bg-card border-border text-muted-foreground"
-                    )}>
-                      {inv.projectRole?.name ?? inv.role}
-                    </span>
-                    <span className="text-xs text-muted-foreground/50">
-                      Added {formatDistanceToNow(new Date(inv.createdAt), { addSuffix: true })}
-                    </span>
-                  </div>
-                </div>
-                {isAdmin && (
+                {(isAdmin || member.projects.length > 0) && (
                   <button
-                    onClick={() => handleSignInAsEmail(inv.email)}
-                    disabled={actionLoading === inv.email}
-                    title={`Sign in as ${inv.email}`}
-                    className="w-7 h-7 rounded-md flex items-center justify-center bg-card border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50 shrink-0"
+                    type="button"
+                    onClick={() => setProjectsMemberId(member.id)}
+                    className="mt-3 flex w-full items-center gap-xs border-t border-border/50 pt-3 text-start text-xs text-muted-foreground transition-colors hover:text-foreground"
                   >
-                    <Eye className="w-3.5 h-3.5" />
+                    <FolderKanban className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+                    <span className="flex-1">
+                      {member.projects.length}{" "}
+                      {member.projects.length === 1 ? "project" : "projects"}
+                    </span>
+                    <ChevronDown className="h-3 w-3 text-muted-foreground/50" />
                   </button>
                 )}
               </div>
             );
+          })}
+        </div>
+        {filteredMembers.length === 0 && (
+          <p className="text-s text-muted-foreground py-8 text-center">No members found.</p>
+        )}
+      </div>
+
+      {(filteredTeamInvites.length > 0 || filteredInvitations.length > 0) && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Clock className="w-3.5 h-3.5 text-muted-foreground/50" />
+            <span className="text-xs font-medium text-muted-foreground/70">
+              Awaiting Sign In
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {filteredTeamInvites.map((inv) => {
+              const displayName = joinDisplayName(inv.firstName, inv.lastName);
+              return (
+                <div
+                  key={inv.id}
+                  className="rounded-lg bg-card border border-dashed border-border p-4"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-s min-w-0">
+                      <div className="w-9 h-9 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
+                        <Mail className="w-4 h-4 text-orange" strokeWidth={1.5} />
+                      </div>
+                      <div className="min-w-0">
+                        {nameEdit?.kind === "team" && nameEdit.id === inv.id ? (
+                          <NameEditRow
+                            value={nameEdit.value}
+                            saving={nameEdit.saving}
+                            error={nameEdit.error}
+                            onChange={(value) => setNameEdit({ ...nameEdit, value, error: null })}
+                            onSave={handleNameSave}
+                            onCancel={() => setNameEdit(null)}
+                          />
+                        ) : (
+                          <p className="text-s font-medium text-foreground truncate flex items-center gap-1">
+                            <span className="truncate">{displayName || inv.email}</span>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setNameEdit({
+                                    kind: "team",
+                                    id: inv.id,
+                                    value: displayName,
+                                    error: null,
+                                    saving: false,
+                                  })
+                                }
+                                title="Edit name"
+                                className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            )}
+                          </p>
+                        )}
+                        {displayName && (
+                          <p className="text-xs text-muted-foreground truncate">{inv.email}</p>
+                        )}
+                        <div className="flex items-center gap-xs mt-0.5">
+                          <StatusBadge
+                            size="sm"
+                            config={outlineBadge("Added", "text-orange", "border-orange/30")}
+                            icon={Clock}
+                          />
+                          <span className="text-xs text-muted-foreground/50">
+                            {formatDistanceToNow(new Date(inv.createdAt), { addSuffix: true })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    {isAdmin && (
+                      <div className="flex items-center gap-0.5 shrink-0 -mt-0.5 -me-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleSignInAsEmail(inv.email)}
+                          disabled={actionLoading === inv.email || actionLoading === inv.id}
+                          title={`Sign in as ${inv.email}`}
+                          className="text-muted-foreground/40 hover:text-foreground"
+                        >
+                          <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleCancelInvite(inv.id)}
+                          disabled={actionLoading === inv.id}
+                          title="Remove from allowlist"
+                          className="text-muted-foreground/40 hover:text-destructive"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {inv.systemRole === "ADMIN" && (
+                      <StatusBadge
+                        size="sm"
+                        config={outlineBadge("Admin", "text-purple", "border-purple/30")}
+                        icon={Shield}
+                      />
+                    )}
+                    {inv.team && (
+                      <StatusBadge
+                        size="sm"
+                        config={outlineBadge(inv.team.name, "text-muted-foreground", "border-border")}
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {filteredInvitations.map((inv) => {
+              const displayName = inv.name?.trim() || "";
+              const roleName = inv.projectRole?.name ?? inv.role;
+              return (
+                <div
+                  key={inv.id}
+                  className="rounded-lg bg-card border border-dashed border-border p-4"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-s min-w-0">
+                      <div className="w-9 h-9 rounded-full bg-muted/50 flex items-center justify-center text-muted-foreground shrink-0">
+                        <Mail className="w-4 h-4" strokeWidth={1.5} />
+                      </div>
+                      <div className="min-w-0">
+                        {nameEdit?.kind === "invitation" && nameEdit.id === inv.id ? (
+                          <NameEditRow
+                            value={nameEdit.value}
+                            saving={nameEdit.saving}
+                            error={nameEdit.error}
+                            onChange={(value) => setNameEdit({ ...nameEdit, value, error: null })}
+                            onSave={handleNameSave}
+                            onCancel={() => setNameEdit(null)}
+                          />
+                        ) : (
+                          <p className="text-s font-medium text-foreground truncate flex items-center gap-1">
+                            <span className="truncate">{displayName || inv.email}</span>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setNameEdit({
+                                    kind: "invitation",
+                                    id: inv.id,
+                                    projectId: inv.project.id,
+                                    value: displayName,
+                                    error: null,
+                                    saving: false,
+                                  })
+                                }
+                                title="Edit name"
+                                className="shrink-0 text-muted-foreground/40 hover:text-foreground transition-colors"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            )}
+                          </p>
+                        )}
+                        {displayName && (
+                          <p className="text-xs text-muted-foreground truncate">{inv.email}</p>
+                        )}
+                        <div className="flex items-center gap-xs mt-0.5">
+                          <StatusBadge
+                            size="sm"
+                            config={outlineBadge("Added", "text-orange", "border-orange/30")}
+                            icon={Clock}
+                          />
+                          <span className="text-xs text-muted-foreground/50">
+                            {formatDistanceToNow(new Date(inv.createdAt), { addSuffix: true })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    {isAdmin && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleSignInAsEmail(inv.email)}
+                        disabled={actionLoading === inv.email}
+                        title={`Sign in as ${inv.email}`}
+                        className="text-muted-foreground/40 hover:text-foreground shrink-0 -mt-0.5 -me-1"
+                      >
+                        <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <StatusBadge
+                      size="sm"
+                      config={outlineBadge(inv.project.name, "text-muted-foreground", "border-border")}
+                    />
+                    <StatusBadge
+                      size="sm"
+                      config={
+                        inv.role === "ADMIN"
+                          ? outlineBadge(roleName, "text-primary", "border-primary/30")
+                          : outlineBadge(roleName, "text-muted-foreground", "border-border")
+                      }
+                      icon={Shield}
+                    />
+                  </div>
+                </div>
+              );
             })}
           </div>
         </div>
       )}
+
+      {projectsMemberId && (() => {
+        const member = members.find((m) => m.id === projectsMemberId);
+        if (!member) return null;
+        return (
+          <MemberProjectsDialog
+            member={member}
+            roles={roles}
+            projectOptions={projectOptions}
+            canManage={isAdmin}
+            onClose={() => setProjectsMemberId(null)}
+          />
+        );
+      })()}
+      {editMemberId && (() => {
+        const member = members.find((m) => m.id === editMemberId);
+        if (!member) return null;
+        return (
+          <EditMemberDialog
+            member={member}
+            onClose={() => setEditMemberId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
 
-/**
- * A project chip that admins can click to change the member's role in that
- * project — or remove them from the project — without leaving the settings
- * page. If the member still owns tasks in the project, removal asks for a
- * transfer target first (same rule as the project team tab).
- */
-function ProjectRoleChip({
-  project,
-  roles,
-  userId,
-  userName,
+function NameEditRow({
+  value,
+  saving,
+  error,
+  hint,
+  type = "text",
+  onChange,
+  onSave,
+  onCancel,
 }: {
-  project: MemberProject;
-  roles: GlobalRole[];
-  userId: string;
-  userName: string;
+  value: string;
+  saving: boolean;
+  error: string | null;
+  hint?: string;
+  type?: "text" | "email";
+  onChange: (value: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
 }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [transfer, setTransfer] = useState<{
-    taskCount: number;
-    targets: { id: string; name: string | null; systemRole: string }[];
-    transferToUserId: string;
-  } | null>(null);
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave();
+      }}
+      className="space-y-1 mb-1"
+    >
+      <div className="flex items-center gap-xs">
+        <input
+          type={type}
+          value={value}
+          autoFocus
+          disabled={saving}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => e.key === "Escape" && onCancel()}
+          className="h-6 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none focus:border-muted-foreground/50 disabled:opacity-50"
+        />
+        <button
+          type="submit"
+          disabled={saving}
+          className="h-6 px-2 rounded-md text-xs font-medium bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-colors disabled:opacity-50 shrink-0"
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="h-6 px-2 rounded-md text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50 shrink-0"
+        >
+          Cancel
+        </button>
+      </div>
+      {error ? (
+        <p className="text-xs text-destructive">{error}</p>
+      ) : hint ? (
+        <p className="text-xs text-muted-foreground/60">{hint}</p>
+      ) : null}
+    </form>
+  );
+}
 
-  async function handlePick(roleId: string) {
-    if (roleId === project.roleId) {
-      setOpen(false);
+function EditMemberDialog({
+  member,
+  onClose,
+}: {
+  member: Member;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(member.name ?? "");
+  const [email, setEmail] = useState(member.email);
+  const [gender, setGender] = useState<GenderChoice>(member.gender ?? "");
+  const [excludeFromAlias, setExcludeFromAlias] = useState(member.excludeFromAlias);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
+    if (!trimmedName) {
+      setError("Name is required");
+      return;
+    }
+    if (!trimmedEmail) {
+      setError("Email is required");
+      return;
+    }
+    if (!gender) {
+      setError("Gender is required");
       return;
     }
     setSaving(true);
+    setError(null);
     try {
-      await updateMemberRole({ projectId: project.id, memberId: project.memberId, roleId });
-      router.refresh();
-      setOpen(false);
+      const res = await updateUserProfile({
+        userId: member.id,
+        name: trimmedName,
+        email: trimmedEmail,
+        gender,
+        excludeFromAlias: member.systemRole === "CLIENT" || excludeFromAlias,
+      });
+      if (res?.error) {
+        setError(res.error);
+        setSaving(false);
+        return;
+      }
+      onClose();
     } catch (err) {
-      alert((err as Error).message || "Failed to update role");
+      setError((err as Error).message || "Failed to update member");
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleRemove(transferToUserId?: string) {
-    setSaving(true);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay"
+      onClick={onClose}
+    >
+      <form
+        onSubmit={handleSave}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-xl border border-border bg-sidebar p-5 shadow-xl mx-4 space-y-3"
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-s font-semibold text-foreground">Edit member</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-card transition-colors text-muted-foreground"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">Name</label>
+          <input
+            type="text"
+            required
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setError(null);
+            }}
+            className="w-full h-9 px-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">Email</label>
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setError(null);
+            }}
+            className="w-full h-9 px-3 rounded-lg border border-border bg-card text-s text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+          />
+          <p className="text-xs text-muted-foreground/60 mt-1">
+            Must be a Google account — the old one keeps working too
+          </p>
+        </div>
+        <MemberProfileFields
+          gender={gender}
+          onGenderChange={setGender}
+          excludeFromAlias={member.systemRole === "CLIENT" || excludeFromAlias}
+          onExcludeFromAliasChange={setExcludeFromAlias}
+          excludeLocked={member.systemRole === "CLIENT"}
+        />
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1.5 rounded-lg text-s text-muted-foreground hover:bg-card transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving || !name.trim() || !email.trim() || !gender}
+            className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-s font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function MemberProjectsDialog({
+  member,
+  roles,
+  projectOptions,
+  canManage,
+  onClose,
+}: {
+  member: Member;
+  roles: GlobalRole[];
+  projectOptions: { id: string; name: string }[];
+  canManage: boolean;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const userName = member.name ?? member.email;
+  const assignedIds = new Set(member.projects.map((p) => p.id));
+  const available = projectOptions.filter((p) => !assignedIds.has(p.id));
+
+  const [addProjectId, setAddProjectId] = useState("");
+  const [addRoleId, setAddRoleId] = useState(roles[0]?.id ?? "");
+  const [saving, setSaving] = useState<string | null>(null);
+  const [transfer, setTransfer] = useState<{
+    project: MemberProject;
+    taskCount: number;
+    targets: { id: string; name: string | null; systemRole: string }[];
+    transferToUserId: string;
+  } | null>(null);
+
+  async function handleAdd() {
+    if (!addProjectId || !addRoleId) return;
+    setSaving("add");
+    try {
+      await addMemberToProject({
+        projectId: addProjectId,
+        userId: member.id,
+        roleId: addRoleId,
+      });
+      setAddProjectId("");
+      router.refresh();
+    } catch (err) {
+      alert((err as Error).message || "Failed to add to project");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function handleRoleChange(project: MemberProject, roleId: string) {
+    if (roleId === project.roleId) return;
+    setSaving(project.id);
+    try {
+      await updateMemberRole({ projectId: project.id, memberId: project.memberId, roleId });
+      router.refresh();
+    } catch (err) {
+      alert((err as Error).message || "Failed to update role");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function handleRemove(project: MemberProject, transferToUserId?: string) {
+    setSaving(project.id);
     try {
       const result = await removeMember({
         projectId: project.id,
@@ -1153,98 +1298,149 @@ function ProjectRoleChip({
       });
       if (result.success) {
         setTransfer(null);
-        setOpen(false);
         router.refresh();
         return;
       }
       const match = result.error.match(/^TRANSFER_REQUIRED:(\d+)$/);
       if (match) {
-        // The member still owns tasks here — load who they can hand over to.
-        const summary = await getUserTaskSummary(userId);
+        const summary = await getUserTaskSummary(member.id);
         const entry = summary.find((p) => p.id === project.id);
         setTransfer({
+          project,
           taskCount: parseInt(match[1], 10),
           targets: entry?.eligibleTransferTargets ?? [],
           transferToUserId: "",
         });
-        setOpen(false);
       } else {
         alert(result.error || "Failed to remove member");
       }
     } catch (err) {
       alert((err as Error).message || "Failed to remove member");
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   }
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        disabled={saving}
-        className={cn(
-          "text-xs px-1.5 py-0.5 rounded-full bg-card border border-border text-muted-foreground",
-          "inline-flex items-center gap-0.5 hover:border-muted-foreground/40 hover:text-foreground transition-colors",
-          saving && "opacity-50",
-        )}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[80vh] w-full max-w-md flex-col rounded-xl border border-border bg-sidebar p-5 shadow-xl mx-4"
+        onClick={(e) => e.stopPropagation()}
       >
-        {project.name}
-        {project.roleName && (
-          <span className="text-muted-foreground/50">({project.roleName})</span>
-        )}
-        <ChevronDown className="w-2.5 h-2.5 text-muted-foreground/50" />
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full mt-1 z-50 min-w-[180px] rounded-lg border border-border bg-sidebar shadow-xl py-1">
-            <p className="px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/50 truncate">
-              {project.name}
-            </p>
-            {roles.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => handlePick(r.id)}
-                disabled={saving}
-                className={cn(
-                  "w-full flex items-center gap-xs px-2.5 py-1.5 text-start text-xs transition-colors",
-                  r.id === project.roleId
-                    ? "text-foreground font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-card",
-                )}
-              >
-                <Shield className="w-3 h-3 text-muted-foreground/50 shrink-0" strokeWidth={1.5} />
-                <span className="flex-1 truncate">{r.name}</span>
-                {r.id === project.roleId && <Check className="w-3 h-3 text-primary shrink-0" />}
-              </button>
-            ))}
-            {roles.length === 0 && (
-              <p className="px-2.5 py-1.5 text-xs text-muted-foreground/60">No roles defined.</p>
-            )}
-            <div className="border-t border-border/60 my-1" />
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm(`Remove ${userName} from ${project.name}?`)) {
-                  void handleRemove();
-                }
-              }}
-              disabled={saving}
-              className="w-full flex items-center gap-xs px-2.5 py-1.5 text-start text-xs text-destructive hover:bg-destructive/10 transition-colors"
-            >
-              <Trash2 className="w-3 h-3 shrink-0" strokeWidth={1.5} />
-              Remove from project
-            </button>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-s font-semibold text-foreground">Projects</h3>
+            <p className="text-xs text-muted-foreground truncate">{userName}</p>
           </div>
-        </>
-      )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-card transition-colors text-muted-foreground shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+          {member.projects.length === 0 && (
+            <p className="py-6 text-center text-s text-muted-foreground">
+              Not on any projects yet.
+            </p>
+          )}
+          {member.projects
+            .slice()
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((project) => (
+              <div
+                key={project.id}
+                className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-card/60"
+              >
+                <FolderKanban className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" strokeWidth={1.5} />
+                <span className="min-w-0 flex-1 truncate text-s text-foreground">{project.name}</span>
+                {canManage ? (
+                  <select
+                    value={project.roleId ?? ""}
+                    disabled={saving === project.id}
+                    onChange={(e) => {
+                      if (e.target.value) void handleRoleChange(project, e.target.value);
+                    }}
+                    className="h-7 max-w-[8.5rem] shrink-0 rounded-md border border-border bg-card px-1.5 text-xs text-foreground disabled:opacity-50"
+                  >
+                    {!project.roleId && <option value="">{project.roleName || "Role"}</option>}
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {project.roleName || project.role}
+                  </span>
+                )}
+                {canManage && (
+                  <button
+                    type="button"
+                    disabled={saving === project.id}
+                    title={`Remove from ${project.name}`}
+                    onClick={() => {
+                      if (confirm(`Remove ${userName} from ${project.name}?`)) {
+                        void handleRemove(project);
+                      }
+                    }}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  </button>
+                )}
+              </div>
+            ))}
+        </div>
+
+        {canManage && (
+          <div className="mt-4 space-y-2 border-t border-border pt-4">
+            <p className="text-xs font-medium text-muted-foreground">Add to a project</p>
+            {available.length === 0 ? (
+              <p className="text-xs text-muted-foreground/60">Already on every project.</p>
+            ) : (
+              <div className="flex items-center gap-2">
+                <select
+                  value={addProjectId}
+                  onChange={(e) => setAddProjectId(e.target.value)}
+                  className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-card px-2 text-s text-foreground"
+                >
+                  <option value="">Select project...</option>
+                  {available.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={addRoleId}
+                  onChange={(e) => setAddRoleId(e.target.value)}
+                  disabled={!addProjectId}
+                  className="h-9 w-[7.5rem] shrink-0 rounded-lg border border-border bg-card px-2 text-s text-foreground disabled:opacity-50"
+                >
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={!addProjectId || !addRoleId || saving === "add"}
+                  onClick={() => void handleAdd()}
+                  className="h-9 shrink-0 rounded-lg bg-primary px-3 text-s font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {saving === "add" ? "Adding..." : "Add"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {transfer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay backdrop-blur-sm">
           <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
@@ -1254,12 +1450,11 @@ function ProjectRoleChip({
                 <h3 className="text-s font-semibold text-foreground">Transfer Tasks Required</h3>
                 <p className="text-s text-muted-foreground mt-0.5">
                   <strong>{userName}</strong> has <strong>{transfer.taskCount}</strong> task
-                  {transfer.taskCount !== 1 ? "s" : ""} in <strong>{project.name}</strong>.
+                  {transfer.taskCount !== 1 ? "s" : ""} in <strong>{transfer.project.name}</strong>.
                   Select a member to transfer them to before removal.
                 </p>
               </div>
             </div>
-
             <div className="mb-4">
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Transfer tasks to</label>
               <select
@@ -1282,23 +1477,22 @@ function ProjectRoleChip({
                 </p>
               )}
             </div>
-
             <div className="flex items-center gap-2 justify-end">
               <button
                 type="button"
                 onClick={() => setTransfer(null)}
-                disabled={saving}
+                disabled={saving === transfer.project.id}
                 className="px-3 py-1.5 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={() => void handleRemove(transfer.transferToUserId)}
-                disabled={!transfer.transferToUserId || saving}
+                onClick={() => void handleRemove(transfer.project, transfer.transferToUserId)}
+                disabled={!transfer.transferToUserId || saving === transfer.project.id}
                 className="px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-s font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50"
               >
-                {saving ? "Transferring..." : "Transfer & Remove"}
+                {saving === transfer.project.id ? "Transferring..." : "Transfer & Remove"}
               </button>
             </div>
           </div>

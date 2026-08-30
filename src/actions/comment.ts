@@ -1,12 +1,13 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireProjectMember } from "@/lib/auth";
+import { requireProjectMember, requireStaffUser } from "@/lib/auth";
 import { publish, taskChannel } from "@/lib/centrifugo";
-import { enqueuePush } from "@/lib/push-queue";
-import { createAndPublishNotifications } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 import { sendMessage } from "@/actions/messages";
 import { encodeTaskCommentBody } from "@/lib/task-comment-payload";
+import { getAliasMap, NO_MASK } from "@/lib/alias";
+import { isClientUser } from "@/lib/client-chat";
 
 export async function createComment(data: {
   taskId: string;
@@ -108,27 +109,22 @@ export async function createComment(data: {
     if (mentionRecipients.length && !postedToChannel) {
       const snippet = data.content.replace(/\s+/g, " ").trim().slice(0, 140);
       const pushTag = `thread-task-${data.taskId}`;
-      const rows = await createAndPublishNotifications({
-        recipientIds: mentionRecipients,
-        type: "mention",
-        title: `${comment.user.name ?? "Someone"} mentioned you`,
-        body: `#${task.taskNumber} ${task.title}: ${snippet}`,
-        linkUrl: `/dashboard/projects/${task.projectId}/tasks/${data.taskId}`,
-        tag: pushTag,
-        threadKey: `task-${data.taskId}`,
-      });
-      if (rows.length > 0) {
-        void enqueuePush(
-          rows.map((r) => r.recipientId),
-          {
-            title: `${comment.user.name ?? "Someone"} mentioned you`,
-            body: `#${task.taskNumber} ${task.title}: ${snippet}`,
-            url: `/dashboard/projects/${task.projectId}/tasks/${data.taskId}`,
-            tag: pushTag,
-            type: "mention",
-          },
-        );
-      }
+      const title = `${comment.user.name ?? "Someone"} mentioned you`;
+      const notifBody = `#${task.taskNumber} ${task.title}: ${snippet}`;
+      const linkUrl = `/dashboard/projects/${task.projectId}/tasks/${data.taskId}`;
+      await notifyAndPush(
+        {
+          recipientIds: mentionRecipients,
+          type: "mention",
+          title,
+          body: notifBody,
+          linkUrl,
+          tag: pushTag,
+          threadKey: `task-${data.taskId}`,
+          alias: { projectId: task.projectId, actorUserId: user.id },
+        },
+        { title, body: notifBody, url: linkUrl, type: "mention" },
+      );
     }
 
     // Live-stream the new comment to anyone viewing this task (Centrifugo).
@@ -179,6 +175,9 @@ export async function getComments(taskId: string): Promise<{ success: true; comm
     if (!task) return { success: false, error: "Task not found" };
 
     await requireProjectMember(task.projectId);
+    // Internal task discussion, named authors and mentions included. Clients
+    // talk to the team in chat, which is aliased; this thread is not for them.
+    await requireStaffUser();
 
     const comments = await prisma.taskComment.findMany({
       where: { taskId },
@@ -245,5 +244,17 @@ export async function getProjectMembersForMention(
     include: { user: { select: { id: true, name: true, imageUrl: true } } },
   });
 
-  return { members: members.map((m) => m.user), currentUserId: user.id };
+  // A picked name becomes a stored @[Name](id) token, so handing a client the
+  // real one would plant a leak in the message body itself.
+  const aliasMap = isClientUser(user) ? await getAliasMap(projectId) : NO_MASK;
+
+  return {
+    members: members.map((m) => {
+      const alias = aliasMap.get(m.user.id);
+      return alias
+        ? { ...m.user, name: alias.name, imageUrl: alias.imageUrl }
+        : m.user;
+    }),
+    currentUserId: user.id,
+  };
 }

@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { hasProjectAccess } from "@/lib/project-access";
-import { GLOBAL_PRESENCE_ID } from "@/lib/channels";
+import {
+  GLOBAL_PRESENCE_ID,
+  isStaffOnlyChannel,
+  parseConversationChannel,
+} from "@/lib/channels";
 import {
   connectionToken,
   subscriptionToken,
@@ -11,6 +15,7 @@ import {
 import {
   canAccessClientConversation,
   CLIENT_CONVERSATION_KIND,
+  isClientUser,
 } from "@/lib/client-chat";
 import {
   ANNOUNCEMENTS_CONVERSATION_ID,
@@ -96,6 +101,11 @@ async function canSubscribe(
   user: { id: string; systemRole: string },
 ): Promise<boolean> {
   const memberId = user.id;
+
+  // Masking happens as the server publishes, so a client on a staff-only feed
+  // would read real names straight from Centrifugo with nothing in the way.
+  if (isStaffOnlyChannel(channel) && isClientUser(user)) return false;
+
   const [namespace, rest] = splitChannel(channel);
 
   switch (namespace) {
@@ -119,22 +129,30 @@ async function canSubscribe(
       return hasProjectAccess(task.projectId);
     }
     case "conv": {
-      if (rest === ANNOUNCEMENTS_CONVERSATION_ID) {
+      // A conversation has two channels: the plain one carries real staff names
+      // and the "-client" twin carries aliases. Each audience may only mint a
+      // token for its own, so a client cannot subscribe to unmasked names.
+      const parsed = parseConversationChannel(rest);
+      if (!parsed) return false;
+      const { conversationId, forClient } = parsed;
+      if (forClient !== isClientUser(user)) return false;
+
+      if (conversationId === ANNOUNCEMENTS_CONVERSATION_ID) {
         return canReadAnnouncements(user);
       }
       const convo = await prisma.conversation.findUnique({
-        where: { id: rest },
+        where: { id: conversationId },
         select: { kind: true },
       });
       if (!convo) return false;
       // Client rooms: anyone who can open the thread (participant, curated
       // staff, or admin) must be on the realtime channel for typing/presence.
       if (convo.kind === CLIENT_CONVERSATION_KIND) {
-        const access = await canAccessClientConversation(rest, user);
+        const access = await canAccessClientConversation(conversationId, user);
         return access.ok;
       }
       const participant = await prisma.conversationParticipant.findFirst({
-        where: { conversationId: rest, memberId },
+        where: { conversationId, memberId },
         select: { id: true },
       });
       return Boolean(participant);

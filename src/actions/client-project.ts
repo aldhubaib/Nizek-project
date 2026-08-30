@@ -2,6 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
+import { getAliasMap, maskBody, maskPlainNames, NO_MASK } from "@/lib/alias";
+import { isClientUser } from "@/lib/client-chat";
 import { sprintIdFromPlanningHtml } from "@/lib/sprint-planning-doc";
 import { reviewDateBySprintId } from "@/lib/sprint-review-doc";
 import { isMissingDataTask } from "@/lib/task-readiness";
@@ -414,11 +416,17 @@ export async function getClientSprintDoc(
   if (note.noteType !== "SPRINT_PLANNING" && note.noteType !== "SPRINT_REVIEW") {
     throw new Error("Document not found");
   }
-  await requireProjectMember(note.projectId);
+  const { user } = await requireProjectMember(note.projectId);
+
+  // Sprint docs are written by the team, for the team, and name people freely —
+  // "Ahmed picks up the migration" and mention tokens both end up in the body.
+  // This is the one client-facing surface that serves staff-authored prose, so
+  // it is masked on the way out like a chat message would be.
+  const aliasMap = isClientUser(user) ? await getAliasMap(note.projectId) : NO_MASK;
 
   return {
-    title: note.title,
-    content: note.content,
+    title: maskPlainNames(note.title, aliasMap),
+    content: maskBody(note.content, aliasMap),
     date: note.date.toISOString(),
   };
 }

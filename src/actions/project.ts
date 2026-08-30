@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireUser, requireProjectMember, requireProjectRole } from "@/lib/auth";
+import { requireUser, requireProjectMember, requireProjectRole, requireStaffUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { removeFromAllowlistIfUnused, syncInviteDisplayName } from "@/lib/pending-invite";
 import { validateContractDates } from "@/lib/contract-rules";
@@ -19,7 +19,16 @@ import {
   rememberClientSignup,
   forgetClientSignupIfUnused,
 } from "@/lib/client-role";
-import { joinDisplayName } from "@/lib/display-name";
+import { joinDisplayName, splitDisplayName } from "@/lib/display-name";
+import type { Gender } from "@/generated/prisma/client";
+import { parseGender } from "@/lib/member-profile";
+import {
+  aliasRequirement,
+  AliasGenderMissingError,
+  AliasPoolExhaustedError,
+  availableAliasCount,
+  claimAliasForMember,
+} from "@/lib/alias";
 
 async function requireMemberManagement(projectId: string) {
   const { user, member } = await requireProjectMember(projectId);
@@ -39,6 +48,50 @@ async function requireMemberManagement(projectId: string) {
     throw new Error("Insufficient permissions");
   }
   return { user, member, canInviteMembers, canInviteClients };
+}
+
+/**
+ * Refuse the caller's change unless this person could be given an alias on this
+ * project — they already hold one, they are exempt, or the pool has one of
+ * their gender free. Called before writing, so an admin gets a clear reason
+ * instead of a member who is silently visible to the client.
+ */
+async function requireClaimableAlias(
+  userId: string,
+  projectId: string,
+): Promise<void> {
+  const held = await prisma.aliasAssignment.findUnique({
+    where: { userId_projectId: { userId, projectId } },
+    select: { id: true },
+  });
+  if (held) return;
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      name: true,
+      email: true,
+      systemRole: true,
+      excludeFromAlias: true,
+      gender: true,
+    },
+  });
+  if (!target) return;
+
+  // The role they are moving to decides this, not the one they hold now, so the
+  // current membership role is deliberately not passed.
+  const requirement = aliasRequirement({
+    systemRole: target.systemRole === "CLIENT" ? "MEMBER" : target.systemRole,
+    excludeFromAlias: target.excludeFromAlias,
+    gender: target.gender,
+  });
+  if (requirement === "exempt") return;
+  if (requirement === "no-gender") {
+    throw new AliasGenderMissingError(target.name ?? target.email);
+  }
+  if ((await availableAliasCount(target.gender!)) === 0) {
+    throw new AliasPoolExhaustedError(target.gender!);
+  }
 }
 
 async function buildContractCode(prefixId: string, manualNumber?: string): Promise<{ code: string; prefixId: string }> {
@@ -106,6 +159,23 @@ export async function createProject(data: {
     },
   });
 
+  // The creator is the project's first client-visible face. If no alias can be
+  // drawn the project still exists — the Aliases page lists them as unaliased
+  // and "Assign aliases" fixes it, which is gentler than throwing away a
+  // freshly created project. Logged rather than swallowed so the gap is
+  // traceable if nobody notices the banner.
+  await claimAliasForMember(prisma, {
+    userId: user.id,
+    projectId: project.id,
+    memberRole: "ADMIN",
+  }).catch((err: unknown) => {
+    console.error("[createProject] creator left unaliased", {
+      userId: user.id,
+      projectId: project.id,
+      error: err instanceof Error ? err.message : err,
+    });
+  });
+
   revalidatePath("/dashboard");
   return project;
 }
@@ -121,7 +191,7 @@ export async function getProjectOptions() {
 }
 
 export async function getProjects() {
-  const user = await requireUser();
+  const user = await requireStaffUser();
   const where = user.systemRole === "ADMIN" ? {} : { members: { some: { userId: user.id } } };
   return prisma.project.findMany({
     where,
@@ -150,6 +220,9 @@ export async function getProject(projectId: string) {
 
   if (!project) throw new Error("Project not found");
   await requireProjectMember(project.id);
+  // Carries the full member roster with real names and emails, and only the
+  // staff project pages need it.
+  await requireStaffUser();
   return project;
 }
 
@@ -356,11 +429,14 @@ export async function inviteMember(data: {
   email: string;
   roleId: string;
   name: string;
+  gender: Gender;
+  excludeFromAlias?: boolean;
 }) {
   const { user, canInviteMembers, canInviteClients } = await requireMemberManagement(data.projectId);
   const email = data.email.toLowerCase().trim();
   const name = data.name.trim();
   if (!name) throw new Error("Name is required");
+  const gender = parseGender(data.gender);
 
   const pRole = await prisma.projectRole.findUnique({
     where: { id: data.roleId },
@@ -371,8 +447,17 @@ export async function inviteMember(data: {
 
   const existingUser = await prisma.user.findUnique({ where: { email }, select: { systemRole: true } });
   const assigningClient = pRole.isClient || existingUser?.systemRole === "CLIENT";
+  const excludeFromAlias = assigningClient || Boolean(data.excludeFromAlias);
   if (assigningClient && !canInviteClients) throw new Error("You don't have permission to invite clients");
   if (!assigningClient && !canInviteMembers) throw new Error("You don't have permission to invite team members");
+
+  // Refuse the invite now rather than letting them sign up and land on the
+  // project with no alias to hide behind.
+  if (!excludeFromAlias && (await availableAliasCount(gender)) === 0) {
+    throw new Error(
+      `No unused ${gender === "MALE" ? "male" : "female"} aliases left. Upload more in Settings → Aliases.`,
+    );
+  }
 
   const invitation = await prisma.invitation.upsert({
     where: { email_projectId: { email, projectId: data.projectId } },
@@ -401,8 +486,27 @@ export async function inviteMember(data: {
     create: { email },
   });
 
+  const nameParts = splitDisplayName(name);
+  await prisma.pendingTeamInvite.upsert({
+    where: { email },
+    update: {
+      firstName: nameParts.firstName,
+      lastName: nameParts.lastName,
+      gender,
+      excludeFromAlias,
+    },
+    create: {
+      email,
+      firstName: nameParts.firstName,
+      lastName: nameParts.lastName,
+      systemRole: pRole.isClient ? "CLIENT" : "DEVELOPER",
+      gender,
+      excludeFromAlias,
+    },
+  });
+
   if (pRole.isClient) {
-    await rememberClientSignup(email, name);
+    await rememberClientSignup(email, name, { gender, excludeFromAlias });
     await ensureClientChatForProject(data.projectId, user.id);
   }
 
@@ -569,11 +673,25 @@ export async function updateMemberRole(data: {
   });
   if (!member) throw new Error("Member not found");
 
+  // Moving a client seat to a staff one turns this person into someone the
+  // client can see, so they need an alias. Checked before anything is written,
+  // the way invites are: the claim itself can only run after the demotion
+  // below, and refusing the change is better than committing it and finding out.
+  if (!pRole.isClient) {
+    await requireClaimableAlias(member.userId, data.projectId);
+  }
+
+  const memberRole = membershipRoleFromProjectRole(pRole);
   await prisma.projectMember.update({
     where: { id: data.memberId },
     data: {
-      role: membershipRoleFromProjectRole(pRole),
+      role: memberRole,
       roleId: data.roleId,
+      ...(pRole.isClient && {
+        canInviteMembers: false,
+        canInviteClients: false,
+        canBypassProof: false,
+      }),
     },
   });
 
@@ -581,7 +699,14 @@ export async function updateMemberRole(data: {
     await promoteUserToClient(member.userId);
     await ensureClientChatForProject(data.projectId, user.id);
   } else {
+    // Clears the CLIENT system role first, or the claim would read them as a
+    // client and skip — leaving a staff seat with no alias behind it.
     await demoteClientIfUnneeded(member.userId);
+    await claimAliasForMember(prisma, {
+      userId: member.userId,
+      projectId: data.projectId,
+      memberRole,
+    });
   }
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
@@ -630,7 +755,10 @@ export async function addMemberToProject(data: {
     });
 
     if (pRole.isClient) {
-      await rememberClientSignup(pendingInvite.email, pendingName ?? undefined);
+      await rememberClientSignup(pendingInvite.email, pendingName ?? undefined, {
+        gender: pendingInvite.gender,
+        excludeFromAlias: pendingInvite.excludeFromAlias,
+      });
       await ensureClientChatForProject(data.projectId, user.id);
     }
 
@@ -650,13 +778,23 @@ export async function addMemberToProject(data: {
   });
   if (existing) throw new Error("User is already a member of this project");
 
-  await prisma.projectMember.create({
-    data: {
+  // Membership and alias are claimed together: a member who joins without an
+  // alias would show their real name to the client the moment they post.
+  const memberRole = membershipRoleFromProjectRole(pRole);
+  await prisma.$transaction(async (tx) => {
+    await tx.projectMember.create({
+      data: {
+        userId: data.userId,
+        projectId: data.projectId,
+        role: memberRole,
+        roleId: data.roleId,
+      },
+    });
+    await claimAliasForMember(tx, {
       userId: data.userId,
       projectId: data.projectId,
-      role: membershipRoleFromProjectRole(pRole),
-      roleId: data.roleId,
-    },
+      memberRole,
+    });
   });
 
   if (pRole.isClient) {
@@ -728,6 +866,7 @@ export async function deleteProject(data: {
 
 export async function getProjectMembers(projectId: string) {
   await requireProjectMember(projectId);
+  await requireStaffUser();
   return prisma.projectMember.findMany({
     where: { projectId },
     include: {
@@ -836,6 +975,14 @@ export async function updateMemberInvitePerms(data: {
   const isSystemAdmin = user.systemRole === "ADMIN";
   const isProjectAdmin = member.projectRole?.isAdmin ?? false;
   if (!isSystemAdmin && !isProjectAdmin) throw new Error("Only admins can manage invite permissions");
+
+  const target = await prisma.projectMember.findFirst({
+    where: { id: data.memberId, projectId: data.projectId },
+    select: { role: true, projectRole: { select: { isClient: true } } },
+  });
+  if (target?.role === "CLIENT" || target?.projectRole?.isClient) {
+    throw new Error("Client members cannot invite or bypass");
+  }
 
   await prisma.projectMember.update({
     where: { id: data.memberId },

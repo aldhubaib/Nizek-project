@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireProjectMember } from "@/lib/auth";
+import { requireProjectMember, requireStaffUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { logTaskActivity } from "@/lib/activity";
 import {
@@ -12,11 +12,12 @@ import {
   canModifyInStage,
 } from "@/lib/permissions";
 import { publish, broadcast, broadcastTaskEvent, taskChannel, projectChannel, userChannel } from "@/lib/centrifugo";
-import { createAndPublishNotifications } from "@/lib/notify";
+import { notifyAndPush } from "@/lib/notify";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
-import { enqueuePush } from "@/lib/push-queue";
 import { isBuiltInTaskFieldQuestion, isQuestionAnswerFilled, isReadinessQuestion, isWaitingOnClientAnswer } from "@/lib/task-readiness";
 import { requireUserOnProject } from "@/lib/project-mentions";
+import { getAliasMap, NO_MASK, type AliasIdentity } from "@/lib/alias";
+import { isClientUser } from "@/lib/client-chat";
 
 // ─── Stage → Role Track ─────────────────────────────────
 type RoleTrack = "pm" | "developer" | "client";
@@ -744,21 +745,21 @@ export async function declineTask(data: {
       const notifBody = `#${task.taskNumber} ${task.title}: ${declineSnippet}`;
       const linkUrl = `/dashboard/projects/${task.projectId}/tasks/${task.id}`;
       const pushTag = `thread-task-${task.id}`;
-      const rows = await createAndPublishNotifications({
-        recipientIds: [submitterId],
-        type: "rejection",
-        title,
-        body: notifBody,
-        linkUrl,
-        tag: pushTag,
-        threadKey: `task-${task.id}`,
-      });
-      if (rows.length > 0) {
-        void enqueuePush(
-          rows.map((r) => r.recipientId),
-          { title, body: notifBody, url: linkUrl, tag: pushTag, type: "rejection" },
-        );
-      }
+      // A client submitter (client-review decline) must see the alias, not the
+      // real name of whoever declined.
+      await notifyAndPush(
+        {
+          recipientIds: [submitterId],
+          type: "rejection",
+          title,
+          body: notifBody,
+          linkUrl,
+          tag: pushTag,
+          threadKey: `task-${task.id}`,
+          alias: { projectId: task.projectId, actorUserId: user.id },
+        },
+        { title, body: notifBody, url: linkUrl, type: "rejection" },
+      );
     }
 
     // Bump the project thread in the inbox sidebar for the people involved.
@@ -978,6 +979,16 @@ const BOARD_TASK_SELECT = {
   _count: { select: { notes: true, sprintSnapshots: true } },
 } as const;
 
+/** Aliases to apply to a board read — empty for staff, who see real names. */
+async function boardAliasMap(
+  user: { systemRole: string },
+  projectId: string,
+): Promise<Map<string, AliasIdentity>> {
+  return isClientUser(user) ? getAliasMap(projectId) : NO_MASK;
+}
+
+type BoardPerson = { id: string; name: string | null; imageUrl: string | null };
+
 type BoardTaskRow = {
   id: string;
   title: string;
@@ -986,6 +997,10 @@ type BoardTaskRow = {
   startedAt: Date | null;
   estimatedMinutes: number | null;
   estimateAccuracy: unknown;
+  // Spelled out rather than left to the index signature below, so the masking
+  // in mapBoardTask is type-checked against the select.
+  assignee: BoardPerson | null;
+  createdBy: BoardPerson;
   answers: { questionId: string; answer: string; question: { type: string } }[];
   stageLogs: { enteredAt: Date }[];
   _count: { notes: number; sprintSnapshots: number };
@@ -1005,10 +1020,26 @@ function fieldsByType(
   return byType;
 }
 
+/**
+ * Board cards carry the assignee's and creator's real name and photo. The client
+ * project panel reads the same board (`client-project-panel.tsx`), so an empty
+ * map is the only thing that leaves them untouched.
+ */
+function maskBoardPerson<T extends BoardPerson | null>(
+  person: T,
+  aliasMap: Map<string, AliasIdentity>,
+): T {
+  if (!person || aliasMap.size === 0) return person;
+  const alias = aliasMap.get(person.id);
+  if (!alias) return person;
+  return { ...person, name: alias.name, imageUrl: alias.imageUrl } as T;
+}
+
 function mapBoardTask(
   task: BoardTaskRow,
   declines: { internal: number; client: number },
   fields: { id: string; type: string }[],
+  aliasMap: Map<string, AliasIdentity> = NO_MASK,
 ) {
   const answerByQuestion = new Map(task.answers.map((a) => [a.questionId, a.answer]));
   const hasAllFields = fields.every((q) =>
@@ -1024,6 +1055,8 @@ function mapBoardTask(
 
   return {
     ...task,
+    assignee: maskBoardPerson(task.assignee, aliasMap),
+    createdBy: maskBoardPerson(task.createdBy, aliasMap),
     answers: undefined,
     stageLogs: undefined,
     isReadyForTransition,
@@ -1049,7 +1082,8 @@ function mapBoardTask(
 }
 
 export async function getTasksByProject(projectId: string) {
-  await requireProjectMember(projectId);
+  const { user } = await requireProjectMember(projectId);
+  const aliasMap = await boardAliasMap(user, projectId);
 
   const [tasks, specQuestions, declineCounts] = await Promise.all([
     prisma.task.findMany({
@@ -1082,6 +1116,7 @@ export async function getTasksByProject(projectId: string) {
       task as unknown as BoardTaskRow,
       declinesByTask.get(task.id) ?? { internal: 0, client: 0 },
       fieldsByTaskType.get(task.taskType) ?? [],
+      aliasMap,
     ),
   );
 }
@@ -1097,7 +1132,8 @@ export async function getBoardTask(taskId: string, expectedProjectId?: string) {
 
   if (expectedProjectId && task.projectId !== expectedProjectId) return null;
 
-  await requireProjectMember(task.projectId as string);
+  const { user } = await requireProjectMember(task.projectId as string);
+  const aliasMap = await boardAliasMap(user, task.projectId as string);
 
   const [specQuestions, declineCounts] = await Promise.all([
     prisma.defaultQuestion.findMany({
@@ -1117,11 +1153,12 @@ export async function getBoardTask(taskId: string, expectedProjectId?: string) {
   }
 
   const fields = fieldsByType(specQuestions).get(task.taskType) ?? [];
-  return mapBoardTask(task as unknown as BoardTaskRow, declines, fields);
+  return mapBoardTask(task as unknown as BoardTaskRow, declines, fields, aliasMap);
 }
 
 export async function pollTaskUpdates(projectId: string) {
-  await requireProjectMember(projectId);
+  const { user } = await requireProjectMember(projectId);
+  const aliasMap = await boardAliasMap(user, projectId);
 
   const tasks = await prisma.task.findMany({
     where: { projectId, archivedAt: null },
@@ -1138,8 +1175,10 @@ export async function pollTaskUpdates(projectId: string) {
       startedAt: true,
       sprintId: true,
       sprint: { select: { name: true } },
-      assignee: { select: { id: true, name: true, email: true, imageUrl: true } },
-      createdBy: { select: { id: true, name: true, email: true, imageUrl: true } },
+      // No email: nothing on the board renders it, and it would walk past the
+      // alias for any client polling this.
+      assignee: { select: { id: true, name: true, imageUrl: true } },
+      createdBy: { select: { id: true, name: true, imageUrl: true } },
       stageLogs: {
         where: { exitedAt: null },
         orderBy: { enteredAt: "desc" },
@@ -1164,13 +1203,15 @@ export async function pollTaskUpdates(projectId: string) {
     stageEnteredAt: t.stageLogs[0]?.enteredAt?.toISOString() ?? null,
     sprintId: t.sprintId,
     sprintName: t.sprint?.name ?? null,
-    assignee: t.assignee,
-    createdBy: t.createdBy,
+    assignee: maskBoardPerson(t.assignee, aliasMap),
+    createdBy: maskBoardPerson(t.createdBy, aliasMap),
   }));
 }
 
 export async function getEligibleAssignees(projectId: string, stage: string) {
   await requireProjectMember(projectId);
+  // The staff assignment picker — a roster of real names by design.
+  await requireStaffUser();
 
   const track = STAGE_ROLE_MAP[stage];
   if (!track) return [];
@@ -1250,6 +1291,8 @@ export async function getTaskPreview(taskId: string): Promise<TaskPreview> {
   });
   if (!task) throw new Error("Task not found");
   await requireProjectMember(task.projectId);
+  // Hover preview on the staff board, and it names the assignee.
+  await requireStaffUser();
 
   return {
     id: task.id,

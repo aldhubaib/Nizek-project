@@ -596,6 +596,7 @@ export function ThreadSidebar({
                   thread.peerMemberIds.some((id) => online.has(id))
                 }
                 currentMemberId={currentMemberId}
+                isClient={isClient}
               />
             </li>
           ))

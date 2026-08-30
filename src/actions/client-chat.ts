@@ -10,6 +10,7 @@ import {
   isClientUser,
   syncClientConversationParticipants,
 } from "@/lib/client-chat";
+import { getAliasMap, NO_MASK } from "@/lib/alias";
 
 export type ClientChatPerson = {
   id: string;
@@ -110,14 +111,20 @@ export async function getClientChatRoster(projectId: string): Promise<{
     orderBy: { createdAt: "asc" },
   });
 
-  const people: ClientChatPerson[] = participants.map((p) => ({
-    id: p.member.id,
-    name: p.member.name,
-    email: p.member.email,
-    imageUrl: p.member.imageUrl,
-    systemRole: p.member.systemRole,
-    kind: isClientUser(p.member) ? "client" : "staff",
-  }));
+  // A client viewing the roster must see aliases, and never a work email —
+  // that gives away the real name just as directly.
+  const aliasMap = isClientUser(user) ? await getAliasMap(projectId) : NO_MASK;
+  const people: ClientChatPerson[] = participants.map((p) => {
+    const alias = aliasMap.get(p.member.id);
+    return {
+      id: p.member.id,
+      name: alias ? alias.name : p.member.name,
+      email: alias ? "" : p.member.email,
+      imageUrl: alias ? alias.imageUrl : p.member.imageUrl,
+      systemRole: p.member.systemRole,
+      kind: isClientUser(p.member) ? "client" : "staff",
+    };
+  });
 
   const inRoom = new Set(people.map((p) => p.id));
 

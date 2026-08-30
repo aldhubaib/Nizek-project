@@ -25,6 +25,11 @@ enum SystemRole {
   CLIENT
 }
 
+enum Gender {
+  MALE
+  FEMALE
+}
+
 enum Stage {
   NEW_REQUEST
   CLARIFICATION
@@ -91,6 +96,8 @@ model User {
   imageUrl      String?
   systemRole    SystemRole @default(DEVELOPER)
   blocked       Boolean    @default(false)
+  gender        Gender?
+  excludeFromAlias Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -148,6 +155,7 @@ model User {
   proofOfWorkBypassed  ProofOfWork[]              @relation("ProofOfWorkBypassApprover")
   proofBypassRequested ProofBypassPass[]          @relation("ProofBypassRequester")
   proofBypassApproved  ProofBypassPass[]          @relation("ProofBypassApprover")
+  aliasAssignments     AliasAssignment[]          @relation("UserAliasAssignments")
 
   @@index([systemRole])
   @@index([blocked])
@@ -220,6 +228,7 @@ model Project {
   vaultCredentials VaultCredential[]
   vaultFolders     VaultFolder[]
   vaultPermissions VaultPermission[]
+  aliasAssignments AliasAssignment[]
   @@index([teamId])
 }
 
@@ -1626,6 +1635,8 @@ model PendingTeamInvite {
   firstName  String?
   lastName   String?
   systemRole SystemRole
+  gender     Gender?
+  excludeFromAlias Boolean @default(false)
   // Team the person joins automatically once they sign up.
   teamId     String?
   team       Team?      @relation("PendingInviteTeam", fields: [teamId], references: [id], onDelete: SetNull)
@@ -1978,6 +1989,57 @@ model LoginPhoto {
   createdAt   DateTime @default(now())
 
   @@index([column, order])
+}
+
+// ─── Aliases (client-facing identities) ──────────────────────────────────────
+//
+// Clients never see real employee names or photos — competitors in the region
+// poach staff off client-facing surfaces. Admins upload a pool of alias
+// name/photo pairs, and each person on each project claims one permanently.
+// Users flagged excludeFromAlias (clients, founders, anyone public) keep their
+// real identity.
+
+model Alias {
+  id     String @id @default(cuid())
+  name   String
+  gender Gender
+  /// Free text (e.g. "Kuwaiti"). Curation aid only — claiming matches on gender,
+  /// so a thin nationality does not block anyone from getting an alias.
+  nationality String?
+  imageUrl    String?
+  r2Key       String?
+  contentType String?
+  /// Inactive aliases stay assigned but are never handed out again.
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  /// Random draw order. Postgres fills this, so aliases are handed out in an
+  /// unpredictable sequence no matter what order they were imported in —
+  /// otherwise an alphabetised import would be handed out alphabetically and a
+  /// client could spot the pattern across a project.
+  shuffleKey Float @default(dbgenerated("random()"))
+
+  assignment AliasAssignment?
+
+  @@index([gender, active, shuffleKey])
+  @@index([nationality])
+}
+
+model AliasAssignment {
+  id      String @id @default(cuid())
+  /// Unique: an alias is consumed once, so it can never appear on two projects.
+  aliasId String @unique
+  alias   Alias  @relation(fields: [aliasId], references: [id], onDelete: Cascade)
+
+  userId    String
+  user      User    @relation("UserAliasAssignments", fields: [userId], references: [id], onDelete: Cascade)
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, projectId])
+  @@index([projectId])
+  @@index([userId])
 }
 
 // ─── Vault (project credentials) ─────────────────────────────────────────────

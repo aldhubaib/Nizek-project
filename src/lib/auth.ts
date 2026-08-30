@@ -76,6 +76,21 @@ export async function requireUser() {
 }
 
 /**
+ * A read that only staff may make.
+ *
+ * Server actions are callable by any signed-in user who knows the action id, so
+ * "no client screen calls this" is not the same as "no client can call it".
+ * Actions that hand back real names, emails or photos of the team use this, or
+ * a client could read the roster the aliases exist to hide. `requireUser` has
+ * already resolved the effective role, so a client seat counts as a client here.
+ */
+export async function requireStaffUser() {
+  const user = await requireUser();
+  if (user.systemRole === "CLIENT") throw new Error("Not authorized");
+  return user;
+}
+
+/**
  * True when the user has no profile photo. We check our own DB field
  * instead of relying on Clerk's hasImage.
  */

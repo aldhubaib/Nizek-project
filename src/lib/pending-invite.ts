@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { joinDisplayName, splitDisplayName } from "@/lib/display-name";
+import { claimAliasForMember, isAliasBlocked } from "@/lib/alias";
 
 export function logPendingInviteError(
   context: string,
@@ -30,36 +31,88 @@ export async function acceptPendingInvitations(userId: string, email: string) {
 
   const newMembers = pending.filter((inv) => !memberSet.has(inv.projectId));
 
-  await prisma.$transaction([
-    ...(newMembers.length > 0
-      ? [prisma.projectMember.createMany({
-          data: newMembers.map((inv) => ({
+  // Each membership is created together with its alias. When none can be drawn
+  // we skip that project and leave the invitation PENDING so the next sign-in
+  // retries — joining without an alias would expose a real name to the client.
+  const blockedInviteIds = new Set<string>();
+  const createdMembers: typeof newMembers = [];
+
+  for (const inv of newMembers) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.projectMember.upsert({
+          where: { userId_projectId: { userId, projectId: inv.projectId } },
+          update: {},
+          create: {
             userId,
             projectId: inv.projectId,
             role: inv.role,
             roleId: inv.roleId,
-          })),
-          skipDuplicates: true,
-        })]
-      : []),
-    prisma.invitation.updateMany({
-      where: { id: { in: pending.map((inv) => inv.id) } },
-      data: { status: "ACCEPTED" },
-    }),
-  ]);
+          },
+        });
+        await claimAliasForMember(tx, {
+          userId,
+          projectId: inv.projectId,
+          memberRole: inv.role,
+        });
+      });
+      createdMembers.push(inv);
+    } catch (error) {
+      // Sign-in runs through here, so a blocked alias must never surface as a
+      // failed login — the invitation simply waits.
+      if (!isAliasBlocked(error)) throw error;
+      blockedInviteIds.add(inv.id);
+      logPendingInviteError("No alias available — project assignment deferred", {
+        userId,
+        email,
+        error,
+      });
+    }
+  }
 
-  if (newMembers.length > 0) {
+  // A membership that predates the alias pool, or that some earlier path seated
+  // without one, is only discoverable at moments like this. The claim is
+  // idempotent, so re-checking costs one query and repairs the gap.
+  for (const inv of pending.filter((i) => memberSet.has(i.projectId))) {
+    try {
+      await claimAliasForMember(prisma, {
+        userId,
+        projectId: inv.projectId,
+        memberRole: inv.role,
+      });
+    } catch (error) {
+      if (!isAliasBlocked(error)) throw error;
+      blockedInviteIds.add(inv.id);
+      logPendingInviteError("No alias available — existing membership unaliased", {
+        userId,
+        email,
+        error,
+      });
+    }
+  }
+
+  const acceptedIds = pending
+    .filter((inv) => !blockedInviteIds.has(inv.id))
+    .map((inv) => inv.id);
+  if (acceptedIds.length > 0) {
+    await prisma.invitation.updateMany({
+      where: { id: { in: acceptedIds } },
+      data: { status: "ACCEPTED" },
+    });
+  }
+
+  if (createdMembers.length > 0) {
     const { syncClientConversationParticipants } = await import("@/lib/client-chat");
     const { promoteUserToClient, ensureClientChatForProject } = await import("@/lib/client-role");
-    const projectIds = [...new Set(newMembers.map((m) => m.projectId))];
-    if (newMembers.some((m) => m.role === "CLIENT")) {
+    const projectIds = [...new Set(createdMembers.map((m) => m.projectId))];
+    if (createdMembers.some((m) => m.role === "CLIENT")) {
       await promoteUserToClient(userId);
     }
     const enabled = await prisma.project.findMany({
       where: { id: { in: projectIds }, clientChatEnabled: true },
       select: { id: true },
     });
-    const clientProjects = newMembers.filter((m) => m.role === "CLIENT").map((m) => m.projectId);
+    const clientProjects = createdMembers.filter((m) => m.role === "CLIENT").map((m) => m.projectId);
     const results = await Promise.allSettled([
       ...enabled.map((p) => syncClientConversationParticipants(p.id)),
       ...clientProjects.map((id) => ensureClientChatForProject(id)),
@@ -102,7 +155,7 @@ export async function applyPendingInvite(
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { systemRole: true, name: true },
+    select: { systemRole: true, name: true, gender: true, excludeFromAlias: true },
   });
   if (!user) {
     throw new Error(`User ${userId} not found while applying pending invite`);
@@ -128,13 +181,17 @@ export async function applyPendingInvite(
 
   if (pending) {
     const roleChanged = pending.systemRole !== user.systemRole;
+    const genderChanged = Boolean(pending.gender) && pending.gender !== user.gender;
+    const aliasChanged = pending.excludeFromAlias !== user.excludeFromAlias;
 
-    if (roleChanged || nameChanged) {
+    if (roleChanged || nameChanged || genderChanged || aliasChanged) {
       await prisma.user.update({
         where: { id: userId },
         data: {
           ...(roleChanged ? { systemRole: pending.systemRole } : {}),
           ...(nameChanged ? { name: inviteName } : {}),
+          ...(genderChanged ? { gender: pending.gender } : {}),
+          excludeFromAlias: pending.excludeFromAlias,
         },
       });
       userMutated = true;

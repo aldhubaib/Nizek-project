@@ -58,6 +58,43 @@ export async function isClientAccount(userId: string): Promise<boolean> {
 }
 
 /**
+ * Which of these users read the given project as a client, and so must be sent
+ * aliases rather than real names.
+ *
+ * The stored `systemRole` is not the test on its own. `withEffectiveClientRole`
+ * below promotes anyone holding a client seat to CLIENT for the request, so a
+ * user whose stored role had drifted would be masked on screen and unmasked in
+ * whatever a background job sends them. Admins are excluded here for the same
+ * reason that promotion skips them: they are staff and see the real names.
+ *
+ * Answers for a batch in two queries — fan-out paths call this per publish.
+ */
+export async function clientViewerIds(
+  userIds: string[],
+  projectId: string,
+): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+
+  const [byRole, bySeat] = await Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: userIds }, systemRole: "CLIENT" },
+      select: { id: true },
+    }),
+    prisma.projectMember.findMany({
+      where: {
+        projectId,
+        userId: { in: userIds },
+        user: { systemRole: { not: "ADMIN" } },
+        OR: [{ role: "CLIENT" }, { projectRole: { isClient: true } }],
+      },
+      select: { userId: true },
+    }),
+  ]);
+
+  return new Set([...byRole.map((u) => u.id), ...bySeat.map((m) => m.userId)]);
+}
+
+/**
  * Clients are chat-only. If their system role drifted but they still sit on a
  * client project seat, treat them as CLIENT so view-as matches a real login.
  */
@@ -124,7 +161,11 @@ export async function ensureClientChatForProject(projectId: string, staffUserId?
   await enableClientChat(projectId, staffUserId);
 }
 
-export async function rememberClientSignup(email: string, name?: string) {
+export async function rememberClientSignup(
+  email: string,
+  name?: string,
+  profile?: { gender?: "MALE" | "FEMALE" | null; excludeFromAlias?: boolean },
+) {
   const normalized = email.toLowerCase().trim();
   if (!normalized) return;
 
@@ -142,12 +183,16 @@ export async function rememberClientSignup(email: string, name?: string) {
       systemRole: "CLIENT",
       teamId: clientsTeam?.id ?? undefined,
       ...(parts ? { firstName: parts.firstName, lastName: parts.lastName } : {}),
+      ...(profile?.gender ? { gender: profile.gender } : {}),
+      ...(profile?.excludeFromAlias != null ? { excludeFromAlias: profile.excludeFromAlias } : {}),
     },
     create: {
       email: normalized,
       systemRole: "CLIENT",
       teamId: clientsTeam?.id ?? null,
       ...(parts ? { firstName: parts.firstName, lastName: parts.lastName } : {}),
+      ...(profile?.gender ? { gender: profile.gender } : {}),
+      excludeFromAlias: profile?.excludeFromAlias ?? true,
     },
   });
 }

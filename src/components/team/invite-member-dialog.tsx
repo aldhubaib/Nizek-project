@@ -15,6 +15,7 @@ import { UserPlus, Check, Search, Mail, X, Loader2 } from "lucide-react";
 import { AddButton } from "@/components/add-button";
 import { inviteMember, addMemberToProject, getAvailableUsers } from "@/actions/project";
 import { cn } from "@/lib/utils";
+import { MemberProfileFields, type GenderChoice } from "@/components/team/member-profile-fields";
 
 const ROLE_SELECT_CLASS =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-s text-foreground focus:outline-none focus:ring-2 focus:ring-ring";
@@ -57,6 +58,8 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
   const [mode, setMode] = useState<"add" | "invite">("add");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
+  const [inviteGender, setInviteGender] = useState<GenderChoice>("");
+  const [inviteExcludeFromAlias, setInviteExcludeFromAlias] = useState(false);
   const [inviteRoleId, setInviteRoleId] = useState<string>(roles[0]?.id ?? "");
   const [userSearch, setUserSearch] = useState("");
   const [availableUsers, setAvailableUsers] = useState<AvailableUser[]>([]);
@@ -78,6 +81,12 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
   useEffect(() => {
     if (!inviteRoleId && defaultRoleId) setInviteRoleId(defaultRoleId);
   }, [defaultRoleId, inviteRoleId]);
+
+  const inviteRoleIsClient = Boolean(roles.find((r) => r.id === inviteRoleId)?.isClient);
+
+  useEffect(() => {
+    if (inviteRoleIsClient) setInviteExcludeFromAlias(true);
+  }, [inviteRoleIsClient]);
 
   const visibleUsers = availableUsers.filter((u) => {
     if (u.isClient) return canInviteClients;
@@ -145,7 +154,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
 
   async function handleSubmitInvite(e: React.FormEvent) {
     e.preventDefault();
-    if (!inviteName.trim() || !inviteEmail.trim() || !inviteRoleId) return;
+    if (!inviteName.trim() || !inviteEmail.trim() || !inviteRoleId || !inviteGender) return;
     setLoading(true);
     try {
       await inviteMember({
@@ -153,10 +162,14 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
         email: inviteEmail.trim(),
         name: inviteName.trim(),
         roleId: inviteRoleId,
+        gender: inviteGender,
+        excludeFromAlias: inviteRoleIsClient || inviteExcludeFromAlias,
       });
       setOpen(false);
       setInviteEmail("");
       setInviteName("");
+      setInviteGender("");
+      setInviteExcludeFromAlias(false);
       await onChanged?.();
     } catch (err) {
       alert((err as Error).message);
@@ -171,6 +184,8 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
       setSelected([]);
       setInviteEmail("");
       setInviteName("");
+      setInviteGender("");
+      setInviteExcludeFromAlias(false);
       setUserSearch("");
       setMode("add");
       setAddProgress(null);
@@ -382,6 +397,13 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
                 Adds this email to the allowlist. They can then sign in with Google — any domain is allowed.
               </p>
             </div>
+            <MemberProfileFields
+              gender={inviteGender}
+              onGenderChange={setInviteGender}
+              excludeFromAlias={inviteRoleIsClient || inviteExcludeFromAlias}
+              onExcludeFromAliasChange={setInviteExcludeFromAlias}
+              excludeLocked={inviteRoleIsClient}
+            />
             <div className="space-y-2">
               <Label htmlFor="invite-role">Role</Label>
               {roles.length === 0 ? (
@@ -418,7 +440,7 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
               <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={loading || !inviteName.trim() || !inviteEmail.trim() || !inviteRoleId}>
+              <Button type="submit" disabled={loading || !inviteName.trim() || !inviteEmail.trim() || !inviteRoleId || !inviteGender}>
                 {loading ? "Adding..." : "Allow Sign In"}
               </Button>
             </div>

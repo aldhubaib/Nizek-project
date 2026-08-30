@@ -484,7 +484,17 @@ export function ProjectDetailClient({
           <span className="flex-1">Settings</span>
         </DropdownMenuItem>
       </PageOverflowItems>
-      {canCreateTask && isActive && !noteFullscreen && activeTab !== "notes" ? (
+      {activeTab === "team" && canManageTeam && teamData ? (
+        <PageHeaderActions>
+          <InviteMemberDialog
+            projectId={project.id}
+            roles={teamData.roles}
+            canInviteMembers={userPermissions.canInviteMembers}
+            canInviteClients={userPermissions.canInviteClients}
+            onChanged={reloadTeam}
+          />
+        </PageHeaderActions>
+      ) : canCreateTask && isActive && !noteFullscreen && activeTab !== "notes" ? (
         <PageHeaderActions>
           <AddButton
             label="New task"
@@ -666,18 +676,7 @@ export function ProjectDetailClient({
               <TabSpinner />
             ) : (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-s font-semibold">Team Members</h2>
-                  {canManageTeam && (
-                    <InviteMemberDialog
-                      projectId={project.id}
-                      roles={teamData.roles}
-                      canInviteMembers={userPermissions.canInviteMembers}
-                      canInviteClients={userPermissions.canInviteClients}
-                      onChanged={reloadTeam}
-                    />
-                  )}
-                </div>
+                <h2 className="text-s font-semibold">Team Members</h2>
                 <MemberList
                   members={teamMembers}
                   projectId={project.id}

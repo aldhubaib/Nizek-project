@@ -19,6 +19,7 @@ interface WorkspaceRole {
   id: string;
   name: string;
   isAdmin: boolean;
+  isClient?: boolean;
   canCreateTask: boolean;
   canModifyTask: boolean;
   canMoveTask: boolean;
@@ -88,6 +89,7 @@ export function MemberList({
   const [permOverrides, setPermOverrides] = useState<
     Record<string, Partial<Pick<Member, "canInviteMembers" | "canBypassProof">>>
   >({});
+  const [roleOverrides, setRoleOverrides] = useState<Record<string, string>>({});
   const [nameEdit, setNameEdit] = useState<{
     kind: "member" | "invitation";
     id: string;
@@ -97,9 +99,16 @@ export function MemberList({
   } | null>(null);
 
   async function handleRoleChange(memberId: string, roleId: string) {
+    setRoleOverrides((prev) => ({ ...prev, [memberId]: roleId }));
     try {
       await updateMemberRole({ projectId, memberId, roleId });
+      onTeamChanged?.();
     } catch (err) {
+      setRoleOverrides((prev) => {
+        const next = { ...prev };
+        delete next[memberId];
+        return next;
+      });
       console.error(err);
     }
   }
@@ -296,7 +305,14 @@ export function MemberList({
               .map((n) => n[0])
               .join("") ?? member.user.email[0]?.toUpperCase();
           const isSelf = member.user.id === currentUserId;
-          const roleName = member.projectRole?.name ?? member.role;
+          const effectiveRoleId = roleOverrides[member.id] ?? member.roleId;
+          const selectedRole = roles.find((r) => r.id === effectiveRoleId);
+          const roleName = selectedRole?.name ?? member.projectRole?.name ?? member.role;
+          const isClientRole = selectedRole
+            ? selectedRole.isClient === true || selectedRole.name.toLowerCase() === "client"
+            : member.role === "CLIENT" ||
+              member.projectRole?.isClient === true ||
+              roleName.toLowerCase() === "client";
 
           return (
             <div
@@ -373,7 +389,7 @@ export function MemberList({
 
               {isAdmin && !isSelf ? (
                 <Select
-                  value={member.roleId ?? ""}
+                  value={effectiveRoleId ?? ""}
                   onValueChange={(val) => val && handleRoleChange(member.id, val)}
                 >
                   <SelectTrigger className="h-7 w-full text-xs rounded-full border-border">
@@ -399,7 +415,7 @@ export function MemberList({
                 <StatusBadge config={outlineBadge(roleName, "text-muted-foreground", "border-border")} icon={Shield} />
               )}
 
-              {isAdmin && !isSelf && (
+              {isAdmin && !isSelf && !isClientRole && (
                 <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border/50">
                   <InviteToggle
                     checked={permOverrides[member.id]?.canInviteMembers ?? member.canInviteMembers}

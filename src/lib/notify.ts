@@ -9,6 +9,8 @@ import {
 import { enqueuePush } from "@/lib/push-queue";
 import type { PushPayload } from "@/lib/push-core";
 import { sumInboxMessageUnreads } from "@/lib/inbox-unread";
+import { getAliasMap, maskPlainNames, NO_MASK, type AliasIdentity } from "@/lib/alias";
+import { clientViewerIds } from "@/lib/client-role";
 
 type NotifyInput = {
   recipientIds: string[];
@@ -22,6 +24,17 @@ type NotifyInput = {
   threadKey?: string | null;
   /** Message author — forwarded on `notification.new` so clients can skip self-chimes. */
   authorId?: string | null;
+  /**
+   * Render a second, aliased copy of `title`/`body` for any client recipient.
+   * Titles are stored pre-rendered, so this has to happen at write time — it is
+   * the only way to keep the stored row, the bell payload, and the push banner
+   * telling a client the same story.
+   */
+  alias?: {
+    projectId: string | null;
+    /** Whose face the push banner shows; swapped for their alias photo. */
+    actorUserId?: string | null;
+  } | null;
 };
 
 export type CreatedNotification = {
@@ -102,6 +115,28 @@ export async function resolveNotifiableRecipients(input: {
  * live without a refetch. Returns the created rows — callers should push to
  * `rows.map((r) => r.recipientId)` so push honors the same filtering.
  */
+/**
+ * Which of these recipients are clients, plus the alias map to render for them.
+ * Returns an empty set when there is nothing to mask, so the common all-staff
+ * case costs no extra queries.
+ */
+async function resolveAliasAudience(
+  input: NotifyInput,
+  recipients: string[],
+): Promise<{ clientIds: Set<string>; aliasMap: Map<string, AliasIdentity> }> {
+  if (!input.alias?.projectId) {
+    return { clientIds: new Set(), aliasMap: NO_MASK };
+  }
+  const aliasMap = await getAliasMap(input.alias.projectId);
+  if (aliasMap.size === 0) {
+    return { clientIds: new Set(), aliasMap: NO_MASK };
+  }
+  return {
+    clientIds: await clientViewerIds(recipients, input.alias.projectId),
+    aliasMap,
+  };
+}
+
 export async function createAndPublishNotifications(
   input: NotifyInput,
 ): Promise<CreatedNotification[]> {
@@ -112,15 +147,22 @@ export async function createAndPublishNotifications(
   });
   if (recipients.length === 0) return [];
 
+  const { clientIds, aliasMap } = await resolveAliasAudience(input, recipients);
+
   const rows = await prisma.notification.createManyAndReturn({
-    data: recipients.map((rid) => ({
-      recipientId: rid,
-      type: input.type,
-      title: input.title,
-      body: input.body ?? null,
-      linkUrl: input.linkUrl ?? null,
-      tag: input.tag ?? null,
-    })),
+    data: recipients.map((rid) => {
+      const mask = clientIds.has(rid);
+      return {
+        recipientId: rid,
+        type: input.type,
+        title: mask ? maskPlainNames(input.title, aliasMap) : input.title,
+        body: mask
+          ? maskPlainNames(input.body ?? "", aliasMap) || null
+          : (input.body ?? null),
+        linkUrl: input.linkUrl ?? null,
+        tag: input.tag ?? null,
+      };
+    }),
   });
 
   // Each recipient gets a distinct row/id — batch all publishes into one
@@ -158,12 +200,66 @@ export async function notifyAndPush(
   pushPayload: Omit<PushPayload, "tag" | "type"> & { type: string },
 ): Promise<CreatedNotification[]> {
   const rows = await createAndPublishNotifications(input);
-  if (rows.length > 0) {
+  if (rows.length === 0) return rows;
+
+  const tag = input.tag ?? undefined;
+
+  if (!input.alias?.projectId) {
     void enqueuePush(
       rows.map((r) => r.recipientId),
-      { ...pushPayload, tag: input.tag ?? undefined },
+      { ...pushPayload, tag },
     );
+    return rows;
   }
+
+  // Rows already carry the audience-correct title and body, so grouping by them
+  // keeps each banner consistent with the stored notification. Clients also get
+  // the actor's alias photo rather than their real face.
+  const [clientIds, aliasMap] = await Promise.all([
+    clientViewerIds(
+      rows.map((r) => r.recipientId),
+      input.alias.projectId,
+    ),
+    getAliasMap(input.alias.projectId),
+  ]);
+  const actorAlias = input.alias.actorUserId
+    ? aliasMap.get(input.alias.actorUserId)
+    : undefined;
+  // An aliased actor's real avatar must never reach a client banner, so an alias
+  // with no photo drops the icon entirely rather than falling back — the service
+  // worker then shows the app icon.
+  const clientIcon = actorAlias
+    ? (actorAlias.imageUrl ?? undefined)
+    : pushPayload.icon;
+
+  const groups = new Map<
+    string,
+    { title: string; body?: string; icon?: string; ids: string[] }
+  >();
+  for (const row of rows) {
+    const forClient = clientIds.has(row.recipientId);
+    const icon = forClient ? clientIcon : pushPayload.icon;
+    const key = `${forClient ? "c" : "s"}\u0000${row.title}\u0000${row.body ?? ""}`;
+    const group = groups.get(key) ?? {
+      title: row.title,
+      body: row.body ?? undefined,
+      icon: icon ?? undefined,
+      ids: [],
+    };
+    group.ids.push(row.recipientId);
+    groups.set(key, group);
+  }
+
+  for (const group of groups.values()) {
+    void enqueuePush(group.ids, {
+      ...pushPayload,
+      title: group.title,
+      body: group.body,
+      icon: group.icon,
+      tag,
+    });
+  }
+
   return rows;
 }
 

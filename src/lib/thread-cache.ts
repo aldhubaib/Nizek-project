@@ -4,6 +4,7 @@ import type { InboxThread } from "@/actions/messages";
 import { getThreadMessages } from "@/actions/messages";
 import {
   conversationChannel,
+  conversationClientChannel,
   globalPresenceChannel,
   projectChannel,
   taskChannel,
@@ -127,15 +128,21 @@ export function targetFromThreadId(threadId: string): ThreadTarget {
   return {};
 }
 
-export function channelsForThread(thread: {
-  id: string;
-  kind: InboxThread["kind"];
-  projectId: string | null;
-  conversationId: string | null;
-}): { channel: string; presenceChannel: string | null } {
+export function channelsForThread(
+  thread: {
+    id: string;
+    kind: InboxThread["kind"];
+    projectId: string | null;
+    conversationId: string | null;
+  },
+  /** Clients read the aliased twin channel; only they may subscribe to it. */
+  isClientViewer = false,
+): { channel: string; presenceChannel: string | null } {
   if (thread.conversationId) {
     return {
-      channel: conversationChannel(thread.conversationId),
+      channel: isClientViewer
+        ? conversationClientChannel(thread.conversationId)
+        : conversationChannel(thread.conversationId),
       presenceChannel: globalPresenceChannel(),
     };
   }
@@ -155,8 +162,9 @@ export function channelsForThread(thread: {
 export function snapshotFromInboxThread(
   thread: InboxThread,
   currentMemberId: string,
+  isClientViewer = false,
 ): ThreadCacheSnapshot {
-  const { channel, presenceChannel } = channelsForThread(thread);
+  const { channel, presenceChannel } = channelsForThread(thread, isClientViewer);
   return {
     channel,
     presenceChannel,
@@ -187,6 +195,7 @@ export function snapshotFromInboxThread(
 export function prefetchInboxThread(
   thread: InboxThread,
   currentMemberId: string,
+  isClientViewer = false,
 ): void {
   if (typeof window === "undefined") return;
   if (inflightPrefetch.has(thread.id)) return;
@@ -203,7 +212,9 @@ export function prefetchInboxThread(
   void getThreadMessages(target)
     .then((page) => {
       const prev = peekThreadCache(thread.id);
-      const base = prev?.snapshot ?? snapshotFromInboxThread(thread, currentMemberId);
+      const base =
+        prev?.snapshot ??
+        snapshotFromInboxThread(thread, currentMemberId, isClientViewer);
       putThreadCache(thread.id, {
         snapshot: {
           ...base,

@@ -6,8 +6,10 @@ import {
   taskChannel,
   projectChannel,
   conversationChannel,
+  conversationClientChannel,
   globalPresenceChannel,
 } from "@/lib/channels";
+import { getAliasMap, maskName, maskPlainNames } from "@/lib/alias";
 import { getThreadMessages, getInboxThreads } from "@/actions/messages";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import {
@@ -325,6 +327,22 @@ export default async function ThreadPage({
     allowedTaskTypes = activeContract
       ? getAllowedTaskTypes(activeContract.contractType, isSystemAdmin)
       : [];
+  }
+
+  // Clients see aliases for everyone on the project, and read the separate
+  // aliased realtime channel — the plain conv channel carries real names.
+  if (client && target.conversationId) {
+    const aliasMap = await getAliasMap(target.projectId);
+    for (const [id, name] of Object.entries(memberNames)) {
+      memberNames[id] = maskName(id, name, aliasMap);
+    }
+    mentionables = mentionables.map((m) => ({
+      id: m.id,
+      name: maskName(m.id, m.name, aliasMap),
+    }));
+    title = maskPlainNames(title, aliasMap);
+    subtitle = maskPlainNames(subtitle, aliasMap);
+    channel = conversationClientChannel(target.conversationId);
   }
 
   // Latest page only (50 messages) — older pages load on demand in the client.

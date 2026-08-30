@@ -1,12 +1,14 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth";
+import { requireUser, requireStaffUser } from "@/lib/auth";
 import { applyPendingInvite, logPendingInviteError, removeFromAllowlistIfUnused, syncInviteDisplayName } from "@/lib/pending-invite";
 import { revalidatePath } from "next/cache";
 import { cache } from "react";
-import type { SystemRole, TeamRole } from "@/generated/prisma/client";
+import type { Gender, SystemRole, TeamRole } from "@/generated/prisma/client";
+import { parseGender } from "@/lib/member-profile";
 import { membershipRoleFromProjectRole } from "@/lib/client-role";
+import { availableAliasCount } from "@/lib/alias";
 
 async function requireAdmin() {
   const user = await requireUser();
@@ -17,7 +19,7 @@ async function requireAdmin() {
 // ─── Team CRUD ───────────────────────────────────────────────
 
 export async function getTeams() {
-  await requireUser();
+  await requireStaffUser();
   return prisma.team.findMany({
     orderBy: [{ isDefault: "desc" }, { name: "asc" }],
     include: {
@@ -137,7 +139,7 @@ export async function deleteTeam(teamId: string) {
 // ─── Team Members ────────────────────────────────────────────
 
 export async function getTeamMembers() {
-  await requireUser();
+  await requireStaffUser();
 
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "asc" },
@@ -162,6 +164,8 @@ export async function getTeamMembers() {
     imageUrl: u.imageUrl,
     systemRole: u.systemRole,
     blocked: u.blocked,
+    gender: u.gender,
+    excludeFromAlias: u.excludeFromAlias,
     createdAt: u.createdAt,
     projects: u.projects.map((p) => ({
       id: p.project.id,
@@ -255,6 +259,66 @@ export async function updateUserName(userId: string, name: string) {
   return {};
 }
 
+export async function updateUserProfile(data: {
+  userId: string;
+  name: string;
+  email: string;
+  gender: Gender;
+  excludeFromAlias: boolean;
+}) {
+  await requireAdmin();
+
+  const trimmedName = data.name.trim();
+  if (!trimmedName) return { error: "Name is required" };
+  let gender: Gender;
+  try {
+    gender = parseGender(data.gender);
+  } catch (err) {
+    return { error: (err as Error).message };
+  }
+
+  const nextEmail = data.email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+    return { error: "Enter a valid email address" };
+  }
+
+  const target = await prisma.user.findUnique({ where: { id: data.userId } });
+  if (!target) return { error: "User not found" };
+
+  if (target.email.toLowerCase() !== nextEmail) {
+    const taken = await prisma.user.findFirst({
+      where: { email: { equals: nextEmail, mode: "insensitive" }, NOT: { id: data.userId } },
+      select: { id: true },
+    });
+    if (taken) return { error: "Another member already uses this email" };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: data.userId },
+      data: {
+        name: trimmedName,
+        email: nextEmail,
+        gender,
+        excludeFromAlias: data.excludeFromAlias,
+      },
+    });
+    if (target.email.toLowerCase() !== nextEmail) {
+      await tx.allowedEmail.upsert({
+        where: { email: nextEmail },
+        update: {},
+        create: { email: nextEmail },
+      });
+    }
+  });
+  await syncInviteDisplayName(target.email, trimmedName);
+
+  revalidatePath("/dashboard/team");
+  revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/account");
+  return {};
+}
+
 const reconcileSignedUpInvites = cache(async () => {
   try {
     const [invitations, teamInvites] = await Promise.all([
@@ -314,6 +378,8 @@ export async function inviteToTeam(data: {
   systemRole: SystemRole;
   firstName: string;
   lastName: string;
+  gender: Gender;
+  excludeFromAlias?: boolean;
   teamId?: string;
   projects?: { projectId: string; roleId: string }[];
 }) {
@@ -328,20 +394,9 @@ export async function inviteToTeam(data: {
   if (!firstName || !lastName) {
     throw new Error("First name and last name are required");
   }
+  const gender = parseGender(data.gender);
 
   const teamId = data.teamId || null;
-  await prisma.pendingTeamInvite.upsert({
-    where: { email },
-    update: { systemRole: data.systemRole, firstName, lastName, teamId },
-    create: { email, systemRole: data.systemRole, firstName, lastName, teamId },
-  });
-
-  await prisma.allowedEmail.upsert({
-    where: { email },
-    update: {},
-    create: { email },
-  });
-
   const assignments = (data.projects ?? []).filter((p) => p.projectId && p.roleId);
   const assignedRoles = assignments.length
     ? await prisma.projectRole.findMany({
@@ -351,13 +406,44 @@ export async function inviteToTeam(data: {
   const roleById = new Map(assignedRoles.map((r) => [r.id, r]));
   const asClient =
     data.systemRole === "CLIENT" || assignedRoles.some((r) => r.isClient);
+  const excludeFromAlias = asClient || Boolean(data.excludeFromAlias);
+
+  // One alias is consumed per project, so the pool must cover every assignment
+  // up front. Catching it here beats letting them sign in and get stuck.
+  if (!excludeFromAlias && assignments.length > 0) {
+    const available = await availableAliasCount(gender);
+    if (available < assignments.length) {
+      throw new Error(
+        `Only ${available} unused ${gender === "MALE" ? "male" : "female"} alias${available === 1 ? "" : "es"} left, but ${assignments.length} project${assignments.length === 1 ? "" : "s"} were selected. Upload more in Settings → Aliases.`,
+      );
+    }
+  }
+
+  await prisma.pendingTeamInvite.upsert({
+    where: { email },
+    update: { systemRole: data.systemRole, firstName, lastName, teamId, gender, excludeFromAlias },
+    create: { email, systemRole: data.systemRole, firstName, lastName, teamId, gender, excludeFromAlias },
+  });
+
+  await prisma.allowedEmail.upsert({
+    where: { email },
+    update: {},
+    create: { email },
+  });
 
   const displayName = `${firstName} ${lastName}`.trim();
 
   if (asClient && assignments.length > 0) {
     const { inviteMember } = await import("@/actions/project");
     for (const a of assignments) {
-      await inviteMember({ projectId: a.projectId, email, roleId: a.roleId, name: displayName });
+      await inviteMember({
+        projectId: a.projectId,
+        email,
+        roleId: a.roleId,
+        name: displayName,
+        gender,
+        excludeFromAlias,
+      });
     }
   } else {
     for (const a of assignments) {

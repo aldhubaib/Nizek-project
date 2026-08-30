@@ -16,6 +16,7 @@ import {
   ClipboardCheck,
   PieChart,
   KeyRound,
+  UserRoundSearch,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { TeamsManager } from "@/components/settings/teams-manager";
@@ -27,21 +28,25 @@ import { AppLogoClient } from "./app-logo-client";
 import { LoginSettingsClient } from "./login-settings-client";
 import { NotificationSoundClient } from "./notification-sound-client";
 import { NotificationStatusClient } from "./notification-status-client";
+import { AliasManager } from "@/components/settings/alias-manager";
 import { AuditAccessManager } from "@/components/settings/audit-access-manager";
 import { EquityAccessManager } from "@/components/settings/equity-access-manager";
 import { VaultAccessManager } from "@/components/settings/vault-access-manager";
+import type { AliasDTO, AliasStatsDTO, AliasUsageDTO } from "@/actions/alias";
 import type { BrandingAssetDTO } from "@/actions/branding";
 import type { LoginPhotoDTO } from "@/actions/login-photos";
 import type { NotificationSoundDTO } from "@/actions/notification-sound-settings";
 import type { BrandingSlotId } from "@/lib/branding-slots";
 import { PageHeader, PageBackButton, PageName } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { cn } from "@/lib/utils";
 
 type TabId =
   | "teams"
   | "members"
   | "roles"
   | "contracts"
+  | "aliases"
   | "questions"
   | "app-logo"
   | "login"
@@ -80,6 +85,12 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         label: "Roles",
         icon: Shield,
         desc: "Define roles and permissions across the system.",
+      },
+      {
+        id: "aliases",
+        label: "Aliases",
+        icon: UserRoundSearch,
+        desc: "Alias names and photos shown to clients instead of real staff identities.",
       },
     ],
   },
@@ -165,6 +176,9 @@ interface Props {
   roles: any;
   prefixes: any;
   questions: any;
+  aliases: AliasDTO[];
+  aliasUsage: AliasUsageDTO[];
+  aliasStats: AliasStatsDTO;
   branding: Partial<Record<BrandingSlotId, BrandingAssetDTO>>;
   loginPhotos: LoginPhotoDTO[];
   notificationSound: NotificationSoundDTO;
@@ -181,6 +195,9 @@ export function AdminPageClient({
   roles,
   prefixes,
   questions,
+  aliases,
+  aliasUsage,
+  aliasStats,
   branding,
   loginPhotos,
   notificationSound,
@@ -221,7 +238,8 @@ export function AdminPageClient({
   // Detail view — the selected section's manager with a back link to the hub.
   return (
     <div>
-      <PageHeader>
+      {/* Tabs that park a button in the top-right chrome need the extra room. */}
+      <PageHeader hasMenu={active.id === "members" || active.id === "aliases"}>
         <PageBackButton href="/dashboard/admin" label="Back to settings" />
         <PageBreadcrumb
           items={[
@@ -231,7 +249,7 @@ export function AdminPageClient({
         />
       </PageHeader>
 
-      <div className="px-app py-6 max-w-3xl">
+      <div className={cn("min-w-0 px-app", active.id === "members" ? "max-w-full py-4" : "py-6 max-w-3xl")}>
         {active.id === "teams" && (
           <TeamsManager teams={teams} pendingInvites={pendingInvites} />
         )}
@@ -252,6 +270,9 @@ export function AdminPageClient({
         {active.id === "roles" && <RolesManager roles={roles} />}
         {active.id === "contracts" && (
           <ContractPrefixManager prefixes={prefixes} />
+        )}
+        {active.id === "aliases" && (
+          <AliasManager aliases={aliases} usage={aliasUsage} stats={aliasStats} />
         )}
         {active.id === "questions" && (
           <DefaultQuestionsManager questions={questions} />
