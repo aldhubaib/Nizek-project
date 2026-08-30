@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Clock, FolderKanban, Search, X, Ban, Trash2, ShieldCheck, Shield, AlertTriangle, ChevronDown, Eye, Pencil } from "lucide-react";
+import { Mail, Clock, FolderKanban, Search, X, Ban, Trash2, ShieldCheck, Shield, AlertTriangle, ChevronDown, Eye, Pencil, UserRound, VenetianMask } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddButton } from "@/components/add-button";
 import { PageHeaderActions } from "@/components/page-header-actions";
@@ -662,6 +662,9 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                 .join("") ?? member.email[0]?.toUpperCase();
             const isSelf = member.id === currentUserId;
             const roleLabel = member.systemRole === "ADMIN" ? "Admin" : "Member";
+            // Clients are who the aliases are for, so neither tag says anything
+            // about them.
+            const aliasApplies = member.systemRole !== "CLIENT";
 
             return (
               <div
@@ -774,6 +777,44 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                       size="sm"
                       config={outlineBadge("Blocked", "text-destructive", "border-destructive/30")}
                     />
+                  )}
+                  {aliasApplies && (
+                    <>
+                      <StatusBadge
+                        size="sm"
+                        icon={UserRound}
+                        config={
+                          member.gender
+                            ? outlineBadge(
+                                member.gender === "MALE" ? "Male" : "Female",
+                                "text-muted-foreground",
+                                "border-border",
+                              )
+                            : // The pool is matched on gender, so a blank one is
+                              // the reason someone joins a project unaliased.
+                              outlineBadge("No gender", "text-orange", "border-orange/30")
+                        }
+                        title={
+                          member.gender
+                            ? "Aliases are drawn from the pool of this gender"
+                            : "No gender recorded, so no alias can be drawn for them"
+                        }
+                      />
+                      <StatusBadge
+                        size="sm"
+                        icon={VenetianMask}
+                        config={
+                          member.excludeFromAlias
+                            ? outlineBadge("Real name", "text-violet", "border-violet/30")
+                            : outlineBadge("Aliased", "text-muted-foreground", "border-border")
+                        }
+                        title={
+                          member.excludeFromAlias
+                            ? "Excluded from aliases: clients see their real name on every project"
+                            : "Clients see an alias instead of their real name"
+                        }
+                      />
+                    </>
                   )}
                 </div>
 
