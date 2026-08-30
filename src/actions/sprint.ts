@@ -10,7 +10,7 @@ import {
 } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import type { SprintStatus } from "@/generated/prisma/client";
-import { isClosedSprint, isCurrentSprintStatus, isUnstartedSprint, comparePlannedSprints, compareClosedSprints, type SprintBoardColumn } from "@/lib/sprint-status";
+import { isClosedSprint, isCurrentSprintStatus, isUnstartedSprint, comparePlannedSprints, compareClosedSprints, sprintDepartureToRecord, type SprintBoardColumn } from "@/lib/sprint-status";
 import { taskCode } from "@/lib/task-label";
 import { isBuiltInTaskFieldQuestion } from "@/lib/task-readiness";
 import { countWorkingDays } from "@/lib/working-days";
@@ -548,13 +548,21 @@ export async function setTaskSprint(
       projectId: true,
       archivedAt: true,
       assigneeId: true,
-      assignee: { select: { name: true } },
+      assignee: { select: { name: true, imageUrl: true } },
+      // Read before the update, because this is the state that gets recorded
+      // against the sprint the task is leaving.
+      stage: true,
+      estimatedMinutes: true,
+      unplannedInSprint: true,
+      sprintId: true,
+      sprint: { select: { name: true, status: true } },
     },
   });
   if (!task || task.archivedAt) throw new Error("Task not found");
   const { user } = await requireSprintEditor(task.projectId);
 
   let sprintStatus: string | null = null;
+  let sprintName: string | null = null;
   if (sprintId) {
     const sprint = await prisma.sprint.findUnique({
       where: { id: sprintId },
@@ -567,26 +575,72 @@ export async function setTaskSprint(
       throw new Error("Cannot add tasks to a completed sprint");
     }
     sprintStatus = sprint.status;
+    sprintName = sprint.name;
   }
 
-  const updated = await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      sprintId,
-      ...(sprintId
-        ? {
-            stage: "NEW_REQUEST",
-            unplannedInSprint: sprintStatus === "ACTIVE",
-            ...(estimatedMinutes !== undefined ? { estimatedMinutes } : {}),
-          }
-        : { assigneeId: null, estimatedMinutes: null, unplannedInSprint: false }),
-    },
-    select: {
-      id: true,
-      sprintId: true,
-      sprint: { select: { id: true, name: true, status: true } },
-    },
-  });
+  // A task carries only one sprint, so reassigning it used to erase the fact
+  // that it had ever been in the previous one: the task's Sprints History
+  // showed the new name instead of both. Ending a sprint records a snapshot for
+  // everything still in it, and leaving one early is recorded here, so the two
+  // ways a task can part from a sprint both leave a trace.
+  const leaving = sprintDepartureToRecord(
+    { sprintId: task.sprintId, status: task.sprint?.status ?? null },
+    sprintId,
+  );
+
+  const departure = {
+    stage: task.stage,
+    estimatedMinutes: task.estimatedMinutes,
+    unplannedInSprint: task.unplannedInSprint,
+    assigneeId: task.assigneeId,
+    assigneeName: task.assignee?.name ?? null,
+    assigneeImageUrl: task.assignee?.imageUrl ?? null,
+    // Explains the task in that sprint's review, which would otherwise list it
+    // as unfinished with no reason given.
+    incompleteReason: sprintId
+      ? `Moved to ${sprintName ?? "another sprint"}`
+      : "Removed from the sprint",
+  };
+
+  const [updated] = await prisma.$transaction([
+    prisma.task.update({
+      where: { id: taskId },
+      data: {
+        sprintId,
+        ...(sprintId
+          ? {
+              stage: "NEW_REQUEST",
+              unplannedInSprint: sprintStatus === "ACTIVE",
+              ...(estimatedMinutes !== undefined ? { estimatedMinutes } : {}),
+            }
+          : { assigneeId: null, estimatedMinutes: null, unplannedInSprint: false }),
+      },
+      select: {
+        id: true,
+        sprintId: true,
+        sprint: { select: { id: true, name: true, status: true } },
+      },
+    }),
+    // Upsert, not create: a task can leave the same sprint more than once, and
+    // the latest departure is the one worth keeping.
+    ...(leaving
+      ? [
+          prisma.sprintTaskSnapshot.upsert({
+            where: { sprintId_taskId: { sprintId: leaving, taskId } },
+            create: { sprintId: leaving, taskId, ...departure },
+            update: departure,
+          }),
+        ]
+      : []),
+    // A task that comes back to a sprint it had left is in that sprint now, so
+    // the record of it leaving is no longer history — and left in place it would
+    // be counted a second time in the task's sprint tally, which adds the
+    // current sprint to the snapshot count. Only ever an open sprint here: a
+    // closed one is refused above, so no ended sprint's record is at risk.
+    ...(sprintId
+      ? [prisma.sprintTaskSnapshot.deleteMany({ where: { sprintId, taskId } })]
+      : []),
+  ]);
 
   if (!sprintId && task.assigneeId) {
     await logTaskActivity({

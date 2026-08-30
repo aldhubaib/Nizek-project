@@ -750,7 +750,7 @@ export function TaskDetailPage({
         <div className="rounded-lg border border-border/50 bg-card px-3 pb-3">
           <div className="flex items-center gap-2 px-1 py-4">
             <Zap className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-            <h3 className="text-s font-semibold">Sprints</h3>
+            <h3 className="text-s font-semibold">Sprints History</h3>
             {initialTask.sprints.length > 0 && (
               <CountBadge count={initialTask.sprints.length} size="sm" muted />
             )}

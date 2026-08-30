@@ -6,7 +6,41 @@ import {
   isCurrentSprintStatus,
   isUnstartedSprint,
   sprintBoardColumn,
+  sprintDepartureToRecord,
 } from "@/lib/sprint-status";
+
+describe("sprintDepartureToRecord", () => {
+  it("records the sprint a task is moved out of", () => {
+    expect(
+      sprintDepartureToRecord({ sprintId: "s1", status: "ACTIVE" }, "s2"),
+    ).toBe("s1");
+  });
+
+  it("records a removal from a sprint, not just a move to another", () => {
+    expect(
+      sprintDepartureToRecord({ sprintId: "s1", status: "PLANNED" }, null),
+    ).toBe("s1");
+  });
+
+  it("records nothing when the task was not in a sprint", () => {
+    expect(sprintDepartureToRecord({ sprintId: null, status: null }, "s2")).toBeNull();
+  });
+
+  it("records nothing when the sprint is unchanged", () => {
+    // Re-assigning the same sprint happens when only the estimate is edited.
+    expect(
+      sprintDepartureToRecord({ sprintId: "s1", status: "ACTIVE" }, "s1"),
+    ).toBeNull();
+  });
+
+  it("leaves a closed sprint's own snapshot alone", () => {
+    // A DONE task stays attached to a sprint that ended, and that snapshot
+    // carries the reason its review gave. Overwriting it would lose that.
+    for (const status of ["COMPLETED", "PARTIALLY_COMPLETED", "SHIPPED"]) {
+      expect(sprintDepartureToRecord({ sprintId: "s1", status }, "s2")).toBeNull();
+    }
+  });
+});
 
 describe("sprintBoardColumn", () => {
   it("puts unstarted sprints in Planned or Next", () => {

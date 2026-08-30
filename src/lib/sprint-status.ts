@@ -16,6 +16,25 @@ export function isUnstartedSprint(status: string): boolean {
   return status === "PLANNED" || status === "NEXT";
 }
 
+/**
+ * The sprint a task is parting from, when that departure is worth recording in
+ * the task's sprint history — or null when there is nothing to record.
+ *
+ * Closed sprints are excluded on purpose. A DONE task stays attached to a sprint
+ * that has ended, and that sprint already holds a snapshot written when it
+ * closed, carrying the reason its review gave. Recording a departure over that
+ * would replace a real review record with a note about this move.
+ */
+export function sprintDepartureToRecord(
+  from: { sprintId: string | null; status: string | null },
+  toSprintId: string | null,
+): string | null {
+  if (!from.sprintId) return null;
+  if (from.sprintId === toSprintId) return null;
+  if (isClosedSprint(from.status ?? "")) return null;
+  return from.sprintId;
+}
+
 export function sprintBoardColumn(status: string): SprintBoardColumn {
   if (status === "NEXT") return "NEXT";
   if (status === "ACTIVE") return "ACTIVE";
