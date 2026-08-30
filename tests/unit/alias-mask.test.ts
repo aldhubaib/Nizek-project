@@ -148,7 +148,28 @@ describe("aliasRequirement", () => {
     expect(
       aliasRequirement(
         { systemRole: "DEVELOPER", excludeFromAlias: false, gender: "MALE" },
-        "CLIENT",
+        { memberRole: "CLIENT" },
+      ),
+    ).toBe("exempt");
+  });
+
+  it("exempts a member this project shows by real name", () => {
+    expect(
+      aliasRequirement(
+        { systemRole: "DEVELOPER", excludeFromAlias: false, gender: "MALE" },
+        { showRealName: true },
+      ),
+    ).toBe("exempt");
+  });
+
+  it("does not report a missing gender for someone shown by real name", () => {
+    // They need no alias here, so an absent gender is nothing to refuse the
+    // membership over — it would otherwise hard-fail on a project that has no
+    // intention of masking them.
+    expect(
+      aliasRequirement(
+        { systemRole: "DEVELOPER", excludeFromAlias: false, gender: null },
+        { showRealName: true },
       ),
     ).toBe("exempt");
   });
@@ -185,6 +206,8 @@ describe("claimAliasForMember", () => {
       systemRole: string;
       excludeFromAlias: boolean;
       gender: "MALE" | "FEMALE" | null;
+      /** The membership's per-project "show them by real name" switch. */
+      showRealName?: boolean;
     },
   ) =>
     Object.assign(db, {
@@ -196,6 +219,9 @@ describe("claimAliasForMember", () => {
           excludeFromAlias: user.excludeFromAlias,
           gender: user.gender,
         }),
+      },
+      projectMember: {
+        findUnique: async () => ({ showRealName: user.showRealName ?? false }),
       },
     }) as unknown as AliasDb;
 
@@ -227,6 +253,33 @@ describe("claimAliasForMember", () => {
       await claimAliasForMember(db, { userId: "u1", projectId: "p1" }),
     ).toBeNull();
     expect((db as unknown as ReturnType<typeof fakeDb>).assignments).toHaveLength(0);
+  });
+
+  it("spends no alias on a member the project shows by real name", async () => {
+    const db = withUser(fakeDb(["a1"]), {
+      systemRole: "DEVELOPER",
+      excludeFromAlias: false,
+      gender: "MALE",
+      showRealName: true,
+    });
+    expect(
+      await claimAliasForMember(db, { userId: "u1", projectId: "p1" }),
+    ).toBeNull();
+    // The pool is finite, so holding one back for a name nobody hides is waste.
+    expect((db as unknown as ReturnType<typeof fakeDb>).assignments).toHaveLength(0);
+  });
+
+  it("still refuses nothing when a revealed member has no gender", async () => {
+    const db = withUser(fakeDb([]), {
+      name: "Ali Hassan",
+      systemRole: "DEVELOPER",
+      excludeFromAlias: false,
+      gender: null,
+      showRealName: true,
+    });
+    expect(
+      await claimAliasForMember(db, { userId: "u1", projectId: "p1" }),
+    ).toBeNull();
   });
 
   it("claims for a normal employee", async () => {
@@ -272,7 +325,18 @@ describe("needsAlias", () => {
     expect(
       needsAlias(
         { systemRole: "DEVELOPER", excludeFromAlias: false, gender: "MALE" },
-        "CLIENT",
+        { memberRole: "CLIENT" },
+      ),
+    ).toBe(false);
+  });
+
+  it("skips a member shown by real name on this project", () => {
+    // Keeps them out of the pool stats and the backfill list, which would
+    // otherwise nag about a gap that is there on purpose.
+    expect(
+      needsAlias(
+        { systemRole: "DEVELOPER", excludeFromAlias: false, gender: "MALE" },
+        { showRealName: true },
       ),
     ).toBe(false);
   });

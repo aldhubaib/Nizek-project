@@ -247,6 +247,13 @@ model ProjectMember {
   canInviteMembers Boolean @default(false)
   canInviteClients Boolean @default(false)
   canBypassProof   Boolean @default(false)
+  /**
+   * Show this person's real name to the client on this project alone, while
+   * they stay aliased everywhere else. `User.excludeFromAlias` is the whole-
+   * account version of the same idea; this is the per-project one, for someone
+   * the client already deals with by name here.
+   */
+  showRealName     Boolean @default(false)
 
   createdAt DateTime @default(now())
 

@@ -91,6 +91,7 @@ interface Member {
   canInviteMembers: boolean;
   canInviteClients: boolean;
   canBypassProof: boolean;
+  showRealName?: boolean;
   projectRole: {
     id: string;
     name: string;
@@ -105,6 +106,7 @@ interface Member {
     email: string;
     imageUrl: string | null;
     systemRole?: string;
+    excludeFromAlias?: boolean;
   };
 }
 

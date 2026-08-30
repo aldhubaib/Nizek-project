@@ -1046,8 +1046,18 @@ function UsageView({ usage }: { usage: AliasUsageDTO[] }) {
                       {u.userName}
                     </span>
                   </div>
-                  <span className="truncate text-s text-muted-foreground">
-                    {u.projectName}
+                  <span className="flex min-w-0 items-center gap-xs">
+                    <span className="truncate text-s text-muted-foreground">
+                      {u.projectName}
+                    </span>
+                    {u.showRealName && (
+                      <span
+                        className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                        title="This project shows their real name to its client, so the alias is reserved but not in use"
+                      >
+                        Real name
+                      </span>
+                    )}
                   </span>
                 </div>
               ))}

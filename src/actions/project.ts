@@ -28,6 +28,7 @@ import {
   AliasPoolExhaustedError,
   availableAliasCount,
   claimAliasForMember,
+  isAliasBlocked,
 } from "@/lib/alias";
 
 async function requireMemberManagement(projectId: string) {
@@ -59,6 +60,12 @@ async function requireMemberManagement(projectId: string) {
 async function requireClaimableAlias(
   userId: string,
   projectId: string,
+  /**
+   * Value of the project's real-name switch to judge against. Defaults to what
+   * the membership currently says; pass false to ask "could they be masked",
+   * which is what turning that switch back off needs to know.
+   */
+  showRealName?: boolean,
 ): Promise<void> {
   const held = await prisma.aliasAssignment.findUnique({
     where: { userId_projectId: { userId, projectId } },
@@ -66,25 +73,36 @@ async function requireClaimableAlias(
   });
   if (held) return;
 
-  const target = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      name: true,
-      email: true,
-      systemRole: true,
-      excludeFromAlias: true,
-      gender: true,
-    },
-  });
+  const [target, membership] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        name: true,
+        email: true,
+        systemRole: true,
+        excludeFromAlias: true,
+        gender: true,
+      },
+    }),
+    showRealName === undefined
+      ? prisma.projectMember.findUnique({
+          where: { userId_projectId: { userId, projectId } },
+          select: { showRealName: true },
+        })
+      : null,
+  ]);
   if (!target) return;
 
   // The role they are moving to decides this, not the one they hold now, so the
   // current membership role is deliberately not passed.
-  const requirement = aliasRequirement({
-    systemRole: target.systemRole === "CLIENT" ? "MEMBER" : target.systemRole,
-    excludeFromAlias: target.excludeFromAlias,
-    gender: target.gender,
-  });
+  const requirement = aliasRequirement(
+    {
+      systemRole: target.systemRole === "CLIENT" ? "MEMBER" : target.systemRole,
+      excludeFromAlias: target.excludeFromAlias,
+      gender: target.gender,
+    },
+    { showRealName: showRealName ?? membership?.showRealName ?? false },
+  );
   if (requirement === "exempt") return;
   if (requirement === "no-gender") {
     throw new AliasGenderMissingError(target.name ?? target.email);
@@ -213,7 +231,7 @@ export async function getProject(projectId: string) {
       // without it the dropdown always showed "No team".
       team: { select: { id: true, name: true } },
       contracts: { orderBy: { startDate: "desc" } },
-      members: { include: { user: { select: { id: true, name: true, imageUrl: true, email: true, systemRole: true } }, projectRole: true } },
+      members: { include: { user: { select: { id: true, name: true, imageUrl: true, email: true, systemRole: true, excludeFromAlias: true } }, projectRole: true } },
       _count: { select: { tasks: true, meetingNotes: true, assets: true } },
     },
   });
@@ -871,7 +889,14 @@ export async function getProjectMembers(projectId: string) {
     where: { projectId },
     include: {
       user: {
-        select: { id: true, name: true, imageUrl: true, email: true, systemRole: true },
+        select: {
+          id: true,
+          name: true,
+          imageUrl: true,
+          email: true,
+          systemRole: true,
+          excludeFromAlias: true,
+        },
       },
       projectRole: true,
     },
@@ -994,4 +1019,78 @@ export async function updateMemberInvitePerms(data: {
   });
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
+}
+
+/**
+ * Show one member to this project's client under their real name, or put them
+ * back behind their alias. Scoped to this membership, so their aliases on other
+ * projects are untouched, and independent of the account-wide
+ * `User.excludeFromAlias`.
+ *
+ * Going back behind an alias has to leave them with one, so it runs the same
+ * preflight as seating a new member and claims inside the flag's transaction —
+ * an empty pool rolls the whole thing back rather than leaving the client
+ * reading a real name. That refusal is returned rather than thrown, since the
+ * admin flipping the switch is the one who has to go and fix the pool.
+ */
+export async function setMemberRealName(data: {
+  projectId: string;
+  memberId: string;
+  showRealName: boolean;
+}): Promise<{ success: true } | { error: string }> {
+  const { user, member } = await requireProjectMember(data.projectId);
+  const isSystemAdmin = user.systemRole === "ADMIN";
+  const isProjectAdmin = member.projectRole?.isAdmin ?? false;
+  if (!isSystemAdmin && !isProjectAdmin) {
+    throw new Error("Only admins can manage alias visibility");
+  }
+
+  const target = await prisma.projectMember.findFirst({
+    where: { id: data.memberId, projectId: data.projectId },
+    select: {
+      userId: true,
+      role: true,
+      showRealName: true,
+      projectRole: { select: { isClient: true } },
+    },
+  });
+  if (!target) throw new Error("Member not found");
+  if (target.role === "CLIENT" || target.projectRole?.isClient) {
+    throw new Error("Client members are the ones reading the aliases");
+  }
+  if (target.showRealName === data.showRealName) return { success: true };
+
+  if (data.showRealName) {
+    // The assignment they may already hold stays put — an alias is never handed
+    // to anyone else, so the same one returns if this is switched back off.
+    await prisma.projectMember.update({
+      where: { id: data.memberId },
+      data: { showRealName: true },
+    });
+  } else {
+    try {
+      // Judged as if the switch were already off, since that is what is about
+      // to be true — the membership still says otherwise at this point.
+      await requireClaimableAlias(target.userId, data.projectId, false);
+      await prisma.$transaction(async (tx) => {
+        await tx.projectMember.update({
+          where: { id: data.memberId },
+          data: { showRealName: false },
+        });
+        // After the update, never before: the claim reads this flag and would
+        // treat them as exempt while it still said true.
+        await claimAliasForMember(tx, {
+          userId: target.userId,
+          projectId: data.projectId,
+          memberRole: target.role,
+        });
+      });
+    } catch (err) {
+      if (isAliasBlocked(err)) return { error: err.message };
+      throw err;
+    }
+  }
+
+  revalidatePath(`/dashboard/projects/${data.projectId}`);
+  return { success: true };
 }

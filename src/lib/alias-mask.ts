@@ -68,20 +68,37 @@ export function isAliasBlocked(
   return isAliasPoolExhausted(err) || isAliasGenderMissing(err);
 }
 
+export type AliasSubject = {
+  systemRole: string;
+  excludeFromAlias: boolean;
+  gender: Gender | null;
+};
+
+/** How this person joins the project being asked about. */
+export type AliasMembership = {
+  memberRole?: string;
+  /** The project's own exception: shown to its client by real name. */
+  showRealName?: boolean;
+};
+
 /**
  * Where this person stands on needing an alias for a project.
  *
- * "exempt" — clients see the aliases so they never get one, and excluded users
- * (founders, public-facing staff) keep their real identity on purpose.
+ * "exempt" — clients see the aliases so they never get one, excluded users
+ * (founders, public-facing staff) keep their real identity on purpose, and a
+ * member this project shows by name has nothing to hide behind either.
  * "no-gender" — they should have one but nothing can be drawn for them.
  * "required" — claim one.
  */
 export function aliasRequirement(
-  user: { systemRole: string; excludeFromAlias: boolean; gender: Gender | null },
-  memberRole?: string,
+  user: AliasSubject,
+  membership?: AliasMembership,
 ): "exempt" | "no-gender" | "required" {
-  if (user.systemRole === "CLIENT" || memberRole === "CLIENT") return "exempt";
+  if (user.systemRole === "CLIENT" || membership?.memberRole === "CLIENT") return "exempt";
   if (user.excludeFromAlias) return "exempt";
+  // Before the gender check: someone shown by name needs no alias, so a missing
+  // gender is not a problem worth refusing the membership over.
+  if (membership?.showRealName) return "exempt";
   if (user.gender === null) return "no-gender";
   return "required";
 }
@@ -91,11 +108,8 @@ export function aliasRequirement(
  * missing gender: this answers "is there an alias to hand out", which is what
  * the pool stats and the backfill list ask.
  */
-export function needsAlias(
-  user: { systemRole: string; excludeFromAlias: boolean; gender: Gender | null },
-  memberRole?: string,
-): boolean {
-  return aliasRequirement(user, memberRole) === "required";
+export function needsAlias(user: AliasSubject, membership?: AliasMembership): boolean {
+  return aliasRequirement(user, membership) === "required";
 }
 
 function isRootClient(db: AliasDb): db is PrismaClient {
@@ -196,7 +210,19 @@ export async function claimAliasForMember(
   });
   if (!user) return null;
 
-  const requirement = aliasRequirement(user, input.memberRole);
+  // Read through the same client as the claim, so a membership created in the
+  // caller's still-open transaction is visible here.
+  const membership = await db.projectMember.findUnique({
+    where: {
+      userId_projectId: { userId: input.userId, projectId: input.projectId },
+    },
+    select: { showRealName: true },
+  });
+
+  const requirement = aliasRequirement(user, {
+    memberRole: input.memberRole,
+    showRealName: membership?.showRealName ?? false,
+  });
   if (requirement === "exempt") return null;
   if (requirement === "no-gender") {
     throw new AliasGenderMissingError(user.name ?? user.email);

@@ -9,8 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Trash2, Shield, X, Clock, Mail, Users, AlertTriangle, ArrowRightLeft, Film, Eye, Pencil } from "lucide-react";
-import { removeMember, updateMemberRole, cancelInvitation, updateMemberInvitePerms, updateInvitationName, updateMemberName } from "@/actions/project";
+import { Trash2, Shield, X, Clock, Mail, Users, AlertTriangle, ArrowRightLeft, Film, Eye, Pencil, UserRound } from "lucide-react";
+import { removeMember, updateMemberRole, cancelInvitation, updateMemberInvitePerms, updateInvitationName, updateMemberName, setMemberRealName } from "@/actions/project";
 import { startImpersonationByEmail } from "@/actions/impersonation";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { outlineBadge } from "@/lib/task-label";
@@ -32,11 +32,15 @@ interface Member {
   projectRole: WorkspaceRole | null;
   canInviteMembers: boolean;
   canBypassProof: boolean;
+  /** This project shows them to its client by real name instead of their alias. */
+  showRealName?: boolean;
   user: {
     id: string;
     name: string | null;
     email: string;
     imageUrl: string | null;
+    /** Account-wide exemption, which outranks the per-project switch. */
+    excludeFromAlias?: boolean;
   };
 }
 
@@ -86,6 +90,8 @@ export function MemberList({
   const [transferState, setTransferState] = useState<TransferState | null>(null);
   const [impersonating, setImpersonating] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [realNameOverrides, setRealNameOverrides] = useState<Record<string, boolean>>({});
+  const [realNameErrors, setRealNameErrors] = useState<Record<string, string>>({});
   const [permOverrides, setPermOverrides] = useState<
     Record<string, Partial<Pick<Member, "canInviteMembers" | "canBypassProof">>>
   >({});
@@ -224,6 +230,31 @@ export function MemberList({
     } catch (err) {
       setPermOverrides((prev) => ({ ...prev, [memberId]: { ...prev[memberId], [field]: !value } }));
       console.error(err);
+    }
+  }
+
+  async function handleToggleRealName(memberId: string, value: boolean) {
+    setRealNameOverrides((prev) => ({ ...prev, [memberId]: value }));
+    setRealNameErrors((prev) => {
+      const next = { ...prev };
+      delete next[memberId];
+      return next;
+    });
+    // Switching back to the alias can be refused when the pool has nothing left,
+    // so the optimistic flip is undone and the reason shown on the card.
+    const revert = (message: string) => {
+      setRealNameOverrides((prev) => ({ ...prev, [memberId]: !value }));
+      setRealNameErrors((prev) => ({ ...prev, [memberId]: message }));
+    };
+    try {
+      const res = await setMemberRealName({ projectId, memberId, showRealName: value });
+      if ("error" in res) {
+        revert(res.error);
+        return;
+      }
+      onTeamChanged?.();
+    } catch (err) {
+      revert((err as Error).message || "Could not change how this member is shown");
     }
   }
 
@@ -416,19 +447,39 @@ export function MemberList({
               )}
 
               {isAdmin && !isSelf && !isClientRole && (
-                <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border/50">
-                  <InviteToggle
-                    checked={permOverrides[member.id]?.canInviteMembers ?? member.canInviteMembers}
-                    onChange={(v) => handleToggleInvitePerm(member.id, "canInviteMembers", v)}
-                    icon={<Users className="w-3 h-3" strokeWidth={1.5} />}
-                    label="Members"
-                  />
-                  <InviteToggle
-                    checked={permOverrides[member.id]?.canBypassProof ?? member.canBypassProof}
-                    onChange={(v) => handleToggleInvitePerm(member.id, "canBypassProof", v)}
-                    icon={<Film className="w-3 h-3" strokeWidth={1.5} />}
-                    label="Bypass"
-                  />
+                <div className="mt-2 pt-2 border-t border-border/50 space-y-1.5">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <InviteToggle
+                      checked={permOverrides[member.id]?.canInviteMembers ?? member.canInviteMembers}
+                      onChange={(v) => handleToggleInvitePerm(member.id, "canInviteMembers", v)}
+                      icon={<Users className="w-3 h-3" strokeWidth={1.5} />}
+                      label="Members"
+                    />
+                    <InviteToggle
+                      checked={permOverrides[member.id]?.canBypassProof ?? member.canBypassProof}
+                      onChange={(v) => handleToggleInvitePerm(member.id, "canBypassProof", v)}
+                      icon={<Film className="w-3 h-3" strokeWidth={1.5} />}
+                      label="Bypass"
+                    />
+                    <InviteToggle
+                      checked={
+                        member.user.excludeFromAlias ||
+                        (realNameOverrides[member.id] ?? member.showRealName ?? false)
+                      }
+                      onChange={(v) => handleToggleRealName(member.id, v)}
+                      icon={<UserRound className="w-3 h-3" strokeWidth={1.5} />}
+                      label="Real name"
+                      disabled={member.user.excludeFromAlias}
+                      title={
+                        member.user.excludeFromAlias
+                          ? "Excluded from aliases on their account, so clients see their real name on every project"
+                          : "Show this member's real name to this project's client instead of their alias"
+                      }
+                    />
+                  </div>
+                  {realNameErrors[member.id] && (
+                    <p className="text-xs text-destructive">{realNameErrors[member.id]}</p>
+                  )}
                 </div>
               )}
             </div>
@@ -603,17 +654,21 @@ function NameEditRow({
   );
 }
 
-function InviteToggle({ checked, onChange, icon, label }: {
+function InviteToggle({ checked, onChange, icon, label, disabled = false, title }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   icon: React.ReactNode;
   label: string;
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className="flex items-center gap-xs group/toggle"
+      disabled={disabled}
+      title={title}
+      className="flex items-center gap-xs group/toggle disabled:opacity-60 disabled:cursor-not-allowed"
     >
       <div className={`w-6 h-3.5 rounded-full transition-colors relative ${checked ? "bg-primary/70" : "bg-muted"}`}>
         <div className={`absolute top-0.5 w-2.5 h-2.5 rounded-full transition-all ${checked ? "left-3 bg-white" : "left-0.5 bg-muted-foreground/40"}`} />

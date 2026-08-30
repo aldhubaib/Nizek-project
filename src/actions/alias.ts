@@ -41,6 +41,12 @@ export type AliasUsageDTO = {
   userImageUrl: string | null;
   projectId: string;
   projectName: string;
+  /**
+   * The alias is held but not in effect: this project shows the person to its
+   * client by real name. Kept visible so the list is not read as "the client
+   * sees this alias".
+   */
+  showRealName: boolean;
   createdAt: string;
 };
 
@@ -392,16 +398,23 @@ export async function reshuffleAliasPool(): Promise<{ reshuffled: number }> {
 
 export async function getAliasUsage(): Promise<AliasUsageDTO[]> {
   await requireAliasAdmin();
-  const rows = await prisma.aliasAssignment.findMany({
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      createdAt: true,
-      alias: { select: { name: true, imageUrl: true, gender: true } },
-      user: { select: { id: true, name: true, email: true, imageUrl: true } },
-      project: { select: { id: true, name: true } },
-    },
-  });
+  const [rows, revealed] = await Promise.all([
+    prisma.aliasAssignment.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        createdAt: true,
+        alias: { select: { name: true, imageUrl: true, gender: true } },
+        user: { select: { id: true, name: true, email: true, imageUrl: true } },
+        project: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.projectMember.findMany({
+      where: { showRealName: true },
+      select: { userId: true, projectId: true },
+    }),
+  ]);
+  const shownByName = new Set(revealed.map((m) => `${m.userId}:${m.projectId}`));
 
   return rows.map((r) => ({
     id: r.id,
@@ -413,6 +426,7 @@ export async function getAliasUsage(): Promise<AliasUsageDTO[]> {
     userImageUrl: r.user.imageUrl,
     projectId: r.project.id,
     projectName: r.project.name,
+    showRealName: shownByName.has(`${r.user.id}:${r.project.id}`),
     createdAt: r.createdAt.toISOString(),
   }));
 }
@@ -429,7 +443,9 @@ export async function getAliasStats(): Promise<AliasStatsDTO> {
     }),
     prisma.aliasAssignment.count(),
     prisma.projectMember.findMany({
-      where: { role: { not: "CLIENT" } },
+      // Members this project shows by name are not gaps in the pool, so they are
+      // kept out of the stats and the backfill list entirely.
+      where: { role: { not: "CLIENT" }, showRealName: false },
       select: {
         role: true,
         projectId: true,
@@ -466,7 +482,7 @@ export async function getAliasStats(): Promise<AliasStatsDTO> {
     missingGenderMap.set(m.user.id, entry);
   }
 
-  const claimable = candidates.filter((m) => needsAlias(m.user, m.role));
+  const claimable = candidates.filter((m) => needsAlias(m.user, { memberRole: m.role }));
   const existing = claimable.length
     ? await prisma.aliasAssignment.findMany({
         where: {
@@ -511,7 +527,7 @@ export async function backfillAliasAssignments(): Promise<{
   await requireAliasAdmin();
 
   const members = await prisma.projectMember.findMany({
-    where: { role: { not: "CLIENT" } },
+    where: { role: { not: "CLIENT" }, showRealName: false },
     select: {
       role: true,
       projectId: true,
@@ -555,7 +571,7 @@ export async function backfillAliasAssignments(): Promise<{
       });
       continue;
     }
-    if (!needsAlias(m.user, m.role)) continue;
+    if (!needsAlias(m.user, { memberRole: m.role })) continue;
     try {
       const result = await claimAliasForMember(prisma, {
         userId: m.user.id,
