@@ -422,7 +422,7 @@ export function VaultCredentialsPanel({
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative max-w-xs flex-1">
+        <div className="relative max-w-[16rem] flex-1">
           <SearchIcon />
           <Input
             value={query}

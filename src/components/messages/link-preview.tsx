@@ -195,7 +195,7 @@ export function LinkPreviewCard({
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}
       className={cn(
-        "flex w-full max-w-xs items-center gap-s rounded-xl border px-2.5 py-2 transition-colors",
+        "flex w-full max-w-[16rem] items-center gap-s rounded-xl border px-2.5 py-2 transition-colors",
         mine
           ? "border-primary-foreground/20 bg-primary-foreground/10 hover:bg-primary-foreground/15"
           : "border-border/60 bg-background/60 hover:bg-background",

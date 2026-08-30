@@ -60,6 +60,10 @@ html[data-scroll-locked] body {
   --text-s: 0.8125rem;
   --text-m: 1rem;
   --text-l: clamp(1.25rem, 1rem + 2.5cqi, 1.75rem);
+  /* These shadow Tailwind's --container-* scale wherever the key collides, so
+     `max-w-xs` is 0.25rem and `max-w-xl` is 1.5rem rather than the 16rem/36rem
+     you would expect. Width utilities that want a container size have to spell
+     it out (`max-w-[16rem]`); `sm`/`md`/`lg` don't collide and stay usable. */
   --spacing-xs: 0.25rem;
   --spacing-s: 0.5rem;
   --spacing-m: 0.75rem;
@@ -220,6 +224,13 @@ html[data-scroll-locked] body {
   padding-inline: var(--app-gutter);
   padding-left: calc(var(--app-gutter) + env(safe-area-inset-left, 0px));
   padding-right: calc(var(--app-gutter) + env(safe-area-inset-right, 0px));
+}
+
+/* The top-right chrome is flush so the bare ⋮ can sit in the corner — its glyph
+   is already optically inset. A labelled button parked there needs the gutter
+   back to line up with the page body. */
+.me-app {
+  margin-inline-end: calc(var(--app-gutter) + env(safe-area-inset-right, 0px));
 }
 
 /* Bottom tab bar. Unlayered — Tailwind `pb-[env()]` loses to preflight and
