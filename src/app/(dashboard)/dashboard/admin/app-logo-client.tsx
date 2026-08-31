@@ -8,11 +8,14 @@ import {
   CheckCircle2,
   AlertTriangle,
   Loader2,
+  UploadCloud,
 } from "lucide-react";
 import {
   setBrandingAsset,
   removeBrandingAsset,
+  pushBrandingToAllPlatforms,
   type BrandingAssetDTO,
+  type BrandingPushResult,
 } from "@/actions/branding";
 import {
   BRANDING_SLOTS,
@@ -33,6 +36,7 @@ export function AppLogoClient({ assets }: { assets: Assets }) {
         individual assets below. Each slot enforces the required format and
         dimensions before it&apos;s accepted.
       </p>
+      <PushRow hasSource={Boolean(assets.homeScreenSource || assets.webLogo)} />
       <p className="text-s text-muted-foreground rounded-lg border border-border bg-card/60 px-3 py-2.5 leading-relaxed">
         Sidebar, login, and the browser tab update within about a minute. On
         Android Chrome, open the installed app, tap ⋮ → Review app update,
@@ -52,6 +56,93 @@ export function AppLogoClient({ assets }: { assets: Assets }) {
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * One action that makes every surface show the current logo. Uploading already
+ * updates the browser tab on its own; this is for the home-screen glyphs, which
+ * only move when the icon URLs change underneath them.
+ */
+function PushRow({ hasSource }: { hasSource: boolean }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<BrandingPushResult | null>(null);
+
+  const onPush = async () => {
+    setError(null);
+    setResult(null);
+    setBusy(true);
+    try {
+      setResult(await pushBrandingToAllPlatforms());
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not push the logos");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="rounded-xl border border-border/60 bg-surface p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-s font-medium">Push to all platforms</div>
+          <p className="mt-1 text-s text-muted-foreground leading-relaxed">
+            Rebuilds the browser tab, iOS and Android icons from the home screen
+            source and hands the new set to every open tab and installed app.
+            Replaces anything you uploaded into those slots by hand; the dark
+            favicon, monochrome glyph, splash, and sidebar mark are left alone.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onPush}
+          disabled={busy || !hasSource}
+          title={
+            hasSource
+              ? "Rebuild and publish every platform icon"
+              : "Upload the home screen source or app logo first"
+          }
+          className="inline-flex h-8 shrink-0 items-center gap-xs rounded-md border border-border/60 bg-background px-3 text-s font-medium text-foreground transition-colors hover:border-border disabled:opacity-60"
+        >
+          {busy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <UploadCloud className="h-3.5 w-3.5" />
+          )}
+          {busy ? "Pushing…" : "Push"}
+        </button>
+      </div>
+
+      {error && (
+        <p className="mt-3 flex items-center gap-xs text-s text-destructive">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          {error}
+        </p>
+      )}
+
+      {result && (
+        <div className="mt-3 space-y-1 rounded-lg border border-border/60 bg-card/60 px-3 py-2.5 text-s">
+          <p className="flex items-center gap-xs text-success">
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            Pushed from {result.sourceName}
+            {result.sourceSlot === "webLogo" ? " (app logo)" : ""}.
+          </p>
+          {result.rebuilt.length > 0 && (
+            <p className="text-muted-foreground">
+              Updated: {result.rebuilt.join(", ")}.
+            </p>
+          )}
+          <p className="text-muted-foreground">
+            {result.deliveredLive
+              ? "Open tabs and installed apps were updated straight away."
+              : "Realtime was unavailable, so clients will pick this up within a minute."}
+          </p>
+        </div>
+      )}
+    </section>
   );
 }
 

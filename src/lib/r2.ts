@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const R2 = new S3Client({
@@ -45,6 +45,22 @@ export async function uploadToR2(
   );
 
   return `${process.env.R2_PUBLIC_URL}/${key}`;
+}
+
+/**
+ * Read an object back into memory. Used when the server has to re-derive
+ * something from an asset a user uploaded earlier — going through the API
+ * rather than the public URL keeps it working for private buckets.
+ */
+export async function downloadFromR2(key: string): Promise<Buffer> {
+  const res = await R2.send(
+    new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME!,
+      Key: key,
+    }),
+  );
+  if (!res.Body) throw new Error(`R2 object ${key} is empty`);
+  return Buffer.from(await res.Body.transformToByteArray());
 }
 
 export function generateR2Key(prefix: string, filename: string): string {

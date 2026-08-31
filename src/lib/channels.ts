@@ -69,6 +69,11 @@ export function globalPresenceChannel(): string {
 // the "use server" action module, where only async functions may be exported).
 export const NOTIFICATION_SOUND_EVENT = "notification-sound-changed";
 
+// Same channel, published when an admin pushes the logos out. Carries the fresh
+// LiveLogos so open tabs and installed apps swap icons on the spot instead of
+// waiting for the next /api/version poll.
+export const BRANDING_PUSHED_EVENT = "branding-pushed";
+
 /** Ephemeral presence on a chat channel. Not stored in history. */
 export const TYPING_EVENT = "typing";
 

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { NotificationSound } from "@/components/notification-sound";
+import { BrandingLiveListener } from "@/components/branding-live-listener";
 import { bootstrapServiceWorker } from "@/lib/service-worker-register";
 import "@/lib/install-prompt-capture";
 import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
@@ -209,6 +210,7 @@ export function DashboardShell({
       )}
       <ProofUploadToast />
       <NotificationSound currentUserId={currentUserId} soundUrl={notificationSoundUrl} />
+      <BrandingLiveListener />
       <PushNotifier />
       <InstallPrompt />
       <OfflineNotice />

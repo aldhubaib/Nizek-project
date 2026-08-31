@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { NotificationSound } from "@/components/notification-sound";
+import { BrandingLiveListener } from "@/components/branding-live-listener";
 import { bootstrapServiceWorker } from "@/lib/service-worker-register";
 import "@/lib/install-prompt-capture";
 import { CentrifugoProvider } from "@/components/realtime/centrifugo-provider";
@@ -107,6 +108,7 @@ export function ClientShell({
         {children}
       </div>
       <NotificationSound currentUserId={currentUserId} soundUrl={notificationSoundUrl} />
+      <BrandingLiveListener />
       <PushNotifier />
       <InstallPrompt />
       <OfflineNotice />

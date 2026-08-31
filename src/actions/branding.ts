@@ -3,8 +3,10 @@
 import sharp from "sharp";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { invalidateBrandingCache } from "@/lib/branding";
-import { generateR2Key, uploadToR2, deleteFromR2 } from "@/lib/r2";
+import { getLiveLogos, invalidateBrandingCache } from "@/lib/branding";
+import { publish } from "@/lib/centrifugo";
+import { BRANDING_PUSHED_EVENT, globalPresenceChannel } from "@/lib/channels";
+import { generateR2Key, uploadToR2, deleteFromR2, downloadFromR2 } from "@/lib/r2";
 import {
   getBrandingSlot,
   storageSlotsFor,
@@ -175,49 +177,80 @@ async function upsertAsset(
   if (existing) await deleteFromR2(existing.r2Key).catch(() => {});
 }
 
+/**
+ * Every asset derived from one square source, in the order they are written.
+ * `platform` is what the admin screen reports after a push — the file names
+ * alone don't say which device they end up on.
+ */
+function derivedTargets(set: Awaited<ReturnType<typeof generatePwaSetFromSource>>) {
+  return [
+    {
+      slot: "androidAny192",
+      platform: "Android icon 192",
+      bytes: set.any192,
+      mime: "image/png",
+      fileName: "icon-192.png",
+      width: 192,
+      height: 192,
+    },
+    {
+      slot: "androidAny512",
+      platform: "Android icon 512",
+      bytes: set.any512,
+      mime: "image/png",
+      fileName: "icon-512.png",
+      width: 512,
+      height: 512,
+    },
+    {
+      slot: "androidMaskable192",
+      platform: "Android maskable 192",
+      bytes: set.maskable192,
+      mime: "image/png",
+      fileName: "icon-maskable-192.png",
+      width: 192,
+      height: 192,
+    },
+    {
+      slot: "androidMaskable512",
+      platform: "Android maskable 512",
+      bytes: set.maskable512,
+      mime: "image/png",
+      fileName: "icon-maskable-512.png",
+      width: 512,
+      height: 512,
+    },
+    {
+      slot: "appleTouchIcon",
+      platform: "iOS home screen",
+      bytes: set.appleTouch,
+      mime: "image/png",
+      fileName: "apple-touch-icon.png",
+      width: 180,
+      height: 180,
+    },
+    {
+      slot: "favicon",
+      platform: "Browser tab",
+      bytes: set.faviconIco,
+      mime: "image/x-icon",
+      fileName: "favicon.ico",
+      width: 32,
+      height: 32,
+    },
+  ] as const;
+}
+
 async function applyGeneratedPwaSet(set: Awaited<ReturnType<typeof generatePwaSetFromSource>>) {
-  await upsertAsset("androidAny192", {
-    bytes: set.any192,
-    mime: "image/png",
-    fileName: "icon-192.png",
-    width: 192,
-    height: 192,
-  });
-  await upsertAsset("androidAny512", {
-    bytes: set.any512,
-    mime: "image/png",
-    fileName: "icon-512.png",
-    width: 512,
-    height: 512,
-  });
-  await upsertAsset("androidMaskable192", {
-    bytes: set.maskable192,
-    mime: "image/png",
-    fileName: "icon-maskable-192.png",
-    width: 192,
-    height: 192,
-  });
-  await upsertAsset("androidMaskable512", {
-    bytes: set.maskable512,
-    mime: "image/png",
-    fileName: "icon-maskable-512.png",
-    width: 512,
-    height: 512,
-  });
-  await upsertAsset("appleTouchIcon", {
-    bytes: set.appleTouch,
-    mime: "image/png",
-    fileName: "apple-touch-icon.png",
-    width: 180,
-    height: 180,
-  });
-  await upsertAsset("favicon", {
-    bytes: set.faviconIco,
-    mime: "image/x-icon",
-    fileName: "favicon.ico",
-    width: 32,
-    height: 32,
-  });
+  for (const t of derivedTargets(set)) {
+    await upsertAsset(t.slot, {
+      bytes: t.bytes,
+      mime: t.mime,
+      fileName: t.fileName,
+      width: t.width,
+      height: t.height,
+    });
+  }
 }
 
 export async function setBrandingAsset(formData: FormData): Promise<void> {
@@ -320,6 +353,85 @@ export async function setBrandingAsset(formData: FormData): Promise<void> {
     height: dims.height,
   });
   invalidateBrandingCache();
+}
+
+export type BrandingPushResult = {
+  /** Which upload the platform icons were rebuilt from. */
+  sourceName: string;
+  sourceSlot: "homeScreenSource" | "webLogo";
+  /** Platform labels of everything that was rewritten. */
+  rebuilt: string[];
+  /** The push reached open tabs and installed apps over the realtime channel. */
+  deliveredLive: boolean;
+};
+
+/**
+ * Send the current logo to every surface at once: browser tab, iOS home screen,
+ * and the Android manifest icons.
+ *
+ * Every derived slot is rewritten from the source, the same way uploading a new
+ * source does — the source is what the platforms are meant to agree on, so a
+ * push that left some of them behind would defeat the point. That rewrite is
+ * also what moves the icons: Chrome treats an icon href as immutable, and each
+ * fresh row lands on a new `/pwa-icons/<stamp>/…` path and lifts the manifest
+ * query, which is the only thing an installed app notices.
+ *
+ * Assets that are never derived — the dark favicon, monochrome glyph, splash,
+ * OG image, sidebar mark — are left untouched, artwork and URL both.
+ */
+export async function pushBrandingToAllPlatforms(): Promise<BrandingPushResult> {
+  await requireBrandingEditor();
+
+  const rows = await prisma.brandingAsset.findMany();
+  const bySlot = new Map(rows.map((r) => [r.slot, r]));
+  const source = bySlot.get("homeScreenSource") ?? bySlot.get("webLogo");
+  if (!source) {
+    throw new Error(
+      "Nothing to push yet — upload the home screen source or the app logo first.",
+    );
+  }
+
+  const sourceBytes = await downloadFromR2(source.r2Key);
+  let set: Awaited<ReturnType<typeof generatePwaSetFromSource>>;
+  try {
+    set = await generatePwaSetFromSource(sourceBytes);
+  } catch {
+    throw new Error(
+      `Could not read ${source.fileName} as an icon. Upload a square PNG as the home screen source, then push again.`,
+    );
+  }
+
+  const rebuilt: string[] = [];
+  for (const target of derivedTargets(set)) {
+    await upsertAsset(target.slot, {
+      bytes: target.bytes,
+      mime: target.mime,
+      fileName: target.fileName,
+      width: target.width,
+      height: target.height,
+    });
+    rebuilt.push(target.platform);
+  }
+
+  invalidateBrandingCache();
+
+  let deliveredLive = false;
+  try {
+    await publish(globalPresenceChannel(), {
+      type: BRANDING_PUSHED_EVENT,
+      logos: await getLiveLogos(),
+    });
+    deliveredLive = true;
+  } catch {
+    // Realtime is best-effort: clients still converge on their next poll.
+  }
+
+  return {
+    sourceName: source.fileName,
+    sourceSlot: source.slot === "webLogo" ? "webLogo" : "homeScreenSource",
+    rebuilt,
+    deliveredLive,
+  };
 }
 
 export async function removeBrandingAsset(
