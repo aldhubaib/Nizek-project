@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Clock, FolderKanban, Search, X, Ban, Trash2, ShieldCheck, Shield, AlertTriangle, ChevronDown, Eye, Pencil, UserRound, VenetianMask } from "lucide-react";
+import { Mail, Clock, FolderKanban, Search, X, Ban, Trash2, ShieldCheck, Shield, AlertTriangle, ChevronDown, Eye, Pencil, UserRound, VenetianMask, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddButton } from "@/components/add-button";
 import { PageHeaderActions } from "@/components/page-header-actions";
@@ -88,6 +88,9 @@ interface Props {
 export function TeamPageClient({ members, invitations, teamInvites, roles, workspaceTeams = [], projectOptions = [], isAdmin, currentUserId }: Props) {
   const [search, setSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState<string>("all");
+  // Null means the filter is off; clicking the active chip clears it again.
+  const [genderFilter, setGenderFilter] = useState<"MALE" | "FEMALE" | "none" | null>(null);
+  const [aliasFilter, setAliasFilter] = useState<"real" | "aliased" | null>(null);
   const [changingRole, setChangingRole] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [projectsMemberId, setProjectsMemberId] = useState<string | null>(null);
@@ -345,12 +348,83 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
       .sort((a, b) => a.name.localeCompare(b.name));
   })();
 
+  const matchesSearch = (m: Member) =>
+    m.name?.toLowerCase().includes(search.toLowerCase()) ||
+    m.email.toLowerCase().includes(search.toLowerCase());
+  const matchesTeam = (m: Member) =>
+    teamFilter === "all" || m.teams.some((t) => t.id === teamFilter);
+
+  // Both tag filters only ever match the people who carry those tags, so a
+  // client — who reads the aliases rather than having one — is never a hit.
+  const matchesGender = (m: Member) => {
+    if (genderFilter === null) return true;
+    if (m.systemRole === "CLIENT") return false;
+    return genderFilter === "none" ? m.gender === null : m.gender === genderFilter;
+  };
+  const matchesAlias = (m: Member) => {
+    if (aliasFilter === null) return true;
+    if (m.systemRole === "CLIENT") return false;
+    return aliasFilter === "real" ? m.excludeFromAlias : !m.excludeFromAlias;
+  };
+
   const filteredMembers = members.filter(
-    (m) =>
-      (m.name?.toLowerCase().includes(search.toLowerCase()) ||
-        m.email.toLowerCase().includes(search.toLowerCase())) &&
-      (teamFilter === "all" || m.teams.some((t) => t.id === teamFilter))
+    (m) => matchesSearch(m) && matchesTeam(m) && matchesGender(m) && matchesAlias(m),
   );
+
+  // Counts follow the team and search already in force, so they describe the
+  // list on screen. They deliberately ignore the other tag filter, which keeps
+  // a number from dropping to zero the moment you pick something next to it.
+  const tagScope = members.filter(
+    (m) => matchesSearch(m) && matchesTeam(m) && m.systemRole !== "CLIENT",
+  );
+  const tagFilters = [
+    {
+      key: "MALE" as const,
+      label: "Male",
+      icon: UserRound,
+      count: tagScope.filter((m) => m.gender === "MALE").length,
+      active: genderFilter === "MALE",
+      activeClass: "border-primary/40 bg-primary/15 text-primary",
+      onClick: () => setGenderFilter((g) => (g === "MALE" ? null : "MALE")),
+    },
+    {
+      key: "FEMALE" as const,
+      label: "Female",
+      icon: UserRound,
+      count: tagScope.filter((m) => m.gender === "FEMALE").length,
+      active: genderFilter === "FEMALE",
+      activeClass: "border-primary/40 bg-primary/15 text-primary",
+      onClick: () => setGenderFilter((g) => (g === "FEMALE" ? null : "FEMALE")),
+    },
+    {
+      key: "none" as const,
+      label: "No gender",
+      icon: UserRound,
+      count: tagScope.filter((m) => m.gender === null).length,
+      active: genderFilter === "none",
+      activeClass: "border-orange/40 bg-orange/15 text-orange",
+      onClick: () => setGenderFilter((g) => (g === "none" ? null : "none")),
+    },
+    { key: "divider" as const },
+    {
+      key: "real" as const,
+      label: "Real name",
+      icon: VenetianMask,
+      count: tagScope.filter((m) => m.excludeFromAlias).length,
+      active: aliasFilter === "real",
+      activeClass: "border-violet/40 bg-violet/15 text-violet",
+      onClick: () => setAliasFilter((a) => (a === "real" ? null : "real")),
+    },
+    {
+      key: "aliased" as const,
+      label: "Aliased",
+      icon: VenetianMask,
+      count: tagScope.filter((m) => !m.excludeFromAlias).length,
+      active: aliasFilter === "aliased",
+      activeClass: "border-primary/40 bg-primary/15 text-primary",
+      onClick: () => setAliasFilter((a) => (a === "aliased" ? null : "aliased")),
+    },
+  ];
 
   const filteredInvitations = invitations.filter((inv) =>
     inv.email.toLowerCase().includes(search.toLowerCase()) ||
@@ -648,6 +722,31 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
             mobileMaxVisible={2}
             className="w-full min-w-0 overflow-hidden"
           />
+        )}
+        {/* Kept on screen while a chip is active even if the team in view has
+            nobody to tag, so an empty list always has its cause next to it. */}
+        {(tagScope.length > 0 || genderFilter !== null || aliasFilter !== null) && (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {tagFilters.map((f) =>
+              f.key === "divider" ? (
+                <span
+                  key="divider"
+                  aria-hidden
+                  className="mx-1 hidden h-4 w-px bg-border sm:block"
+                />
+              ) : (
+                <TagFilterChip
+                  key={f.key}
+                  label={f.label}
+                  count={f.count}
+                  icon={f.icon}
+                  active={f.active}
+                  activeClass={f.activeClass}
+                  onClick={f.onClick}
+                />
+              ),
+            )}
+          </div>
         )}
       </div>
 
@@ -1074,6 +1173,46 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
         );
       })()}
     </div>
+  );
+}
+
+/**
+ * Secondary filter chip, sized under the team pills so the row reads as the
+ * narrower cut. Carries the same colour as the tag it filters on, so "No
+ * gender" and "Real name" match the badges on the cards.
+ */
+function TagFilterChip({
+  label,
+  count,
+  icon: Icon,
+  active,
+  activeClass,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  icon: LucideIcon;
+  active: boolean;
+  activeClass: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={active ? `Showing ${label} only — click to clear` : `Show ${label} only`}
+      className={cn(
+        "inline-flex h-7 shrink-0 items-center gap-xs rounded-full border px-2.5 text-xs font-medium leading-none transition-colors",
+        active
+          ? activeClass
+          : "border-transparent bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+      )}
+    >
+      <Icon className="h-3 w-3" strokeWidth={1.5} />
+      {label}
+      <span className="opacity-60">{count}</span>
+    </button>
   );
 }
 
