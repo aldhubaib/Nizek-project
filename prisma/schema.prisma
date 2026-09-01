@@ -190,6 +190,7 @@ model User {
   proofBypassRequested ProofBypassPass[]          @relation("ProofBypassRequester")
   proofBypassApproved  ProofBypassPass[]          @relation("ProofBypassApprover")
   aliasAssignments     AliasAssignment[]          @relation("UserAliasAssignments")
+  overviewSnoozes      OverviewSnooze[]           @relation("UserOverviewSnoozes")
 
   @@index([systemRole])
   @@index([blocked])
@@ -260,6 +261,7 @@ model Project {
   vaultFolders     VaultFolder[]
   vaultPermissions VaultPermission[]
   aliasAssignments AliasAssignment[]
+  overviewSnoozes  OverviewSnooze[]
   @@index([teamId])
 }
 
@@ -1941,6 +1943,33 @@ model MutedThread {
 // assigns responsibility. Admins implicitly have every team.
 
 // Grants a user the right to audit one team's projects.
+/// One attention signal a manager has acknowledged on the overview, hidden until
+/// `until` passes.
+///
+/// Held per person rather than per project: a project paused on purpose is only
+/// known to the manager who paused it, and hiding the row for everyone would
+/// take the signal away from the people who have not seen it. Rows are keyed by
+/// signal type so silencing "no sprint" on a parked project does not also
+/// silence a client blocker on the same project.
+model OverviewSnooze {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("UserOverviewSnoozes", fields: [userId], references: [id], onDelete: Cascade)
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// An `AttentionSignalType` from src/lib/project-attention.ts.
+  signalType String
+  until      DateTime
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, projectId, signalType])
+  @@index([userId, until])
+  @@index([projectId])
+}
+
 model AuditPermission {
   id          String   @id @default(cuid())
   userId      String
