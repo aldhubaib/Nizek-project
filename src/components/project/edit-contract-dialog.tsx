@@ -90,7 +90,7 @@ export function EditContractDialog({ contract, contractPrefixes = [], open, onCl
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="sm:max-w-md z-[10000]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Edit Contract</DialogTitle>
         </DialogHeader>

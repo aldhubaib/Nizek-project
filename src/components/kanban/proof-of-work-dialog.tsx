@@ -110,7 +110,7 @@ export function ProofOfWorkDialog({
   }
 
   return createPortal(
-    <div data-scroll-lock-root className="fixed inset-0 z-[200] flex items-center justify-center">
+    <div data-scroll-lock-root className="fixed inset-0 z-[900] flex items-center justify-center">
       <div className="absolute inset-0 bg-overlay" onClick={onCancel} />
       <div className="relative mx-4 w-full max-w-lg rounded-xl border border-border bg-card p-5 shadow-2xl">
         <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-surface/60 p-3">

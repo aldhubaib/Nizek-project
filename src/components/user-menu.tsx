@@ -223,7 +223,6 @@ export function UserMenu({
           side={header ? "bottom" : "top"}
           align={header ? "end" : "start"}
           className="w-56"
-          positionerClassName="z-[700]"
         >
           <AccountMenuItems
             onProfile={goToAccount}

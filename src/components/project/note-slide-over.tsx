@@ -76,6 +76,10 @@ export function NoteSlideOver({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Opaque and isolated at 850. A dialog opened from inside here that portals
+  // to document.body becomes a sibling of this element rather than a child, so
+  // it has to sit above 850 or it is painted behind an opaque background and
+  // never seen. Those dialogs use 900.
   const ui = (
     <div
       data-slide-over

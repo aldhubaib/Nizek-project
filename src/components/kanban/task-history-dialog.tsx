@@ -48,7 +48,7 @@ export function TaskHistoryDialog({ taskId, refreshKey, onClose }: Props) {
   const allowed = history?.allowed === true ? history : null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+    <div className="fixed inset-0 z-[900] flex items-center justify-center">
       <div className="absolute inset-0 bg-overlay" onClick={onClose} />
       <div className="relative mx-4 flex max-h-[85vh] w-full max-w-lg flex-col rounded-xl border border-border bg-card shadow-2xl">
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-5 py-4">

@@ -172,7 +172,7 @@ export function NoteHistoryDialog({ events, onClose }: Props) {
   }, [onClose]);
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+    <div className="fixed inset-0 z-[900] flex items-center justify-center">
       <div className="absolute inset-0 bg-overlay" onClick={onClose} />
       <div className="relative bg-card border border-border rounded-xl shadow-2xl max-w-[36rem] w-full mx-4 flex flex-col max-h-[85vh]">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-border shrink-0">

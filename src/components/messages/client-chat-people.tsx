@@ -224,8 +224,7 @@ export function ClientChatPeopleManager({
       )}
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        {/* The People panel is a slide-over at z-850 — the picker has to clear it. */}
-        <DialogContent className="z-[901] sm:max-w-md" overlayClassName="z-[900]">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add staff to client chat</DialogTitle>
           </DialogHeader>

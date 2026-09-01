@@ -65,7 +65,7 @@ export function AddContractDialog({ projectId, contractPrefixes = [] }: Props) {
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setError(null); }}>
       <DialogTrigger render={<AddButton label="Add Contract" />} />
-      <DialogContent className="sm:max-w-md z-[10000]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add Contract</DialogTitle>
         </DialogHeader>

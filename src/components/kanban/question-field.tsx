@@ -49,7 +49,7 @@ function Lightbox({
   return (
     <div
       data-scroll-lock-root
-      className="fixed inset-0 z-[200] flex flex-col bg-black/90"
+      className="fixed inset-0 z-[900] flex flex-col bg-black/90"
       onClick={onClose}
     >
       {/* Top bar */}

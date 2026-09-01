@@ -95,7 +95,7 @@ export function StageConfirmDialog({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+    <div className="fixed inset-0 z-[900] flex items-center justify-center">
       <div className="absolute inset-0 bg-overlay" onClick={onCancel} />
       <div className="relative bg-card border border-border rounded-xl shadow-2xl max-w-lg w-full mx-4 p-5">
         <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-surface/60 p-3">
