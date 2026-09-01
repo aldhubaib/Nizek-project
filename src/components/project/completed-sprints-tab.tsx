@@ -56,6 +56,7 @@ import {
   sprintBoardColumn,
   type SprintBoardColumn,
 } from "@/lib/sprint-status";
+import { statusDot } from "@/lib/task-label";
 import { cn } from "@/lib/utils";
 import { useKanbanStore, type KanbanTask } from "@/store/kanban";
 import { useProjectTaskSync } from "@/components/kanban/use-project-task-sync";
@@ -70,14 +71,6 @@ const BACKLOG_ZONE = "backlog";
 const MISSING_ZONE = "missing-data";
 const TASK_ZONES = new Set([BACKLOG_ZONE, MISSING_ZONE, "PLANNED", "NEXT"]);
 const SPRINT_CARD_COLUMNS = new Set<SprintBoardColumn>(["ACTIVE", "COMPLETED", "SHIPPED"]);
-
-const COLUMN_COLOR: Record<SprintBoardColumn, string> = {
-  PLANNED: "bg-muted-foreground",
-  NEXT: "bg-cyan",
-  ACTIVE: "bg-sky",
-  COMPLETED: "bg-orange",
-  SHIPPED: "bg-success",
-};
 
 const COLUMN_HEADER_CLASS =
   "flex h-12 shrink-0 items-center gap-2 border-b border-border/50 px-3";
@@ -771,7 +764,7 @@ export function CompletedSprintsTab({
             id={MISSING_ZONE}
             title="Missing data"
             count={missingTasks.length}
-            color="bg-orange"
+            color={statusDot("MISSING_DATA")}
             emptyLabel="No tasks with missing data."
           >
             <div className="space-y-2">
@@ -791,7 +784,7 @@ export function CompletedSprintsTab({
             id={BACKLOG_ZONE}
             title="Backlog"
             count={backlogTasks.length}
-            color="bg-muted-foreground"
+            color={statusDot("BACKLOG")}
             emptyLabel="Drag completed items here. Higher in the list is higher priority."
           >
             <SortableContext
@@ -814,7 +807,7 @@ export function CompletedSprintsTab({
             id="PLANNED"
             title="Planned"
             count={plannedTasks.length}
-            color={COLUMN_COLOR.PLANNED}
+            color={statusDot("PLANNED")}
             emptyLabel="Drop ready tasks here."
           >
             <SortableContext
@@ -837,7 +830,7 @@ export function CompletedSprintsTab({
             id="NEXT"
             title="Next"
             count={nextTasks.length}
-            color={COLUMN_COLOR.NEXT}
+            color={statusDot("NEXT")}
             emptyLabel="Drop tasks here to include them in the next sprint."
             action={
               (canStartSprint || canCreateSprintPlanning) && isProjectActive ? (
@@ -1256,7 +1249,7 @@ function SprintColumn({
       )}
     >
       <div className={COLUMN_HEADER_CLASS}>
-        <div className={cn("h-2.5 w-2.5 rounded-full", COLUMN_COLOR[column.id])} />
+        <div className={cn("h-2.5 w-2.5 rounded-full", statusDot(column.id))} />
         <h3 className="text-s font-medium">{column.label}</h3>
         <span className="text-s text-muted-foreground">{sprints.length}</span>
         {action ? <div className="ml-auto">{action}</div> : null}

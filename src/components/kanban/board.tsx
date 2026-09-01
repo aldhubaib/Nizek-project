@@ -26,7 +26,7 @@ import { DeclineDialog, type DeclineAttachment } from "./decline-dialog";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { useProjectTaskSync } from "./use-project-task-sync";
 import { canTransition } from "@/lib/permissions";
-import { stageLabel } from "@/lib/task-label";
+import { stageLabel, statusDot } from "@/lib/task-label";
 
 interface QuestionWithType extends TaskQuestion {
   taskType: string;
@@ -51,13 +51,9 @@ const columnFirstCollision: CollisionDetection = (args) => {
 // Only stages a card can actually be dragged into. Planned, Next, Completed and
 // Shipped are the sprint's own status showing through, so they are moved on the
 // roadmap, not here.
-const STAGES: { id: MovableStage; label: string; color: string }[] = [
-  { id: "BACKLOG", label: stageLabel("BACKLOG"), color: "bg-muted-foreground" },
-  { id: "TODO", label: stageLabel("TODO"), color: "bg-cyan" },
-  { id: "IN_DEVELOPMENT", label: stageLabel("IN_DEVELOPMENT"), color: "bg-sky" },
-  { id: "INTERNAL_REVIEW", label: stageLabel("INTERNAL_REVIEW"), color: "bg-orange" },
-  { id: "DONE", label: stageLabel("DONE"), color: "bg-success" },
-];
+const STAGES: { id: MovableStage; label: string; color: string }[] = (
+  ["BACKLOG", "TODO", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "DONE"] as const
+).map((id) => ({ id, label: stageLabel(id), color: statusDot(id) }));
 
 export interface BoardProps {
   initialTasks: KanbanTask[];

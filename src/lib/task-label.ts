@@ -30,31 +30,83 @@ export const TASK_TYPE_BADGE: Record<string, { label: string; color: string; bg:
   DESIGN: outlineBadge("Design", "text-cyan", "border-cyan/30"),
 };
 
+interface StatusPalette {
+  /** Filled dot, for column headers and badge bullets. */
+  dot: string;
+  text: string;
+  border: string;
+}
+
+/**
+ * Every status colour in the product, and the only place any of them is set.
+ * The board columns, the roadmap columns and the badges all read from here, so
+ * recolouring a column recolours its badge with it — there is no second list to
+ * remember.
+ *
+ * Each entry spells its three classes out instead of interpolating one stem
+ * because Tailwind only emits classes it can find as literal text; a computed
+ * `bg-${hue}` compiles to nothing at all. Editing a status is still a one-line
+ * change here.
+ *
+ * The hues are deliberately spread so that no two statuses appearing side by
+ * side land on the same colour — Backlog and Planned used to share a grey, and
+ * Done, Completed and Shipped all shared a green.
+ */
+export const STATUS_COLOR: Record<string, StatusPalette> = {
+  BACKLOG: { dot: "bg-muted-foreground", text: "text-muted-foreground", border: "border-muted-foreground/30" },
+  PLANNED: { dot: "bg-violet", text: "text-violet", border: "border-violet/30" },
+  NEXT: { dot: "bg-fuchsia-400", text: "text-fuchsia-400", border: "border-fuchsia-400/30" },
+  TODO: { dot: "bg-cyan", text: "text-cyan", border: "border-cyan/30" },
+  IN_DEVELOPMENT: { dot: "bg-primary", text: "text-primary", border: "border-primary/30" },
+  INTERNAL_REVIEW: { dot: "bg-orange", text: "text-orange", border: "border-orange/30" },
+  DONE: { dot: "bg-emerald-400", text: "text-emerald-400", border: "border-emerald-400/30" },
+  COMPLETED: { dot: "bg-success", text: "text-success", border: "border-success/30" },
+  SHIPPED: { dot: "bg-lime-400", text: "text-lime-400", border: "border-lime-400/30" },
+  /** Sprint-only. An active sprint hands its tasks over to the work stages. */
+  ACTIVE: { dot: "bg-sky", text: "text-sky", border: "border-sky/30" },
+  /** Sprint-only. Closed with work left over, so it reads as a warning. */
+  PARTIALLY_COMPLETED: { dot: "bg-rose-400", text: "text-rose-400", border: "border-rose-400/30" },
+  /** Not a stage — the roadmap's holding pen for unanswered mandatory questions. */
+  MISSING_DATA: { dot: "bg-amber-400", text: "text-amber-400", border: "border-amber-400/30" },
+};
+
+const UNKNOWN_STATUS: StatusPalette = {
+  dot: "bg-muted-foreground",
+  text: "text-muted-foreground",
+  border: "border-border",
+};
+
+export function statusColor(status: string): StatusPalette {
+  return STATUS_COLOR[status] ?? UNKNOWN_STATUS;
+}
+
+/** Header dot for a status. Board and roadmap columns both read this. */
+export function statusDot(status: string): string {
+  return statusColor(status).dot;
+}
+
+function statusBadge(status: string, label: string) {
+  const palette = statusColor(status);
+  return outlineBadge(label, palette.text, palette.border);
+}
+
 // Declaration order is the lifecycle order, and the history view relies on it to
 // lay stages out left to right.
 export const TASK_STAGE_BADGE: Record<string, { label: string; color: string; bg: string }> = {
-  BACKLOG: outlineBadge("Backlog", "text-muted-foreground", "border-muted-foreground/30"),
-  PLANNED: outlineBadge("Planned", "text-violet-400", "border-violet-500/30"),
-  NEXT: outlineBadge("Next", "text-cyan", "border-cyan/30"),
-  TODO: outlineBadge("Todo", "text-cyan-400", "border-cyan-500/30"),
-  IN_DEVELOPMENT: outlineBadge("In Development", "text-sky-400", "border-sky-500/30"),
-  INTERNAL_REVIEW: outlineBadge("Internal Review", "text-orange", "border-orange/30"),
-  DONE: outlineBadge("Done", "text-success", "border-success/30"),
-  COMPLETED: outlineBadge("Completed", "text-emerald-400", "border-emerald-500/30"),
-  SHIPPED: outlineBadge("Shipped", "text-success", "border-success/30"),
+  BACKLOG: statusBadge("BACKLOG", "Backlog"),
+  PLANNED: statusBadge("PLANNED", "Planned"),
+  NEXT: statusBadge("NEXT", "Next"),
+  TODO: statusBadge("TODO", "Todo"),
+  IN_DEVELOPMENT: statusBadge("IN_DEVELOPMENT", "In Development"),
+  INTERNAL_REVIEW: statusBadge("INTERNAL_REVIEW", "Internal Review"),
+  DONE: statusBadge("DONE", "Done"),
+  COMPLETED: statusBadge("COMPLETED", "Completed"),
+  SHIPPED: statusBadge("SHIPPED", "Shipped"),
 };
 
-export const TASK_STAGE_DOT: Record<string, string> = {
-  BACKLOG: "bg-muted-foreground",
-  PLANNED: "bg-violet-400",
-  NEXT: "bg-cyan",
-  TODO: "bg-cyan-400",
-  IN_DEVELOPMENT: "bg-sky-400",
-  INTERNAL_REVIEW: "bg-orange",
-  DONE: "bg-success",
-  COMPLETED: "bg-emerald-400",
-  SHIPPED: "bg-success",
-};
+export const TASK_STAGE_DOT: Record<string, string> = Object.fromEntries(
+  Object.entries(STATUS_COLOR).map(([status, palette]) => [status, palette.dot]),
+);
 
 export function taskStageBadge(stage: string, missingData = false) {
   if (missingData) {
@@ -117,13 +169,15 @@ export function priorityLabel(priority: string | null | undefined): string {
   return TASK_PRIORITY_BADGE[priority]?.label ?? priority;
 }
 
+// Same palette as the task stages: a sprint and the tasks it holds share these
+// names, so they had better share the colour too.
 export const SPRINT_STATUS_BADGE: Record<string, { label: string; color: string; bg: string }> = {
-  PLANNED: outlineBadge("Planned", "text-muted-foreground", "border-muted-foreground/30"),
-  NEXT: outlineBadge("Next", "text-cyan", "border-cyan/30"),
-  ACTIVE: outlineBadge("In progress", "text-success", "border-success/30"),
-  COMPLETED: outlineBadge("Completed", "text-success", "border-success/30"),
-  PARTIALLY_COMPLETED: outlineBadge("Partially completed", "text-orange", "border-orange/30"),
-  SHIPPED: outlineBadge("Shipped", "text-success", "border-success/30"),
+  PLANNED: statusBadge("PLANNED", "Planned"),
+  NEXT: statusBadge("NEXT", "Next"),
+  ACTIVE: statusBadge("ACTIVE", "In progress"),
+  COMPLETED: statusBadge("COMPLETED", "Completed"),
+  PARTIALLY_COMPLETED: statusBadge("PARTIALLY_COMPLETED", "Partially completed"),
+  SHIPPED: statusBadge("SHIPPED", "Shipped"),
 };
 
 export function sprintStatusBadge(status: string) {

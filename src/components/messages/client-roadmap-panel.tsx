@@ -6,17 +6,9 @@ import { listSprints, type SprintDTO } from "@/actions/sprint";
 import {
   SPRINT_BOARD_COLUMNS,
   sprintBoardColumn,
-  type SprintBoardColumn,
 } from "@/lib/sprint-status";
+import { statusDot } from "@/lib/task-label";
 import { cn } from "@/lib/utils";
-
-const COLUMN_COLOR: Record<SprintBoardColumn, string> = {
-  PLANNED: "bg-muted-foreground",
-  NEXT: "bg-cyan",
-  ACTIVE: "bg-sky",
-  COMPLETED: "bg-orange",
-  SHIPPED: "bg-success",
-};
 
 function formatRange(startISO: string, endISO: string) {
   const start = new Date(startISO);
@@ -87,7 +79,7 @@ export function ClientRoadmapPanel({ projectId }: { projectId: string }) {
               <span
                 className={cn(
                   "h-2.5 w-2.5 rounded-full",
-                  COLUMN_COLOR[column.id],
+                  statusDot(column.id),
                 )}
               />
               <h3 className="text-s font-medium">{column.label}</h3>
