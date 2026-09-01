@@ -2,9 +2,9 @@
 
 import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
 import { AlertCircle, Bug, CircleAlert, Clock, Palette, Sparkles, UserRound, Wrench } from "lucide-react";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { PriorityIconBadge } from "@/components/task/priority-icon";
 import { isMissingDataTask } from "@/lib/task-readiness";
-import { taskStageBadge } from "@/lib/task-label";
+import { type TaskPriorityId } from "@/lib/task-label";
 import { cn } from "@/lib/utils";
 
 export function getTypeIcon(taskType: string) {
@@ -83,6 +83,8 @@ export interface SprintTaskRowData {
   title: string;
   taskType: string;
   stage: string;
+  /** Absent on the sprint-doc rows, which carry no priority and hide the slot. */
+  priority?: TaskPriorityId;
   assignee?: { name: string | null; imageUrl: string | null } | null;
   isReadyForTransition?: boolean;
   sprintCount?: number;
@@ -95,7 +97,7 @@ interface SprintTaskRowProps extends HTMLAttributes<HTMLElement> {
   footer?: ReactNode;
   as?: "button" | "div";
   missingData?: boolean;
-  hideStatus?: boolean;
+  hidePriority?: boolean;
   hideAssignee?: boolean;
   disableHoverBorder?: boolean;
   incomplete?: boolean;
@@ -113,7 +115,7 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
       footer,
       as = "button",
       missingData,
-      hideStatus,
+      hidePriority,
       hideAssignee,
       disableHoverBorder,
       incomplete,
@@ -129,7 +131,8 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
     const Comp = as === "div" ? "div" : "button";
     const showMissing = missingData ?? isMissingDataTask(task);
     const compact = variant === "roadmap";
-    const showStatus = !hideStatus;
+    const showPriority = !hidePriority && task.priority != null;
+    const showFlag = !hidePriority && showMissing;
     const showAssignee = !compact && !hideAssignee;
     const showExtra = !compact && extra;
 
@@ -153,7 +156,7 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
             )}
           </span>
         </span>
-        {(showExtra || showStatus || showAssignee || incomplete) && (
+        {(showExtra || showPriority || showAssignee || incomplete || showFlag) && (
           <div className="flex shrink-0 items-center gap-2 max-sm:w-full max-sm:pl-7">
             {showExtra ? extra : null}
             {incomplete ? (
@@ -164,8 +167,22 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
                 <CircleAlert className="size-4" />
               </span>
             ) : null}
-            {showStatus && !incomplete && (
-              <StatusBadge config={taskStageBadge(task.stage, showMissing)} />
+            {/* Missing data used to ride along inside the stage badge, which
+                priority replaced. It stays as its own glyph so dropping the
+                badge does not drop the warning with it. */}
+            {showFlag && !incomplete && (
+              <span
+                title="Missing data"
+                aria-label="Missing data"
+                className="grid size-6 shrink-0 place-items-center text-orange"
+              >
+                <CircleAlert className="size-4" />
+              </span>
+            )}
+            {/* Shown alongside a warning rather than instead of it: one says the
+                task needs attention, the other says how much it matters. */}
+            {showPriority && task.priority && (
+              <PriorityIconBadge priority={task.priority} />
             )}
             {showAssignee && (assigneeSlot ?? (
               task.assignee ? (
@@ -217,7 +234,7 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
   },
 );
 
-/** Road map list row — type icon, name, and status. */
+/** Road map list row — type icon, name, and priority. */
 export const RoadmapTaskRow = forwardRef<HTMLElement, Omit<SprintTaskRowProps, "variant">>(
   function RoadmapTaskRow(props, ref) {
     return <SprintTaskRow ref={ref} variant="roadmap" {...props} />;

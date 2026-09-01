@@ -365,6 +365,7 @@ export function CompletedSprintsTab({
         taskNumber: t.taskNumber,
         taskType: t.taskType,
         stage: t.stage,
+        priority: t.priority,
         estimatedMinutes: t.estimatedMinutes ?? null,
         incompleteReason: null,
         assignee: t.assignee ?? null,

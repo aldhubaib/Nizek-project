@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
 import { logTaskActivity } from "@/lib/activity";
-import { taskCode } from "@/lib/task-label";
+import { taskCode, type TaskPriorityId } from "@/lib/task-label";
 import { moveTask } from "@/actions/task";
 import { ensureBypassConversation, postBypassInbox, postBypassToProjectChat } from "@/lib/deliver-proof-bypass";
 import type { ProofBypassPayload } from "@/lib/proof-bypass-payload";
@@ -35,6 +35,7 @@ export type ProofBypassRequest = {
     taskNumber: number;
     taskType: string;
     stage: string;
+    priority: TaskPriorityId;
     projectId: string;
   };
 };
@@ -121,7 +122,7 @@ export async function listProofBypassRequests(projectId: string): Promise<ProofB
     include: {
       requestedBy: { select: { id: true, name: true, imageUrl: true } },
       approvedBy: { select: { id: true, name: true, imageUrl: true } },
-      task: { select: { id: true, title: true, taskNumber: true, taskType: true, stage: true, projectId: true } },
+      task: { select: { id: true, title: true, taskNumber: true, taskType: true, stage: true, priority: true, projectId: true } },
     },
     orderBy: { requestedAt: "desc" },
     take: 80,

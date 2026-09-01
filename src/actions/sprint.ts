@@ -12,7 +12,7 @@ import { revalidatePath } from "next/cache";
 import type { SprintStatus } from "@/generated/prisma/client";
 import { isClosedSprint, isCurrentSprintStatus, isUnstartedSprint, comparePlannedSprints, compareClosedSprints, sprintDepartureToRecord, type SprintBoardColumn } from "@/lib/sprint-status";
 import { stageForSprintStatus } from "@/lib/task-stage";
-import { taskCode } from "@/lib/task-label";
+import { taskCode, type TaskPriorityId } from "@/lib/task-label";
 import { isBuiltInTaskFieldQuestion } from "@/lib/task-readiness";
 import { countWorkingDays } from "@/lib/working-days";
 import { logTaskActivity } from "@/lib/activity";
@@ -855,6 +855,7 @@ export interface SprintSnapshotTask {
   taskNumber: number;
   taskType: string;
   stage: string;
+  priority: TaskPriorityId;
   estimatedMinutes: number | null;
   incompleteReason: string | null;
   assignee: { id: string; name: string | null; imageUrl: string | null } | null;
@@ -891,6 +892,9 @@ export async function getSprintSnapshots(
           title: true,
           taskNumber: true,
           taskType: true,
+          // Live, not frozen: the snapshot records how the sprint went, but
+          // priority is a statement about the task now.
+          priority: true,
           assignee: { select: { id: true, name: true, imageUrl: true } },
         },
       },
@@ -914,6 +918,7 @@ export async function getSprintSnapshots(
       taskNumber: snap.task.taskNumber,
       taskType: snap.task.taskType,
       stage: snap.stage,
+      priority: snap.task.priority,
       estimatedMinutes: snap.estimatedMinutes,
       incompleteReason: snap.incompleteReason,
       assignee: frozenAssignee,

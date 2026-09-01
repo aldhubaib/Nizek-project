@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AddButton } from "@/components/add-button";
+import { PriorityIcon } from "@/components/task/priority-icon";
 import {
   Loader2, MessageCircleQuestion, History, MessageSquare,
   ChevronRight, ChevronLeft, ChevronDown, Pencil, Check, Undo2,
@@ -99,7 +100,12 @@ interface QuestionWithType extends TaskQuestion {
 
 const PRIORITY_ITEMS = TASK_PRIORITIES.map((id) => ({
   value: id,
-  label: TASK_PRIORITY_BADGE[id].label,
+  label: (
+    <span className="flex items-center gap-1.5">
+      <PriorityIcon priority={id} />
+      {TASK_PRIORITY_BADGE[id].label}
+    </span>
+  ),
 }));
 
 interface TaskData {
@@ -760,6 +766,7 @@ export function TaskDetailPage({
                 <SelectContent>
                   {TASK_PRIORITIES.map((id) => (
                     <SelectItem key={id} value={id}>
+                      <PriorityIcon priority={id} />
                       {TASK_PRIORITY_BADGE[id].label}
                     </SelectItem>
                   ))}

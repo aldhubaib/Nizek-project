@@ -65,7 +65,7 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
         as="div"
         task={rowTask}
         missingData={false}
-        hideStatus
+        hidePriority
         hideAssignee={hideAssignee}
         disableHoverBorder
         extra={
