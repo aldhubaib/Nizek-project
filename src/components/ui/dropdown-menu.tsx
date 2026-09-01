@@ -36,7 +36,7 @@ function DropdownMenuContent({
   return (
     <MenuPrimitive.Portal>
       <MenuPrimitive.Positioner
-        className={cn("isolate popup-layer outline-none", positionerClassName)}
+        className={cn("isolate z-[10000] outline-none", positionerClassName)}
         align={align}
         alignOffset={alignOffset}
         side={side}

@@ -209,12 +209,12 @@ html[data-scroll-locked] body {
    what lets a select opened inside a dialog render over the dialog. Giving one
    of them its own value would break that.
 
-   Named outside the z-* namespace on purpose: Tailwind reads `z-popup` as its
-   own built-in z-index utility, finds "popup" is not a scale value, and emits
-   nothing at all. */
-@utility popup-layer {
-  z-index: 10000;
-}
+   Spelled as the arbitrary utility `z-[10000]` at each call site rather than a
+   named `@utility` here. A custom class works in the production build but not
+   under the dev server, so popups silently fell back to `z-index: auto` and
+   were painted behind the page; `z-[10000]` also lets tailwind-merge see it as
+   a z-index, so a caller passing their own z-* replaces it instead of
+   colliding. Grep `z-[10000]` to find the popups. */
 
 /* Outside @layer so safe-area padding is not overridden by Tailwind utilities.
    Bottom gutter for title→content lives on PageHeader (pb-5). The shell

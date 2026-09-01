@@ -81,7 +81,7 @@ function SelectContent({
         align={align}
         alignOffset={alignOffset}
         alignItemWithTrigger={alignItemWithTrigger}
-        className={cn("isolate popup-layer", positionerClassName)}
+        className={cn("isolate z-[10000]", positionerClassName)}
       >
         <SelectPrimitive.Popup
           data-slot="select-content"
