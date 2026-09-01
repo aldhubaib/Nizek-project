@@ -19,7 +19,6 @@ interface ColumnProps {
   projectId: string;
   canCreateTask?: boolean;
   dragFromStage?: Stage | null;
-  dragTaskType?: string | null;
   canSelfAssign?: (task: KanbanTask) => boolean;
   onSelfAssign?: (task: KanbanTask) => void;
   onRemoveFromSprint?: (taskId: string) => void;
@@ -27,7 +26,7 @@ interface ColumnProps {
   pipelineOnly?: boolean;
 }
 
-export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled, projectId, canCreateTask, dragFromStage, dragTaskType, canSelfAssign, onSelfAssign, onRemoveFromSprint, hideSprintName, pipelineOnly }: ColumnProps) {
+export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled, projectId, canCreateTask, dragFromStage, canSelfAssign, onSelfAssign, onRemoveFromSprint, hideSprintName, pipelineOnly }: ColumnProps) {
   const router = useRouter();
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
 
@@ -36,16 +35,14 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
   const isValidDropTarget = useMemo(() => {
     if (!dragFromStage) return false;
     const stageIds = pipelineOnly
-      ? ["READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "DONE"]
-      : ["NEW_REQUEST", "READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW", "READY_FOR_RELEASE", "DONE"];
+      ? ["TODO", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "DONE"]
+      : ["BACKLOG", "TODO", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "DONE"];
     const fromIdx = stageIds.indexOf(dragFromStage);
     const toIdx = stageIds.indexOf(stage.id);
     if (toIdx === fromIdx + 1) return true;
-    if (dragTaskType === "BUG" && dragFromStage === "INTERNAL_REVIEW" && stage.id === "DONE") return true;
     if (dragFromStage === "INTERNAL_REVIEW" && stage.id === "IN_DEVELOPMENT") return true;
-    if (dragFromStage === "CLIENT_REVIEW" && stage.id === "INTERNAL_REVIEW") return true;
     return false;
-  }, [dragFromStage, stage.id, dragTaskType, pipelineOnly]);
+  }, [dragFromStage, stage.id, pipelineOnly]);
 
   const isDragging = dragFromStage != null;
 
@@ -64,7 +61,7 @@ export const KanbanColumn = memo(function KanbanColumn({ stage, tasks, disabled,
           <h3 className="text-s font-medium">{stage.label}</h3>
           <span className="text-s text-muted-foreground">{tasks.length}</span>
         </div>
-        {!disabled && canCreateTask && stage.id === "NEW_REQUEST" && (
+        {!disabled && canCreateTask && stage.id === "BACKLOG" && (
           <AddButton
             label="New task"
             onClick={() => router.push(`/dashboard/projects/${projectId}/tasks/new`)}

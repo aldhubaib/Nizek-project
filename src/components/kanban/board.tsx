@@ -15,8 +15,8 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "./column";
 import { TaskCard } from "./task-card";
-import { useKanbanStore, type KanbanTask, type Stage } from "@/store/kanban";
-import { moveTask as moveTaskAction, declineTask, pollTaskUpdates, assignTaskToMe, getBoardTask } from "@/actions/task";
+import { useKanbanStore, type KanbanTask, type MovableStage, type Stage } from "@/store/kanban";
+import { moveTask as moveTaskAction, declineTask, assignTaskToMe } from "@/actions/task";
 import { useCurrentUser } from "@/components/current-user-provider";
 import type { TaskQuestion } from "./question-field";
 import { StageConfirmDialog, getCheckpoint } from "./stage-confirm-dialog";
@@ -24,8 +24,7 @@ import { ProofOfWorkDialog } from "./proof-of-work-dialog";
 import { needsProofOfWork } from "@/lib/proof-of-work";
 import { DeclineDialog, type DeclineAttachment } from "./decline-dialog";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
-import { useChannel } from "@/components/realtime/hooks";
-import { projectChannel } from "@/lib/channels";
+import { useProjectTaskSync } from "./use-project-task-sync";
 import { canTransition } from "@/lib/permissions";
 import { stageLabel } from "@/lib/task-label";
 
@@ -35,12 +34,10 @@ interface QuestionWithType extends TaskQuestion {
 import type { UserPermissions } from "@/app/(dashboard)/dashboard/projects/[projectId]/project-detail-client";
 
 const COLUMN_IDS = new Set<string>([
-  "NEW_REQUEST",
-  "READY_FOR_DEV",
+  "BACKLOG",
+  "TODO",
   "IN_DEVELOPMENT",
   "INTERNAL_REVIEW",
-  "CLIENT_REVIEW",
-  "READY_FOR_RELEASE",
   "DONE",
 ]);
 
@@ -51,13 +48,14 @@ const columnFirstCollision: CollisionDetection = (args) => {
   return closestCorners(args);
 };
 
-const STAGES: { id: Stage; label: string; color: string }[] = [
-  { id: "NEW_REQUEST", label: stageLabel("NEW_REQUEST"), color: "bg-muted-foreground" },
-  { id: "READY_FOR_DEV", label: stageLabel("READY_FOR_DEV"), color: "bg-cyan" },
+// Only stages a card can actually be dragged into. Planned, Next, Completed and
+// Shipped are the sprint's own status showing through, so they are moved on the
+// roadmap, not here.
+const STAGES: { id: MovableStage; label: string; color: string }[] = [
+  { id: "BACKLOG", label: stageLabel("BACKLOG"), color: "bg-muted-foreground" },
+  { id: "TODO", label: stageLabel("TODO"), color: "bg-cyan" },
   { id: "IN_DEVELOPMENT", label: stageLabel("IN_DEVELOPMENT"), color: "bg-sky" },
   { id: "INTERNAL_REVIEW", label: stageLabel("INTERNAL_REVIEW"), color: "bg-orange" },
-  { id: "CLIENT_REVIEW", label: stageLabel("CLIENT_REVIEW"), color: "bg-orange" },
-  { id: "READY_FOR_RELEASE", label: stageLabel("READY_FOR_RELEASE"), color: "bg-emerald-400" },
   { id: "DONE", label: stageLabel("DONE"), color: "bg-success" },
 ];
 
@@ -91,22 +89,17 @@ const ASSIGN_TO_ME_CHECKPOINT = {
   assignToMe: true,
 } as const;
 
-function visibleStage(
-  stage: Stage | undefined | null,
-  pipelineOnly = false,
-): Stage | undefined {
+/**
+ * The column a task belongs in, or undefined if it has none.
+ *
+ * This used to remap stages on the way in — Client Review shown as Internal
+ * Review, Backlog shown as Todo — because the stored stage and the column the
+ * task belonged in had drifted apart. The stage now says where the task is, so
+ * there is nothing to translate.
+ */
+function boardStageOf(stage: Stage | undefined | null): MovableStage | undefined {
   if (!stage) return undefined;
-  if (pipelineOnly && (stage === "NEW_REQUEST" || stage === "CLARIFICATION")) {
-    return "READY_FOR_DEV";
-  }
-  if (pipelineOnly && stage === "CLIENT_REVIEW") {
-    return "INTERNAL_REVIEW";
-  }
-  if (pipelineOnly && stage === "READY_FOR_RELEASE") {
-    return "DONE";
-  }
-  if (stage === "CLARIFICATION") return "NEW_REQUEST";
-  return stage;
+  return COLUMN_IDS.has(stage) ? (stage as MovableStage) : undefined;
 }
 
 export function KanbanBoard({
@@ -136,8 +129,8 @@ export function KanbanBoard({
   const [activeTask, setActiveTask] = useState<KanbanTask | null>(null);
   const [pendingMove, setPendingMove] = useState<{
     taskId: string;
-    fromStage: Stage;
-    toStage: Stage;
+    fromStage: MovableStage;
+    toStage: MovableStage;
     order: number;
     assigneeName: string | null;
     assigneeAvatar: string | null;
@@ -197,107 +190,22 @@ export function KanbanBoard({
     }
   }, [projectId, initialTasks, setTasks]);
 
-  const refetchTasks = useCallback(async () => {
-    if (isDragging.current || pendingDeclineRef.current || document.hidden) return;
-    try {
-      const updates = await pollTaskUpdates(projectId);
-      if (useKanbanStore.getState().projectId !== projectId) return;
-      setTasks((prev: KanbanTask[]) => {
-        const updateMap = new Map(updates.map((u) => [u.id, u]));
-        const currentIds = new Set(prev.map((t) => t.id));
-        const updateIds = new Set(updates.map((u) => u.id));
-
-        let changed = false;
-
-        const merged = prev.map((task) => {
-          const update = updateMap.get(task.id);
-          if (!update) { changed = true; return task; }
-          if (task.stage !== update.stage || task.order !== update.order || task.title !== update.title || task.priority !== update.priority) {
-            changed = true;
-            return { ...task, ...update };
-          }
-          return task;
-        }).filter((t) => updateIds.has(t.id));
-
-        for (const u of updates) {
-          if (!currentIds.has(u.id)) {
-            changed = true;
-            merged.push({
-              ...u,
-              description: null,
-              isReadyForTransition: false,
-              declineCount: 0,
-              internalDeclines: 0,
-              clientDeclines: 0,
-            } as KanbanTask);
-          }
-        }
-
-        if (prev.length !== merged.length) changed = true;
-        return changed ? merged : prev;
-      }, projectId);
-    } catch {
-      // Silently ignore
-    }
-  }, [projectId, setTasks]);
-
-  // Realtime board sync over Centrifugo (consolidated from Pusher). Instead of
-  // refetching the whole board on every remote event, patch the single affected
-  // task via an O(1) fetch (or remove it on delete).
-  const applyRemoteTask = useCallback(
-    async (taskId: string) => {
-      try {
-        const updated = await getBoardTask(taskId, projectId);
-        if (useKanbanStore.getState().projectId !== projectId) return;
-        if (!updated) {
-          useKanbanStore.getState().removeTask(taskId);
-          return;
-        }
-        const dto = updated as unknown as KanbanTask;
-        setTasks((prev: KanbanTask[]) => {
-          const exists = prev.some((t) => t.id === taskId);
-          return exists
-            ? prev.map((t) => (t.id === taskId ? dto : t))
-            : [...prev, dto];
-        }, projectId);
-      } catch {
-        // Best-effort; the fallback poll (when realtime is off) covers gaps.
-      }
-    },
-    [projectId, setTasks],
-  );
-
-  const handleTaskEvent = useCallback(
-    (data: unknown) => {
-      const ev = data as { type?: string; taskId?: string; userId?: string };
-      // The project channel also carries chat payloads — only react to task-*.
-      if (!ev?.type || !ev.type.startsWith("task-")) return;
-      // Own drags already patched the store. Still apply our own task-moved
-      // when we are not dragging — e.g. a bypass we just approved.
-      if (ev.userId === currentUserId && (ev.type !== "task-moved" || isDragging.current)) return;
-      if (isDragging.current || pendingDeclineRef.current) return;
-      if (ev.type === "task-deleted") {
-        if (ev.taskId && useKanbanStore.getState().projectId === projectId) {
-          useKanbanStore.getState().removeTask(ev.taskId);
-        }
-        return;
-      }
-      if (ev.taskId) void applyRemoteTask(ev.taskId);
-    },
-    [currentUserId, projectId, applyRemoteTask],
-  );
-
-  useChannel(
-    isProjectActive && cent?.enabled ? projectChannel(projectId) : null,
-    handleTaskEvent,
-  );
+  // Realtime board sync over Centrifugo. Instead of refetching the whole board
+  // on every remote event, the hook patches the single affected task.
+  const { resync } = useProjectTaskSync({
+    projectId,
+    enabled: isProjectActive,
+    currentUserId,
+    isDragging: () => isDragging.current,
+    isBusy: () => pendingDeclineRef.current,
+  });
 
   // Fallback polling only when the realtime transport is unavailable.
   useEffect(() => {
     if (!isProjectActive || cent?.enabled) return;
-    const interval = setInterval(refetchTasks, 30_000);
+    const interval = setInterval(resync, 30_000);
     return () => clearInterval(interval);
-  }, [isProjectActive, cent?.enabled, refetchTasks]);
+  }, [isProjectActive, cent?.enabled, resync]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -319,16 +227,6 @@ export function KanbanBoard({
         to,
       ),
     [userPermissions, isProjectActive]
-  );
-
-  const canSkipClientReview = canTransition(
-    {
-      isAdmin: userPermissions.isAdmin,
-      canMoveTask: userPermissions.canMoveTask,
-      allowedTransitions: userPermissions.allowedTransitions ?? {},
-    },
-    "INTERNAL_REVIEW",
-    "DONE",
   );
 
   // Claim a task by clicking its avatar — offered when the viewer can move it at
@@ -381,24 +279,13 @@ export function KanbanBoard({
   }
 
   const boardStages = useMemo(
-    () =>
-      pipelineOnly
-        ? STAGES.filter(
-            (s) =>
-              s.id !== "NEW_REQUEST" &&
-              s.id !== "CLIENT_REVIEW" &&
-              s.id !== "READY_FOR_RELEASE",
-          )
-        : STAGES,
+    () => (pipelineOnly ? STAGES.filter((s) => s.id !== "BACKLOG") : STAGES),
     [pipelineOnly],
   );
-  const stageOnBoard = (stage: Stage | undefined | null) => visibleStage(stage, pipelineOnly);
+  const stageOnBoard = boardStageOf;
 
   function isDeclineMove(fromStage: Stage, toStage: Stage) {
-    return (
-      (fromStage === "INTERNAL_REVIEW" && toStage === "IN_DEVELOPMENT") ||
-      (fromStage === "CLIENT_REVIEW" && toStage === "INTERNAL_REVIEW")
-    );
+    return fromStage === "INTERNAL_REVIEW" && toStage === "IN_DEVELOPMENT";
   }
 
   function isValidMove(fromStage: Stage, toStage: Stage) {
@@ -410,7 +297,7 @@ export function KanbanBoard({
     return false;
   }
 
-  const dragOriginRef = useRef<Stage | null>(null);
+  const dragOriginRef = useRef<MovableStage | null>(null);
   const canLeaveBacklogRef = useRef(false);
 
   const dragFromStage = useMemo(() => {
@@ -418,17 +305,15 @@ export function KanbanBoard({
     return dragOriginRef.current;
   }, [activeTask]);
 
-  const dragTaskType = activeTask?.taskType ?? null;
-
   function handleDragStart(event: DragStartEvent) {
     isDragging.current = true;
     snapshotRef.current = useKanbanStore.getState().tasks;
     const task = useKanbanStore.getState().tasks.find((t) => t.id === event.active.id);
-    if (task) {
-      const origin = stageOnBoard(task.stage) ?? task.stage;
+    const origin = stageOnBoard(task?.stage);
+    if (task && origin) {
       dragOriginRef.current = origin;
       canLeaveBacklogRef.current =
-        origin === "NEW_REQUEST" ? Boolean(task.isReadyForTransition) : false;
+        origin === "BACKLOG" ? Boolean(task.isReadyForTransition) : false;
       setActiveTask(task);
     }
   }
@@ -455,12 +340,14 @@ export function KanbanBoard({
     );
 
     // Determine the effective target stage (either from optimistic move or direct drop)
-    let targetStage = stageOnBoard(task.stage) ?? task.stage;
-    if (stageOnBoard(task.stage) === fromStage && dropStage && dropStage !== fromStage) {
-      let effectiveDrop = dropStage;
-      if (fromStage === "INTERNAL_REVIEW" && dropStage === "CLIENT_REVIEW" && task.taskType === "BUG") {
-        effectiveDrop = "DONE";
-      }
+    const currentStage = stageOnBoard(task.stage);
+    if (!currentStage) {
+      setTasks(snapshotRef.current, projectId);
+      return;
+    }
+    let targetStage: MovableStage = currentStage;
+    if (currentStage === fromStage && dropStage && dropStage !== fromStage) {
+      const effectiveDrop = dropStage;
       if (!canMoveFromTo(fromStage, effectiveDrop)) {
         setTasks(snapshotRef.current, projectId);
         const fromLabel = STAGES.find((s) => s.id === fromStage)?.label ?? fromStage;
@@ -469,7 +356,7 @@ export function KanbanBoard({
         return;
       }
       if (!isValidMove(fromStage, effectiveDrop)) { setTasks(snapshotRef.current, projectId); return; }
-      if (fromStage === "NEW_REQUEST" && !canLeaveBacklogRef.current) { setTasks(snapshotRef.current, projectId); return; }
+      if (fromStage === "BACKLOG" && !canLeaveBacklogRef.current) { setTasks(snapshotRef.current, projectId); return; }
       targetStage = effectiveDrop;
       const tasksInTarget = tasks.filter((t) => stageOnBoard(t.stage) === effectiveDrop);
       moveTask(activeId, effectiveDrop, tasksInTarget.length);
@@ -483,7 +370,7 @@ export function KanbanBoard({
       return;
     }
 
-    if (fromStage === "NEW_REQUEST" && fromStage !== targetStage && !canLeaveBacklogRef.current) {
+    if (fromStage === "BACKLOG" && fromStage !== targetStage && !canLeaveBacklogRef.current) {
       setTasks(snapshotRef.current, projectId);
       return;
     }
@@ -521,7 +408,7 @@ export function KanbanBoard({
     executeMoveTask(activeId, targetStage, task.order);
   }
 
-  function executeMoveTask(taskId: string, stage: Stage, order: number, estimatedMinutes?: number) {
+  function executeMoveTask(taskId: string, stage: MovableStage, order: number, estimatedMinutes?: number) {
     snapshotRef.current = useKanbanStore.getState().tasks;
     moveTaskAction({ taskId, stage, order, estimatedMinutes }).then((result) => {
       if (result.success) return;
@@ -541,7 +428,7 @@ export function KanbanBoard({
         const current = useKanbanStore.getState().tasks.find((t) => t.id === taskId);
         setPendingMove({
           taskId,
-          fromStage: (current?.stage as Stage) ?? "READY_FOR_DEV",
+          fromStage: boardStageOf(current?.stage) ?? "TODO",
           toStage: stage,
           order,
           assigneeName: current?.assignee?.name ?? null,
@@ -571,7 +458,6 @@ export function KanbanBoard({
     if (!pendingDecline) return;
     const DECLINE_TARGETS: Record<string, Stage> = {
       INTERNAL_REVIEW: "IN_DEVELOPMENT",
-      CLIENT_REVIEW: "INTERNAL_REVIEW",
     };
     const targetStage = DECLINE_TARGETS[pendingDecline.fromStage];
     try {
@@ -673,7 +559,6 @@ export function KanbanBoard({
                 (userPermissions.isAdmin || (userPermissions.createStages ?? []).includes(stage.id))
               }
               dragFromStage={dragFromStage}
-              dragTaskType={dragTaskType}
               canSelfAssign={canSelfAssign}
               onSelfAssign={openSelfAssign}
               onRemoveFromSprint={onRemoveFromSprint}

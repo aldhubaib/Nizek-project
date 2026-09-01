@@ -25,12 +25,22 @@ import { StageConfirmDialog, getCheckpoint } from "@/components/kanban/stage-con
 import { ProofOfWorkDialog } from "@/components/kanban/proof-of-work-dialog";
 import { ProofVideosSection } from "@/components/kanban/proof-videos-section";
 import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
+import { TaskLifecycleTimeline } from "@/components/task/task-lifecycle-timeline";
+import type { StageVisit, TaskHistoryActivity, TaskHistorySummary } from "@/actions/task-history";
 import { needsProofOfWork } from "@/lib/proof-of-work";
-import { useKanbanStore } from "@/store/kanban";
+import { useKanbanStore, type MovableStage } from "@/store/kanban";
 import { DeclineDialog } from "@/components/kanban/decline-dialog";
 import { projectNoteUrl, isRoadmapNote } from "@/lib/project-note-url";
 import { cn } from "@/lib/utils";
-import { projectHrefForTaskReturn, sprintTabForStatus, taskStageBadge } from "@/lib/task-label";
+import {
+  isTaskPriority,
+  projectHrefForTaskReturn,
+  sprintTabForStatus,
+  taskStageBadge,
+  TASK_PRIORITIES,
+  TASK_PRIORITY_BADGE,
+  type TaskPriorityId,
+} from "@/lib/task-label";
 import { EstimateBadge, TaskTypeBadge } from "@/components/project/sprint-task-row";
 import { SprintStatusControl } from "@/components/project/sprint-status-control";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -62,15 +72,16 @@ const TASK_TYPE_META: Record<string, { prefix: string; label: string; color: str
   DESIGN: { prefix: "D", label: "Design", color: "text-cyan" },
 };
 
-type Stage = "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "DONE";
+// This page used to keep its own stage list, which had drifted from the board's
+// — it still offered Client Review after the board had dropped it. Both now read
+// from the same place.
+type Stage = MovableStage;
 
 const STAGES: { id: Stage }[] = [
-  { id: "NEW_REQUEST" },
-  { id: "CLARIFICATION" },
-  { id: "READY_FOR_DEV" },
+  { id: "BACKLOG" },
+  { id: "TODO" },
   { id: "IN_DEVELOPMENT" },
   { id: "INTERNAL_REVIEW" },
-  { id: "CLIENT_REVIEW" },
   { id: "DONE" },
 ];
 
@@ -91,7 +102,7 @@ interface TaskData {
   taskNumber: number;
   title: string;
   description: string | null;
-  priority: number | null;
+  priority: TaskPriorityId;
   taskType: string;
   stage: string;
   order: number;
@@ -126,8 +137,14 @@ interface Props {
   questions: QuestionWithType[];
   initialAnswers: Record<string, string>;
   initialNotes: NoteData[];
+  /** Null when the viewer's role cannot see the lifecycle. Omitted by the
+   *  slide-over, which offers the history dialog instead. */
+  history?: {
+    visits: StageVisit[];
+    activities: TaskHistoryActivity[];
+    summary: TaskHistorySummary;
+  } | null;
   isAdmin: boolean;
-  canSkipClientReview?: boolean;
   canDelete?: boolean;
   initialThreadId?: string | null;
   backToNoteId?: string | null;
@@ -144,8 +161,8 @@ export function TaskDetailPage({
   questions: allQuestions,
   initialAnswers,
   initialNotes,
+  history = null,
   isAdmin,
-  canSkipClientReview,
   canDelete,
   initialThreadId = null,
   backToNoteId = null,
@@ -183,7 +200,7 @@ export function TaskDetailPage({
   const [titleValue, setTitleValue] = useState(initialTask.title);
   const [editingTitle, setEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLTextAreaElement>(null);
-  const [priorityValue, setPriorityValue] = useState<number | null>(initialTask.priority);
+  const [priorityValue, setPriorityValue] = useState<TaskPriorityId>(initialTask.priority);
 
   // Questions
   const [answers, setAnswers] = useState<Record<string, string>>(initialAnswers);
@@ -279,11 +296,15 @@ export function TaskDetailPage({
   }
 
   const currentStageIndex = STAGES.findIndex((s) => s.id === taskStage);
-  const nextStage = currentStageIndex < STAGES.length - 1 ? STAGES[currentStageIndex + 1] : null;
-  const clarificationIndex = STAGES.findIndex((s) => s.id === "CLARIFICATION");
-  const isPostClarification = currentStageIndex > clarificationIndex;
+  const nextStage =
+    currentStageIndex >= 0 && currentStageIndex < STAGES.length - 1
+      ? STAGES[currentStageIndex + 1]
+      : null;
+  // Spec answers are only editable while the task is still in the backlog; once
+  // it has been picked up, changing what was asked for rewrites history.
+  const isPostClarification = taskStage !== "BACKLOG";
   const isReady = computeIsReadyForTransition(questions, answers);
-  const missingData = taskStage === "NEW_REQUEST" && !isReady;
+  const missingData = taskStage === "BACKLOG" && !isReady;
 
   useEffect(() => {
     if (editingTitle) titleInputRef.current?.focus();
@@ -371,7 +392,7 @@ export function TaskDetailPage({
     }
   }
 
-  async function handlePrioritySave(newPriority: number | null) {
+  async function handlePrioritySave(newPriority: TaskPriorityId) {
     const oldPriority = priorityValue;
     setPriorityValue(newPriority);
     if (newPriority === initialTask.priority) return;
@@ -454,35 +475,13 @@ export function TaskDetailPage({
     }
   }
 
-  const showSkipButton = taskStage === "INTERNAL_REVIEW" && canSkipClientReview && initialTask.taskType !== "BUG";
-  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
+  // "Skip client review" used to jump Internal Review straight to Done, past a
+  // per-task client gate. That gate is gone — review happens once per sprint —
+  // so Done is simply the next stage and the ordinary move button covers it.
 
-  function handleSkipClientReview() {
-    setShowSkipConfirm(true);
-  }
-
-  async function executeSkip() {
-    setMovingStage(true);
-    setMoveError(null);
-    setShowSkipConfirm(false);
-    try {
-      const result = await moveTaskAction({ taskId: initialTask.id, stage: "DONE", order: initialTask.order });
-      if (!result.success) {
-        setMoveError([result.error || "Failed to skip. Please try again."]);
-        return;
-      }
-      setTaskStage("DONE");
-      setActivityKey((k) => k + 1);
-    } catch (err) {
-      setMoveError([(err as Error).message || "Failed to skip. Please try again."]);
-    } finally {
-      setMovingStage(false);
-    }
-  }
-
-  const canDecline = taskStage === "INTERNAL_REVIEW" || taskStage === "CLIENT_REVIEW";
-  const declineTargetStage = taskStage === "CLIENT_REVIEW" ? "INTERNAL_REVIEW" : "IN_DEVELOPMENT";
-  const declineTargetLabel = taskStage === "CLIENT_REVIEW" ? "Internal Review" : "In Development";
+  const canDecline = taskStage === "INTERNAL_REVIEW";
+  const declineTargetStage = "IN_DEVELOPMENT" as const;
+  const declineTargetLabel = "In Development";
 
   async function handleDecline() {
     if (!declineComment.trim() || declining) return;
@@ -711,14 +710,20 @@ export function TaskDetailPage({
 
             <div className="flex items-center justify-between rounded-md border border-border bg-field px-3 py-3">
               <span className="text-s text-muted-foreground">Priority</span>
-              <Select value={priorityValue?.toString() ?? ""} onValueChange={(val) => handlePrioritySave(val === "" ? null : Number(val))}>
+              <Select
+                value={priorityValue}
+                onValueChange={(val) => {
+                  if (isTaskPriority(val)) handlePrioritySave(val);
+                }}
+              >
                 <SelectTrigger className="h-8 w-auto min-w-[5rem] gap-1 rounded-lg border-border bg-transparent px-2.5 text-s">
-                  <SelectValue placeholder="None" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                    <SelectItem key={n} value={n.toString()}>P{n}</SelectItem>
+                  {TASK_PRIORITIES.map((id) => (
+                    <SelectItem key={id} value={id}>
+                      {TASK_PRIORITY_BADGE[id].label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -884,6 +889,21 @@ export function TaskDetailPage({
           </div>
           <CommentSection key={`comments-${initialTask.id}-${commentKey}`} taskId={initialTask.id} projectId={projectId} />
         </div>
+
+        {history && (
+          <div className="rounded-lg border border-border/50 bg-card px-3 pb-3">
+            <div className="flex items-center gap-2 px-1 py-4">
+              <History className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
+              <h3 className="text-s font-semibold">Lifecycle</h3>
+            </div>
+            <TaskLifecycleTimeline
+              visits={history.visits}
+              activities={history.activities}
+              summary={history.summary}
+              dense
+            />
+          </div>
+        )}
       </div>
       )}
 
@@ -915,17 +935,6 @@ export function TaskDetailPage({
             checkpoint={checkpoint}
             onConfirm={(estimatedMinutes) => executeMove(estimatedMinutes)}
             onCancel={() => setShowConfirm(false)}
-          />
-        ) : null;
-      })()}
-
-      {showSkipConfirm && (() => {
-        const checkpoint = getCheckpoint("INTERNAL_REVIEW" as Stage, "DONE" as Stage);
-        return checkpoint ? (
-          <StageConfirmDialog
-            checkpoint={checkpoint}
-            onConfirm={() => executeSkip()}
-            onCancel={() => setShowSkipConfirm(false)}
           />
         ) : null;
       })()}

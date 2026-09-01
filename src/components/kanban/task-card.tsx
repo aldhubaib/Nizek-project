@@ -262,20 +262,12 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
             </span>
           ) : null}
 
-          {(task.internalDeclines ?? 0) > 0 && (
+          {(task.declineCount ?? 0) > 0 && (
             <StatusBadge
-              config={outlineBadge(String(task.internalDeclines), "text-orange", "border-orange/30")}
+              config={outlineBadge(String(task.declineCount), "text-orange", "border-orange/30")}
               icon={Undo2}
               className="tabular-nums"
-              title={`Internal review declined ${task.internalDeclines} time${task.internalDeclines === 1 ? "" : "s"}`}
-            />
-          )}
-          {(task.clientDeclines ?? 0) > 0 && (
-            <StatusBadge
-              config={outlineBadge(String(task.clientDeclines), "text-destructive", "border-destructive/30")}
-              icon={Undo2}
-              className="tabular-nums"
-              title={`Client review declined ${task.clientDeclines} time${task.clientDeclines === 1 ? "" : "s"}`}
+              title={`Sent back ${task.declineCount} time${task.declineCount === 1 ? "" : "s"}`}
             />
           )}
           {task.estimateAccuracy && ACCURACY_CONFIG[task.estimateAccuracy] && (

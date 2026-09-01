@@ -12,6 +12,8 @@ import {
 import { createTaskFromNoteHighlight } from "@/actions/meeting-note";
 import { getTaskQuestions } from "@/actions/task-question";
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
+import { PriorityPicker } from "@/components/task/priority-picker";
+import { DEFAULT_TASK_PRIORITY, type TaskPriorityId } from "@/lib/task-label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -80,7 +82,7 @@ export function CreateTaskFromNoteDialog({
   const [loadingQs, setLoadingQs] = useState(false);
   const [title, setTitle] = useState("");
   const [taskType, setTaskType] = useState<TaskType>("FEATURE");
-  const [priority, setPriority] = useState<number | null>(null);
+  const [priority, setPriority] = useState<TaskPriorityId>(DEFAULT_TASK_PRIORITY);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +96,7 @@ export function CreateTaskFromNoteDialog({
   useEffect(() => {
     if (!open) return;
     setTitle(quote.slice(0, 200));
-    setPriority(null);
+    setPriority(DEFAULT_TASK_PRIORITY);
     setAnswers({});
     setError(null);
     setMandatoryErrors([]);
@@ -137,7 +139,7 @@ export function CreateTaskFromNoteDialog({
         quoteText: quote,
         title: title.trim(),
         taskType,
-        priority: priority ?? undefined,
+        priority,
         answers: answersList.length > 0 ? answersList : undefined,
       });
       onCreated();
@@ -221,23 +223,7 @@ export function CreateTaskFromNoteDialog({
 
               <div className="space-y-2">
                 <label className="text-s font-semibold">Priority</label>
-                <div className="flex flex-wrap gap-xs">
-                  {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setPriority(priority === n ? null : n)}
-                      className={cn(
-                        "h-9 w-9 rounded-md border text-s font-medium",
-                        priority === n
-                          ? "border-primary/40 bg-primary/20 text-primary"
-                          : "border-border text-muted-foreground",
-                      )}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
+                <PriorityPicker value={priority} onChange={setPriority} />
               </div>
 
               {loadingQs ? (

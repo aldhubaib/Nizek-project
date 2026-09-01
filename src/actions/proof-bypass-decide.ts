@@ -33,11 +33,12 @@ async function loadPassForApprover(passId: string) {
   return { pass, user };
 }
 
+/** Already at or past review, so approving the bypass has nowhere to move it. */
 const REVIEW_OR_LATER = new Set([
   "INTERNAL_REVIEW",
-  "CLIENT_REVIEW",
-  "READY_FOR_RELEASE",
   "DONE",
+  "COMPLETED",
+  "SHIPPED",
 ]);
 
 async function moveTaskToInternalReviewOnApprove(pass: {

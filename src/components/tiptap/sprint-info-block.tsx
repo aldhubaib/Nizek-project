@@ -374,7 +374,7 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
               sprintId: null,
               sprintName: null,
               estimatedMinutes: null,
-              stage: "NEW_REQUEST",
+              stage: "BACKLOG",
               assignee: null,
             });
           }
@@ -403,9 +403,9 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
         for (const task of useKanbanStore.getState().tasks) {
           if (
             task.sprintId === current.sprintId &&
-            (task.stage === "NEW_REQUEST" || task.stage === "CLARIFICATION")
+            (task.stage === "BACKLOG" || task.stage === "PLANNED" || task.stage === "NEXT")
           ) {
-            updateTask(task.id, { stage: "READY_FOR_DEV" });
+            updateTask(task.id, { stage: "TODO" });
           }
         }
         window.dispatchEvent(new CustomEvent("sprint-status-changed", { detail: started }));

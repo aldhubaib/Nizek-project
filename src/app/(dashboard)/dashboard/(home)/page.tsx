@@ -23,7 +23,7 @@ export default async function DashboardPage() {
       where: {
         assigneeId: userId,
         archivedAt: null,
-        stage: { in: ["READY_FOR_DEV", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "CLIENT_REVIEW"] },
+        stage: { in: ["TODO", "IN_DEVELOPMENT", "INTERNAL_REVIEW"] },
       },
       select: {
         id: true,

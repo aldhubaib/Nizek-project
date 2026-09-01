@@ -93,13 +93,11 @@ function SortableQuestionItem({
   editOptions,
   editMultiple,
   editMandatory,
-  editRequired,
   setEditingId,
   setEditValue,
   setEditOptions,
   setEditMultiple,
   setEditMandatory,
-  setEditRequired,
   onUpdate,
   onDelete,
   onToggleField,
@@ -112,16 +110,14 @@ function SortableQuestionItem({
   editOptions: string;
   editMultiple: boolean;
   editMandatory: boolean;
-  editRequired: boolean;
   setEditingId: (id: string | null) => void;
   setEditValue: (v: string) => void;
   setEditOptions: (v: string) => void;
   setEditMultiple: (v: boolean) => void;
   setEditMandatory: (v: boolean) => void;
-  setEditRequired: (v: boolean) => void;
   onUpdate: (id: string) => void;
   onDelete: (id: string) => void;
-  onToggleField: (id: string, field: "mandatory" | "required", value: boolean) => void;
+  onToggleField: (id: string, field: "mandatory", value: boolean) => void;
   getOptionsList: (q: Question) => string[];
 }) {
   const {
@@ -196,16 +192,9 @@ function SortableQuestionItem({
                 onChange={(e) => setEditMandatory(e.target.checked)}
                 className="rounded border-border accent-destructive w-3.5 h-3.5"
               />
-              <span className="text-xs text-muted-foreground">Mandatory</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={editRequired ?? false}
-                onChange={(e) => setEditRequired(e.target.checked)}
-                className="rounded border-border accent-orange w-3.5 h-3.5"
-              />
-              <span className="text-xs text-muted-foreground">Required before backlog</span>
+              <span className="text-xs text-muted-foreground">
+                Mandatory — must be answered to create the task
+              </span>
             </label>
           </div>
         </div>
@@ -218,7 +207,6 @@ function SortableQuestionItem({
               setEditOptions(getOptionsList(q).join(", "));
               setEditMultiple(q.multiple);
               setEditMandatory(q.mandatory);
-              setEditRequired(q.required);
             }}
             className="flex-1 text-start min-w-0"
           >
@@ -235,29 +223,27 @@ function SortableQuestionItem({
           <span className="text-xs text-muted-foreground/50 font-mono shrink-0">
                     {q.type === "select" ? (q.multiple ? "dropdown · multi" : "dropdown") : q.type === "file" ? "file" : q.type === "link" ? "link" : q.type === "client" ? "client" : "text"}
           </span>
+          {/*
+            Every question has to be answered before its task can leave the
+            Backlog, so there is no "optional" state left. This toggle only sets
+            how early the answer is due: on creation, or by the time the task
+            stops being Missing data.
+          */}
           <button
             onClick={() => onToggleField(q.id, "mandatory", !q.mandatory)}
             className={cn(
               "text-xs font-medium rounded px-1.5 py-0.5 border transition-colors shrink-0",
               q.mandatory
                 ? "bg-destructive/10 border-destructive/30 text-destructive"
-                : "bg-muted border-border text-muted-foreground/50 hover:border-muted-foreground/40 hover:text-muted-foreground"
+                : "bg-orange/10 border-orange/30 text-orange"
             )}
-            title={q.mandatory ? "Mandatory — click to remove" : "Click to make mandatory on creation"}
+            title={
+              q.mandatory
+                ? "Must be answered to create the task — click to allow creating without it"
+                : "Must be answered before the task leaves the Backlog — click to require it on creation"
+            }
           >
-            {q.mandatory ? "Mandatory" : "Optional"}
-          </button>
-          <button
-            onClick={() => onToggleField(q.id, "required", !q.required)}
-            className={cn(
-              "text-xs font-medium rounded px-1.5 py-0.5 border transition-colors shrink-0",
-              q.required
-                ? "bg-orange/10 border-orange/30 text-orange"
-                : "bg-muted border-border text-muted-foreground/50 hover:border-muted-foreground/40 hover:text-muted-foreground"
-            )}
-            title={q.required ? "Required before backlog — click to remove" : "Click to require before the task can enter the Backlog"}
-          >
-            {q.required ? "Before backlog" : ""}
+            {q.mandatory ? "Mandatory" : "Before backlog"}
           </button>
           <button
             onClick={() => onDelete(q.id)}
@@ -280,13 +266,11 @@ export function DefaultQuestionsManager({ questions }: Props) {
   const [newMultiple, setNewMultiple] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newMandatory, setNewMandatory] = useState(false);
-  const [newRequired, setNewRequired] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [editOptions, setEditOptions] = useState("");
   const [editMultiple, setEditMultiple] = useState(false);
   const [editMandatory, setEditMandatory] = useState(false);
-  const [editRequired, setEditRequired] = useState(false);
 
   const filteredQuestions = useMemo(
     () => questions.filter((q) => q.taskType === activeType),
@@ -330,7 +314,6 @@ export function DefaultQuestionsManager({ questions }: Props) {
         options,
         multiple: newType === "select" ? newMultiple : false,
         mandatory: newMandatory,
-        required: newRequired,
         taskType: activeType,
       });
       setNewQuestion("");
@@ -338,7 +321,6 @@ export function DefaultQuestionsManager({ questions }: Props) {
       setNewType("text");
       setNewMultiple(false);
       setNewMandatory(false);
-      setNewRequired(true);
     } catch (err) {
       console.error(err);
     } finally {
@@ -367,7 +349,6 @@ export function DefaultQuestionsManager({ questions }: Props) {
         options,
         ...(q?.type === "select" && { multiple: editMultiple }),
         mandatory: editMandatory,
-        required: editRequired,
       });
       setEditingId(null);
     } catch (err) {
@@ -375,7 +356,7 @@ export function DefaultQuestionsManager({ questions }: Props) {
     }
   }
 
-  async function handleToggleField(questionId: string, field: "mandatory" | "required", value: boolean) {
+  async function handleToggleField(questionId: string, field: "mandatory", value: boolean) {
     try {
       await updateDefaultQuestion({ questionId, [field]: value });
     } catch (err) {
@@ -455,13 +436,11 @@ export function DefaultQuestionsManager({ questions }: Props) {
                   editOptions={editOptions}
                   editMultiple={editMultiple}
                   editMandatory={editMandatory}
-                  editRequired={editRequired}
                   setEditingId={setEditingId}
                   setEditValue={setEditValue}
                   setEditOptions={setEditOptions}
                   setEditMultiple={setEditMultiple}
                   setEditMandatory={setEditMandatory}
-                  setEditRequired={setEditRequired}
                   onUpdate={handleUpdate}
                   onDelete={handleDelete}
                   onToggleField={handleToggleField}
@@ -531,16 +510,9 @@ export function DefaultQuestionsManager({ questions }: Props) {
                 onChange={(e) => setNewMandatory(e.target.checked)}
                 className="rounded border-border accent-destructive w-3.5 h-3.5"
               />
-              <span className="text-s text-muted-foreground">Mandatory</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={newRequired}
-                onChange={(e) => setNewRequired(e.target.checked)}
-                className="rounded border-border accent-orange w-3.5 h-3.5"
-              />
-              <span className="text-s text-muted-foreground">Required before backlog</span>
+              <span className="text-s text-muted-foreground">
+                Mandatory — must be answered to create the task
+              </span>
             </label>
           </div>
           <AddButton

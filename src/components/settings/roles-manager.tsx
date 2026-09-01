@@ -17,13 +17,13 @@ import {
 import { createRole, updateRole, deleteRole } from "@/actions/role";
 import { cn } from "@/lib/utils";
 
+// Only the stages a person moves a task through. Planned, Next, Completed and
+// Shipped follow the sprint, so a role has nothing to permit there.
 const ALL_STAGES = [
-  { id: "NEW_REQUEST", label: "Backlog" },
-  { id: "READY_FOR_DEV", label: "Todo" },
+  { id: "BACKLOG", label: "Backlog" },
+  { id: "TODO", label: "Todo" },
   { id: "IN_DEVELOPMENT", label: "In Development" },
   { id: "INTERNAL_REVIEW", label: "Internal Review" },
-  { id: "CLIENT_REVIEW", label: "Client Review" },
-  { id: "READY_FOR_RELEASE", label: "Ready for Release" },
   { id: "DONE", label: "Done" },
 ];
 
@@ -42,6 +42,7 @@ interface WorkspaceRole {
   canStartSprint: boolean;
   canEndSprint: boolean;
   canDeleteSprint: boolean;
+  canViewTaskHistory: boolean;
   allowedStages: string | null;
   allowedTransitions: string | null;
   _count: { members: number };
@@ -116,6 +117,7 @@ const EMPTY_GENERAL = {
   canStartSprint: false,
   canEndSprint: false,
   canDeleteSprint: false,
+  canViewTaskHistory: false,
 };
 
 export function RolesManager({ roles }: Props) {
@@ -158,6 +160,9 @@ export function RolesManager({ roles }: Props) {
         canStartSprint: newPerms.isClient ? false : newPerms.canStartSprint,
         canEndSprint: newPerms.isClient ? false : newPerms.canEndSprint,
         canDeleteSprint: newPerms.isClient ? false : newPerms.canDeleteSprint,
+        // Deliberately not forced false for client roles: the lifecycle view is
+        // the one thing a client can be granted without touching code.
+        canViewTaskHistory: newPerms.canViewTaskHistory,
         allowedTransitions: newPerms.isClient ? {} : serializeAllData(newStagePerms),
       });
       setNewName("");
@@ -184,6 +189,7 @@ export function RolesManager({ roles }: Props) {
       canStartSprint: role.canStartSprint,
       canEndSprint: role.canEndSprint,
       canDeleteSprint: role.canDeleteSprint,
+      canViewTaskHistory: role.canViewTaskHistory,
     });
     const parsed = parseAllData(role.allowedTransitions);
     if (parsed.createStages.length === 0 && role.canCreateTask) {
@@ -213,6 +219,7 @@ export function RolesManager({ roles }: Props) {
         canStartSprint: editPerms.isClient ? false : editPerms.canStartSprint,
         canEndSprint: editPerms.isClient ? false : editPerms.canEndSprint,
         canDeleteSprint: editPerms.isClient ? false : editPerms.canDeleteSprint,
+        canViewTaskHistory: editPerms.canViewTaskHistory,
         allowedTransitions: editPerms.isClient ? {} : serializeAllData(editStagePerms),
       });
       setEditingId(null);
@@ -270,6 +277,11 @@ export function RolesManager({ roles }: Props) {
               }))
             }
           />
+          <TaskHistoryToggle
+            checked={newPerms.canViewTaskHistory}
+            onChange={(v) => setNewPerms((p) => ({ ...p, canViewTaskHistory: v }))}
+          />
+
           {newPerms.isClient ? (
             <p className="text-xs text-muted-foreground">
               This person only sees this project&apos;s client chat. No dashboard, projects, tasks, or internal chats.
@@ -345,6 +357,11 @@ export function RolesManager({ roles }: Props) {
                         }
                       />
                     )}
+                    <TaskHistoryToggle
+                      checked={editPerms.canViewTaskHistory}
+                      onChange={(v) => setEditPerms((p) => ({ ...p, canViewTaskHistory: v }))}
+                    />
+
                     {editPerms.isClient ? (
                       <p className="text-xs text-muted-foreground">
                         This person only sees this project&apos;s client chat. No dashboard, projects, tasks, or internal chats.
@@ -426,6 +443,10 @@ export function RolesManager({ roles }: Props) {
                           </Button>
                         )}
                       </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-xs mb-2">
+                      <PermBadge label="Task history" enabled={role.canViewTaskHistory} />
                     </div>
 
                     {role.isClient ? (
@@ -537,15 +558,7 @@ function StagePermissionsTable({
     onChange({ ...stagePerms, modifyStages: toggleInArray(stagePerms.modifyStages, stageId) });
   }
   function toggleForward(fromId: string, toId: string) {
-    let updated = toggleTransitionTarget(stagePerms.transitions, fromId, toId);
-    if (fromId === "INTERNAL_REVIEW" && toId === "CLIENT_REVIEW") {
-      const enabling = !(stagePerms.transitions[fromId] ?? []).includes(toId);
-      if (enabling) {
-        updated = { ...updated, [fromId]: [...new Set([...(updated[fromId] ?? []), "DONE"])] };
-      } else {
-        updated = { ...updated, [fromId]: (updated[fromId] ?? []).filter((s) => s !== "DONE" && s !== "READY_FOR_RELEASE") };
-      }
-    }
+    const updated = toggleTransitionTarget(stagePerms.transitions, fromId, toId);
     onChange({ ...stagePerms, transitions: updated });
     if (!(stagePerms.transitions[fromId] ?? []).includes(toId) && !canMoveTask) {
       onMoveTaskChange(true);
@@ -638,6 +651,24 @@ function StageCheckbox({ enabled, onClick, color }: { enabled: boolean; onClick:
     >
       {enabled && <Check className={cn("w-3.5 h-3.5", c.text)} strokeWidth={2.5} />}
     </button>
+  );
+}
+
+function TaskHistoryToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <PermToggle label="View task history" checked={checked} onChange={onChange} />
+      <p className="text-xs text-muted-foreground">
+        The stage-by-stage lifecycle of a task: who moved it, when, and how long it sat.
+        Safe to grant to a client role.
+      </p>
+    </div>
   );
 }
 

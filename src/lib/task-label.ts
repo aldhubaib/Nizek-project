@@ -30,28 +30,30 @@ export const TASK_TYPE_BADGE: Record<string, { label: string; color: string; bg:
   DESIGN: outlineBadge("Design", "text-cyan", "border-cyan/30"),
 };
 
+// Declaration order is the lifecycle order, and the history view relies on it to
+// lay stages out left to right.
 export const TASK_STAGE_BADGE: Record<string, { label: string; color: string; bg: string }> = {
-  NEW_REQUEST: outlineBadge("Backlog", "text-muted-foreground", "border-muted-foreground/30"),
   BACKLOG: outlineBadge("Backlog", "text-muted-foreground", "border-muted-foreground/30"),
-  CLARIFICATION: outlineBadge("Clarification", "text-violet-400", "border-violet-500/30"),
-  READY_FOR_DEV: outlineBadge("Todo", "text-cyan-400", "border-cyan-500/30"),
+  PLANNED: outlineBadge("Planned", "text-violet-400", "border-violet-500/30"),
+  NEXT: outlineBadge("Next", "text-cyan", "border-cyan/30"),
+  TODO: outlineBadge("Todo", "text-cyan-400", "border-cyan-500/30"),
   IN_DEVELOPMENT: outlineBadge("In Development", "text-sky-400", "border-sky-500/30"),
   INTERNAL_REVIEW: outlineBadge("Internal Review", "text-orange", "border-orange/30"),
-  CLIENT_REVIEW: outlineBadge("Client Review", "text-orange-400", "border-orange-500/30"),
-  READY_FOR_RELEASE: outlineBadge("Ready for Release", "text-emerald-400", "border-emerald-500/30"),
   DONE: outlineBadge("Done", "text-success", "border-success/30"),
+  COMPLETED: outlineBadge("Completed", "text-emerald-400", "border-emerald-500/30"),
+  SHIPPED: outlineBadge("Shipped", "text-success", "border-success/30"),
 };
 
 export const TASK_STAGE_DOT: Record<string, string> = {
-  NEW_REQUEST: "bg-muted-foreground",
   BACKLOG: "bg-muted-foreground",
-  CLARIFICATION: "bg-violet-400",
-  READY_FOR_DEV: "bg-cyan-400",
+  PLANNED: "bg-violet-400",
+  NEXT: "bg-cyan",
+  TODO: "bg-cyan-400",
   IN_DEVELOPMENT: "bg-sky-400",
   INTERNAL_REVIEW: "bg-orange",
-  CLIENT_REVIEW: "bg-orange-400",
-  READY_FOR_RELEASE: "bg-emerald-400",
   DONE: "bg-success",
+  COMPLETED: "bg-emerald-400",
+  SHIPPED: "bg-success",
 };
 
 export function taskStageBadge(stage: string, missingData = false) {
@@ -67,6 +69,52 @@ export function taskStageBadge(stage: string, missingData = false) {
 export function stageLabel(stage: string | null | undefined, missingData = false): string {
   if (!stage) return "—";
   return taskStageBadge(stage, missingData).label;
+}
+
+/** Lowest to highest. Order is the ranking, and the pickers render it as-is. */
+export const TASK_PRIORITIES = [
+  "VERY_LOW",
+  "LOW",
+  "NORMAL",
+  "HIGH",
+  "VERY_HIGH",
+] as const;
+
+export type TaskPriorityId = (typeof TASK_PRIORITIES)[number];
+
+/** Every task starts here — there is no "unset" priority. */
+export const DEFAULT_TASK_PRIORITY: TaskPriorityId = "NORMAL";
+
+export const TASK_PRIORITY_BADGE: Record<string, { label: string; color: string; bg: string }> = {
+  VERY_LOW: outlineBadge("Very Low", "text-muted-foreground", "border-muted-foreground/30"),
+  LOW: outlineBadge("Low", "text-cyan", "border-cyan/30"),
+  NORMAL: outlineBadge("Normal", "text-primary", "border-primary/30"),
+  HIGH: outlineBadge("High", "text-orange", "border-orange/30"),
+  VERY_HIGH: outlineBadge("Very High", "text-destructive", "border-destructive/30"),
+};
+
+export function isTaskPriority(value: unknown): value is TaskPriorityId {
+  return (
+    typeof value === "string" &&
+    (TASK_PRIORITIES as readonly string[]).includes(value)
+  );
+}
+
+export function taskPriorityBadge(priority: string | null | undefined) {
+  if (!priority) return TASK_PRIORITY_BADGE[DEFAULT_TASK_PRIORITY];
+  return (
+    TASK_PRIORITY_BADGE[priority] ??
+    outlineBadge(priority, "text-muted-foreground", "border-muted-foreground/30")
+  );
+}
+
+/**
+ * Task history predates the named levels, so old rows hold "7" and the like.
+ * Those stay as written rather than being reinterpreted after the fact.
+ */
+export function priorityLabel(priority: string | null | undefined): string {
+  if (!priority) return "—";
+  return TASK_PRIORITY_BADGE[priority]?.label ?? priority;
 }
 
 export const SPRINT_STATUS_BADGE: Record<string, { label: string; color: string; bg: string }> = {

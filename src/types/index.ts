@@ -60,26 +60,18 @@ export function isProjectActive(project: ProjectWithContracts): boolean {
   });
 }
 
-export const STAGE_ORDER: Stage[] = [
-  "NEW_REQUEST",
-  "CLARIFICATION",
-  "READY_FOR_DEV",
-  "IN_DEVELOPMENT",
-  "INTERNAL_REVIEW",
-  "CLIENT_REVIEW",
-  "READY_FOR_RELEASE",
-  "DONE",
-];
+export { STAGE_ORDER } from "@/lib/task-stage";
 
 export const STAGE_LABELS: Record<Stage, string> = {
-  NEW_REQUEST: "Backlog",
-  CLARIFICATION: "Clarification",
-  READY_FOR_DEV: "Todo",
+  BACKLOG: "Backlog",
+  PLANNED: "Planned",
+  NEXT: "Next",
+  TODO: "Todo",
   IN_DEVELOPMENT: "In Development",
   INTERNAL_REVIEW: "Internal Review",
-  CLIENT_REVIEW: "Client Review",
-  READY_FOR_RELEASE: "Ready for Release",
   DONE: "Done",
+  COMPLETED: "Completed",
+  SHIPPED: "Shipped",
 };
 
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {

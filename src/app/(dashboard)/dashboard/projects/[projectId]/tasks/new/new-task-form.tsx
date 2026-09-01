@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Sparkles, Wrench, Bug, AlertCircle, Palette, Loader2 } from "lucide-react";
 import { createTask } from "@/actions/task";
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
+import { PriorityPicker } from "@/components/task/priority-picker";
+import { DEFAULT_TASK_PRIORITY, type TaskPriorityId } from "@/lib/task-label";
 import { cn } from "@/lib/utils";
 import { PageHeader, PageBackButton } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
@@ -38,7 +40,7 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
 
   const visibleTypes = TASK_TYPES.filter((t) => allowedTaskTypes.includes(t.id));
   const [taskType, setTaskType] = useState<TaskType>(visibleTypes[0]?.id ?? "FEATURE");
-  const [priority, setPriority] = useState<number | null>(null);
+  const [priority, setPriority] = useState<TaskPriorityId>(DEFAULT_TASK_PRIORITY);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -77,7 +79,7 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
       await createTask({
         projectId,
         title: title.trim(),
-        priority: priority ?? undefined,
+        priority,
         taskType,
         answers: answersList.length > 0 ? answersList : undefined,
       });
@@ -168,30 +170,7 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
             <label className="text-s font-semibold text-foreground">
               Priority
             </label>
-            <div className="flex gap-xs">
-              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setPriority(priority === n ? null : n)}
-                  className={cn(
-                    "h-9 w-9 rounded-md border text-s font-medium transition-colors",
-                    priority === n
-                      ? n >= 9
-                        ? "bg-destructive/20 border-destructive/40 text-destructive"
-                        : n >= 7
-                          ? "bg-orange/20 border-orange/40 text-orange"
-                          : "bg-primary/20 border-primary/40 text-primary"
-                      : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
-                  )}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {priority === null ? "No priority selected" : `1 = lowest, 10 = highest`}
-            </p>
+            <PriorityPicker value={priority} onChange={setPriority} />
           </div>
 
           {/* Questions (filtered by type) — always shown so spec fields aren't silent */}

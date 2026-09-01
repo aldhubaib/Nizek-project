@@ -6,17 +6,12 @@ import {
   isReadinessQuestion,
 } from "@/lib/task-readiness";
 
-const spec = (id: string, required = false) => ({
-  id,
-  type: "text" as const,
-  required,
-});
+const spec = (id: string) => ({ id, type: "text" as const });
 
 describe("isReadinessQuestion", () => {
-  it("only counts questions marked mandatory or required before backlog", () => {
-    expect(isReadinessQuestion({ type: "text" })).toBe(false);
-    expect(isReadinessQuestion({ type: "text", required: true })).toBe(true);
-    expect(isReadinessQuestion({ type: "select", mandatory: true })).toBe(true);
+  it("counts every question, however it is flagged", () => {
+    expect(isReadinessQuestion({ type: "text" })).toBe(true);
+    expect(isReadinessQuestion({ type: "select" })).toBe(true);
   });
 
   it("ignores client questions", () => {
@@ -24,37 +19,32 @@ describe("isReadinessQuestion", () => {
   });
 
   it("ignores Priority — that field lives on the task, not in questions", () => {
-    expect(isReadinessQuestion({ type: "text", question: "Priority", required: true })).toBe(false);
-    expect(isReadinessQuestion({ type: "select", question: "priority", mandatory: true })).toBe(false);
+    expect(isReadinessQuestion({ type: "text", question: "Priority" })).toBe(false);
+    expect(isReadinessQuestion({ type: "select", question: "priority" })).toBe(false);
   });
 });
 
 describe("computeIsReadyForTransition", () => {
-  it("keeps a task in Missing Data when required questions are unanswered", () => {
-    expect(computeIsReadyForTransition([spec("q1", true), spec("q2", true)], {})).toBe(false);
+  it("keeps a task in Missing Data when questions are unanswered", () => {
+    expect(computeIsReadyForTransition([spec("q1"), spec("q2")], {})).toBe(false);
   });
 
-  it("treats required:false as optional for the Backlog split", () => {
+  it("holds the task for an unflagged question, which used to count as optional", () => {
+    expect(computeIsReadyForTransition([spec("q1")], {})).toBe(false);
+  });
+
+  it("is ready only once every question has an answer", () => {
     expect(
-      computeIsReadyForTransition([spec("q1", false)], {}),
+      computeIsReadyForTransition([spec("q1"), spec("q2")], { q2: "two" }),
+    ).toBe(false);
+    expect(
+      computeIsReadyForTransition([spec("q1"), spec("q2")], { q1: "one", q2: "two" }),
     ).toBe(true);
   });
 
-  it("is ready only after every required question has an answer", () => {
+  it("stays unready if a select/file answer is an empty list", () => {
     expect(
-      computeIsReadyForTransition(
-        [spec("q1", false), spec("q2", true)],
-        { q2: "two" },
-      ),
-    ).toBe(true);
-  });
-
-  it("stays unready if a required select/file answer is an empty list", () => {
-    expect(
-      computeIsReadyForTransition(
-        [{ id: "files", type: "file", required: true }],
-        { files: "[]" },
-      ),
+      computeIsReadyForTransition([{ id: "files", type: "file" }], { files: "[]" }),
     ).toBe(false);
   });
 
@@ -71,10 +61,7 @@ describe("computeIsReadyForTransition", () => {
 
   it("does not keep a task in Missing Data for an unanswered Priority question", () => {
     expect(
-      computeIsReadyForTransition(
-        [{ id: "p1", type: "text", question: "Priority", required: true }],
-        {},
-      ),
+      computeIsReadyForTransition([{ id: "p1", type: "text", question: "Priority" }], {}),
     ).toBe(true);
   });
 });
@@ -82,10 +69,10 @@ describe("computeIsReadyForTransition", () => {
 describe("isMissingDataTask", () => {
   it("is true for backlog-stage work that is not ready", () => {
     expect(
-      isMissingDataTask({ stage: "NEW_REQUEST", isReadyForTransition: false }),
+      isMissingDataTask({ stage: "BACKLOG", isReadyForTransition: false }),
     ).toBe(true);
     expect(
-      isMissingDataTask({ stage: "NEW_REQUEST", isReadyForTransition: true }),
+      isMissingDataTask({ stage: "BACKLOG", isReadyForTransition: true }),
     ).toBe(false);
   });
 });

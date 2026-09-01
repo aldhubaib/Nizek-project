@@ -47,7 +47,7 @@ export function SprintsTab({
 
   useEffect(() => {
     if (!activeId) return;
-    const backlog = (stage: string) => stage === "NEW_REQUEST" || stage === "CLARIFICATION";
+    const backlog = (stage: string) => stage === "BACKLOG" || stage === "CLARIFICATION";
     const store = useKanbanStore.getState();
     if (store.projectId != null && store.projectId !== projectId) {
       setTasks(tasks, projectId);
@@ -58,7 +58,7 @@ export function SprintsTab({
       setTasks(
         tasks.map((task) =>
           task.sprintId === activeId && backlog(task.stage)
-            ? { ...task, stage: "READY_FOR_DEV" }
+            ? { ...task, stage: "TODO" }
             : task,
         ),
         projectId,
@@ -67,7 +67,7 @@ export function SprintsTab({
       let changed = false;
       for (const task of current) {
         if (task.sprintId === activeId && backlog(task.stage)) {
-          updateTask(task.id, { stage: "READY_FOR_DEV" });
+          updateTask(task.id, { stage: "TODO" });
           changed = true;
         }
       }

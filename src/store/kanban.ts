@@ -1,6 +1,23 @@
 import { create } from "zustand";
+import type { TaskPriorityId } from "@/lib/task-label";
 
-export type Stage = "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "READY_FOR_RELEASE" | "DONE";
+/** Mirrors the Stage enum in the schema, in lifecycle order. */
+export type Stage =
+  | "BACKLOG"
+  | "PLANNED"
+  | "NEXT"
+  | "TODO"
+  | "IN_DEVELOPMENT"
+  | "INTERNAL_REVIEW"
+  | "DONE"
+  | "COMPLETED"
+  | "SHIPPED";
+
+/** The subset a person can drag a card into; the rest follow the sprint. */
+export type MovableStage = Extract<
+  Stage,
+  "BACKLOG" | "TODO" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "DONE"
+>;
 export type TaskType = "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
 
 export type EstimateAccuracy = "WAY_OVER" | "OVER" | "ON_TRACK" | "UNDER" | "WAY_UNDER";
@@ -10,7 +27,7 @@ export interface KanbanTask {
   taskNumber: number;
   title: string;
   description: string | null;
-  priority: number | null;
+  priority: TaskPriorityId;
   taskType: TaskType;
   stage: Stage;
   order: number;
@@ -20,8 +37,6 @@ export interface KanbanTask {
   startedAt?: string | null;
   stageEnteredAt?: string | null;
   declineCount?: number;
-  internalDeclines?: number;
-  clientDeclines?: number;
   estimatedMinutes?: number | null;
   estimateAccuracy?: EstimateAccuracy | null;
   notesCount?: number;

@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { requireProjectMember, requireStaffUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { logTaskActivity } from "@/lib/activity";
+import { applyStageChange } from "@/lib/stage-transition";
+import { isLifecycleStage, isWorkStage } from "@/lib/task-stage";
 import {
   getPermissionsFromRole,
   getAdminPermissions,
@@ -16,31 +18,37 @@ import { notifyAndPush } from "@/lib/notify";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import { isBuiltInTaskFieldQuestion, isQuestionAnswerFilled, isReadinessQuestion, isWaitingOnClientAnswer } from "@/lib/task-readiness";
 import { requireUserOnProject } from "@/lib/project-mentions";
+import {
+  DEFAULT_TASK_PRIORITY,
+  isTaskPriority,
+  priorityLabel,
+  type TaskPriorityId,
+} from "@/lib/task-label";
 import { getAliasMap, NO_MASK, type AliasIdentity } from "@/lib/alias";
 import { isClientUser } from "@/lib/client-chat";
+import type { Stage } from "@/generated/prisma/client";
 
 // ─── Stage → Role Track ─────────────────────────────────
-type RoleTrack = "pm" | "developer" | "client";
+type RoleTrack = "pm" | "developer";
 
 const STAGE_ROLE_MAP: Record<string, RoleTrack> = {
-  NEW_REQUEST: "pm",
-  CLARIFICATION: "pm",
-  READY_FOR_DEV: "developer",
+  BACKLOG: "pm",
+  PLANNED: "pm",
+  NEXT: "pm",
+  TODO: "developer",
   IN_DEVELOPMENT: "developer",
   INTERNAL_REVIEW: "pm",
-  CLIENT_REVIEW: "client",
-  READY_FOR_RELEASE: "developer",
   DONE: "developer",
+  COMPLETED: "pm",
+  SHIPPED: "pm",
 };
 
 const PM_ROLES = ["ADMIN", "PM", "TECH_LEAD"];
 const DEV_ROLES = ["DEVELOPER", "DESIGNER", "TECH_LEAD", "ADMIN"];
-const CLIENT_ROLES = ["CLIENT"];
 
 const ALLOWED_ROLES_BY_TRACK: Record<RoleTrack, string[]> = {
   pm: PM_ROLES,
   developer: DEV_ROLES,
-  client: CLIENT_ROLES,
 };
 
 async function resolveInternalReviewAssignee(projectId: string): Promise<string | null> {
@@ -68,7 +76,7 @@ async function resolveInternalReviewAssignee(projectId: string): Promise<string 
 
 async function resolveAutoAssignee(
   stage: string,
-  task: { createdById: string; developerId: string | null; clientReviewerId: string | null },
+  task: { createdById: string; developerId: string | null },
   actingUserId: string,
   projectId: string,
 ): Promise<string | null> {
@@ -83,19 +91,6 @@ async function resolveAutoAssignee(
       return task.createdById;
     case "developer":
       return task.developerId ?? actingUserId;
-    case "client": {
-      if (task.clientReviewerId) return task.clientReviewerId;
-      const project = await prisma.project.findUnique({
-        where: { id: projectId },
-        select: { defaultClientReviewerId: true },
-      });
-      if (project?.defaultClientReviewerId) return project.defaultClientReviewerId;
-      const clientMember = await prisma.projectMember.findFirst({
-        where: { projectId, role: "CLIENT" },
-        select: { userId: true },
-      });
-      return clientMember?.userId ?? null;
-    }
   }
 }
 
@@ -103,7 +98,7 @@ export async function createTask(data: {
   projectId: string;
   title: string;
   description?: string;
-  priority?: number;
+  priority?: TaskPriorityId;
   taskType?: "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
   assigneeId?: string;
   answers?: { questionId: string; answer: string }[];
@@ -122,7 +117,7 @@ export async function createTask(data: {
 
   if (!isAdmin) {
     const perms = getPermissionsFromRole(member.projectRole);
-    if (!canCreateInStage(perms, "NEW_REQUEST")) {
+    if (!canCreateInStage(perms, "BACKLOG")) {
       throw new Error("You do not have permission to create tasks");
     }
   }
@@ -135,7 +130,7 @@ export async function createTask(data: {
 
   const [maxOrder, maxTaskNumber] = await Promise.all([
     prisma.task.aggregate({
-      where: { projectId: data.projectId, stage: "NEW_REQUEST", archivedAt: null },
+      where: { projectId: data.projectId, stage: "BACKLOG", archivedAt: null },
       _max: { order: true },
     }),
     prisma.task.aggregate({
@@ -163,39 +158,59 @@ export async function createTask(data: {
     }
   }
 
-  const priority = data.priority != null ? Math.min(10, Math.max(1, data.priority)) : null;
+  const priority = isTaskPriority(data.priority)
+    ? data.priority
+    : DEFAULT_TASK_PRIORITY;
 
   if (data.assigneeId) {
     await requireUserOnProject(data.projectId, data.assigneeId);
   }
 
-  const task = await prisma.task.create({
-    data: {
-      taskNumber: (maxTaskNumber._max.taskNumber ?? 0) + 1,
-      title: data.title,
-      description: data.description,
-      priority,
-      taskType,
-      stage: "NEW_REQUEST",
-      order: (maxOrder._max.order ?? 0) + 1,
-      projectId: data.projectId,
-      createdById: user.id,
-      assigneeId: data.assigneeId ?? null,
-      ...(data.answers?.length && {
-        answers: {
-          create: data.answers
-            .filter((a) => a.answer.trim())
-            .map((a) => ({ questionId: a.questionId, answer: a.answer })),
-        },
-      }),
-    },
-  });
+  const task = await prisma.$transaction(async (tx) => {
+    const created = await tx.task.create({
+      data: {
+        taskNumber: (maxTaskNumber._max.taskNumber ?? 0) + 1,
+        title: data.title,
+        description: data.description,
+        priority,
+        taskType,
+        stage: "BACKLOG",
+        order: (maxOrder._max.order ?? 0) + 1,
+        projectId: data.projectId,
+        createdById: user.id,
+        assigneeId: data.assigneeId ?? null,
+        ...(data.answers?.length && {
+          answers: {
+            create: data.answers
+              .filter((a) => a.answer.trim())
+              .map((a) => ({ questionId: a.questionId, answer: a.answer })),
+          },
+        }),
+      },
+    });
 
-  await logTaskActivity({
-    taskId: task.id,
-    userId: user.id,
-    action: "created",
-    newValue: task.title,
+    // Opens the task's history. Without this the first stage it ever sat in has
+    // no entry time, so every later duration is measured from the wrong start.
+    await applyStageChange(tx, {
+      taskId: created.id,
+      fromStage: null,
+      toStage: "BACKLOG",
+      actorId: user.id,
+      source: "TASK_CREATED",
+      assigneeId: created.assigneeId,
+      at: created.createdAt,
+    });
+
+    await tx.taskActivity.create({
+      data: {
+        taskId: created.id,
+        userId: user.id,
+        action: "created",
+        newValue: created.title,
+      },
+    });
+
+    return created;
   });
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
@@ -207,7 +222,7 @@ export async function updateTask(data: {
   taskId: string;
   title?: string;
   description?: string;
-  priority?: number | null;
+  priority?: TaskPriorityId;
   assigneeId?: string | null;
   estimatedMinutes?: number | null;
 }) {
@@ -236,10 +251,12 @@ export async function updateTask(data: {
       field: "title", oldValue: task.title, newValue: data.title,
     }));
   }
-  if (data.priority !== undefined && data.priority !== task.priority) {
+  if (isTaskPriority(data.priority) && data.priority !== task.priority) {
     activities.push(logTaskActivity({
       taskId: task.id, userId: user.id, action: "updated",
-      field: "priority", oldValue: String(task.priority), newValue: String(data.priority),
+      field: "priority",
+      oldValue: priorityLabel(task.priority),
+      newValue: priorityLabel(data.priority),
     }));
   }
   const stickyUpdates: Record<string, string | null> = {};
@@ -257,7 +274,6 @@ export async function updateTask(data: {
 
       const track = STAGE_ROLE_MAP[task.stage];
       if (track === "developer") stickyUpdates.developerId = data.assigneeId;
-      if (track === "client") stickyUpdates.clientReviewerId = data.assigneeId;
 
       activities.push(logTaskActivity({
         taskId: task.id, userId: user.id, action: "assigned",
@@ -276,7 +292,7 @@ export async function updateTask(data: {
     data: {
       ...(data.title && { title: data.title }),
       ...(data.description !== undefined && { description: data.description }),
-      ...(data.priority !== undefined && { priority: data.priority != null ? Math.min(10, Math.max(1, data.priority)) : null }),
+      ...(isTaskPriority(data.priority) && { priority: data.priority }),
       ...(data.assigneeId !== undefined && { assigneeId: data.assigneeId }),
       ...(data.estimatedMinutes !== undefined && { estimatedMinutes: data.estimatedMinutes }),
       ...stickyUpdates,
@@ -351,7 +367,9 @@ export async function assignTaskToMe(
 
 export async function moveTask(data: {
   taskId: string;
-  stage: "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "READY_FOR_RELEASE" | "DONE";
+  /** Passing the stage the task is already in is a reorder, and is allowed from
+   *  anywhere. Actually changing it is restricted — see the guards below. */
+  stage: Stage;
   order: number;
   estimatedMinutes?: number;
   proofOfWorkId?: string;
@@ -359,7 +377,10 @@ export async function moveTask(data: {
   try {
     const task = await prisma.task.findUnique({
       where: { id: data.taskId },
-      include: { project: { include: { contracts: true } } },
+      include: {
+        project: { include: { contracts: true } },
+        sprint: { select: { name: true, status: true } },
+      },
     });
     if (!task) return { success: false, error: "Task not found" };
 
@@ -368,6 +389,33 @@ export async function moveTask(data: {
 
     const activeContract = getActiveContract(task.project.contracts);
     if (!activeContract && !isAdmin) return { success: false, error: "No active contract — this project is read-only" };
+
+    if (task.stage !== data.stage) {
+      // Lifecycle stages belong to the sprint. Letting a move set one, even for
+      // an admin, would put Task.stage and Sprint.status into a disagreement
+      // that nothing else in the system knows how to resolve.
+      if (isLifecycleStage(data.stage) && data.stage !== "BACKLOG") {
+        return {
+          success: false,
+          error: `${data.stage.replaceAll("_", " ")} follows the sprint — move the sprint instead`,
+        };
+      }
+
+      // Work stages only exist inside a running sprint. Without this a card
+      // could be dragged into In Development while its sprint is still Planned.
+      if (isWorkStage(data.stage) && task.sprint?.status !== "ACTIVE") {
+        return { success: false, error: "Start the sprint before moving its tasks" };
+      }
+
+      // Backlog means "in no sprint". Sending a task there while it is still
+      // scheduled is a scheduling change, and belongs to the sprint view.
+      if (data.stage === "BACKLOG" && task.sprintId) {
+        return {
+          success: false,
+          error: "Remove the task from its sprint to send it back to the backlog",
+        };
+      }
+    }
 
     if (!isAdmin && task.stage !== data.stage) {
       const perms = getPermissionsFromRole(member.projectRole);
@@ -393,17 +441,17 @@ export async function moveTask(data: {
 
     const oldStage = task.stage;
 
-    if (!isAdmin && (oldStage === "NEW_REQUEST" || oldStage === "CLARIFICATION") && data.stage !== "NEW_REQUEST" && data.stage !== "CLARIFICATION") {
+    if (!isAdmin && oldStage === "BACKLOG" && data.stage !== "BACKLOG") {
       const errors: string[] = [];
 
+      // Filtered in memory off the same predicate the board and the task page
+      // use, rather than re-encoded as a where clause. There are a handful of
+      // questions per task type, and a second copy of the rule would be free to
+      // drift from the one that decides whether the card says Missing data.
       const specQuestions = (await prisma.defaultQuestion.findMany({
-        where: {
-          taskType: task.taskType,
-          type: { not: "client" },
-          OR: [{ required: true }, { mandatory: true }],
-        },
+        where: { taskType: task.taskType },
         select: { id: true, question: true, type: true },
-      })).filter((q) => !isBuiltInTaskFieldQuestion(q.question));
+      })).filter(isReadinessQuestion);
 
       if (specQuestions.length > 0) {
         const existingAnswers = await prisma.taskAnswer.findMany({
@@ -441,10 +489,7 @@ export async function moveTask(data: {
       }
     }
 
-    let targetStage = data.stage;
-    if (!isAdmin && task.taskType === "BUG" && targetStage === "CLIENT_REVIEW") {
-      targetStage = "DONE";
-    }
+    const targetStage = data.stage;
 
     if (oldStage !== "INTERNAL_REVIEW" && targetStage === "INTERNAL_REVIEW") {
       if (!data.proofOfWorkId) {
@@ -480,7 +525,7 @@ export async function moveTask(data: {
     if (oldStage !== targetStage) {
       autoAssigneeId = await resolveAutoAssignee(
         targetStage,
-        { createdById: task.createdById, developerId: task.developerId, clientReviewerId: task.clientReviewerId },
+        { createdById: task.createdById, developerId: task.developerId },
         user.id,
         task.projectId,
       );
@@ -489,43 +534,37 @@ export async function moveTask(data: {
       if (track === "developer" && !task.developerId && autoAssigneeId) {
         stickyUpdates.developerId = autoAssigneeId;
       }
-      if (track === "client" && !task.clientReviewerId && autoAssigneeId) {
-        stickyUpdates.clientReviewerId = autoAssigneeId;
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const next = await tx.task.update({
+        where: { id: data.taskId },
+        data: {
+          stage: targetStage,
+          order: data.order,
+          ...(isEnteringDev && !task.startedAt && { startedAt: new Date() }),
+          ...(isEnteringDev && data.estimatedMinutes && { estimatedMinutes: data.estimatedMinutes }),
+          ...(estimateAccuracy && { estimateAccuracy }),
+          ...(autoAssigneeId !== undefined && { assigneeId: autoAssigneeId }),
+          ...stickyUpdates,
+        },
+      });
+
+      if (oldStage !== targetStage) {
+        await applyStageChange(tx, {
+          taskId: task.id,
+          fromStage: oldStage,
+          toStage: targetStage,
+          actorId: user.id,
+          source: "USER_MOVE",
+          sprintId: task.sprintId,
+          sprintName: task.sprint?.name ?? null,
+          assigneeId: next.assigneeId,
+        });
       }
-    }
 
-    const updated = await prisma.task.update({
-      where: { id: data.taskId },
-      data: {
-        stage: targetStage,
-        order: data.order,
-        ...(isEnteringDev && !task.startedAt && { startedAt: new Date() }),
-        ...(isEnteringDev && data.estimatedMinutes && { estimatedMinutes: data.estimatedMinutes }),
-        ...(estimateAccuracy && { estimateAccuracy }),
-        ...(autoAssigneeId !== undefined && { assigneeId: autoAssigneeId }),
-        ...stickyUpdates,
-      },
+      return next;
     });
-
-    if (oldStage !== targetStage) {
-      await prisma.stageLog.updateMany({
-        where: { taskId: task.id, stage: oldStage, exitedAt: null },
-        data: { exitedAt: new Date() },
-      });
-
-      await prisma.stageLog.create({
-        data: { taskId: task.id, stage: targetStage },
-      });
-
-      await logTaskActivity({
-        taskId: task.id,
-        userId: user.id,
-        action: "moved",
-        field: "stage",
-        oldValue: oldStage,
-        newValue: targetStage,
-      });
-    }
 
     broadcastTaskEvent(task.projectId, {
       type: "task-moved",
@@ -540,9 +579,10 @@ export async function moveTask(data: {
   }
 }
 
-const DECLINE_TARGETS: Record<string, "NEW_REQUEST" | "CLARIFICATION" | "READY_FOR_DEV" | "IN_DEVELOPMENT" | "INTERNAL_REVIEW" | "CLIENT_REVIEW" | "READY_FOR_RELEASE" | "DONE"> = {
+// Client review is per sprint now, not per task, so Internal Review is the only
+// place a task can be sent back from.
+const DECLINE_TARGETS: Record<string, "IN_DEVELOPMENT"> = {
   INTERNAL_REVIEW: "IN_DEVELOPMENT",
-  CLIENT_REVIEW: "INTERNAL_REVIEW",
 };
 
 export async function declineTask(data: {
@@ -568,7 +608,8 @@ export async function declineTask(data: {
         assignee: { select: { id: true, name: true } },
         createdById: true,
         developerId: true,
-        clientReviewerId: true,
+        sprintId: true,
+        sprint: { select: { name: true } },
       },
     });
     if (!task) return { success: false, error: "Task not found" };
@@ -782,36 +823,29 @@ export async function declineTask(data: {
     if (targetTrack === "developer" && !task.developerId && autoAssigneeId) {
       declineSticky.developerId = autoAssigneeId;
     }
-    if (targetTrack === "client" && !task.clientReviewerId && autoAssigneeId) {
-      declineSticky.clientReviewerId = autoAssigneeId;
-    }
 
-    await prisma.task.update({
-      where: { id: task.id },
-      data: {
-        stage: targetStage,
-        order: tasksInTarget,
-        ...(autoAssigneeId && { assigneeId: autoAssigneeId }),
-        ...declineSticky,
-      },
-    });
+    await prisma.$transaction(async (tx) => {
+      await tx.task.update({
+        where: { id: task.id },
+        data: {
+          stage: targetStage,
+          order: tasksInTarget,
+          ...(autoAssigneeId && { assigneeId: autoAssigneeId }),
+          ...declineSticky,
+        },
+      });
 
-    await prisma.stageLog.updateMany({
-      where: { taskId: task.id, stage: oldStage, exitedAt: null },
-      data: { exitedAt: new Date() },
-    });
-
-    await prisma.stageLog.create({
-      data: { taskId: task.id, stage: targetStage },
-    });
-
-    await logTaskActivity({
-      taskId: task.id,
-      userId: user.id,
-      action: "declined",
-      field: "stage",
-      oldValue: oldStage,
-      newValue: targetStage,
+      await applyStageChange(tx, {
+        taskId: task.id,
+        fromStage: oldStage,
+        toStage: targetStage,
+        actorId: user.id,
+        source: "DECLINE",
+        reason: data.comment.trim(),
+        sprintId: task.sprintId,
+        sprintName: task.sprint?.name ?? null,
+        assigneeId: autoAssigneeId ?? task.assigneeId,
+      });
     });
 
     if (autoAssigneeId && autoAssigneeId !== task.assigneeId) {
@@ -963,7 +997,6 @@ const BOARD_TASK_SELECT = {
   assigneeId: true,
   createdById: true,
   developerId: true,
-  clientReviewerId: true,
   projectId: true,
   sprintId: true,
   sprint: { select: { id: true, name: true, status: true } },
@@ -993,7 +1026,7 @@ type BoardTaskRow = {
   id: string;
   title: string;
   taskType: string;
-  priority: number | null;
+  priority: TaskPriorityId;
   startedAt: Date | null;
   estimatedMinutes: number | null;
   estimateAccuracy: unknown;
@@ -1008,7 +1041,7 @@ type BoardTaskRow = {
 };
 
 function fieldsByType(
-  questions: { id: string; taskType: string; type: string; question?: string; required?: boolean; mandatory?: boolean }[],
+  questions: { id: string; taskType: string; type: string; question?: string }[],
 ): Map<string, { id: string; type: string }[]> {
   const byType = new Map<string, { id: string; type: string }[]>();
   for (const q of questions) {
@@ -1037,7 +1070,7 @@ function maskBoardPerson<T extends BoardPerson | null>(
 
 function mapBoardTask(
   task: BoardTaskRow,
-  declines: { internal: number; client: number },
+  declineCount: number,
   fields: { id: string; type: string }[],
   aliasMap: Map<string, AliasIdentity> = NO_MASK,
 ) {
@@ -1062,9 +1095,7 @@ function mapBoardTask(
     isReadyForTransition,
     startedAt: task.startedAt?.toISOString() ?? null,
     stageEnteredAt: currentLog?.enteredAt?.toISOString() ?? null,
-    declineCount: declines.internal + declines.client,
-    internalDeclines: declines.internal,
-    clientDeclines: declines.client,
+    declineCount,
     estimatedMinutes: task.estimatedMinutes,
     estimateAccuracy: task.estimateAccuracy,
     notesCount: task._count.notes,
@@ -1094,27 +1125,26 @@ export async function getTasksByProject(projectId: string) {
     prisma.defaultQuestion.findMany({
       select: { id: true, taskType: true, type: true, question: true, required: true, mandatory: true },
     }),
-    prisma.taskActivity.findMany({
+    // Counted in the database rather than by fetching rows. The old query took
+    // the first 500 decline activities across the whole project and tallied
+    // those, so on a busy project the counts on the cards were simply wrong.
+    prisma.taskActivity.groupBy({
+      by: ["taskId"],
       where: { action: "declined", task: { projectId } },
-      select: { taskId: true, oldValue: true },
-      take: 500,
+      _count: { _all: true },
     }),
   ]);
 
-  const declinesByTask = new Map<string, { internal: number; client: number }>();
-  for (const d of declineCounts) {
-    const entry = declinesByTask.get(d.taskId) ?? { internal: 0, client: 0 };
-    if (d.oldValue === "CLIENT_REVIEW") entry.client += 1;
-    else entry.internal += 1;
-    declinesByTask.set(d.taskId, entry);
-  }
+  const declinesByTask = new Map<string, number>(
+    declineCounts.map((d) => [d.taskId, d._count._all]),
+  );
 
   const fieldsByTaskType = fieldsByType(specQuestions);
 
   return tasks.map((task) =>
     mapBoardTask(
       task as unknown as BoardTaskRow,
-      declinesByTask.get(task.id) ?? { internal: 0, client: 0 },
+      declinesByTask.get(task.id) ?? 0,
       fieldsByTaskType.get(task.taskType) ?? [],
       aliasMap,
     ),
@@ -1140,20 +1170,11 @@ export async function getBoardTask(taskId: string, expectedProjectId?: string) {
       where: { taskType: task.taskType },
       select: { id: true, taskType: true, type: true, question: true, required: true, mandatory: true },
     }),
-    prisma.taskActivity.findMany({
-      where: { action: "declined", taskId },
-      select: { oldValue: true },
-    }),
+    prisma.taskActivity.count({ where: { action: "declined", taskId } }),
   ]);
 
-  const declines = { internal: 0, client: 0 };
-  for (const d of declineCounts) {
-    if (d.oldValue === "CLIENT_REVIEW") declines.client += 1;
-    else declines.internal += 1;
-  }
-
   const fields = fieldsByType(specQuestions).get(task.taskType) ?? [];
-  return mapBoardTask(task as unknown as BoardTaskRow, declines, fields, aliasMap);
+  return mapBoardTask(task as unknown as BoardTaskRow, declineCounts, fields, aliasMap);
 }
 
 export async function pollTaskUpdates(projectId: string) {

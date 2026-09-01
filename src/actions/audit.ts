@@ -199,7 +199,7 @@ async function collectFlaggedItems(teamIds: string[]): Promise<SnapshotItem[]> {
       where: {
         question: { type: "client" },
         task: {
-          stage: { in: ["NEW_REQUEST", "CLARIFICATION"] },
+          stage: "BACKLOG",
           archivedAt: null,
           project: projectWhere,
         },
@@ -565,8 +565,9 @@ export type BlameCandidatesDTO = {
 
 /**
  * People involved in a flagged item's history — the pool the auditor picks
- * the responsible person from. Tasks: creator + everyone who assigned,
- * moved, or declined. Deadline notes: author + mentioned users.
+ * the responsible person from. Tasks: everyone who moved the task, from the
+ * stage log, plus everyone who changed its assignee. Deadline notes: author
+ * and mentioned users.
  */
 export async function getBlameCandidates(item: {
   taskId?: string | null;
@@ -575,20 +576,36 @@ export async function getBlameCandidates(item: {
   await requireAuditor();
 
   if (item.taskId) {
-    const activities = await prisma.taskActivity.findMany({
-      where: { taskId: item.taskId },
-      select: {
-        action: true,
-        field: true,
-        oldValue: true,
-        newValue: true,
-        createdAt: true,
-        user: { select: { id: true, name: true, imageUrl: true } },
-      },
-      orderBy: { createdAt: "asc" },
-      take: 300,
-    });
-    const timeline = buildOwnershipTimeline(activities);
+    // No row cap: on a long-lived task the earliest moves are exactly the ones
+    // an auditor is looking for, and a cap dropped them silently.
+    const [visits, activities] = await Promise.all([
+      prisma.stageLog.findMany({
+        where: { taskId: item.taskId },
+        select: {
+          stage: true,
+          fromStage: true,
+          enteredAt: true,
+          exitedAt: true,
+          source: true,
+          sprintName: true,
+          actor: { select: { id: true, name: true, imageUrl: true } },
+        },
+        orderBy: { enteredAt: "asc" },
+      }),
+      prisma.taskActivity.findMany({
+        where: { taskId: item.taskId, action: { in: ["assigned", "unassigned", "transferred"] } },
+        select: {
+          action: true,
+          field: true,
+          oldValue: true,
+          newValue: true,
+          createdAt: true,
+          user: { select: { id: true, name: true, imageUrl: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      }),
+    ]);
+    const timeline = buildOwnershipTimeline(visits, activities);
     return { timeline, candidates: blameCandidates(timeline) };
   }
 

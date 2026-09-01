@@ -46,10 +46,6 @@ export async function getTaskDetailPanel(taskId: string) {
     initialNotes: notes,
     isAdmin: user.systemRole === "ADMIN",
     canDelete: user.systemRole === "ADMIN" || userPermissions.canDeleteTask,
-    canSkipClientReview:
-      user.systemRole === "ADMIN" ||
-      (userPermissions.canMoveTask &&
-        (userPermissions.allowedTransitions?.["INTERNAL_REVIEW"] ?? []).includes("DONE")),
     task: {
       id: task.id,
       taskNumber: task.taskNumber,

@@ -16,7 +16,7 @@ import { EditContractDialog } from "@/components/project/edit-contract-dialog";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
-import { stageLabel, outlineBadge } from "@/lib/task-label";
+import { stageLabel, outlineBadge, priorityLabel } from "@/lib/task-label";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { ClientChatPeopleManager } from "@/components/messages/client-chat-people";
@@ -57,14 +57,12 @@ interface ProjectSettingsProps {
     logoUrl: string | null;
     team?: Team | null;
     contracts: Contract[];
-    defaultClientReviewerId?: string | null;
     internalReviewRoleId?: string | null;
     internalReviewUserId?: string | null;
     clientChatEnabled?: boolean;
   };
   teams?: Team[];
   contractPrefixes?: ContractPrefixOption[];
-  clientMembers?: ClientMember[];
   /** Non-client project members for the internal review user picker. */
   internalMembers?: ClientMember[];
   isAdmin?: boolean;
@@ -75,7 +73,6 @@ export function ProjectSettingsOverlay({
   project,
   teams = [],
   contractPrefixes = [],
-  clientMembers = [],
   internalMembers = [],
   isAdmin = false,
   onClose,
@@ -87,7 +84,6 @@ export function ProjectSettingsOverlay({
   const [logo, setLogo] = useState<string | null>(project.logoUrl);
   const [description, setDescription] = useState(project.description || "");
   const [teamId, setTeamId] = useState(project.team?.id || "");
-  const [clientReviewerId, setClientReviewerId] = useState(project.defaultClientReviewerId || "");
   const [internalReviewRoleId, setInternalReviewRoleId] = useState(project.internalReviewRoleId || "");
   const [internalReviewUserId, setInternalReviewUserId] = useState(project.internalReviewUserId || "");
   const [roles, setRoles] = useState<{ id: string; name: string }[]>([]);
@@ -172,7 +168,6 @@ export function ProjectSettingsOverlay({
         description,
         // Empty string = "No team" — send null so the team can be cleared.
         teamId: teamId || null,
-        defaultClientReviewerId: clientReviewerId || null,
         internalReviewRoleId: internalReviewUserId ? null : (internalReviewRoleId || null),
         internalReviewUserId: internalReviewUserId || null,
       });
@@ -368,31 +363,6 @@ export function ProjectSettingsOverlay({
                 </optgroup>
               )}
             </select>
-          </div>
-
-          {/* Default Client Reviewer */}
-          <div className="space-y-2">
-            <Label htmlFor="proj-client" className="text-s font-semibold">Default Client Reviewer</Label>
-            <p className="text-xs text-muted-foreground">
-              Tasks in Client Review will be auto-assigned to this person.
-            </p>
-            {clientMembers.length === 0 ? (
-              <p className="text-s text-muted-foreground">
-                No client members in this project yet.
-              </p>
-            ) : (
-              <select
-                id="proj-client"
-                value={clientReviewerId}
-                onChange={(e) => setClientReviewerId(e.target.value)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-s text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">Auto (first client member)</option>
-                {clientMembers.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name ?? c.id}</option>
-                ))}
-              </select>
-            )}
           </div>
 
           {/* Client chat */}
@@ -635,7 +605,7 @@ interface ArchivedTask {
   title: string;
   taskType: string;
   stage: string;
-  priority: number | null;
+  priority: string;
   archivedAt: Date | null;
   createdBy: { id: string; name: string | null; imageUrl: string | null };
   assignee: { id: string; name: string | null; imageUrl: string | null } | null;
@@ -724,11 +694,9 @@ function ArchiveTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolea
                     <span className="text-xs text-muted-foreground">
                       {stageLabel(task.stage)}
                     </span>
-                    {task.priority && (
-                      <span className="text-xs text-muted-foreground">
-                        P{task.priority}
-                      </span>
-                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {priorityLabel(task.priority)}
+                    </span>
                     {task.archivedAt && (
                       <span className="text-xs text-muted-foreground/50">
                         Archived {new Date(task.archivedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}

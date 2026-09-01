@@ -4,12 +4,13 @@ export function needsProofOfWork(fromStage: Stage | string, toStage: Stage | str
   return toStage === "INTERNAL_REVIEW" && fromStage !== "INTERNAL_REVIEW";
 }
 
-/** Latest proof is the current approved work while the task sits at review or done. */
+/** Latest proof is the current approved work once the task reaches review, and
+ *  stays so through everything after it. */
 export function isProofApprovedStage(stage: Stage | string) {
   return (
     stage === "INTERNAL_REVIEW" ||
-    stage === "CLIENT_REVIEW" ||
     stage === "DONE" ||
-    stage === "READY_FOR_RELEASE"
+    stage === "COMPLETED" ||
+    stage === "SHIPPED"
   );
 }

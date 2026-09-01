@@ -9,6 +9,7 @@ export interface ProjectRolePermissions {
   canEndSprint: boolean;
   canDeleteSprint: boolean;
   canMoveTask: boolean;
+  canViewTaskHistory: boolean;
   allowedTransitions: Record<string, string[]>;
   createStages: string[];
   modifyStages: string[];
@@ -35,47 +36,7 @@ export function canTransition(
   if (!permissions.canMoveTask) return false;
   const allowed = permissions.allowedTransitions[fromStage];
   if (!allowed) return false;
-  if (allowed.includes(toStage)) return true;
-  // Bugs skip Client Review and go straight to Done, so being allowed
-  // forward out of Internal Review covers that lane too. Checked here
-  // rather than trusting the stored role, which may predate the shortcut.
-  if (
-    fromStage === "INTERNAL_REVIEW" &&
-    toStage === "DONE" &&
-    (allowed.includes("CLIENT_REVIEW") || allowed.includes("READY_FOR_RELEASE"))
-  ) {
-    return true;
-  }
-  // Ready for Release was removed from the board; Client Review now
-  // forwards to Done. Roles that still store the old next-stage still work.
-  if (
-    fromStage === "CLIENT_REVIEW" &&
-    toStage === "DONE" &&
-    allowed.includes("READY_FOR_RELEASE")
-  ) {
-    return true;
-  }
-  // Clarification was removed from the board; Backlog now forwards to
-  // Ready for Dev. Roles that still store the old next-stage still work.
-  if (
-    fromStage === "NEW_REQUEST" &&
-    toStage === "READY_FOR_DEV" &&
-    allowed.includes("CLARIFICATION")
-  ) {
-    return true;
-  }
-  if (
-    fromStage === "READY_FOR_DEV" &&
-    toStage === "NEW_REQUEST" &&
-    allowed.includes("CLARIFICATION")
-  ) {
-    return true;
-  }
-  return (
-    fromStage === "INTERNAL_REVIEW" &&
-    toStage === "READY_FOR_RELEASE" &&
-    allowed.includes("CLIENT_REVIEW")
-  );
+  return allowed.includes(toStage);
 }
 
 export function canCreateInStage(
@@ -107,6 +68,7 @@ export function getPermissionsFromRole(role: {
   canEndSprint?: boolean;
   canDeleteSprint?: boolean;
   canMoveTask: boolean;
+  canViewTaskHistory?: boolean;
   allowedTransitions?: string | null;
   allowedStages?: string | null;
 } | null): ProjectRolePermissions {
@@ -122,6 +84,7 @@ export function getPermissionsFromRole(role: {
       canEndSprint: false,
       canDeleteSprint: false,
       canMoveTask: false,
+      canViewTaskHistory: false,
       allowedTransitions: {},
       createStages: [],
       modifyStages: [],
@@ -162,20 +125,37 @@ export function getPermissionsFromRole(role: {
     canEndSprint: role.canEndSprint ?? false,
     canDeleteSprint: role.canDeleteSprint ?? false,
     canMoveTask: hasTransitions || role.canMoveTask,
+    canViewTaskHistory: role.canViewTaskHistory ?? false,
     allowedTransitions: transitions,
     createStages: hasCreateStages ? createStages : (role.canCreateTask ? ALL_STAGE_IDS : []),
     modifyStages: hasModifyStages ? modifyStages : (role.canModifyTask ? ALL_STAGE_IDS : []),
   };
 }
 
+/** Every stage a task can hold. Used for blanket create / modify rights. */
 const ALL_STAGE_IDS = [
-  "NEW_REQUEST",
-  "CLARIFICATION",
-  "READY_FOR_DEV",
+  "BACKLOG",
+  "PLANNED",
+  "NEXT",
+  "TODO",
   "IN_DEVELOPMENT",
   "INTERNAL_REVIEW",
-  "CLIENT_REVIEW",
-  "READY_FOR_RELEASE",
+  "DONE",
+  "COMPLETED",
+  "SHIPPED",
+];
+
+/**
+ * The stages a person can move a task between by hand. Planned, Next, Completed
+ * and Shipped are projections of the sprint, so they are reached by moving the
+ * sprint, never by dragging a card — granting a role permission over them would
+ * describe a move that cannot happen.
+ */
+const MOVABLE_STAGE_IDS = [
+  "BACKLOG",
+  "TODO",
+  "IN_DEVELOPMENT",
+  "INTERNAL_REVIEW",
   "DONE",
 ];
 
@@ -186,7 +166,7 @@ function migrateStagesToTransitions(
   try {
     const stages: string[] = JSON.parse(allowedStages);
     const transitions: Record<string, string[]> = {};
-    for (const from of ALL_STAGE_IDS) {
+    for (const from of MOVABLE_STAGE_IDS) {
       const targets = stages.filter((s) => s !== from);
       if (targets.length > 0) transitions[from] = targets;
     }
@@ -208,6 +188,7 @@ export function getAdminPermissions(): ProjectRolePermissions {
     canEndSprint: true,
     canDeleteSprint: true,
     canMoveTask: true,
+    canViewTaskHistory: true,
     allowedTransitions: {},
     createStages: ALL_STAGE_IDS,
     modifyStages: ALL_STAGE_IDS,

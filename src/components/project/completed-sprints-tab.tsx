@@ -28,6 +28,7 @@ import {
   createSprint,
   deleteSprint,
   getSprintSnapshots,
+  listSprints,
   reorderPlannedSprints,
   setSprintBoardStatus,
   setTaskSprint,
@@ -57,6 +58,7 @@ import {
 } from "@/lib/sprint-status";
 import { cn } from "@/lib/utils";
 import { useKanbanStore, type KanbanTask } from "@/store/kanban";
+import { useProjectTaskSync } from "@/components/kanban/use-project-task-sync";
 import { NoteSlideOver } from "@/components/project/note-slide-over";
 import { NoteFullScreenCreate } from "@/components/project/note-full-screen-create";
 import { ClientSprintCard } from "@/components/project/client-sprint-card";
@@ -125,6 +127,11 @@ interface Props {
   hideAssignees?: boolean;
   /** Board is as wide as its columns; a parent scroller moves sideways. */
   embedInScrollParent?: boolean;
+  /**
+   * Staff viewer id. Its presence opts this roadmap into realtime updates:
+   * `project:` is a staff-only namespace, so the client panel leaves it unset.
+   */
+  currentUserId?: string;
 }
 
 function sprintDragId(id: string) {
@@ -167,6 +174,7 @@ export function CompletedSprintsTab({
   isProjectActive,
   hideAssignees = false,
   embedInScrollParent = false,
+  currentUserId,
 }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -196,6 +204,44 @@ export function CompletedSprintsTab({
     if (!activeId?.startsWith("sprint:")) return null;
     return sprints.find((s) => s.id === activeId.slice("sprint:".length)) ?? null;
   }, [activeId, sprints]);
+
+  // The roadmap reads the same kanban store as the board, and that store is
+  // only as live as its subscribers — without this, another user's edits sit
+  // unseen until a manual refresh.
+  const activeIdRef = useRef<string | null>(null);
+  const onSprintsChangeRef = useRef(onSprintsChange);
+  const sprintReloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    activeIdRef.current = activeId;
+    onSprintsChangeRef.current = onSprintsChange;
+  });
+
+  // Sprint payloads carry no sprint body, and starting a sprint fires several
+  // at once, so coalesce them into one list read.
+  const reloadSprints = useCallback(() => {
+    if (sprintReloadTimer.current) return;
+    sprintReloadTimer.current = setTimeout(() => {
+      sprintReloadTimer.current = null;
+      void listSprints(projectId)
+        .then((next) => onSprintsChangeRef.current(next))
+        .catch(() => {});
+    }, 250);
+  }, [projectId]);
+
+  useEffect(
+    () => () => {
+      if (sprintReloadTimer.current) clearTimeout(sprintReloadTimer.current);
+    },
+    [],
+  );
+
+  useProjectTaskSync({
+    projectId,
+    enabled: Boolean(currentUserId) && isProjectActive,
+    currentUserId,
+    isDragging: () => activeIdRef.current !== null,
+    onSprintEvent: reloadSprints,
+  });
 
   const closeReview = useCallback(() => {
     setReviewSprint(null);
@@ -374,7 +420,7 @@ export function CompletedSprintsTab({
       sprintCount: nextSprintCount(task, nextSprintId),
       ...(nextSprintId
         ? {
-            stage: "NEW_REQUEST",
+            stage: "BACKLOG",
             ...(estimatedMinutes !== undefined ? { estimatedMinutes } : {}),
           }
         : { assignee: null, estimatedMinutes: null }),

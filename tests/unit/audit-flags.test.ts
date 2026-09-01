@@ -68,61 +68,136 @@ describe("compareAuditItems", () => {
 
 describe("buildOwnershipTimeline", () => {
   const user = (id: string, name: string) => ({ id, name, imageUrl: null });
+  const NOW = Date.parse("2026-07-10T10:00:00Z");
 
-  it("keeps only ownership/flow events and labels them", () => {
-    const timeline = buildOwnershipTimeline([
-      { action: "created", createdAt: "2026-07-01T10:00:00Z", user: user("u1", "PM") },
-      {
-        action: "updated",
-        field: "title",
-        createdAt: "2026-07-01T11:00:00Z",
-        user: user("u1", "PM"),
-      },
-      {
-        action: "assigned",
-        field: "assignee",
-        newValue: "Ahmed",
-        createdAt: "2026-07-02T10:00:00Z",
-        user: user("u1", "PM"),
-      },
-      {
-        action: "moved",
-        field: "stage",
-        oldValue: "CLARIFICATION",
-        newValue: "IN_DEVELOPMENT",
-        createdAt: "2026-07-03T10:00:00Z",
-        user: user("u2", "Ahmed"),
-      },
-      {
-        action: "declined",
-        field: "stage",
-        oldValue: "INTERNAL_REVIEW",
-        newValue: "IN_DEVELOPMENT",
-        createdAt: "2026-07-05T10:00:00Z",
-        user: user("u3", "Reviewer"),
-      },
-      { action: "answered", createdAt: "2026-07-06T10:00:00Z", user: user("u4", "Client") },
+  it("reads the lifecycle from StageLog, including moves no activity row records", () => {
+    const timeline = buildOwnershipTimeline(
+      [
+        {
+          stage: "BACKLOG",
+          fromStage: null,
+          enteredAt: "2026-07-01T10:00:00Z",
+          exitedAt: "2026-07-02T10:00:00Z",
+          source: "TASK_CREATED",
+          actor: user("u1", "PM"),
+        },
+        {
+          stage: "TODO",
+          fromStage: "PLANNED",
+          enteredAt: "2026-07-02T10:00:00Z",
+          exitedAt: "2026-07-03T10:00:00Z",
+          source: "SPRINT_START",
+          sprintName: "Sprint 21",
+          actor: user("u1", "PM"),
+        },
+        {
+          stage: "IN_DEVELOPMENT",
+          fromStage: "INTERNAL_REVIEW",
+          enteredAt: "2026-07-03T10:00:00Z",
+          exitedAt: null,
+          source: "DECLINE",
+          sprintName: "Sprint 21",
+          actor: user("u3", "Reviewer"),
+        },
+      ],
+      [],
+      NOW,
+    );
+
+    expect(timeline.map((e) => e.label)).toEqual([
+      "Created the task in Backlog",
+      "Started Sprint 21 → Todo",
+      "Declined at Internal Review → back to In Development",
     ]);
-
-    expect(timeline).toHaveLength(4);
-    expect(timeline[0].label).toBe("Created the task");
-    expect(timeline[1].label).toBe("Assigned to Ahmed");
-    expect(timeline[2].label).toBe("Moved Clarification → In Development");
-    expect(timeline[3].label).toBe("Declined at Internal Review");
   });
 
-  it("includes 'updated assignee' (take-ownership) events", () => {
-    const timeline = buildOwnershipTimeline([
-      {
-        action: "updated",
-        field: "assignee",
-        newValue: "Sara",
-        createdAt: "2026-07-02T10:00:00Z",
-        user: user("u5", "Sara"),
-      },
+  it("carries how long the task sat under each person, measuring open visits to now", () => {
+    const day = 24 * 60 * 60 * 1000;
+    const timeline = buildOwnershipTimeline(
+      [
+        {
+          stage: "IN_DEVELOPMENT",
+          fromStage: "TODO",
+          enteredAt: "2026-07-01T10:00:00Z",
+          exitedAt: "2026-07-04T10:00:00Z",
+          source: "USER_MOVE",
+          actor: user("u2", "Ahmed"),
+        },
+        {
+          stage: "INTERNAL_REVIEW",
+          fromStage: "IN_DEVELOPMENT",
+          enteredAt: "2026-07-04T10:00:00Z",
+          exitedAt: null,
+          source: "USER_MOVE",
+          actor: user("u3", "Reviewer"),
+        },
+      ],
+      [],
+      NOW,
+    );
+
+    expect(timeline[0].heldMs).toBe(3 * day);
+    expect(timeline[0].stage).toBe("IN_DEVELOPMENT");
+    expect(timeline[1].heldMs).toBe(6 * day);
+  });
+
+  it("skips backfilled rows and rows with no actor, which nobody can be blamed for", () => {
+    const timeline = buildOwnershipTimeline(
+      [
+        {
+          stage: "BACKLOG",
+          enteredAt: "2026-07-01T10:00:00Z",
+          source: "MIGRATION",
+          actor: user("u1", "PM"),
+        },
+        {
+          stage: "TODO",
+          fromStage: "BACKLOG",
+          enteredAt: "2026-07-02T10:00:00Z",
+          source: "SPRINT_START",
+          actor: null,
+        },
+      ],
+      [],
+      NOW,
+    );
+
+    expect(timeline).toHaveLength(0);
+  });
+
+  it("merges assignment changes in by time, since no stage row describes them", () => {
+    const timeline = buildOwnershipTimeline(
+      [
+        {
+          stage: "IN_DEVELOPMENT",
+          fromStage: "TODO",
+          enteredAt: "2026-07-01T10:00:00Z",
+          source: "USER_MOVE",
+          actor: user("u2", "Ahmed"),
+        },
+      ],
+      [
+        {
+          action: "assigned",
+          field: "assignee",
+          newValue: "Sara",
+          createdAt: "2026-07-02T10:00:00Z",
+          user: user("u5", "Sara"),
+        },
+        {
+          action: "updated",
+          field: "title",
+          createdAt: "2026-07-03T10:00:00Z",
+          user: user("u5", "Sara"),
+        },
+      ],
+      NOW,
+    );
+
+    expect(timeline.map((e) => e.label)).toEqual([
+      "Moved Todo → In Development",
+      "Assigned to Sara",
     ]);
-    expect(timeline).toHaveLength(1);
-    expect(timeline[0].label).toContain("Took ownership");
   });
 });
 

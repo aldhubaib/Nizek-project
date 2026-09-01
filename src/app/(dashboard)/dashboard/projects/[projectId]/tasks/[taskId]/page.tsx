@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getTaskQuestions, getTaskAnswers } from "@/actions/task-question";
-import { getTaskStageLogs } from "@/actions/task";
+import { getTaskHistory } from "@/actions/task-history";
 import { getTaskNotes } from "@/actions/meeting-note";
 import { requireProjectMember } from "@/lib/auth";
 import { getPermissionsFromRole, getAdminPermissions } from "@/lib/permissions";
@@ -52,10 +52,10 @@ export default async function TaskDetailPage({ params, searchParams }: Props) {
     userPermissions = { ...getPermissionsFromRole(member.projectRole), systemRole: user.systemRole };
   }
 
-  const [questions, existingAnswers, , notes] = await Promise.all([
+  const [questions, existingAnswers, history, notes] = await Promise.all([
     getTaskQuestions(),
     getTaskAnswers(taskId),
-    getTaskStageLogs(taskId),
+    getTaskHistory(taskId),
     getTaskNotes(taskId),
   ]).catch((err): never => {
     if (isProjectAccessError(err)) notFound();
@@ -118,13 +118,9 @@ export default async function TaskDetailPage({ params, searchParams }: Props) {
       questions={questions}
       initialAnswers={answersMap}
       initialNotes={notes}
+      history={history.allowed ? history : null}
       isAdmin={user.systemRole === "ADMIN"}
       canDelete={user.systemRole === "ADMIN" || userPermissions.canDeleteTask}
-      canSkipClientReview={
-        user.systemRole === "ADMIN" ||
-        (userPermissions.canMoveTask &&
-          (userPermissions.allowedTransitions?.["INTERNAL_REVIEW"] ?? []).includes("DONE"))
-      }
       initialThreadId={threadId ?? null}
       backToNoteId={from === "note" ? (noteId ?? null) : null}
       backToTab={from && from !== "note" ? from : null}

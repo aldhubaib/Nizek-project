@@ -13,7 +13,6 @@ import { stageLabel } from "@/lib/task-label";
 
 const DECLINE_TARGETS: Record<string, string> = {
   INTERNAL_REVIEW: "IN_DEVELOPMENT",
-  CLIENT_REVIEW: "INTERNAL_REVIEW",
 };
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"];

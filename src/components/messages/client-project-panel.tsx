@@ -45,7 +45,7 @@ function Card({ children, className }: { children: React.ReactNode; className?: 
 }
 
 const SPRINT_STAGE_BARS = [
-  { key: "READY_FOR_DEV", label: "Todo" },
+  { key: "TODO", label: "Todo" },
   { key: "IN_DEVELOPMENT", label: "In Development" },
   { key: "INTERNAL_REVIEW", label: "Internal Review" },
   { key: "DONE", label: "Done" },

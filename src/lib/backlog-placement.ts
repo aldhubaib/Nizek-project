@@ -9,7 +9,7 @@ function nextBacklogOrder(tasks: KanbanTask[], excludeId: string): number {
       t.id !== excludeId &&
       !t.sprintId &&
       t.stage !== "DONE" &&
-      (t.stage !== "NEW_REQUEST" || t.isReadyForTransition),
+      (t.stage !== "BACKLOG" || t.isReadyForTransition),
   );
   return backlog.reduce((max, t) => Math.max(max, t.order), -1) + 1;
 }
@@ -25,7 +25,9 @@ export function promoteToBacklogBottom(taskId: string) {
   const order = nextBacklogOrder(tasks, taskId);
   updateTask(taskId, { isReadyForTransition: true, order });
   if (task.order !== order) {
-    void moveTask({ taskId, stage: task.stage, order });
+    // Reordering only, not a stage change: a task with no sprint is in Backlog
+    // by definition, which the early return above has already established.
+    void moveTask({ taskId, stage: "BACKLOG", order });
   }
 }
 

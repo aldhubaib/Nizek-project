@@ -17,7 +17,7 @@ function task(id: string, title: string, extra?: Partial<SprintPlanningTask>): S
     code: `F-${id}`,
     title,
     taskType: "FEATURE",
-    stage: "NEW_REQUEST",
+    stage: "BACKLOG",
     estimatedMinutes: extra?.estimatedMinutes ?? null,
     sprintCount: 1,
     assignee: extra?.assignee ?? null,

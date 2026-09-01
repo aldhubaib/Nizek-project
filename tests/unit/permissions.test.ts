@@ -23,54 +23,56 @@ describe("getPermissionsFromRole — move permission", () => {
       ...baseRole,
       canMoveTask: false,
       allowedTransitions: JSON.stringify({
-        CLARIFICATION: ["IN_DEVELOPMENT"],
+        TODO: ["IN_DEVELOPMENT"],
         IN_DEVELOPMENT: ["INTERNAL_REVIEW"],
       }),
     });
 
     expect(perms.canMoveTask).toBe(true);
-    expect(canTransition(perms, "CLARIFICATION", "IN_DEVELOPMENT")).toBe(true);
+    expect(canTransition(perms, "TODO", "IN_DEVELOPMENT")).toBe(true);
     expect(canTransition(perms, "IN_DEVELOPMENT", "INTERNAL_REVIEW")).toBe(true);
   });
 
   it("still denies transitions that were never granted", () => {
     const perms = getPermissionsFromRole({
       ...baseRole,
-      allowedTransitions: JSON.stringify({ CLARIFICATION: ["IN_DEVELOPMENT"] }),
+      allowedTransitions: JSON.stringify({ TODO: ["IN_DEVELOPMENT"] }),
     });
 
     // Stage-skipping pair is not in the map.
-    expect(canTransition(perms, "CLARIFICATION", "INTERNAL_REVIEW")).toBe(false);
+    expect(canTransition(perms, "TODO", "INTERNAL_REVIEW")).toBe(false);
     // Rollback was not granted.
-    expect(canTransition(perms, "IN_DEVELOPMENT", "CLARIFICATION")).toBe(false);
+    expect(canTransition(perms, "IN_DEVELOPMENT", "TODO")).toBe(false);
   });
 
   it("keeps everything denied for a role with no transitions and no flag", () => {
     const perms = getPermissionsFromRole({ ...baseRole, allowedTransitions: null });
     expect(perms.canMoveTask).toBe(false);
-    expect(canTransition(perms, "CLARIFICATION", "IN_DEVELOPMENT")).toBe(false);
+    expect(canTransition(perms, "TODO", "IN_DEVELOPMENT")).toBe(false);
   });
 
   it("null role (member without a project role) has no permissions", () => {
     const perms = getPermissionsFromRole(null);
     expect(perms.canMoveTask).toBe(false);
-    expect(canTransition(perms, "CLARIFICATION", "IN_DEVELOPMENT")).toBe(false);
+    expect(canTransition(perms, "TODO", "IN_DEVELOPMENT")).toBe(false);
   });
 
-  it("forward out of Internal Review covers the bug lane to Done", () => {
-    // Regression: bugs skip Client Review, so the board redirects a drop on
-    // Client Review to Done. Roles saved before the editor started writing
-    // that shortcut only stored INTERNAL_REVIEW → CLIENT_REVIEW and denied
-    // the move ("Permission Denied") even though Forward was ticked.
+  it("reads a stored transition literally, with no stage aliasing", () => {
+    // canTransition used to carry three compatibility branches, quietly
+    // granting Internal Review → Done to a role that only named Client Review,
+    // and Backlog → Todo to one that only named Clarification. Those stages no
+    // longer exist and the migration rewrote every stored role, so a role now
+    // grants exactly what it says and nothing else.
     const perms = getPermissionsFromRole({
       ...baseRole,
       allowedTransitions: JSON.stringify({
-        INTERNAL_REVIEW: ["CLIENT_REVIEW", "IN_DEVELOPMENT"],
+        INTERNAL_REVIEW: ["DONE", "IN_DEVELOPMENT"],
       }),
     });
 
     expect(canTransition(perms, "INTERNAL_REVIEW", "DONE")).toBe(true);
-    // The shortcut only follows a granted forward, not a rollback-only role.
+    expect(canTransition(perms, "INTERNAL_REVIEW", "IN_DEVELOPMENT")).toBe(true);
+
     const rollbackOnly = getPermissionsFromRole({
       ...baseRole,
       allowedTransitions: JSON.stringify({
@@ -80,29 +82,25 @@ describe("getPermissionsFromRole — move permission", () => {
     expect(canTransition(rollbackOnly, "INTERNAL_REVIEW", "DONE")).toBe(false);
   });
 
-  it("forwards Client Review to Done when the role still names Ready for Release", () => {
+  it("grants nothing over the sprint-driven stages", () => {
+    // Planned, Next, Completed and Shipped follow the sprint. A role that
+    // somehow named one still cannot be used to move a task there, because
+    // moveTask refuses lifecycle targets outright.
     const perms = getPermissionsFromRole({
       ...baseRole,
-      allowedTransitions: JSON.stringify({
-        CLIENT_REVIEW: ["READY_FOR_RELEASE", "INTERNAL_REVIEW"],
-      }),
+      canMoveTask: true,
+      allowedStages: JSON.stringify(["BACKLOG", "TODO", "IN_DEVELOPMENT"]),
     });
 
-    expect(canTransition(perms, "CLIENT_REVIEW", "DONE")).toBe(true);
-    expect(canTransition(perms, "CLIENT_REVIEW", "INTERNAL_REVIEW")).toBe(true);
-  });
-
-  it("forwards Backlog to Ready for Dev when the role still names Clarification", () => {
-    const perms = getPermissionsFromRole({
-      ...baseRole,
-      allowedTransitions: JSON.stringify({
-        NEW_REQUEST: ["CLARIFICATION"],
-        READY_FOR_DEV: ["CLARIFICATION", "IN_DEVELOPMENT"],
-      }),
-    });
-
-    expect(canTransition(perms, "NEW_REQUEST", "READY_FOR_DEV")).toBe(true);
-    expect(canTransition(perms, "READY_FOR_DEV", "NEW_REQUEST")).toBe(true);
+    expect(Object.keys(perms.allowedTransitions).sort()).toEqual([
+      "BACKLOG",
+      "DONE",
+      "INTERNAL_REVIEW",
+      "IN_DEVELOPMENT",
+      "TODO",
+    ].sort());
+    expect(perms.allowedTransitions["PLANNED"]).toBeUndefined();
+    expect(perms.allowedTransitions["SHIPPED"]).toBeUndefined();
   });
 
   it("admin roles bypass transition checks entirely", () => {
@@ -111,7 +109,7 @@ describe("getPermissionsFromRole — move permission", () => {
       isAdmin: true,
       allowedTransitions: null,
     });
-    expect(canTransition(perms, "CLARIFICATION", "DONE")).toBe(true);
+    expect(canTransition(perms, "BACKLOG", "DONE")).toBe(true);
   });
 });
 

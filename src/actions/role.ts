@@ -51,6 +51,7 @@ export async function createRole(data: {
   canStartSprint?: boolean;
   canEndSprint?: boolean;
   canDeleteSprint?: boolean;
+  canViewTaskHistory?: boolean;
   allowedTransitions?: Record<string, string[]>;
 }) {
   const user = await requireUser();
@@ -79,6 +80,7 @@ export async function createRole(data: {
           canStartSprint: data.canStartSprint ?? false,
           canEndSprint: data.canEndSprint ?? false,
           canDeleteSprint: data.canDeleteSprint ?? false,
+          canViewTaskHistory: data.canViewTaskHistory ?? false,
           allowedTransitions: data.allowedTransitions
             ? JSON.stringify(data.allowedTransitions)
             : null,
@@ -105,6 +107,7 @@ export async function updateRole(data: {
   canStartSprint?: boolean;
   canEndSprint?: boolean;
   canDeleteSprint?: boolean;
+  canViewTaskHistory?: boolean;
   allowedTransitions?: Record<string, string[]>;
 }) {
   const user = await requireUser();
@@ -141,6 +144,9 @@ export async function updateRole(data: {
           ...(data.canStartSprint !== undefined && { canStartSprint: data.canStartSprint }),
           ...(data.canEndSprint !== undefined && { canEndSprint: data.canEndSprint }),
           ...(data.canDeleteSprint !== undefined && { canDeleteSprint: data.canDeleteSprint }),
+          ...(data.canViewTaskHistory !== undefined && {
+            canViewTaskHistory: data.canViewTaskHistory,
+          }),
           ...(data.allowedTransitions !== undefined && {
             allowedTransitions: JSON.stringify(data.allowedTransitions),
           }),

@@ -28,7 +28,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { outlineBadge } from "@/lib/task-label";
-import { formatStageHours, FLAG_LABELS, type AuditFlagType } from "@/lib/audit-flags";
+import { formatStageHours, msToHours, FLAG_LABELS, type AuditFlagType } from "@/lib/audit-flags";
 import {
   getBlameCandidates,
   setAuditItemVerdict,
@@ -307,6 +307,11 @@ function AuditItemCard({
                   <span className="min-w-0 flex-1 truncate text-muted-foreground">
                     {e.label}
                   </span>
+                  {e.heldMs != null && (
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground/70">
+                      sat {formatStageHours(msToHours(e.heldMs))}
+                    </span>
+                  )}
                   <span className="shrink-0 text-xs text-muted-foreground/70">
                     {format(new Date(e.at), "MMM d")}
                   </span>

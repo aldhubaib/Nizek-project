@@ -18,23 +18,13 @@ interface CheckpointConfig {
   assignToMe?: boolean;
 }
 
+// Done is the end of the work a person does on a task. What follows — the sprint
+// completing, and the client optionally accepting it — happens at sprint level,
+// so there is no per-task client approval step to warn about any more.
 const CHECKPOINTS: Partial<Record<string, CheckpointConfig>> = {
-  "INTERNAL_REVIEW→CLIENT_REVIEW": {
-    title: "Move to Client Review",
-    message: "By moving this to client review, you confirm that you have tested this task and it is working correctly.",
-    confirmLabel: "Confirm Tested",
-    confirmColor: "bg-orange hover:bg-orange/80",
-  },
   "INTERNAL_REVIEW→DONE": {
     title: "Move to Done",
-    message: "You are skipping the client approval for this task. By confirming, you acknowledge that you will be held responsible for this action and verify the task is tested and ready for release.",
-    notice: "This action bypasses the client review process.",
-    confirmLabel: "I Accept Responsibility & Skip",
-    confirmColor: "bg-orange hover:bg-orange/80",
-  },
-  "CLIENT_REVIEW→DONE": {
-    title: "Approve & Complete",
-    message: "By moving this to Done, you confirm that you have reviewed and approved the work.",
+    message: "By moving this to Done, you confirm that you have reviewed the work and it is ready to ship with the sprint.",
     confirmLabel: "Approve",
     confirmColor: "bg-success hover:bg-success/80",
   },

@@ -548,7 +548,6 @@ export async function getUserTaskSummary(userId: string) {
             { assigneeId: userId },
             { createdById: userId },
             { developerId: userId },
-            { clientReviewerId: userId },
           ],
         },
       },
@@ -565,7 +564,6 @@ export async function getUserTaskSummary(userId: string) {
                 { assigneeId: userId },
                 { createdById: userId },
                 { developerId: userId },
-                { clientReviewerId: userId },
               ],
             },
           },
@@ -612,7 +610,6 @@ export async function toggleBlockUser(
           { assigneeId: userId },
           { createdById: userId },
           { developerId: userId },
-          { clientReviewerId: userId },
         ],
       },
     });
@@ -634,14 +631,6 @@ export async function toggleBlockUser(
         prisma.task.updateMany({
           where: { projectId: t.projectId, developerId: userId, archivedAt: null },
           data: { developerId: t.transferToUserId },
-        }),
-        prisma.task.updateMany({
-          where: { projectId: t.projectId, clientReviewerId: userId, archivedAt: null },
-          data: { clientReviewerId: t.transferToUserId },
-        }),
-        prisma.project.updateMany({
-          where: { id: t.projectId, defaultClientReviewerId: userId },
-          data: { defaultClientReviewerId: t.transferToUserId },
         }),
       ]);
       await prisma.$transaction(ops);

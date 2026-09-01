@@ -250,7 +250,6 @@ export async function updateProject(data: {
   description?: string;
   logoUrl?: string | null;
   teamId?: string | null;
-  defaultClientReviewerId?: string | null;
   internalReviewRoleId?: string | null;
   internalReviewUserId?: string | null;
 }) {
@@ -271,7 +270,6 @@ export async function updateProject(data: {
       ...(data.description !== undefined && { description: data.description }),
       ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
       ...(data.teamId !== undefined && { teamId: data.teamId || null }),
-      ...(data.defaultClientReviewerId !== undefined && { defaultClientReviewerId: data.defaultClientReviewerId }),
       ...(data.internalReviewRoleId !== undefined && { internalReviewRoleId: data.internalReviewRoleId }),
       ...(data.internalReviewUserId !== undefined && { internalReviewUserId: data.internalReviewUserId }),
     },
@@ -551,7 +549,6 @@ export async function getMemberTaskCount(projectId: string, memberId: string) {
         { assigneeId: member.userId },
         { createdById: member.userId },
         { developerId: member.userId },
-        { clientReviewerId: member.userId },
       ],
     },
   });
@@ -583,7 +580,6 @@ export async function removeMember(data: {
         { assigneeId: member.userId },
         { createdById: member.userId },
         { developerId: member.userId },
-        { clientReviewerId: member.userId },
       ],
     },
   });
@@ -608,7 +604,6 @@ export async function removeMember(data: {
           { assigneeId: member.userId },
           { createdById: member.userId },
           { developerId: member.userId },
-          { clientReviewerId: member.userId },
         ],
       },
       select: { id: true },
@@ -627,10 +622,6 @@ export async function removeMember(data: {
         where: { projectId: data.projectId, developerId: member.userId, archivedAt: null },
         data: { developerId: data.transferToUserId },
       }),
-      prisma.task.updateMany({
-        where: { projectId: data.projectId, clientReviewerId: member.userId, archivedAt: null },
-        data: { clientReviewerId: data.transferToUserId },
-      }),
     ]);
 
     const removedName = member.user.name ?? member.user.email;
@@ -647,13 +638,6 @@ export async function removeMember(data: {
         })),
       });
     }
-  }
-
-  if (data.projectId) {
-    await prisma.project.updateMany({
-      where: { id: data.projectId, defaultClientReviewerId: member.userId },
-      data: { defaultClientReviewerId: data.transferToUserId ?? null },
-    });
   }
 
   await prisma.projectMember.delete({

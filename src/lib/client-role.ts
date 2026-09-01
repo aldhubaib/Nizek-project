@@ -30,6 +30,7 @@ export function clientRoleWriteData(isClient: boolean) {
     canStartSprint: false,
     canEndSprint: false,
     canDeleteSprint: false,
+    canViewTaskHistory: false,
     allowedTransitions: null as string | null,
   };
 }

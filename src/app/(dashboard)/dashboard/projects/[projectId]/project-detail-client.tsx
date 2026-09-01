@@ -118,7 +118,6 @@ interface Project {
   team?: { id: string; name: string } | null;
   contracts: Contract[];
   _count: { tasks: number; meetingNotes: number; assets: number };
-  defaultClientReviewerId?: string | null;
   internalReviewRoleId?: string | null;
   internalReviewUserId?: string | null;
 }
@@ -228,7 +227,7 @@ export function ProjectDetailClient({
   const canCreateTask =
     userPermissions.isAdmin ||
     userPermissions.canCreateTask ||
-    (userPermissions.createStages ?? []).includes("NEW_REQUEST");
+    (userPermissions.createStages ?? []).includes("BACKLOG");
   const canManageTeam = userPermissions.canInviteMembers || userPermissions.canInviteClients;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -633,6 +632,7 @@ export function ProjectDetailClient({
                 canEndSprint={userPermissions.isAdmin || userPermissions.canEndSprint}
                 canCreateSprintPlanning={userPermissions.isAdmin || userPermissions.canCreateSprintPlanning}
                 isProjectActive={isActive}
+                currentUserId={currentUserId}
               />
             ))}
           </TabsContent>
@@ -712,9 +712,6 @@ export function ProjectDetailClient({
           project={project}
           teams={settingsData?.teams ?? []}
           contractPrefixes={settingsData?.contractPrefixes ?? []}
-          clientMembers={members
-            .filter((m) => m.user.systemRole === "CLIENT")
-            .map((m) => ({ id: m.user.id, name: m.user.name, imageUrl: m.user.imageUrl }))}
           internalMembers={members
             .filter((m) => m.user.systemRole !== "CLIENT")
             .map((m) => ({ id: m.user.id, name: m.user.name, imageUrl: m.user.imageUrl }))}

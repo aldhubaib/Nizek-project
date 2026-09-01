@@ -7,6 +7,7 @@ import { isClientUser } from "@/lib/client-chat";
 import { sprintIdFromPlanningHtml } from "@/lib/sprint-planning-doc";
 import { reviewDateBySprintId } from "@/lib/sprint-review-doc";
 import { isMissingDataTask } from "@/lib/task-readiness";
+import { isWorkStage, WORK_STAGES } from "@/lib/task-stage";
 import {
   compareClosedSprints,
   comparePlannedSprints,
@@ -76,7 +77,6 @@ export type ClientProjectOverview = {
   doneTasks: number;
   inProgressTasks: number;
   inDevelopmentCount: number;
-  clientReviewCount: number;
   backlogCount: number;
   stageBreakdown: Record<string, number>;
   typeBreakdown: Record<string, number>;
@@ -153,16 +153,12 @@ function compareForBrowsing(a: SprintOrderRow, b: SprintOrderRow): number {
 }
 
 /** Stages that read as "being worked on" rather than queued or finished. */
-const IN_PROGRESS_STAGES = new Set([
-  "READY_FOR_DEV",
-  "IN_DEVELOPMENT",
-  "INTERNAL_REVIEW",
-  "CLIENT_REVIEW",
-  "READY_FOR_RELEASE",
-]);
+const IN_PROGRESS_STAGES: Set<string> = new Set(
+  WORK_STAGES.filter((s) => s !== "DONE"),
+);
 
 /** Sprint-board columns — these never belong in the type / backlog lists. */
-const SPRINT_BOARD_STAGES = new Set([...IN_PROGRESS_STAGES, "DONE"]);
+const SPRINT_BOARD_STAGES: Set<string> = new Set(WORK_STAGES);
 
 export async function getClientProjectOverview(
   projectId: string,
@@ -260,23 +256,11 @@ export async function getClientProjectOverview(
     : [];
   const activeStageBreakdown: Record<string, number> = {};
   const activeStageTypeBreakdown: Record<string, Record<string, number>> = {};
+  // No remapping any more: a task in an active sprint is already in one of the
+  // four work stages, because that is what starting the sprint put it in.
   for (const task of activeTasks) {
-    const key =
-      task.stage === "NEW_REQUEST" || task.stage === "CLARIFICATION"
-        ? "READY_FOR_DEV"
-        : task.stage === "CLIENT_REVIEW"
-          ? "INTERNAL_REVIEW"
-          : task.stage === "READY_FOR_RELEASE"
-            ? "DONE"
-            : task.stage;
-    if (
-      key !== "READY_FOR_DEV" &&
-      key !== "IN_DEVELOPMENT" &&
-      key !== "INTERNAL_REVIEW" &&
-      key !== "DONE"
-    ) {
-      continue;
-    }
+    if (!isWorkStage(task.stage)) continue;
+    const key = task.stage;
     activeStageBreakdown[key] = (activeStageBreakdown[key] ?? 0) + 1;
     const byType = activeStageTypeBreakdown[key] ?? {};
     byType[task.taskType] = (byType[task.taskType] ?? 0) + 1;
@@ -286,8 +270,7 @@ export async function getClientProjectOverview(
   const stageBreakdown: Record<string, number> = {};
   const typeBreakdown: Record<string, number> = {};
   for (const task of tasks) {
-    const stage = task.stage === "READY_FOR_RELEASE" ? "DONE" : task.stage;
-    stageBreakdown[stage] = (stageBreakdown[stage] ?? 0) + 1;
+    stageBreakdown[task.stage] = (stageBreakdown[task.stage] ?? 0) + 1;
     typeBreakdown[task.taskType] = (typeBreakdown[task.taskType] ?? 0) + 1;
   }
 
@@ -320,7 +303,7 @@ export async function getClientProjectOverview(
       taskNumber: t.taskNumber,
       title: t.title,
       taskType: t.taskType,
-      stage: t.stage === "READY_FOR_RELEASE" ? "DONE" : t.stage,
+      stage: t.stage,
       sprintCount: t.sprintCount,
     }));
 
@@ -330,7 +313,6 @@ export async function getClientProjectOverview(
     doneTasks: tasks.filter((t) => t.stage === "DONE").length,
     inProgressTasks: tasks.filter((t) => IN_PROGRESS_STAGES.has(t.stage)).length,
     inDevelopmentCount: tasks.filter((t) => t.stage === "IN_DEVELOPMENT").length,
-    clientReviewCount: tasks.filter((t) => t.stage === "CLIENT_REVIEW").length,
     backlogCount: backlog.length,
     stageBreakdown,
     typeBreakdown,

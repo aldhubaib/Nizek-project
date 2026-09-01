@@ -13,6 +13,7 @@ import { isDeadlineTestProjectByName } from "@/lib/deadline-reminders";
 import { logTaskActivity } from "@/lib/activity";
 import { revalidatePath } from "next/cache";
 import { createTask } from "@/actions/task";
+import type { TaskPriorityId } from "@/lib/task-label";
 import { sendMessage } from "@/actions/messages";
 import { applyStoredAnnotationMarks, plainTextExcerpt, taskMarkTag, wrapFirstPlainText } from "@/lib/html-annotate";
 import { diffNoteParagraphs, encodeContentDiff } from "@/lib/note-content-diff";
@@ -943,7 +944,7 @@ export async function createTaskFromNoteHighlight(data: {
   quoteText: string;
   title: string;
   description?: string;
-  priority?: number;
+  priority?: TaskPriorityId;
   taskType?: "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
   answers?: { questionId: string; answer: string }[];
 }) {

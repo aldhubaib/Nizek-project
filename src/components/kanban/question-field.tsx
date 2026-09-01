@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { isReadinessQuestion } from "@/lib/task-readiness";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
@@ -161,14 +162,24 @@ function parseMultiValue(raw: string): string[] {
 
 export type ShowRequiredAs = "all" | "mandatory" | "backlog";
 
-/** Whether the field label should show a required asterisk for this screen. */
+/**
+ * Whether the field label should show a required asterisk for this screen.
+ *
+ * The two gates are different questions. "mandatory" is the creation screens
+ * asking what blocks saving the task at all; "backlog" is the task page asking
+ * what holds the task in Missing data, which is every spec question.
+ */
 export function questionShowsRequiredStar(
-  question: { mandatory?: boolean; required?: boolean },
+  question: { type?: string; question?: string; mandatory?: boolean },
   showRequiredAs: ShowRequiredAs = "all",
 ): boolean {
   if (showRequiredAs === "mandatory") return question.mandatory === true;
-  if (showRequiredAs === "backlog") return question.required === true;
-  return question.mandatory === true || question.required === true;
+  const holdsBacklog = isReadinessQuestion({
+    type: question.type ?? "text",
+    question: question.question,
+  });
+  if (showRequiredAs === "backlog") return holdsBacklog;
+  return question.mandatory === true || holdsBacklog;
 }
 
 interface Props {

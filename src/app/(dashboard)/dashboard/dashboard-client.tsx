@@ -129,10 +129,10 @@ function CardTitle({ children }: { children: React.ReactNode }) {
 /* ── donut chart (pure SVG) ── */
 
 const STAGE_RING = [
-  { key: "READY_FOR_DEV", label: "Todo", color: "#22d3ee" },
+  { key: "TODO", label: "Todo", color: "#22d3ee" },
   { key: "IN_DEVELOPMENT", label: "In Dev", color: "#38bdf8" },
   { key: "INTERNAL_REVIEW", label: "Review", color: "#f97316" },
-  { key: "CLIENT_REVIEW", label: "Client", color: "#fb923c" },
+  { key: "DONE", label: "Done", color: "#4ade80" },
 ] as const;
 
 function DonutChart({
@@ -295,7 +295,7 @@ export function DashboardClient({
   }, []);
   const totalTasks = myTasks.length;
   const inDev = stageBreakdown["IN_DEVELOPMENT"] ?? 0;
-  const inReview = (stageBreakdown["INTERNAL_REVIEW"] ?? 0) + (stageBreakdown["CLIENT_REVIEW"] ?? 0);
+  const inReview = stageBreakdown["INTERNAL_REVIEW"] ?? 0;
 
   return (
     <div className="px-app py-6 pb-16">

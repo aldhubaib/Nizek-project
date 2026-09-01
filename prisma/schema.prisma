@@ -30,15 +30,25 @@ enum Gender {
   FEMALE
 }
 
+/// A task's status across its whole life, not just the part inside a sprint.
+///
+/// The first three and the last two are projections of the sprint the task sits
+/// in; the middle four are the work stages, only reachable while that sprint is
+/// ACTIVE. Sprint.status stays authoritative and Task.stage follows it, so a
+/// task can never claim to be somewhere its sprint is not.
+///
+/// Declared in lifecycle order: Postgres sorts an enum by declaration order, so
+/// `ORDER BY stage` reads as progress.
 enum Stage {
-  NEW_REQUEST
-  CLARIFICATION
-  READY_FOR_DEV
+  BACKLOG
+  PLANNED
+  NEXT
+  TODO
   IN_DEVELOPMENT
   INTERNAL_REVIEW
-  CLIENT_REVIEW
-  READY_FOR_RELEASE
   DONE
+  COMPLETED
+  SHIPPED
 }
 
 enum SprintStatus {
@@ -50,12 +60,37 @@ enum SprintStatus {
   SHIPPED
 }
 
+/// What caused a task to enter a stage. Recorded on every StageLog row so a
+/// transition with no actor can still be explained, instead of looking like an
+/// unattributed edit.
+enum StageSource {
+  TASK_CREATED
+  USER_MOVE
+  DECLINE
+  SPRINT_SCHEDULE
+  SPRINT_UNSCHEDULE
+  SPRINT_START
+  SPRINT_COMPLETE
+  SPRINT_STATUS
+  MIGRATION
+}
+
 enum TaskType {
   FEATURE
   ENHANCEMENT
   BUG
   REPORTED_BUG
   DESIGN
+}
+
+/// Declaration order is the ranking, lowest first. NORMAL is the midpoint and
+/// the value every new task starts on.
+enum TaskPriority {
+  VERY_LOW
+  LOW
+  NORMAL
+  HIGH
+  VERY_HIGH
 }
 
 enum ContractType {
@@ -110,10 +145,9 @@ model User {
   assignedTasks       Task[]    @relation("TaskAssignee")
   createdTasks        Task[]    @relation("TaskCreator")
   developerTasks      Task[]    @relation("TaskDeveloper")
-  clientReviewTasks   Task[]    @relation("TaskClientReviewer")
-  defaultClientProjects        Project[] @relation("ProjectDefaultClient")
   internalReviewUserProjects   Project[] @relation("ProjectInternalReviewUser")
   taskActivities TaskActivity[] @relation("ActivityUser")
+  stageChanges   StageLog[]     @relation("StageLogActor")
   taskComments   TaskComment[]  @relation("CommentUser")
   commentMentions TaskCommentMention[] @relation("MentionedUser")
   meetingNotes   MeetingNote[]
@@ -198,9 +232,6 @@ model Project {
   teamId String?
   team   Team?  @relation(fields: [teamId], references: [id])
 
-  defaultClientReviewerId String?
-  defaultClientReviewer   User?  @relation("ProjectDefaultClient", fields: [defaultClientReviewerId], references: [id], onDelete: SetNull)
-
   internalReviewRoleId String?
   internalReviewRole   ProjectRole? @relation("ProjectInternalReviewRole", fields: [internalReviewRoleId], references: [id], onDelete: SetNull)
 
@@ -280,6 +311,8 @@ model ProjectRole {
   canStartSprint     Boolean @default(false)
   canEndSprint       Boolean @default(false)
   canDeleteSprint    Boolean @default(false)
+  /** Access to the stage-by-stage lifecycle of a task: who moved it, when, and how long it sat. */
+  canViewTaskHistory Boolean @default(false)
   allowedStages      String?
   allowedTransitions String?
 
@@ -370,7 +403,7 @@ model Task {
   taskNumber  Int      @default(0)
   title       String
   description String?
-  priority          Int?
+  priority          TaskPriority @default(NORMAL)
   taskType          TaskType @default(FEATURE)
   stage             Stage
   order             Int
@@ -388,8 +421,6 @@ model Task {
   createdBy   User    @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Cascade)
   developerId      String?
   developer        User?   @relation("TaskDeveloper", fields: [developerId], references: [id], onDelete: SetNull)
-  clientReviewerId String?
-  clientReviewer   User?   @relation("TaskClientReviewer", fields: [clientReviewerId], references: [id], onDelete: SetNull)
 
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
@@ -420,16 +451,35 @@ model Task {
   @@index([startedAt])
 }
 
+/// One row per stage visit. Self-contained on purpose: it answers who moved the
+/// task, from where, when, for how long, why, under which sprint and who held it
+/// — without having to correlate timestamps against TaskActivity.
 model StageLog {
   id        String   @id @default(cuid())
   stage     Stage
+  fromStage Stage?
   enteredAt DateTime @default(now())
   exitedAt  DateTime?
 
   taskId String
   task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
+  /// Null only when nobody triggered it directly; `source` then explains it.
+  actorId String?
+  actor   User?   @relation("StageLogActor", fields: [actorId], references: [id], onDelete: SetNull)
+  source  StageSource
+  reason  String?
+
+  /// sprintName and assigneeId are denormalized copies, not lookups. History
+  /// must not change or vanish when a sprint is deleted or the task is
+  /// reassigned later.
+  sprintId   String?
+  sprintName String?
+  assigneeId String?
+
   @@index([taskId, exitedAt])
+  @@index([taskId, enteredAt])
+  @@index([actorId, enteredAt])
 }
 
 model TaskComment {

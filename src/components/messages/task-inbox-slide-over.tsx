@@ -60,7 +60,6 @@ export function TaskInboxSlideOver({
           initialNotes={data.initialNotes}
           isAdmin={data.isAdmin}
           canDelete={data.canDelete}
-          canSkipClientReview={data.canSkipClientReview}
           embedded
           onClose={onClose}
         />

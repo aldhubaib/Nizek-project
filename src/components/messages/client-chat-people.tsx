@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { SprintDocHeaderLeft } from "@/components/project/note-slide-over";
 import {
   addClientChatStaff,
   getClientChatRoster,
@@ -115,8 +116,21 @@ export function ClientChatPeopleManager({
     ? `${projectName?.trim() || "Project"} team`
     : `Clients (${clients.length})`;
 
+  const addButton = canManage ? (
+    <AddButton
+      label="Add staff"
+      disabled={pending}
+      onClick={() => setAddOpen(true)}
+    />
+  ) : null;
+
   return (
     <div className={cn(!compact && "mt-3 space-y-3 border-t border-border/50 pt-3")}>
+      {/* Inside a slide-over the plus belongs in the panel header, beside the title. */}
+      {compact && addButton ? (
+        <SprintDocHeaderLeft>{addButton}</SprintDocHeaderLeft>
+      ) : null}
+
       {!clientView && (
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
@@ -131,13 +145,7 @@ export function ClientChatPeopleManager({
               </p>
             )}
           </div>
-          {canManage && (
-            <AddButton
-              label="Add staff"
-              disabled={pending || addable.length === 0}
-              onClick={() => setAddOpen(true)}
-            />
-          )}
+          {!compact ? addButton : null}
         </div>
       )}
 
@@ -216,7 +224,8 @@ export function ClientChatPeopleManager({
       )}
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="sm:max-w-md">
+        {/* The People panel is a slide-over at z-850 — the picker has to clear it. */}
+        <DialogContent className="z-[901] sm:max-w-md" overlayClassName="z-[900]">
           <DialogHeader>
             <DialogTitle>Add staff to client chat</DialogTitle>
           </DialogHeader>

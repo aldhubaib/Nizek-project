@@ -11,10 +11,16 @@ import {
 import { revalidatePath } from "next/cache";
 import type { SprintStatus } from "@/generated/prisma/client";
 import { isClosedSprint, isCurrentSprintStatus, isUnstartedSprint, comparePlannedSprints, compareClosedSprints, sprintDepartureToRecord, type SprintBoardColumn } from "@/lib/sprint-status";
+import { stageForSprintStatus } from "@/lib/task-stage";
 import { taskCode } from "@/lib/task-label";
 import { isBuiltInTaskFieldQuestion } from "@/lib/task-readiness";
 import { countWorkingDays } from "@/lib/working-days";
 import { logTaskActivity } from "@/lib/activity";
+import {
+  applyBulkStageChange,
+  applyStageChange,
+  type StageWriteClient,
+} from "@/lib/stage-transition";
 import { broadcastTaskEvent, publish, projectChannel } from "@/lib/centrifugo";
 import {
   documentDateIsoFromPlanningHtml,
@@ -122,31 +128,58 @@ function assertCanEditStartedPlanning(isAdmin: boolean, status: string | undefin
   }
 }
 
-function promoteSprintTasksToTodo(sprintId: string) {
-  return prisma.task.updateMany({
+async function promoteSprintTasksToTodo(
+  tx: StageWriteClient,
+  sprint: { id: string; name: string },
+  actorId: string,
+): Promise<number> {
+  // Everything the sprint holds, not just the pre-sprint stages: starting a
+  // sprint moves its Planned or Next tasks into Todo, and those are exactly the
+  // stages a task waiting to start is in.
+  const tasks = await tx.task.findMany({
     where: {
-      sprintId,
+      sprintId: sprint.id,
       archivedAt: null,
-      stage: { in: ["NEW_REQUEST", "CLARIFICATION"] },
+      stage: { in: ["BACKLOG", "PLANNED", "NEXT"] },
     },
-    data: { stage: "READY_FOR_DEV" },
+    select: { id: true, stage: true, assigneeId: true },
   });
+  if (tasks.length === 0) return 0;
+
+  await tx.task.updateMany({
+    where: { id: { in: tasks.map((t) => t.id) } },
+    data: { stage: "TODO" },
+  });
+
+  await applyBulkStageChange(tx, {
+    tasks,
+    toStage: "TODO",
+    actorId,
+    source: "SPRINT_START",
+    reason: `${sprint.name} started`,
+    sprintId: sprint.id,
+    sprintName: sprint.name,
+  });
+
+  return tasks.length;
 }
 
 /** Move leftover backlog-stage tasks on an active sprint into Todo. */
 export async function promoteActiveSprintTasks(sprintId: string): Promise<number> {
   const existing = await prisma.sprint.findUnique({
     where: { id: sprintId },
-    select: { status: true, projectId: true },
+    select: { status: true, projectId: true, name: true },
   });
   if (!existing) throw new Error("Sprint not found");
-  await requireProjectMember(existing.projectId);
+  const { user } = await requireProjectMember(existing.projectId);
   if (existing.status !== "ACTIVE") return 0;
-  const result = await promoteSprintTasksToTodo(sprintId);
-  if (result.count > 0) {
+  const count = await prisma.$transaction((tx) =>
+    promoteSprintTasksToTodo(tx, { id: sprintId, name: existing.name }, user.id),
+  );
+  if (count > 0) {
     revalidatePath(`/dashboard/projects/${existing.projectId}`);
   }
-  return result.count;
+  return count;
 }
 
 function parseDay(value: string): Date {
@@ -298,7 +331,7 @@ export async function setSprintBoardStatus(
 ): Promise<SprintDTO> {
   const existing = await prisma.sprint.findUnique({ where: { id: sprintId } });
   if (!existing) throw new Error("Sprint not found");
-  await requireSprintEditor(existing.projectId);
+  const { user } = await requireSprintEditor(existing.projectId);
 
   const from = existing.status;
   let next: SprintStatus | null = null;
@@ -342,19 +375,83 @@ export async function setSprintBoardStatus(
     return serializeSprint(current);
   }
 
-  const sprint = await prisma.sprint.update({
-    where: { id: sprintId },
-    data: { status: next },
-    select: SPRINT_SELECT,
+  const nextStatus = next;
+  const sprint = await prisma.$transaction(async (tx) => {
+    const updated = await tx.sprint.update({
+      where: { id: sprintId },
+      data: { status: nextStatus },
+      select: SPRINT_SELECT,
+    });
+
+    // The tasks follow the sprint. Moving a sprint from Planned to Next used to
+    // change nothing on its tasks, so the roadmap said Next while every card in
+    // it still read Backlog.
+    await projectSprintOntoTasks(tx, {
+      sprintId,
+      sprintName: existing.name,
+      status: nextStatus,
+      actorId: user.id,
+      // Completed to Shipped is the client accepting the sprint. It is optional
+      // and deliberate, so it is worth being able to say who did it.
+      reason:
+        nextStatus === "SHIPPED"
+          ? `${existing.name} accepted and shipped`
+          : `${existing.name} moved to ${nextStatus.replace("_", " ").toLowerCase()}`,
+    });
+
+    return updated;
   });
+
   revalidatePath(`/dashboard/projects/${existing.projectId}`);
   return serializeSprint(sprint);
+}
+
+/**
+ * Push a sprint's status down onto every task it holds.
+ *
+ * Only for the statuses that map to a single task stage. ACTIVE is excluded:
+ * once a sprint is running its tasks each hold their own work stage, and
+ * flattening them would erase that.
+ */
+async function projectSprintOntoTasks(
+  tx: StageWriteClient,
+  args: {
+    sprintId: string;
+    sprintName: string;
+    status: SprintStatus;
+    actorId: string;
+    reason?: string;
+  },
+): Promise<void> {
+  const targetStage = stageForSprintStatus(args.status);
+  if (!targetStage) return;
+
+  const tasks = await tx.task.findMany({
+    where: { sprintId: args.sprintId, archivedAt: null, stage: { not: targetStage } },
+    select: { id: true, stage: true, assigneeId: true },
+  });
+  if (tasks.length === 0) return;
+
+  await tx.task.updateMany({
+    where: { id: { in: tasks.map((t) => t.id) } },
+    data: { stage: targetStage },
+  });
+
+  await applyBulkStageChange(tx, {
+    tasks,
+    toStage: targetStage,
+    actorId: args.actorId,
+    source: "SPRINT_STATUS",
+    reason: args.reason ?? null,
+    sprintId: args.sprintId,
+    sprintName: args.sprintName,
+  });
 }
 
 export async function startSprint(sprintId: string): Promise<SprintDTO> {
   const existing = await prisma.sprint.findUnique({ where: { id: sprintId } });
   if (!existing) throw new Error("Sprint not found");
-  await requireSprintAction(existing.projectId, "start");
+  const { user } = await requireSprintAction(existing.projectId, "start");
   if (!isUnstartedSprint(existing.status)) throw new Error("Only a planned sprint can be started");
 
   const otherActive = await prisma.sprint.findFirst({
@@ -377,18 +474,18 @@ export async function startSprint(sprintId: string): Promise<SprintDTO> {
   }
 
   try {
-    const [, , sprint] = await prisma.$transaction([
-      promoteSprintTasksToTodo(sprintId),
-      prisma.task.updateMany({
+    const sprint = await prisma.$transaction(async (tx) => {
+      await promoteSprintTasksToTodo(tx, { id: sprintId, name: existing.name }, user.id);
+      await tx.task.updateMany({
         where: { sprintId, archivedAt: null },
         data: { unplannedInSprint: false },
-      }),
-      prisma.sprint.update({
+      });
+      return tx.sprint.update({
         where: { id: sprintId },
         data: { status: "ACTIVE" },
         select: SPRINT_SELECT,
-      }),
-    ]);
+      });
+    });
     revalidatePath(`/dashboard/projects/${existing.projectId}`);
     await announceSprintNoteToChat({
       projectId: existing.projectId,
@@ -416,7 +513,7 @@ export async function completeSprint(
 ): Promise<SprintDTO> {
   const existing = await prisma.sprint.findUnique({ where: { id: sprintId } });
   if (!existing) throw new Error("Sprint not found");
-  await requireSprintAction(existing.projectId, "end");
+  const { user } = await requireSprintAction(existing.projectId, "end");
   if (existing.status !== "ACTIVE") throw new Error("Only an active sprint can be completed");
 
   const sprintTasks = await prisma.task.findMany({
@@ -458,8 +555,8 @@ export async function completeSprint(
       ? unfinished.map((t) => reasonsByTask[t.id]).join("\n")
       : null;
 
-  const [, , sprint] = await prisma.$transaction([
-    prisma.sprintTaskSnapshot.createMany({
+  const sprint = await prisma.$transaction(async (tx) => {
+    await tx.sprintTaskSnapshot.createMany({
       data: sprintTasks.map((t) => ({
         sprintId,
         taskId: t.id,
@@ -472,22 +569,39 @@ export async function completeSprint(
         unplannedInSprint: t.unplannedInSprint,
       })),
       skipDuplicates: true,
-    }),
-    prisma.task.updateMany({
-      where: {
+    });
+
+    if (unfinished.length > 0) {
+      await tx.task.updateMany({
+        where: { id: { in: unfinished.map((t) => t.id) } },
+        data: {
+          sprintId: null,
+          estimatedMinutes: null,
+          stage: "BACKLOG",
+          assigneeId: null,
+          unplannedInSprint: false,
+        },
+      });
+
+      // Sent back unfinished. Each task carries the reason given for it in the
+      // sprint review, so the history explains the reversal rather than just
+      // showing the task reappearing in the backlog.
+      await applyBulkStageChange(tx, {
+        tasks: unfinished.map((t) => ({
+          id: t.id,
+          stage: t.stage,
+          assigneeId: t.assigneeId,
+          reason: reasonsByTask[t.id] ?? null,
+        })),
+        toStage: "BACKLOG",
+        actorId: user.id,
+        source: "SPRINT_COMPLETE",
         sprintId,
-        archivedAt: null,
-        stage: { not: "DONE" },
-      },
-      data: {
-        sprintId: null,
-        estimatedMinutes: null,
-        stage: "NEW_REQUEST",
-        assigneeId: null,
-        unplannedInSprint: false,
-      },
-    }),
-    prisma.sprint.update({
+        sprintName: existing.name,
+      });
+    }
+
+    const updated = await tx.sprint.update({
       where: { id: sprintId },
       data: {
         status,
@@ -497,8 +611,22 @@ export async function completeSprint(
           : new Date(),
       },
       select: SPRINT_SELECT,
-    }),
-  ]);
+    });
+
+    // What is left in the sprint is what was finished, and it now reads as
+    // Completed rather than Done — the sprint's own state, shown on the task.
+    // Completed is terminal on its own; shipping it is the client's optional
+    // acceptance and never happens automatically.
+    await projectSprintOntoTasks(tx, {
+      sprintId,
+      sprintName: existing.name,
+      status,
+      actorId: user.id,
+      reason: `${existing.name} completed`,
+    });
+
+    return updated;
+  });
 
   revalidatePath(`/dashboard/projects/${existing.projectId}`);
   await announceSprintNoteToChat({
@@ -520,18 +648,37 @@ export async function deleteSprint(
 ): Promise<{ id: string; projectId: string }> {
   const existing = await prisma.sprint.findUnique({ where: { id: sprintId } });
   if (!existing) throw new Error("Sprint not found");
-  await requireSprintAction(existing.projectId, "delete");
+  const { user } = await requireSprintAction(existing.projectId, "delete");
   if (confirmName.trim() !== existing.name) {
     throw new Error(`Type "${existing.name}" exactly to delete it`);
   }
 
-  await prisma.$transaction([
-    prisma.task.updateMany({
+  await prisma.$transaction(async (tx) => {
+    const tasks = await tx.task.findMany({
       where: { sprintId },
-      data: { assigneeId: null, unplannedInSprint: false },
-    }),
-    prisma.sprint.delete({ where: { id: sprintId } }),
-  ]);
+      select: { id: true, stage: true, assigneeId: true },
+    });
+
+    await tx.task.updateMany({
+      where: { sprintId },
+      data: { stage: "BACKLOG", assigneeId: null, unplannedInSprint: false },
+    });
+
+    // Set explicitly rather than leaning on the FK's SetNull, which would drop
+    // the sprint link while leaving the task parked in a work stage it can no
+    // longer be in — and would record nothing.
+    await applyBulkStageChange(tx, {
+      tasks,
+      toStage: "BACKLOG",
+      actorId: user.id,
+      source: "SPRINT_UNSCHEDULE",
+      reason: `Sprint "${existing.name}" was deleted`,
+      sprintId,
+      sprintName: existing.name,
+    });
+
+    await tx.sprint.delete({ where: { id: sprintId } });
+  });
   revalidatePath(`/dashboard/projects/${existing.projectId}`);
   return { id: existing.id, projectId: existing.projectId };
 }
@@ -602,14 +749,19 @@ export async function setTaskSprint(
       : "Removed from the sprint",
   };
 
-  const [updated] = await prisma.$transaction([
-    prisma.task.update({
+  // Scheduling a task is what puts it in Planned or Next; unscheduling returns
+  // it to Backlog. Both used to land on BACKLOG regardless, which is why a task
+  // sitting in next month's sprint still showed as backlog everywhere.
+  const targetStage = stageForSprintStatus(sprintStatus) ?? "TODO";
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const next = await tx.task.update({
       where: { id: taskId },
       data: {
         sprintId,
+        stage: targetStage,
         ...(sprintId
           ? {
-              stage: "NEW_REQUEST",
               unplannedInSprint: sprintStatus === "ACTIVE",
               ...(estimatedMinutes !== undefined ? { estimatedMinutes } : {}),
             }
@@ -618,29 +770,58 @@ export async function setTaskSprint(
       select: {
         id: true,
         sprintId: true,
+        assigneeId: true,
         sprint: { select: { id: true, name: true, status: true } },
       },
-    }),
+    });
+
+    await applyStageChange(tx, {
+      taskId: task.id,
+      fromStage: task.stage,
+      toStage: targetStage,
+      actorId: user.id,
+      source: sprintId ? "SPRINT_SCHEDULE" : "SPRINT_UNSCHEDULE",
+      reason: sprintId
+        ? `Scheduled into ${sprintName ?? "a sprint"}`
+        : `Removed from ${task.sprint?.name ?? "the sprint"}`,
+      sprintId,
+      sprintName,
+      assigneeId: next.assigneeId,
+    });
+
     // Upsert, not create: a task can leave the same sprint more than once, and
     // the latest departure is the one worth keeping.
-    ...(leaving
-      ? [
-          prisma.sprintTaskSnapshot.upsert({
-            where: { sprintId_taskId: { sprintId: leaving, taskId } },
-            create: { sprintId: leaving, taskId, ...departure },
-            update: departure,
-          }),
-        ]
-      : []),
+    if (leaving) {
+      await tx.sprintTaskSnapshot.upsert({
+        where: { sprintId_taskId: { sprintId: leaving, taskId } },
+        create: { sprintId: leaving, taskId, ...departure },
+        update: departure,
+      });
+    }
+
     // A task that comes back to a sprint it had left is in that sprint now, so
     // the record of it leaving is no longer history — and left in place it would
     // be counted a second time in the task's sprint tally, which adds the
     // current sprint to the snapshot count. Only ever an open sprint here: a
     // closed one is refused above, so no ended sprint's record is at risk.
-    ...(sprintId
-      ? [prisma.sprintTaskSnapshot.deleteMany({ where: { sprintId, taskId } })]
-      : []),
-  ]);
+    if (sprintId) {
+      await tx.sprintTaskSnapshot.deleteMany({ where: { sprintId, taskId } });
+    }
+
+    return next;
+  });
+
+  // Scheduling was previously invisible: the only trace of a task joining or
+  // leaving a sprint was its stage moving, so nobody could be asked why a piece
+  // of work was pulled out of a sprint.
+  await logTaskActivity({
+    taskId: task.id,
+    userId: user.id,
+    action: sprintId ? "scheduled" : "unscheduled",
+    field: "sprint",
+    oldValue: task.sprint?.name ?? null,
+    newValue: sprintName,
+  });
 
   if (!sprintId && task.assigneeId) {
     await logTaskActivity({

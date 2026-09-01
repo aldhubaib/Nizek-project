@@ -39,31 +39,38 @@ export function isBuiltInTaskFieldQuestion(question: string | undefined | null):
 
 /**
  * Spec fields that decide Backlog vs Missing Data.
- * Only mandatory or required-before-backlog questions block readiness;
- * client questions and built-in task fields (priority) never block this split.
+ *
+ * Every question on the form counts. If it was worth asking, an unanswered
+ * answer is missing data — the flags do not enter into it. `mandatory` says a
+ * question blocks task creation outright, which is a separate gate enforced in
+ * createTask, and leaving readiness to the flags meant a workspace that had
+ * never set one could never surface a single task as missing data.
+ *
+ * Two kinds of question are still skipped, because neither holds a spec answer:
+ * client questions record a dependency on the client rather than answer
+ * anything (isWaitingOnClientAnswer covers those), and priority lives on the
+ * task's own Details, so a leftover "Priority" question must not hold a task.
  */
 export function isReadinessQuestion(q: {
   type: string;
   question?: string;
-  mandatory?: boolean;
-  required?: boolean;
 }): boolean {
   if (q.type === "client") return false;
   if (isBuiltInTaskFieldQuestion(q.question)) return false;
-  return q.mandatory === true || q.required === true;
+  return true;
 }
 
-/** Unassigned NEW_REQUEST work that still has unanswered spec questions. */
+/** Unassigned BACKLOG work that still has unanswered spec questions. */
 export function isMissingDataTask(task: {
   stage: string;
   sprintId?: string | null;
   isReadyForTransition?: boolean;
 }): boolean {
-  return task.stage === "NEW_REQUEST" && !task.isReadyForTransition;
+  return task.stage === "BACKLOG" && !task.isReadyForTransition;
 }
 
 export function computeIsReadyForTransition(
-  questions: { id: string; type: string; question?: string; required?: boolean; mandatory?: boolean }[],
+  questions: { id: string; type: string; question?: string }[],
   answers: Record<string, string>,
 ): boolean {
   const specQs = questions.filter(isReadinessQuestion);

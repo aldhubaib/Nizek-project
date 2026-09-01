@@ -27,14 +27,16 @@ async function requireClientChatRosterAccess(projectId: string) {
   if (user.systemRole === "ADMIN") {
     return { user, member };
   }
-  if (member.projectRole?.isAdmin || member.role === "ADMIN" || member.role === "PROJECT_MANAGER") {
+  if (member.projectRole?.isAdmin || member.role === "ADMIN") {
     return { user, member };
   }
+  // Gated on the "Members" permission only — a project manager without it
+  // cannot change who faces the client.
   const full = await prisma.projectMember.findUnique({
     where: { id: member.id },
-    select: { canInviteClients: true },
+    select: { canInviteMembers: true },
   });
-  if (!full?.canInviteClients) {
+  if (!full?.canInviteMembers) {
     throw new Error("You don't have permission to manage client chat people");
   }
   return { user, member };
