@@ -4,7 +4,6 @@ import { usePathname } from "next/navigation";
 import { AppNavLink } from "@/components/app-nav-link";
 import {
   LayoutDashboard,
-  Gauge,
   Inbox,
   FolderKanban,
   ClipboardCheck,
@@ -20,7 +19,6 @@ import { formatUnreadBadge } from "@/lib/chat-unread";
 
 const NAV_ITEMS = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
-  { name: "Overview", href: "/dashboard/overview", icon: Gauge, adminOnly: false, auditOnly: true, equityOnly: false, vaultOnly: false, trashOnly: false },
   { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
   { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
   { name: "Vault", href: "/dashboard/vault", icon: KeyRound, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: true, trashOnly: false },

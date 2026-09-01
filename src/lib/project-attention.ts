@@ -449,29 +449,151 @@ export function sprintOutcome(rows: SnapshotRow[]): SprintOutcome {
   };
 }
 
-/** Feed layout: signals from every project, grouped under their tier. */
-export function groupSignalsByTier<T extends { signals: AttentionSignal[] }>(
-  projects: T[],
-): { tier: AttentionTier; label: string; items: { project: T; signal: AttentionSignal }[] }[] {
-  const order: AttentionTier[] = [
-    "recoverable",
-    "unwatched",
-    "blocked",
-    "missed",
-    "chronic",
-  ];
+// ─── Stage distribution ─────────────────────────────────
 
-  return order
-    .map((tier) => ({
-      tier,
-      label: TIER_LABELS[tier],
-      items: projects
-        .flatMap((project) =>
-          project.signals
-            .filter((s) => s.tier === tier)
-            .map((signal) => ({ project, signal })),
-        )
-        .sort((x, y) => y.signal.magnitude - x.signal.magnitude),
-    }))
-    .filter((group) => group.items.length > 0);
+/**
+ * The nine task stages folded into the four a manager actually reads.
+ *
+ * Backlog, Planned, Next and Todo are all "not started yet" from a delivery
+ * view — the distinction between them is a planning detail. Done, Completed and
+ * Shipped are all "finished"; which of the three it is depends on whether the
+ * sprint has closed, which is not the task's fault.
+ */
+export type StageGroup = "todo" | "in_development" | "internal_review" | "done";
+
+export const STAGE_GROUP_ORDER: StageGroup[] = [
+  "todo",
+  "in_development",
+  "internal_review",
+  "done",
+];
+
+export const STAGE_GROUP_LABELS: Record<StageGroup, string> = {
+  todo: "To do",
+  in_development: "In development",
+  internal_review: "Internal review",
+  done: "Completed",
+};
+
+const STAGE_TO_GROUP: Record<string, StageGroup> = {
+  BACKLOG: "todo",
+  PLANNED: "todo",
+  NEXT: "todo",
+  TODO: "todo",
+  IN_DEVELOPMENT: "in_development",
+  INTERNAL_REVIEW: "internal_review",
+  DONE: "done",
+  COMPLETED: "done",
+  SHIPPED: "done",
+};
+
+export function stageGroup(stage: string): StageGroup {
+  return STAGE_TO_GROUP[stage] ?? "todo";
+}
+
+/** Whether a stage counts as finished work. */
+export function isDoneStage(stage: string): boolean {
+  return stageGroup(stage) === "done";
+}
+
+export function emptyStageCounts(): Record<StageGroup, number> {
+  return { todo: 0, in_development: 0, internal_review: 0, done: 0 };
+}
+
+// ─── Delivery status ────────────────────────────────────
+
+export type DeliveryStatus = "on_track" | "at_risk" | "off_track";
+
+export const DELIVERY_STATUS_LABELS: Record<DeliveryStatus, string> = {
+  on_track: "on track",
+  at_risk: "at risk",
+  off_track: "off track",
+};
+
+/**
+ * A project's one-word delivery verdict, folded down from its signals.
+ *
+ * Off track is reserved for the two tiers nothing can be done about today — a
+ * date already missed, or a task stuck long enough to be a process problem.
+ * Everything else still has a move available this morning, so it reads as at
+ * risk rather than lost.
+ *
+ * Deliberately not built on `projectBucket`: that answers "what should I look
+ * at first", which ranks a fixable problem above a missed one. A project that
+ * has already missed a date has missed it whether or not something more urgent
+ * happens to be sitting on top, so this asks whether any signal is terminal.
+ */
+export function deliveryStatus(signals: AttentionSignal[]): DeliveryStatus {
+  if (signals.length === 0) return "on_track";
+  const terminal = signals.some(
+    (s) => s.tier === "missed" || s.tier === "chronic",
+  );
+  return terminal ? "off_track" : "at_risk";
+}
+
+// ─── Bucketing for the health chart ─────────────────────
+
+export type HealthBucket = AttentionTier | "healthy";
+
+export const BUCKET_ORDER: HealthBucket[] = [
+  "recoverable",
+  "unwatched",
+  "blocked",
+  "missed",
+  "chronic",
+  "healthy",
+];
+
+export const BUCKET_LABELS: Record<HealthBucket, string> = {
+  ...TIER_LABELS,
+  healthy: "Healthy",
+};
+
+/**
+ * The one bucket a project belongs in: the tier of its worst signal.
+ *
+ * One project, one slice. Counting a project once per signal would let a single
+ * quiet project with three problems outweigh three projects with one each, and
+ * the chart is meant to answer "how many projects are in trouble".
+ */
+export function projectBucket(signals: AttentionSignal[]): HealthBucket {
+  if (signals.length === 0) return "healthy";
+  return signals.reduce<AttentionTier>(
+    (worst, s) => (s.rank < TIER_RANK[worst] ? s.tier : worst),
+    signals[0].tier,
+  );
+}
+
+export interface BucketGroup<T> {
+  bucket: HealthBucket;
+  label: string;
+  projects: T[];
+}
+
+/**
+ * Every project sorted into one bucket, in severity order. Empty buckets are
+ * dropped so the chart has no zero-width slices to catch a click on.
+ */
+export function bucketProjects<T extends RankedProject>(
+  projects: T[],
+): BucketGroup<T>[] {
+  const byBucket = new Map<HealthBucket, T[]>();
+  for (const project of projects) {
+    const bucket = projectBucket(project.signals);
+    const list = byBucket.get(bucket) ?? [];
+    list.push(project);
+    byBucket.set(bucket, list);
+  }
+
+  return BUCKET_ORDER.flatMap((bucket) => {
+    const list = byBucket.get(bucket);
+    if (!list || list.length === 0) return [];
+    return [
+      {
+        bucket,
+        label: BUCKET_LABELS[bucket],
+        projects: [...list].sort(compareProjects),
+      },
+    ];
+  });
 }

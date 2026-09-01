@@ -312,7 +312,9 @@ export function DashboardClient({
   const inReview = stageBreakdown["INTERNAL_REVIEW"] ?? 0;
 
   return (
-    <div className="px-app py-6 pb-16">
+    // No page padding here: this is the top half of the dashboard and the page
+    // owns the container, so the delivery half below lines up with it.
+    <div>
       {/* Greeting */}
       <div className="mb-8">
         <h1 className="text-m font-bold text-foreground">

@@ -1,19 +1,30 @@
 import { describe, it, expect } from "vitest";
 import {
+  BUCKET_LABELS,
+  BUCKET_ORDER,
   DAY_MS,
+  DELIVERY_STATUS_LABELS,
+  STAGE_GROUP_LABELS,
+  STAGE_GROUP_ORDER,
+  deliveryStatus,
+  emptyStageCounts,
+  isDoneStage,
+  stageGroup,
   NO_SPRINT_GAP_DAYS,
   QUIET_DAYS,
   RISK_MARGIN,
   TIER_RANK,
+  bucketProjects,
   compareProjects,
   compareSignals,
-  groupSignalsByTier,
+  projectBucket,
   projectRank,
   projectSignals,
   sprintOutcome,
   sprintVerdict,
   workingDaysBetween,
   type AttentionSignal,
+  type AttentionTier,
   type ProjectAttentionInput,
 } from "@/lib/project-attention";
 import { CRITICAL_LATE_MS } from "@/lib/audit-flags";
@@ -366,37 +377,132 @@ describe("sprintOutcome", () => {
   });
 });
 
-describe("groupSignalsByTier", () => {
-  it("groups across projects and drops empty tiers", () => {
-    const projects = [
-      {
-        name: "A",
-        signals: [
-          {
-            type: "sprint_at_risk" as const,
-            tier: "recoverable" as const,
-            rank: TIER_RANK.recoverable,
-            magnitude: 0.4,
-            message: "A behind",
-          },
-        ],
-      },
-      {
-        name: "B",
-        signals: [
-          {
-            type: "no_sprint" as const,
-            tier: "unwatched" as const,
-            rank: TIER_RANK.unwatched,
-            magnitude: 6,
-            message: "B idle",
-          },
-        ],
-      },
-    ];
+describe("bucketing", () => {
+  function sig(tier: AttentionTier, magnitude = 1): AttentionSignal {
+    return {
+      type: "no_sprint",
+      tier,
+      rank: TIER_RANK[tier],
+      magnitude,
+      message: `${tier} problem`,
+    };
+  }
 
-    const groups = groupSignalsByTier(projects);
-    expect(groups.map((g) => g.tier)).toEqual(["recoverable", "unwatched"]);
-    expect(groups[0].items[0].project.name).toBe("A");
+  it("calls a project with no signals healthy", () => {
+    expect(projectBucket([])).toBe("healthy");
+  });
+
+  it("files a project under its worst signal", () => {
+    expect(projectBucket([sig("chronic"), sig("recoverable")])).toBe(
+      "recoverable",
+    );
+    expect(projectBucket([sig("missed"), sig("unwatched")])).toBe("unwatched");
+  });
+
+  it("counts each project once, however many problems it has", () => {
+    const noisy = { name: "Noisy", signals: [sig("unwatched"), sig("chronic")] };
+    const quiet = { name: "Quiet", signals: [sig("unwatched")] };
+
+    const groups = bucketProjects([noisy, quiet]);
+    const total = groups.reduce((sum, g) => sum + g.projects.length, 0);
+    expect(total).toBe(2);
+    expect(groups.find((g) => g.bucket === "unwatched")!.projects).toHaveLength(2);
+    expect(groups.some((g) => g.bucket === "chronic")).toBe(false);
+  });
+
+  it("drops empty buckets and keeps severity order", () => {
+    const groups = bucketProjects([
+      { name: "H", signals: [] },
+      { name: "A", signals: [sig("recoverable")] },
+      { name: "M", signals: [sig("missed")] },
+    ]);
+    expect(groups.map((g) => g.bucket)).toEqual([
+      "recoverable",
+      "missed",
+      "healthy",
+    ]);
+  });
+
+  it("sorts projects inside a bucket worst first", () => {
+    const mild = { name: "Mild", signals: [sig("unwatched", 2)] };
+    const severe = { name: "Severe", signals: [sig("unwatched", 40)] };
+    const groups = bucketProjects([mild, severe]);
+    expect(groups[0].projects.map((p) => p.name)).toEqual(["Severe", "Mild"]);
+  });
+
+  it("labels every bucket it can produce", () => {
+    for (const bucket of BUCKET_ORDER) {
+      expect(BUCKET_LABELS[bucket]).toBeTruthy();
+    }
+  });
+});
+
+describe("stageGroup", () => {
+  it("folds the four not-started stages into one", () => {
+    for (const stage of ["BACKLOG", "PLANNED", "NEXT", "TODO"]) {
+      expect(stageGroup(stage)).toBe("todo");
+    }
+  });
+
+  it("treats every finished stage as done", () => {
+    for (const stage of ["DONE", "COMPLETED", "SHIPPED"]) {
+      expect(stageGroup(stage)).toBe("done");
+      expect(isDoneStage(stage)).toBe(true);
+    }
+  });
+
+  it("keeps the two working stages apart", () => {
+    expect(stageGroup("IN_DEVELOPMENT")).toBe("in_development");
+    expect(stageGroup("INTERNAL_REVIEW")).toBe("internal_review");
+    expect(isDoneStage("IN_DEVELOPMENT")).toBe(false);
+  });
+
+  it("files an unknown stage as not started rather than dropping it", () => {
+    expect(stageGroup("SOMETHING_NEW")).toBe("todo");
+  });
+
+  it("labels and orders every group", () => {
+    expect(STAGE_GROUP_ORDER).toHaveLength(4);
+    for (const group of STAGE_GROUP_ORDER) {
+      expect(STAGE_GROUP_LABELS[group]).toBeTruthy();
+      expect(emptyStageCounts()[group]).toBe(0);
+    }
+  });
+});
+
+describe("deliveryStatus", () => {
+  function sig(tier: AttentionTier): AttentionSignal {
+    return {
+      type: "no_sprint",
+      tier,
+      rank: TIER_RANK[tier],
+      magnitude: 1,
+      message: "",
+    };
+  }
+
+  it("calls a project with nothing flagged on track", () => {
+    expect(deliveryStatus([])).toBe("on_track");
+  });
+
+  it("only calls a project off track once nothing can be done today", () => {
+    expect(deliveryStatus([sig("missed")])).toBe("off_track");
+    expect(deliveryStatus([sig("chronic")])).toBe("off_track");
+  });
+
+  it("keeps a still-fixable problem at risk rather than off track", () => {
+    expect(deliveryStatus([sig("recoverable")])).toBe("at_risk");
+    expect(deliveryStatus([sig("unwatched")])).toBe("at_risk");
+    expect(deliveryStatus([sig("blocked")])).toBe("at_risk");
+  });
+
+  it("is driven by the worst signal, not the first", () => {
+    expect(deliveryStatus([sig("blocked"), sig("missed")])).toBe("off_track");
+  });
+
+  it("labels every status", () => {
+    for (const status of ["on_track", "at_risk", "off_track"] as const) {
+      expect(DELIVERY_STATUS_LABELS[status]).toBeTruthy();
+    }
   });
 });
