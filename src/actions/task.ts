@@ -10,7 +10,6 @@ import {
   getPermissionsFromRole,
   getAdminPermissions,
   canTransition,
-  canCreateInStage,
   canModifyInStage,
 } from "@/lib/permissions";
 import { publish, broadcast, broadcastTaskEvent, taskChannel, projectChannel, userChannel } from "@/lib/centrifugo";
@@ -117,7 +116,7 @@ export async function createTask(data: {
 
   if (!isAdmin) {
     const perms = getPermissionsFromRole(member.projectRole);
-    if (!canCreateInStage(perms, "BACKLOG")) {
+    if (!perms.canCreateTask) {
       throw new Error("You do not have permission to create tasks");
     }
   }

@@ -3,7 +3,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember, requireProjectRole } from "@/lib/auth";
 import {
-  canCreateInStage,
   canSprint,
   getAdminPermissions,
   getPermissionsFromRole,
@@ -697,7 +696,7 @@ export async function getNoteWorkspace(noteId: string) {
     canCreateTask:
       member.role !== "CLIENT" &&
       isActive &&
-      (isSystemAdmin || canCreateInStage(perms, "BACKLOG")),
+      (isSystemAdmin || perms.canCreateTask),
     allowedTaskTypes,
     activeContractType: activeContract?.contractType ?? null,
     isActive,

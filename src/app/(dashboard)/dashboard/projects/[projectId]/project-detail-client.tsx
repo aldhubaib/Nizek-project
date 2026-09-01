@@ -52,7 +52,6 @@ export interface UserPermissions {
   canInviteClients: boolean;
   allowedStages: string[];
   allowedTransitions: Record<string, string[]>;
-  createStages: string[];
   modifyStages: string[];
   isAdmin: boolean;
   systemRole: string;
@@ -224,10 +223,7 @@ export function ProjectDetailClient({
 }: Props) {
   const canEdit = userPermissions.canModifyTask || userPermissions.isAdmin;
   const isAdmin = userPermissions.isAdmin;
-  const canCreateTask =
-    userPermissions.isAdmin ||
-    userPermissions.canCreateTask ||
-    (userPermissions.createStages ?? []).includes("BACKLOG");
+  const canCreateTask = userPermissions.isAdmin || userPermissions.canCreateTask;
   const canManageTeam = userPermissions.canInviteMembers || userPermissions.canInviteClients;
   const router = useRouter();
   const searchParams = useSearchParams();

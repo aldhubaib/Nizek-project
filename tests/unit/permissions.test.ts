@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { getPermissionsFromRole, canTransition, canSprint, getAdminPermissions } from "@/lib/permissions";
+import {
+  getPermissionsFromRole,
+  canTransition,
+  canModifyInStage,
+  canSprint,
+  getAdminPermissions,
+} from "@/lib/permissions";
 
 const baseRole = {
   isAdmin: false,
@@ -110,6 +116,65 @@ describe("getPermissionsFromRole — move permission", () => {
       allowedTransitions: null,
     });
     expect(canTransition(perms, "BACKLOG", "DONE")).toBe(true);
+  });
+});
+
+describe("modify covers every stage a task can sit in", () => {
+  // Moving and editing are different questions. A task follows its sprint into
+  // Planned, Next, Completed and Shipped, and while it sits there it is still
+  // edited like any other — so modify has to reach stages no one can drag to.
+  it("blanket modify reaches the sprint-driven stages, not just the movable ones", () => {
+    const perms = getPermissionsFromRole({ ...baseRole, canModifyTask: true });
+
+    for (const stage of ["BACKLOG", "TODO", "IN_DEVELOPMENT", "INTERNAL_REVIEW", "DONE"]) {
+      expect(canModifyInStage(perms, stage)).toBe(true);
+    }
+    for (const stage of ["PLANNED", "NEXT", "COMPLETED", "SHIPPED"]) {
+      expect(canModifyInStage(perms, stage)).toBe(true);
+    }
+  });
+
+  it("a configured role grants exactly the stages it names", () => {
+    const perms = getPermissionsFromRole({
+      ...baseRole,
+      allowedTransitions: JSON.stringify({ _modify: ["BACKLOG", "PLANNED", "TODO"] }),
+    });
+
+    expect(perms.canModifyTask).toBe(true);
+    expect(canModifyInStage(perms, "PLANNED")).toBe(true);
+    expect(canModifyInStage(perms, "SHIPPED")).toBe(false);
+    expect(canModifyInStage(perms, "IN_DEVELOPMENT")).toBe(false);
+  });
+
+  it("names no stages, holds no rights", () => {
+    const perms = getPermissionsFromRole(baseRole);
+    expect(perms.canModifyTask).toBe(false);
+    expect(canModifyInStage(perms, "BACKLOG")).toBe(false);
+    expect(canModifyInStage(perms, "PLANNED")).toBe(false);
+  });
+
+  it("admins modify in every stage", () => {
+    for (const stage of ["BACKLOG", "PLANNED", "SHIPPED"]) {
+      expect(canModifyInStage(getAdminPermissions(), stage)).toBe(true);
+    }
+  });
+});
+
+describe("create is one right, not one per stage", () => {
+  it("keeps the right for roles saved back when create was per-stage", () => {
+    // Nothing writes _create any more, but a role saved before the collapse
+    // still carries it and must not silently lose the right to create.
+    const perms = getPermissionsFromRole({
+      ...baseRole,
+      canCreateTask: false,
+      allowedTransitions: JSON.stringify({ _create: ["BACKLOG"] }),
+    });
+    expect(perms.canCreateTask).toBe(true);
+  });
+
+  it("otherwise follows the flag", () => {
+    expect(getPermissionsFromRole({ ...baseRole, canCreateTask: true }).canCreateTask).toBe(true);
+    expect(getPermissionsFromRole(baseRole).canCreateTask).toBe(false);
   });
 });
 

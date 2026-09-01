@@ -556,7 +556,11 @@ export function KanbanBoard({
               canCreateTask={
                 !filterSprintId &&
                 !pipelineOnly &&
-                (userPermissions.isAdmin || (userPermissions.createStages ?? []).includes(stage.id))
+                // Backlog only: createTask files every new task there whichever
+                // column it was started from, so an add button anywhere else
+                // promised a task that would land somewhere the user did not ask for.
+                stage.id === "BACKLOG" &&
+                (userPermissions.isAdmin || userPermissions.canCreateTask)
               }
               dragFromStage={dragFromStage}
               canSelfAssign={canSelfAssign}

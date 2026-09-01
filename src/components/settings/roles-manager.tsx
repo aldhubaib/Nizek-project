@@ -16,16 +16,24 @@ import {
 } from "lucide-react";
 import { createRole, updateRole, deleteRole } from "@/actions/role";
 import { cn } from "@/lib/utils";
+import { MOVABLE_STAGE_IDS } from "@/lib/permissions";
+import { STAGE_ORDER } from "@/lib/task-stage";
+import { stageLabel } from "@/lib/task-label";
 
-// Only the stages a person moves a task through. Planned, Next, Completed and
-// Shipped follow the sprint, so a role has nothing to permit there.
-const ALL_STAGES = [
-  { id: "BACKLOG", label: "Backlog" },
-  { id: "TODO", label: "Todo" },
-  { id: "IN_DEVELOPMENT", label: "In Development" },
-  { id: "INTERNAL_REVIEW", label: "Internal Review" },
-  { id: "DONE", label: "Done" },
-];
+/**
+ * Every stage a task can hold, in lifecycle order. Modify applies to all of
+ * them — a task parked in a planned or shipped sprint is still edited like any
+ * other, and leaving those rows out meant no role could be granted the right.
+ */
+const ALL_STAGES = STAGE_ORDER.map((id) => ({ id: id as string, label: stageLabel(id) }));
+
+/**
+ * The stages a person moves a task between by hand, in the order they move
+ * through. Forward and Rollback only mean something along this chain: the
+ * stages missing from it follow the sprint, so they are reached by moving the
+ * sprint rather than the card.
+ */
+const MOVABLE_STAGES = MOVABLE_STAGE_IDS.map((id) => ({ id, label: stageLabel(id) }));
 
 interface WorkspaceRole {
   id: string;
@@ -54,29 +62,28 @@ interface Props {
 
 interface StagePerms {
   transitions: Record<string, string[]>;
-  createStages: string[];
   modifyStages: string[];
 }
 
+const EMPTY_STAGE_PERMS: StagePerms = { transitions: {}, modifyStages: [] };
+
 function parseAllData(raw: string | null): StagePerms {
-  if (!raw) return { transitions: {}, createStages: [], modifyStages: [] };
+  if (!raw) return { transitions: {}, modifyStages: [] };
   try {
     const data = JSON.parse(raw);
-    const createStages: string[] = data._create ?? [];
     const modifyStages: string[] = data._modify ?? [];
     const transitions: Record<string, string[]> = {};
     for (const [key, val] of Object.entries(data)) {
       if (!key.startsWith("_")) transitions[key] = val as string[];
     }
-    return { transitions, createStages, modifyStages };
+    return { transitions, modifyStages };
   } catch {
-    return { transitions: {}, createStages: [], modifyStages: [] };
+    return { transitions: {}, modifyStages: [] };
   }
 }
 
 function serializeAllData(perms: StagePerms): Record<string, string[]> {
   const result: Record<string, string[]> = { ...perms.transitions };
-  if (perms.createStages.length > 0) result._create = perms.createStages;
   if (perms.modifyStages.length > 0) result._modify = perms.modifyStages;
   return result;
 }
@@ -103,12 +110,11 @@ function toggleTransitionTarget(
   return result;
 }
 
-function stageLabel(id: string): string {
-  return ALL_STAGES.find((s) => s.id === id)?.label ?? id;
-}
-
 const EMPTY_GENERAL = {
   isClient: false,
+  // Every task is born in Backlog, so create is one right rather than one per
+  // stage. The per-stage boxes this replaced were only ever read for Backlog.
+  canCreateTask: false,
   canMoveTask: false,
   canDeleteTask: false,
   canDeclineTask: false,
@@ -124,21 +130,13 @@ export function RolesManager({ roles }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPerms, setNewPerms] = useState({ ...EMPTY_GENERAL });
-  const [newStagePerms, setNewStagePerms] = useState<StagePerms>({
-    transitions: {},
-    createStages: [],
-    modifyStages: [],
-  });
+  const [newStagePerms, setNewStagePerms] = useState<StagePerms>(EMPTY_STAGE_PERMS);
   const [creating, setCreating] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editPerms, setEditPerms] = useState({ ...EMPTY_GENERAL });
-  const [editStagePerms, setEditStagePerms] = useState<StagePerms>({
-    transitions: {},
-    createStages: [],
-    modifyStages: [],
-  });
+  const [editStagePerms, setEditStagePerms] = useState<StagePerms>(EMPTY_STAGE_PERMS);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -148,7 +146,7 @@ export function RolesManager({ roles }: Props) {
       await createRole({
         name: newName.trim(),
         isClient: newPerms.isClient,
-        canCreateTask: newPerms.isClient ? false : newStagePerms.createStages.length > 0,
+        canCreateTask: newPerms.isClient ? false : newPerms.canCreateTask,
         canModifyTask: newPerms.isClient ? false : newStagePerms.modifyStages.length > 0,
         canMoveTask: newPerms.isClient
           ? false
@@ -167,7 +165,7 @@ export function RolesManager({ roles }: Props) {
       });
       setNewName("");
       setNewPerms({ ...EMPTY_GENERAL });
-      setNewStagePerms({ transitions: {}, createStages: [], modifyStages: [] });
+      setNewStagePerms(EMPTY_STAGE_PERMS);
       setShowCreate(false);
     } catch (err) {
       console.error(err);
@@ -181,6 +179,7 @@ export function RolesManager({ roles }: Props) {
     setEditName(role.name);
     setEditPerms({
       isClient: role.isClient,
+      canCreateTask: role.canCreateTask,
       canMoveTask: role.canMoveTask,
       canDeleteTask: role.canDeleteTask,
       canDeclineTask: role.canDeclineTask,
@@ -192,9 +191,6 @@ export function RolesManager({ roles }: Props) {
       canViewTaskHistory: role.canViewTaskHistory,
     });
     const parsed = parseAllData(role.allowedTransitions);
-    if (parsed.createStages.length === 0 && role.canCreateTask) {
-      parsed.createStages = ALL_STAGES.map((s) => s.id);
-    }
     if (parsed.modifyStages.length === 0 && role.canModifyTask) {
       parsed.modifyStages = ALL_STAGES.map((s) => s.id);
     }
@@ -207,7 +203,7 @@ export function RolesManager({ roles }: Props) {
         roleId,
         name: editName.trim() || undefined,
         isClient: editPerms.isClient,
-        canCreateTask: editPerms.isClient ? false : editStagePerms.createStages.length > 0,
+        canCreateTask: editPerms.isClient ? false : editPerms.canCreateTask,
         canModifyTask: editPerms.isClient ? false : editStagePerms.modifyStages.length > 0,
         canMoveTask: editPerms.isClient
           ? false
@@ -289,6 +285,7 @@ export function RolesManager({ roles }: Props) {
           ) : (
             <>
           <div className="flex flex-wrap gap-3">
+            <PermToggle label="Create tasks" checked={newPerms.canCreateTask} onChange={(v) => setNewPerms((p) => ({ ...p, canCreateTask: v }))} />
             <PermToggle label="Delete tasks" checked={newPerms.canDeleteTask} onChange={(v) => setNewPerms((p) => ({ ...p, canDeleteTask: v }))} />
             <PermToggle label="Decline tasks" checked={newPerms.canDeclineTask} onChange={(v) => setNewPerms((p) => ({ ...p, canDeclineTask: v }))} />
             <PermToggle label="Team Lead" checked={newPerms.isTeamLead} onChange={(v) => setNewPerms((p) => ({ ...p, isTeamLead: v }))} />
@@ -369,6 +366,7 @@ export function RolesManager({ roles }: Props) {
                     ) : (
                       <>
                     <div className="flex flex-wrap gap-3">
+                      <PermToggle label="Create tasks" checked={editPerms.canCreateTask} onChange={(v) => setEditPerms((p) => ({ ...p, canCreateTask: v }))} />
                       <PermToggle label="Delete tasks" checked={editPerms.canDeleteTask} onChange={(v) => setEditPerms((p) => ({ ...p, canDeleteTask: v }))} />
                       <PermToggle label="Decline tasks" checked={editPerms.canDeclineTask} onChange={(v) => setEditPerms((p) => ({ ...p, canDeclineTask: v }))} />
                       <PermToggle label="Team Lead" checked={editPerms.isTeamLead} onChange={(v) => setEditPerms((p) => ({ ...p, isTeamLead: v }))} />
@@ -481,26 +479,15 @@ export function RolesManager({ roles }: Props) {
 }
 
 function RoleStageSummary({ parsed }: { parsed: StagePerms; canMoveTask?: boolean }) {
-  const hasCreate = parsed.createStages.length > 0;
   const hasModify = parsed.modifyStages.length > 0;
   // Transitions imply move permission (same rule as getPermissionsFromRole),
   // so always show them.
   const hasTransitions = Object.keys(parsed.transitions).length > 0;
 
-  if (!hasCreate && !hasModify && !hasTransitions) return null;
+  if (!hasModify && !hasTransitions) return null;
 
   return (
     <div className="space-y-1 mt-2">
-      {hasCreate && (
-        <div className="flex items-center gap-xs text-xs">
-          <span className="text-muted-foreground shrink-0 w-12">Create:</span>
-          <div className="flex flex-wrap gap-1">
-            {parsed.createStages.map((s) => (
-              <span key={s} className="bg-primary/10 text-primary px-1.5 py-0.5 rounded">{stageLabel(s)}</span>
-            ))}
-          </div>
-        </div>
-      )}
       {hasModify && (
         <div className="flex items-center gap-xs text-xs">
           <span className="text-muted-foreground shrink-0 w-12">Modify:</span>
@@ -551,9 +538,6 @@ function StagePermissionsTable({
   canMoveTask: boolean;
   onMoveTaskChange: (v: boolean) => void;
 }) {
-  function toggleCreate(stageId: string) {
-    onChange({ ...stagePerms, createStages: toggleInArray(stagePerms.createStages, stageId) });
-  }
   function toggleModify(stageId: string) {
     onChange({ ...stagePerms, modifyStages: toggleInArray(stagePerms.modifyStages, stageId) });
   }
@@ -571,25 +555,29 @@ function StagePermissionsTable({
     }
   }
 
-  const pipeline = ALL_STAGES.map((stage, i) => ({
-    ...stage,
-    next: ALL_STAGES[i + 1] ?? null,
-    prev: ALL_STAGES[i - 1] ?? null,
-  }));
+  // Every stage gets a row, but the Forward / Rollback neighbours come from the
+  // movable chain, so Backlog steps to Todo rather than to Planned. A stage off
+  // that chain has no neighbours and shows a dash in both columns.
+  const pipeline = ALL_STAGES.map((stage) => {
+    const i = MOVABLE_STAGES.findIndex((s) => s.id === stage.id);
+    return {
+      ...stage,
+      next: i === -1 ? null : MOVABLE_STAGES[i + 1] ?? null,
+      prev: i === -1 ? null : MOVABLE_STAGES[i - 1] ?? null,
+    };
+  });
 
   return (
     <div>
       <p className="text-xs text-muted-foreground mb-2 font-medium">Stage Permissions</p>
       <div className="app-card rounded-lg border border-border overflow-x-auto">
-        <div className="grid grid-cols-[1fr_64px_64px_64px_64px] text-xs font-medium text-muted-foreground bg-muted/30 px-3 py-2 border-b border-border">
+        <div className="grid grid-cols-[1fr_64px_64px_64px] text-xs font-medium text-muted-foreground bg-muted/30 px-3 py-2 border-b border-border">
           <span>Stage</span>
-          <span className="text-center">Create</span>
           <span className="text-center">Modify</span>
           <span className="text-center">Forward</span>
           <span className="text-center">Rollback</span>
         </div>
         {pipeline.map((stage) => {
-          const createEnabled = stagePerms.createStages.includes(stage.id);
           const modifyEnabled = stagePerms.modifyStages.includes(stage.id);
           const forwardEnabled = stage.next ? (stagePerms.transitions[stage.id] ?? []).includes(stage.next.id) : false;
           const rollbackEnabled = stage.prev ? (stagePerms.transitions[stage.id] ?? []).includes(stage.prev.id) : false;
@@ -597,12 +585,9 @@ function StagePermissionsTable({
           return (
             <div
               key={stage.id}
-              className="grid grid-cols-[1fr_64px_64px_64px_64px] items-center px-3 py-1.5 border-b border-border last:border-b-0 hover:bg-muted/10 transition-colors"
+              className="grid grid-cols-[1fr_64px_64px_64px] items-center px-3 py-1.5 border-b border-border last:border-b-0 hover:bg-muted/10 transition-colors"
             >
               <span className="text-xs font-medium text-foreground/80">{stage.label}</span>
-              <div className="flex justify-center">
-                <StageCheckbox enabled={createEnabled} onClick={() => toggleCreate(stage.id)} color="blue" />
-              </div>
               <div className="flex justify-center">
                 <StageCheckbox enabled={modifyEnabled} onClick={() => toggleModify(stage.id)} color="purple" />
               </div>
@@ -625,7 +610,9 @@ function StagePermissionsTable({
         })}
       </div>
       <p className="text-xs text-muted-foreground/50 mt-1.5">
-        Create = can create tasks in this stage. Modify = can edit tasks in this stage. Forward/Rollback = can move tasks to next/previous stage.
+        Modify = can edit tasks sitting in this stage. Forward/Rollback = can move
+        tasks to the next/previous stage. Planned, Next, Completed and Shipped
+        follow the sprint, so there is no move to permit there.
       </p>
     </div>
   );

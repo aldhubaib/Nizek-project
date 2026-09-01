@@ -13,7 +13,6 @@ import { getAliasMap, maskName, maskPlainNames } from "@/lib/alias";
 import { getThreadMessages, getInboxThreads } from "@/actions/messages";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import {
-  canCreateInStage,
   getAdminPermissions,
   getPermissionsFromRole,
 } from "@/lib/permissions";
@@ -320,7 +319,7 @@ export default async function ThreadPage({
       ? getAdminPermissions()
       : getPermissionsFromRole(member.projectRole);
     canCreateTask =
-      isSystemAdmin || canCreateInStage(perms, "BACKLOG");
+      isSystemAdmin || perms.canCreateTask;
 
     const activeContract = getActiveContract(contractsForPerms);
     activeContractType = activeContract?.contractType ?? null;

@@ -1,3 +1,5 @@
+import { STAGE_ORDER, WORK_STAGES } from "@/lib/task-stage";
+
 export interface ProjectRolePermissions {
   isAdmin: boolean;
   canCreateTask: boolean;
@@ -11,7 +13,6 @@ export interface ProjectRolePermissions {
   canMoveTask: boolean;
   canViewTaskHistory: boolean;
   allowedTransitions: Record<string, string[]>;
-  createStages: string[];
   modifyStages: string[];
 }
 
@@ -37,15 +38,6 @@ export function canTransition(
   const allowed = permissions.allowedTransitions[fromStage];
   if (!allowed) return false;
   return allowed.includes(toStage);
-}
-
-export function canCreateInStage(
-  permissions: ProjectRolePermissions,
-  stage: string,
-): boolean {
-  if (permissions.isAdmin) return true;
-  if (!permissions.canCreateTask) return false;
-  return permissions.createStages.includes(stage);
 }
 
 export function canModifyInStage(
@@ -86,7 +78,6 @@ export function getPermissionsFromRole(role: {
       canMoveTask: false,
       canViewTaskHistory: false,
       allowedTransitions: {},
-      createStages: [],
       modifyStages: [],
     };
   }
@@ -96,7 +87,9 @@ export function getPermissionsFromRole(role: {
     allData = migrateStagesToTransitions(role.allowedStages);
   }
 
-  const createStages: string[] = (allData as Record<string, unknown>)["_create"] as string[] ?? [];
+  // `_create` is only still read so roles saved before create collapsed into a
+  // single flag keep the right to create. Nothing writes it any more.
+  const legacyCreateStages: string[] = (allData as Record<string, unknown>)["_create"] as string[] ?? [];
   const modifyStages: string[] = (allData as Record<string, unknown>)["_modify"] as string[] ?? [];
 
   const transitions: Record<string, string[]> = {};
@@ -106,7 +99,7 @@ export function getPermissionsFromRole(role: {
     }
   }
 
-  const hasCreateStages = createStages.length > 0;
+  const hasCreateStages = legacyCreateStages.length > 0;
   const hasModifyStages = modifyStages.length > 0;
   // Having any configured transition implies move permission. The roles UI
   // has no explicit "can move" toggle — it only sets the flag as a side
@@ -127,37 +120,20 @@ export function getPermissionsFromRole(role: {
     canMoveTask: hasTransitions || role.canMoveTask,
     canViewTaskHistory: role.canViewTaskHistory ?? false,
     allowedTransitions: transitions,
-    createStages: hasCreateStages ? createStages : (role.canCreateTask ? ALL_STAGE_IDS : []),
-    modifyStages: hasModifyStages ? modifyStages : (role.canModifyTask ? ALL_STAGE_IDS : []),
+    modifyStages: hasModifyStages ? modifyStages : (role.canModifyTask ? [...STAGE_ORDER] : []),
   };
 }
-
-/** Every stage a task can hold. Used for blanket create / modify rights. */
-const ALL_STAGE_IDS = [
-  "BACKLOG",
-  "PLANNED",
-  "NEXT",
-  "TODO",
-  "IN_DEVELOPMENT",
-  "INTERNAL_REVIEW",
-  "DONE",
-  "COMPLETED",
-  "SHIPPED",
-];
 
 /**
  * The stages a person can move a task between by hand. Planned, Next, Completed
  * and Shipped are projections of the sprint, so they are reached by moving the
  * sprint, never by dragging a card — granting a role permission over them would
  * describe a move that cannot happen.
+ *
+ * This is only about moving. A task parked in one of those stages is still
+ * edited like any other, which is why modify covers every stage.
  */
-const MOVABLE_STAGE_IDS = [
-  "BACKLOG",
-  "TODO",
-  "IN_DEVELOPMENT",
-  "INTERNAL_REVIEW",
-  "DONE",
-];
+export const MOVABLE_STAGE_IDS: string[] = ["BACKLOG", ...WORK_STAGES];
 
 function migrateStagesToTransitions(
   allowedStages: string | null,
@@ -190,8 +166,7 @@ export function getAdminPermissions(): ProjectRolePermissions {
     canMoveTask: true,
     canViewTaskHistory: true,
     allowedTransitions: {},
-    createStages: ALL_STAGE_IDS,
-    modifyStages: ALL_STAGE_IDS,
+    modifyStages: [...STAGE_ORDER],
   };
 }
 
