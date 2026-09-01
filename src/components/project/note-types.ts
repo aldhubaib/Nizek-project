@@ -29,17 +29,17 @@ export const NOTE_TYPE_CONFIG: Record<
   NoteType,
   { label: string; color: string; bg: string; icon: typeof FileText }
 > = {
-  MEETING_NOTE: { label: "Meeting Note", color: "text-primary", bg: "bg-transparent border-primary/30", icon: FileText },
-  DECISION: { label: "Decision", color: "text-orange", bg: "bg-transparent border-orange/30", icon: Gavel },
-  CLARIFICATION: { label: "Clarification", color: "text-sky-400", bg: "bg-transparent border-sky-500/30", icon: MessageCircleQuestion },
-  DEADLINE: { label: "Roadmap", color: "text-destructive", bg: "bg-transparent border-destructive/30", icon: CalendarClock },
-  SPRINT_PLANNING: { label: "Sprint Planning", color: "text-success", bg: "bg-transparent border-success/30", icon: IterationCcw },
-  SPRINT_REVIEW: { label: "Sprint Review", color: "text-orange", bg: "bg-transparent border-orange/30", icon: ClipboardCheck },
-  FEATURE: { label: "Business Case", color: "text-primary", bg: "bg-transparent border-primary/30", icon: Sparkles },
-  ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bg: "bg-transparent border-violet-500/30", icon: Wrench },
-  BUG: { label: "Bug", color: "text-orange", bg: "bg-transparent border-orange/30", icon: Bug },
-  REPORTED_BUG: { label: "Reported Bug", color: "text-destructive", bg: "bg-transparent border-destructive/30", icon: AlertCircle },
-  DESIGN: { label: "Design", color: "text-cyan-400", bg: "bg-transparent border-cyan-500/30", icon: Palette },
+  MEETING_NOTE: { label: "Meeting Note", color: "text-primary", bg: "bg-background border-primary/30", icon: FileText },
+  DECISION: { label: "Decision", color: "text-orange", bg: "bg-background border-orange/30", icon: Gavel },
+  CLARIFICATION: { label: "Clarification", color: "text-sky-400", bg: "bg-background border-sky-500/30", icon: MessageCircleQuestion },
+  DEADLINE: { label: "Roadmap", color: "text-destructive", bg: "bg-background border-destructive/30", icon: CalendarClock },
+  SPRINT_PLANNING: { label: "Sprint Planning", color: "text-success", bg: "bg-background border-success/30", icon: IterationCcw },
+  SPRINT_REVIEW: { label: "Sprint Review", color: "text-orange", bg: "bg-background border-orange/30", icon: ClipboardCheck },
+  FEATURE: { label: "Business Case", color: "text-primary", bg: "bg-background border-primary/30", icon: Sparkles },
+  ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bg: "bg-background border-violet-500/30", icon: Wrench },
+  BUG: { label: "Bug", color: "text-orange", bg: "bg-background border-orange/30", icon: Bug },
+  REPORTED_BUG: { label: "Reported Bug", color: "text-destructive", bg: "bg-background border-destructive/30", icon: AlertCircle },
+  DESIGN: { label: "Design", color: "text-cyan-400", bg: "bg-background border-cyan-500/30", icon: Palette },
 };
 
 export const ALL_NOTE_TYPES: NoteType[] = [

@@ -45,27 +45,27 @@ const FLAG_STYLE: Record<
   critical_late: {
     icon: AlertTriangle,
     color: "text-destructive",
-    bg: "bg-transparent border-destructive/30",
+    bg: "bg-background border-destructive/30",
   },
   rejected: {
     icon: XCircle,
     color: "text-orange",
-    bg: "bg-transparent border-orange/30",
+    bg: "bg-background border-orange/30",
   },
   deadline_overdue: {
     icon: CalendarClock,
     color: "text-destructive",
-    bg: "bg-transparent border-destructive/30",
+    bg: "bg-background border-destructive/30",
   },
   warn_late: {
     icon: Clock,
     color: "text-orange",
-    bg: "bg-transparent border-orange/30",
+    bg: "bg-background border-orange/30",
   },
   client_input: {
     icon: MessageCircleQuestion,
     color: "text-sky",
-    bg: "bg-transparent border-sky/30",
+    bg: "bg-background border-sky/30",
   },
 };
 

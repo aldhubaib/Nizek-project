@@ -139,6 +139,18 @@ html[data-scroll-locked] body {
   }
 }
 
+/* On a wide monitor a fixed 24px reads as no margin at all — the page runs
+   from one edge to the other. The gutter grows with the viewport instead,
+   capped so an ultrawide does not end up with a canyon down each side.
+   Scaling the variable rather than adding a max-width wrapper keeps the
+   sticky header and the page body aligned: both measure from this one value. */
+@media (min-width: 1024px) {
+  :root,
+  html {
+    --app-gutter: clamp(1.5rem, 3vw, 5rem);
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

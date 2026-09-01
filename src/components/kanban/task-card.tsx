@@ -20,11 +20,11 @@ const ACCURACY_CONFIG: Record<EstimateAccuracy, { label: string; color: string; 
 };
 
 const TYPE_CONFIG: Record<TaskType, { icon: typeof Sparkles; color: string; bg: string; tooltip: string }> = {
-  FEATURE: { icon: Sparkles, color: "text-primary", bg: "bg-transparent border-primary/30", tooltip: "Business Case" },
-  ENHANCEMENT: { icon: Wrench, color: "text-violet", bg: "bg-transparent border-violet/30", tooltip: "Enhancement" },
-  BUG: { icon: Bug, color: "text-orange", bg: "bg-transparent border-orange/30", tooltip: "Internal Bug" },
-  REPORTED_BUG: { icon: AlertCircle, color: "text-destructive", bg: "bg-transparent border-destructive/30", tooltip: "Reported Bug (Client)" },
-  DESIGN: { icon: Palette, color: "text-cyan", bg: "bg-transparent border-cyan/30", tooltip: "Design" },
+  FEATURE: { icon: Sparkles, color: "text-primary", bg: "bg-background border-primary/30", tooltip: "Business Case" },
+  ENHANCEMENT: { icon: Wrench, color: "text-violet", bg: "bg-background border-violet/30", tooltip: "Enhancement" },
+  BUG: { icon: Bug, color: "text-orange", bg: "bg-background border-orange/30", tooltip: "Internal Bug" },
+  REPORTED_BUG: { icon: AlertCircle, color: "text-destructive", bg: "bg-background border-destructive/30", tooltip: "Reported Bug (Client)" },
+  DESIGN: { icon: Palette, color: "text-cyan", bg: "bg-background border-cyan/30", tooltip: "Design" },
 };
 
 function formatEstimate(minutes: number): string {

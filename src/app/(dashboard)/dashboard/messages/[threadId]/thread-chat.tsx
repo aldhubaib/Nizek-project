@@ -2290,13 +2290,7 @@ export function ThreadChat({
                   setReplyTo(null);
                 }
               }}
-              placeholder={
-                replyingTo
-                  ? "Reply…"
-                  : isProjectChannel
-                    ? `Message ${title} — type # to link a task`
-                    : `Message ${title}`
-              }
+              placeholder={replyingTo ? "Reply…" : "Message"}
               onBlur={() => {
                 if (window.scrollY !== 0 || window.scrollX !== 0) {
                   window.scrollTo(0, 0);

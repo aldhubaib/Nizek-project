@@ -17,9 +17,16 @@ export function taskCode(taskType: string, taskNumber: number): string {
   return `${taskTypePrefix(taskType)}-${String(taskNumber).padStart(3, "0")}`;
 }
 
-/** Transparent outline chip — the project-page badge look. */
+/**
+ * The one status chip: a flat page-black fill, a faint border in the status
+ * hue, and the label itself carrying the colour.
+ *
+ * The fill is `bg-background` rather than transparent so a chip reads the same
+ * on a card, on a hovered row and on the page — a transparent chip picks up
+ * whatever is behind it and the tint shifts under the cursor.
+ */
 export function outlineBadge(label: string, color: string, border: string) {
-  return { label, color, bg: `bg-transparent ${border}` };
+  return { label, color, bg: `bg-background ${border}` };
 }
 
 export const TASK_TYPE_BADGE: Record<string, { label: string; color: string; bg: string }> = {
