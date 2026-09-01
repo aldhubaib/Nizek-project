@@ -13,6 +13,7 @@ import { InviteMemberDialog } from "@/components/team/invite-member-dialog";
 import { ProjectSettingsOverlay } from "@/components/project/project-settings-overlay";
 import { PageOverflowItems } from "@/components/page-overflow-menu";
 import { VaultTab } from "@/components/vault/vault-tab";
+import { BoardTab } from "@/components/boards/board-tab";
 import { createPortal } from "react-dom";
 import { getMeetingNotes } from "@/actions/meeting-note";
 import { getAssets } from "@/actions/asset";
@@ -196,6 +197,12 @@ interface Props {
   activeContractType?: string | null;
   /** Separate Vault permission — not the same as project team access. */
   canAccessVault?: boolean;
+  /**
+   * Whether this project runs a board alongside its sprints, and this viewer
+   * may open it. The board is a separate system with its own columns, card
+   * types and roles; a project without one shows exactly the tabs it always did.
+   */
+  hasBoard?: boolean;
 }
 
 function TabSpinner() {
@@ -220,6 +227,7 @@ export function ProjectDetailClient({
   allowedTaskTypes,
   activeContractType,
   canAccessVault = false,
+  hasBoard = false,
 }: Props) {
   const canEdit = userPermissions.canModifyTask || userPermissions.isAdmin;
   const isAdmin = userPermissions.isAdmin;
@@ -418,6 +426,10 @@ export function ProjectDetailClient({
   const projectTabs: OverflowTabItem<string>[] = [
     { id: "roadmap", label: "Road map" },
     { id: "sprints", label: "Active sprint" },
+    // "boards", not "board": `normalizeProjectTab` already treats `?tab=board`
+    // as a legacy alias for the road map, so that id would never survive a
+    // page load.
+    ...(hasBoard ? [{ id: "boards", label: "Board" }] : []),
     { id: "notes", label: "Notes", count: notesCount },
     { id: "assets", label: "Assets", count: assetsCount },
   ];
@@ -425,7 +437,7 @@ export function ProjectDetailClient({
   return (
     <div
       className={cn(
-        (activeTab === "sprints" || activeTab === "roadmap") &&
+        (activeTab === "sprints" || activeTab === "roadmap" || activeTab === "boards") &&
           !noteFullscreen &&
           "lg:flex lg:h-dvh lg:min-h-0 lg:flex-col lg:overflow-hidden",
       )}
@@ -570,6 +582,7 @@ export function ProjectDetailClient({
           <TabsList className="hidden">
             <TabsTrigger value="roadmap" className={PROJECT_TAB_CLASS} />
             <TabsTrigger value="sprints" className={PROJECT_TAB_CLASS} />
+            {hasBoard && <TabsTrigger value="boards" className={PROJECT_TAB_CLASS} />}
             <TabsTrigger value="notes" className={PROJECT_TAB_CLASS} />
             <TabsTrigger value="assets" className={PROJECT_TAB_CLASS} />
             {canManageTeam && <TabsTrigger value="team" className={PROJECT_TAB_CLASS} />}
@@ -584,7 +597,7 @@ export function ProjectDetailClient({
           "min-w-0",
           noteFullscreen
             ? "px-0 py-0"
-            : activeTab === "sprints"
+            : activeTab === "sprints" || activeTab === "boards"
               ? "flex min-h-0 flex-col overflow-hidden px-app pt-4 pb-4 lg:flex-1 lg:basis-0 lg:pb-0"
               : activeTab === "roadmap"
                 ? "flex min-h-0 flex-col px-app pt-4 pb-4 lg:flex-1 lg:basis-0 lg:overflow-hidden lg:pb-0"
@@ -612,6 +625,14 @@ export function ProjectDetailClient({
               />
             ))}
           </TabsContent>
+
+          {/* Mounted only while it is the open tab, so a project that has a
+              board but never opens it costs nothing to load. */}
+          {hasBoard && (
+            <TabsContent value="boards" className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+              {activeTab === "boards" && <BoardTab projectId={project.id} />}
+            </TabsContent>
+          )}
 
           <TabsContent value="roadmap" className="flex min-h-0 w-full flex-1 flex-col overflow-visible lg:overflow-hidden">
             {activeTab === "roadmap" && (loadingSprints || !sprints ? (
@@ -712,6 +733,7 @@ export function ProjectDetailClient({
             .filter((m) => m.user.systemRole !== "CLIENT")
             .map((m) => ({ id: m.user.id, name: m.user.name, imageUrl: m.user.imageUrl }))}
           isAdmin={isAdmin}
+          hasBoard={hasBoard}
           onClose={() => { setSettingsOpen(false); router.refresh(); }}
         />,
         document.body

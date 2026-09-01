@@ -2,13 +2,14 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, Trash2, Loader2, X as XIcon, ScrollText, AlertTriangle, Archive, Undo2 } from "lucide-react";
+import { Upload, Trash2, Loader2, X as XIcon, ScrollText, AlertTriangle, Archive, Undo2, SquareKanban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { deleteProject, updateProject, deleteContract, toggleLatePayment, setProjectClientChat } from "@/actions/project";
 import { getRoles } from "@/actions/role";
+import { createBoard } from "@/actions/board";
 import { getArchivedTasks, restoreTask, permanentlyDeleteTask } from "@/actions/task";
 import { ContractBadge } from "@/components/project/contract-badge";
 import { AddContractDialog } from "@/components/project/add-contract-dialog";
@@ -66,6 +67,8 @@ interface ProjectSettingsProps {
   /** Non-client project members for the internal review user picker. */
   internalMembers?: ClientMember[];
   isAdmin?: boolean;
+  /** Whether this project already runs a board, which is a one-way switch on. */
+  hasBoard?: boolean;
   onClose: () => void;
 }
 
@@ -75,6 +78,7 @@ export function ProjectSettingsOverlay({
   contractPrefixes = [],
   internalMembers = [],
   isAdmin = false,
+  hasBoard = false,
   onClose,
 }: ProjectSettingsProps) {
   const router = useRouter();
@@ -443,6 +447,8 @@ export function ProjectSettingsOverlay({
             )}
           </div>
 
+          {isAdmin && <BoardSection projectId={project.id} hasBoard={hasBoard} />}
+
           {/* Danger Zone */}
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-5 space-y-4">
             <div>
@@ -586,6 +592,63 @@ function ContractList({ contracts, isAdmin, projectId, contractPrefixes = [] }: 
         />
       )}
     </>
+  );
+}
+
+/* ─── Board ─── */
+
+/**
+ * Turns the Boards module on for this project.
+ *
+ * A board is a separate system from the sprint pipeline and runs alongside it —
+ * adding one changes nothing about sprints, tasks or the road map. There is no
+ * switch back here on purpose: turning it off would have to decide what happens
+ * to the cards on it, and quietly discarding them is not a decision a settings
+ * toggle should make on someone's behalf.
+ */
+function BoardSection({ projectId, hasBoard }: { projectId: string; hasBoard: boolean }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  return (
+    <div className="rounded-lg border border-border p-5 space-y-4">
+      <div>
+        <h3 className="text-s font-semibold">Board</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {hasBoard
+            ? "This project has a board. Its columns, card types and roles are managed from the Board tab."
+            : "Add a Trello-style board with your own columns, card types and fields. It runs alongside sprints and changes nothing about them."}
+        </p>
+      </div>
+
+      {error && <p className="text-s text-destructive">{error}</p>}
+
+      {!hasBoard && (
+        <Button
+          size="sm"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setError("");
+            const result = await createBoard(projectId);
+            setBusy(false);
+            if (!result.success) {
+              setError(result.error);
+              return;
+            }
+            router.refresh();
+          }}
+        >
+          {busy ? (
+            <Loader2 className="w-3.5 h-3.5 me-1.5 animate-spin" />
+          ) : (
+            <SquareKanban className="w-3.5 h-3.5 me-1.5" />
+          )}
+          Add a board
+        </Button>
+      )}
+    </div>
   );
 }
 

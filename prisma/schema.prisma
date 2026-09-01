@@ -192,6 +192,10 @@ model User {
   aliasAssignments     AliasAssignment[]          @relation("UserAliasAssignments")
   overviewSnoozes      OverviewSnooze[]           @relation("UserOverviewSnoozes")
 
+  boardMemberships     BoardMember[]              @relation("BoardMemberUser")
+  boardCardsAssigned   BoardCard[]                @relation("BoardCardAssignee")
+  boardCardsCreated    BoardCard[]                @relation("BoardCardCreator")
+  boardCardComments    BoardCardComment[]         @relation("BoardCardCommentAuthor")
 
   @@index([systemRole])
   @@index([blocked])
@@ -263,6 +267,9 @@ model Project {
   vaultPermissions VaultPermission[]
   aliasAssignments AliasAssignment[]
   overviewSnoozes  OverviewSnooze[]
+  /// Back-relation only — the foreign key lives on Board, so the Project table
+  /// itself gains no column and a project without a board is unchanged.
+  board            Board?
   @@index([teamId])
 }
 
@@ -374,12 +381,36 @@ model Sprint {
 
   tasks     Task[]
   snapshots SprintTaskSnapshot[]
+  taskPlans SprintTaskPlan[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([projectId, status])
   @@index([projectId, startDate])
+}
+
+/// The Decision and Risk agreed for one task in one sprint's planning document.
+///
+/// These used to live only as attributes inside the document HTML, which meant
+/// the server could not check them: starting a sprint trusted the browser's
+/// word that they were filled. Keyed by sprint as well as task because the same
+/// task planned into a later sprint is a fresh decision, not the old one.
+model SprintTaskPlan {
+  id        String   @id @default(cuid())
+  sprintId  String
+  sprint    Sprint   @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  decision  String   @default("")
+  risk      String   @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sprintId, taskId])
+  @@index([sprintId])
+  @@index([taskId])
 }
 
 model SprintTaskSnapshot {
@@ -439,6 +470,7 @@ model Task {
   noteLinks       NoteTaskLink[]
   messages        Message[]
   sprintSnapshots SprintTaskSnapshot[]
+  sprintPlans     SprintTaskPlan[]
   proofOfWork     ProofOfWork[]
   proofBypassPasses ProofBypassPass[]
 
@@ -2299,4 +2331,264 @@ model AllowedEmail {
   id        String   @id @default(cuid())
   email     String   @unique
   createdAt DateTime @default(now())
+}
+
+// ─── Boards (standalone kanban) ──────────────────────────────────────────────
+//
+// A Trello-style board: the columns, the kinds of card, and the fields a card
+// carries are all named by whoever runs the board, rather than being the fixed
+// pipeline that Task and Sprint describe.
+//
+// This deliberately shares nothing with the sprint system but Project and User.
+// A Task carries a `Stage` enum whose declaration order is read as progress and
+// whose values are a projection of `Sprint.status`; a board column is a row
+// someone typed a name into and carries no such meaning. Serving both from one
+// table would have put every audit, dashboard and roadmap query that filters on
+// stage into the path of a card that has no stage to filter on.
+//
+// Ordering is a Float everywhere rather than an Int. A card dropped between two
+// others is written at the midpoint of their positions, so a drag updates one
+// row instead of renumbering the column; see src/lib/board-order.ts.
+
+/// One board per project, enforced by the unique projectId. The row existing is
+/// what turns the feature on — there is no flag on Project that could fall out
+/// of step with it, and a project with no board row behaves exactly as it did
+/// before this module existed.
+///
+/// Lifting the unique constraint is all that stands between this and several
+/// boards per project, which is why everything below points at a board rather
+/// than at a project.
+model Board {
+  id        String  @id @default(cuid())
+  projectId String  @unique
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name String @default("Board")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  columns   BoardColumn[]
+  cardTypes BoardCardType[]
+  cards     BoardCard[]
+  roles     BoardRole[]
+  members   BoardMember[]
+}
+
+/// A column on the board. Nothing is derived from its name or its place in the
+/// order: unlike a Stage, moving a card into one means only that somebody put
+/// it there.
+model BoardColumn {
+  id      String @id @default(cuid())
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  name String
+  /// A key into the fixed palette in src/lib/board-palette.ts, never a raw
+  /// class or hex. Tailwind only emits classes it can find written out, so a
+  /// colour assembled at runtime would compile to nothing.
+  color String @default("slate")
+
+  position Float
+
+  cards BoardCard[]
+
+  @@index([boardId, position])
+}
+
+/// A kind of card — "Bug", "Design", whatever the board needs. Carries its own
+/// set of fields, which is the whole reason it exists: the type is what decides
+/// which questions a card is asked.
+model BoardCardType {
+  id      String @id @default(cuid())
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  name String
+  /// A lucide icon name, resolved against an allow-list at render time.
+  icon String @default("Sparkles")
+  color String @default("slate")
+
+  position Float
+
+  fields BoardField[]
+  cards  BoardCard[]
+
+  @@index([boardId, position])
+}
+
+/// One field on a card type. The column names mirror DefaultQuestion on purpose
+/// so the existing renderer in src/components/kanban/question-field.tsx can be
+/// pointed at these rows without being rewritten — it already knows how to draw
+/// a text, select, link or file field from exactly this shape.
+model BoardField {
+  id         String        @id @default(cuid())
+  cardTypeId String
+  cardType   BoardCardType @relation(fields: [cardTypeId], references: [id], onDelete: Cascade)
+
+  label String
+  /// text | select | link | file
+  type  String @default("text")
+  /// JSON array of choices, for select. Null for every other type.
+  options String?
+  multiple Boolean @default(false)
+  /// Whether a card can be saved without it. This is the "required vs optional"
+  /// the board's admin sets per field.
+  required Boolean @default(false)
+
+  position Float
+
+  values BoardFieldValue[]
+
+  @@index([cardTypeId, position])
+}
+
+model BoardCard {
+  id      String @id @default(cuid())
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  /// Its own sequence per board. Deliberately not shared with Task.taskNumber:
+  /// a shared counter would couple the two systems through a sequence, which is
+  /// exactly what this module is meant to avoid.
+  cardNumber Int
+
+  columnId String
+  /// Restricted rather than cascading: deleting a column that still holds cards
+  /// should be refused and explained, not silently take the cards with it.
+  column   BoardColumn @relation(fields: [columnId], references: [id], onDelete: Restrict)
+
+  cardTypeId String
+  cardType   BoardCardType @relation(fields: [cardTypeId], references: [id], onDelete: Restrict)
+
+  title       String
+  description String?
+
+  assigneeId String?
+  assignee   User?   @relation("BoardCardAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  createdById String
+  createdBy   User   @relation("BoardCardCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  position Float
+
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  fieldValues BoardFieldValue[]
+  comments    BoardCardComment[]
+
+  @@unique([boardId, cardNumber])
+  @@index([boardId, columnId, position])
+  @@index([boardId, archivedAt])
+  @@index([columnId])
+  @@index([cardTypeId])
+  @@index([assigneeId])
+}
+
+/// What one card answered for one field. The twin of TaskAnswer, and stored as
+/// text for the same reason: the renderer already encodes selects and file
+/// lists into a string, so this holds whatever it produced.
+model BoardFieldValue {
+  id     String    @id @default(cuid())
+  cardId String
+  card   BoardCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  fieldId String
+  field   BoardField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  value String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// A field is answered once per card. Twice would be two answers to the same
+  /// question.
+  @@unique([cardId, fieldId])
+  @@index([fieldId])
+}
+
+/// What somebody can do on this board, and nothing else. Kept separate from
+/// ProjectRole because that one is built around the sprint pipeline — its
+/// `allowedTransitions` is a map keyed by Stage names, which cannot describe
+/// columns that are rows with generated ids.
+///
+/// There is no per-column move matrix. Movement here is free, the way it is on
+/// any board of this kind, so moving is one flag rather than a graph.
+model BoardRole {
+  id      String @id @default(cuid())
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  name String
+
+  /// Exactly one role per board is the fallback for a project member who was
+  /// never given one, enforced by a partial unique index in the migration.
+  /// Without it, turning a board on would show an empty tab to the whole team
+  /// until each of them was added by hand. Seeded read-only.
+  isDefault Boolean @default(false)
+
+  /// Everything on this board, including the settings. Not the same as a system
+  /// admin, who bypasses this table entirely.
+  isAdmin Boolean @default(false)
+
+  canManageColumns Boolean @default(false)
+  canManageTypes   Boolean @default(false)
+  canManageMembers Boolean @default(false)
+  canCreateCard    Boolean @default(false)
+  canEditCard      Boolean @default(false)
+  canDeleteCard    Boolean @default(false)
+  canMoveCard      Boolean @default(false)
+  canComment       Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members BoardMember[]
+
+  @@unique([boardId, name])
+  @@index([boardId])
+}
+
+/// Which role a person holds on a board. Membership is drawn from the project —
+/// only someone already on the project can be given a role here — so there is
+/// no invite to accept and no second roster to keep in step.
+model BoardMember {
+  id      String @id @default(cuid())
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("BoardMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Restricted: a role still assigned to somebody cannot be deleted out from
+  /// under them.
+  roleId String
+  role   BoardRole @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@unique([boardId, userId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+/// Discussion on a card. Its own table rather than TaskComment, which is keyed
+/// to Task, and deliberately not wired into chat or the inbox for now — those
+/// address threads as `task-{id}` and would need a second address to learn.
+model BoardCardComment {
+  id     String    @id @default(cuid())
+  cardId String
+  card   BoardCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("BoardCardCommentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+
+  content String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cardId, createdAt])
 }
