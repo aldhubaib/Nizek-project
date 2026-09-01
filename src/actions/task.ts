@@ -450,7 +450,7 @@ export async function moveTask(data: {
       // drift from the one that decides whether the card says Missing data.
       const specQuestions = (await prisma.defaultQuestion.findMany({
         where: { taskType: task.taskType },
-        select: { id: true, question: true, type: true },
+        select: { id: true, question: true, type: true, mandatory: true },
       })).filter(isReadinessQuestion);
 
       if (specQuestions.length > 0) {
@@ -1041,7 +1041,7 @@ type BoardTaskRow = {
 };
 
 function fieldsByType(
-  questions: { id: string; taskType: string; type: string; question?: string }[],
+  questions: { id: string; taskType: string; type: string; question?: string; mandatory: boolean }[],
 ): Map<string, { id: string; type: string }[]> {
   const byType = new Map<string, { id: string; type: string }[]>();
   for (const q of questions) {

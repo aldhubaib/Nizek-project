@@ -300,7 +300,6 @@ export function CreateTaskFromMessageDialog({
                         onChange={(val) =>
                           setAnswers((prev) => ({ ...prev, [q.id]: val }))
                         }
-                        showRequiredAs="mandatory"
                       />
                     ))}
                   </div>

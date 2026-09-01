@@ -40,21 +40,28 @@ export function isBuiltInTaskFieldQuestion(question: string | undefined | null):
 /**
  * Spec fields that decide Backlog vs Missing Data.
  *
- * Every question on the form counts. If it was worth asking, an unanswered
- * answer is missing data — the flags do not enter into it. `mandatory` says a
- * question blocks task creation outright, which is a separate gate enforced in
- * createTask, and leaving readiness to the flags meant a workspace that had
- * never set one could never surface a single task as missing data.
+ * Only a mandatory question holds a task in Missing data. An optional question
+ * is one the form offers, not one the task owes, so leaving it blank is a
+ * choice rather than an omission — a task is not incomplete for skipping an
+ * attachment nobody asked it to carry.
  *
- * Two kinds of question are still skipped, because neither holds a spec answer:
- * client questions record a dependency on the client rather than answer
- * anything (isWaitingOnClientAnswer covers those), and priority lives on the
- * task's own Details, so a leftover "Priority" question must not hold a task.
+ * `mandatory` is deliberately required rather than optional here. Reading it
+ * off a partial select would quietly answer "not mandatory" for every
+ * question and silently retire Missing data altogether, so the type forces
+ * each caller to fetch the flag.
+ *
+ * Two kinds of question are skipped even when marked mandatory, because
+ * neither holds a spec answer: client questions record a dependency on the
+ * client rather than answer anything (isWaitingOnClientAnswer covers those),
+ * and priority lives on the task's own Details, so a leftover "Priority"
+ * question must not hold a task.
  */
 export function isReadinessQuestion(q: {
   type: string;
   question?: string;
+  mandatory: boolean;
 }): boolean {
+  if (!q.mandatory) return false;
   if (q.type === "client") return false;
   if (isBuiltInTaskFieldQuestion(q.question)) return false;
   return true;
@@ -70,7 +77,7 @@ export function isMissingDataTask(task: {
 }
 
 export function computeIsReadyForTransition(
-  questions: { id: string; type: string; question?: string }[],
+  questions: { id: string; type: string; question?: string; mandatory: boolean }[],
   answers: Record<string, string>,
 ): boolean {
   const specQs = questions.filter(isReadinessQuestion);

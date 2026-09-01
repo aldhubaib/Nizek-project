@@ -802,7 +802,7 @@ export function TaskDetailPage({
                     <div key={q.id} className="relative group space-y-1.5">
                       <label className="text-s font-medium text-muted-foreground px-1">
                         {i + 1}. {q.question}
-                        {questionShowsRequiredStar(q, "backlog") && (
+                        {questionShowsRequiredStar(q) && (
                           <span className="text-destructive ms-0.5">*</span>
                         )}
                       </label>
@@ -826,7 +826,6 @@ export function TaskDetailPage({
                           index={i}
                           value={answers[q.id] ?? ""}
                           readonly={isPostClarification || !isEditing}
-                          showRequiredAs="backlog"
                           showLabel={false}
                           onChange={(val) => handleAnswerChange(q.id, val)}
                         />

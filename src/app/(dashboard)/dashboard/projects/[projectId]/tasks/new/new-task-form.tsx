@@ -194,7 +194,6 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
                   onChange={(val) =>
                     setAnswers((prev) => ({ ...prev, [q.id]: val }))
                   }
-                  showRequiredAs="all"
                 />
               ))}
             </div>

@@ -242,7 +242,6 @@ export function CreateTaskFromNoteDialog({
                         onChange={(val) =>
                           setAnswers((prev) => ({ ...prev, [q.id]: val }))
                         }
-                        showRequiredAs="mandatory"
                       />
                     ))}
                   </div>

@@ -13,7 +13,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { isReadinessQuestion } from "@/lib/task-readiness";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
@@ -144,7 +143,8 @@ export interface TaskQuestion {
   type: string;
   options: string | null;
   multiple?: boolean;
-  mandatory?: boolean;
+  /** Non-null in the database, and every screen loads whole rows. */
+  mandatory: boolean;
   required?: boolean;
   order: number;
 }
@@ -160,26 +160,15 @@ function parseMultiValue(raw: string): string[] {
   return [raw];
 }
 
-export type ShowRequiredAs = "all" | "mandatory" | "backlog";
-
 /**
- * Whether the field label should show a required asterisk for this screen.
+ * Whether the field label should show a required asterisk.
  *
- * The two gates are different questions. "mandatory" is the creation screens
- * asking what blocks saving the task at all; "backlog" is the task page asking
- * what holds the task in Missing data, which is every spec question.
+ * The star tracks the Mandatory checkbox and nothing else, so it means the
+ * same thing on every screen: the creation forms will not save without it and
+ * the task page holds the task in Missing data until it is answered.
  */
-export function questionShowsRequiredStar(
-  question: { type?: string; question?: string; mandatory?: boolean },
-  showRequiredAs: ShowRequiredAs = "all",
-): boolean {
-  if (showRequiredAs === "mandatory") return question.mandatory === true;
-  const holdsBacklog = isReadinessQuestion({
-    type: question.type ?? "text",
-    question: question.question,
-  });
-  if (showRequiredAs === "backlog") return holdsBacklog;
-  return question.mandatory === true || holdsBacklog;
+export function questionShowsRequiredStar(question: { mandatory?: boolean }): boolean {
+  return question.mandatory === true;
 }
 
 interface Props {
@@ -189,7 +178,6 @@ interface Props {
   onChange: (value: string) => void;
   compact?: boolean;
   readonly?: boolean;
-  showRequiredAs?: ShowRequiredAs;
   showLabel?: boolean;
 }
 
@@ -231,7 +219,7 @@ function formatReceivedAt(iso: string | null | undefined): string | null {
   });
 }
 
-export function QuestionField({ question, index, value, onChange, compact, readonly: isReadonly, showRequiredAs = "all", showLabel = true }: Props) {
+export function QuestionField({ question, index, value, onChange, compact, readonly: isReadonly, showLabel = true }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const clientTextareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -452,7 +440,7 @@ export function QuestionField({ question, index, value, onChange, compact, reado
       {showLabel && (
         <label className={cn("font-medium text-muted-foreground", compact ? "text-xs" : "text-s")}>
           {index + 1}. {question.question}
-          {questionShowsRequiredStar(question, showRequiredAs) && (
+          {questionShowsRequiredStar(question) && (
             <span className="text-destructive ms-0.5">*</span>
           )}
         </label>
