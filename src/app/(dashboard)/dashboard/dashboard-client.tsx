@@ -97,12 +97,25 @@ function daysLeftColor(iso: string, nowMs: number): string {
 
 const RING_C = 88;
 
-function sprintProgress(startIso: string, endIso: string, nowMs: number): number {
+/**
+ * How far a sprint is through its window, and whether it ran past the end.
+ *
+ * The ring fills to 100% either way, so the overdue flag is what keeps a sprint
+ * that ended a week ago from reading exactly like one that finished on time.
+ */
+function sprintTiming(
+  startIso: string,
+  endIso: string,
+  nowMs: number,
+): { pct: number; overdue: boolean } {
   const start = new Date(startIso).getTime();
   const end = new Date(endIso).getTime();
-  if (nowMs <= start) return 0;
-  if (nowMs >= end) return 100;
-  return Math.round(((nowMs - start) / (end - start)) * 100);
+  if (nowMs <= start) return { pct: 0, overdue: false };
+  if (nowMs >= end) return { pct: 100, overdue: nowMs > end };
+  return {
+    pct: Math.round(((nowMs - start) / (end - start)) * 100),
+    overdue: false,
+  };
 }
 
 function getGreeting(): string {
@@ -207,11 +220,12 @@ function DonutChart({
 /* ── sprint mini cards (horizontal) ── */
 
 function SprintMiniCard({ sprint, nowMs }: { sprint: ActiveSprint; nowMs: number }) {
-  const pct = sprintProgress(sprint.startDate, sprint.endDate, nowMs);
+  const { pct, overdue } = sprintTiming(sprint.startDate, sprint.endDate, nowMs);
   const left = daysLeft(sprint.endDate, nowMs);
   const urgent = left <= 2;
   const dash = ((pct / 100) * RING_C).toFixed(2);
   const gap = (RING_C - (pct / 100) * RING_C).toFixed(2);
+  const ringColor = overdue ? "#ef4444" : urgent ? "#f97316" : "#22c55e";
 
   return (
     <Link
@@ -232,7 +246,7 @@ function SprintMiniCard({ sprint, nowMs }: { sprint: ActiveSprint; nowMs: number
           <circle cx={18} cy={18} r={14} fill="none" stroke="currentColor" strokeWidth={3} className="text-border" />
           <circle
             cx={18} cy={18} r={14} fill="none"
-            stroke={urgent ? "#f97316" : "#22c55e"}
+            stroke={ringColor}
             strokeWidth={3}
             strokeDasharray={`${dash} ${gap}`}
             strokeLinecap="round"
