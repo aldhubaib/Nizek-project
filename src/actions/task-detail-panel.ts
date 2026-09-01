@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
 import { getAdminPermissions, getPermissionsFromRole } from "@/lib/permissions";
+import { taskEditBlockedReason } from "@/lib/task-edit-lock";
 import { getTaskQuestions, getTaskAnswers } from "@/actions/task-question";
 import { getTaskNotes } from "@/actions/meeting-note";
 
@@ -10,7 +11,7 @@ export async function getTaskDetailPanel(taskId: string) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     include: {
-      project: true,
+      project: { include: { contracts: true } },
       assignee: true,
       createdBy: true,
       sprint: true,
@@ -46,6 +47,12 @@ export async function getTaskDetailPanel(taskId: string) {
     initialNotes: notes,
     isAdmin: user.systemRole === "ADMIN",
     canDelete: user.systemRole === "ADMIN" || userPermissions.canDeleteTask,
+    editBlockedReason: taskEditBlockedReason({
+      contracts: task.project.contracts,
+      isSystemAdmin: user.systemRole === "ADMIN",
+      permissions: userPermissions,
+      stage: task.stage,
+    }),
     task: {
       id: task.id,
       taskNumber: task.taskNumber,

@@ -4,6 +4,7 @@ import { getTaskHistory } from "@/actions/task-history";
 import { getTaskNotes } from "@/actions/meeting-note";
 import { requireProjectMember } from "@/lib/auth";
 import { getPermissionsFromRole, getAdminPermissions } from "@/lib/permissions";
+import { taskEditBlockedReason } from "@/lib/task-edit-lock";
 import { isProjectAccessError } from "@/lib/project-access";
 import { notFound } from "next/navigation";
 import { TaskDetailPage as TaskDetailClient } from "./task-detail-view";
@@ -20,7 +21,7 @@ export default async function TaskDetailPage({ params, searchParams }: Props) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     include: {
-      project: true,
+      project: { include: { contracts: true } },
       assignee: true,
       createdBy: true,
       sprint: true,
@@ -45,12 +46,10 @@ export default async function TaskDetailPage({ params, searchParams }: Props) {
     }
   );
 
-  let userPermissions;
-  if (user.systemRole === "ADMIN") {
-    userPermissions = { ...getAdminPermissions(), systemRole: "ADMIN" };
-  } else {
-    userPermissions = { ...getPermissionsFromRole(member.projectRole), systemRole: user.systemRole };
-  }
+  const userPermissions =
+    user.systemRole === "ADMIN"
+      ? { ...getAdminPermissions(), systemRole: "ADMIN" as const }
+      : { ...getPermissionsFromRole(member.projectRole), systemRole: user.systemRole };
 
   const [questions, existingAnswers, history, notes] = await Promise.all([
     getTaskQuestions(),
@@ -121,6 +120,12 @@ export default async function TaskDetailPage({ params, searchParams }: Props) {
       history={history.allowed ? history : null}
       isAdmin={user.systemRole === "ADMIN"}
       canDelete={user.systemRole === "ADMIN" || userPermissions.canDeleteTask}
+      editBlockedReason={taskEditBlockedReason({
+        contracts: task.project.contracts,
+        isSystemAdmin: user.systemRole === "ADMIN",
+        permissions: userPermissions,
+        stage: task.stage,
+      })}
       initialThreadId={threadId ?? null}
       backToNoteId={from === "note" ? (noteId ?? null) : null}
       backToTab={from && from !== "note" ? from : null}

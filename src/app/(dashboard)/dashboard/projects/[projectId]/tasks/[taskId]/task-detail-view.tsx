@@ -97,6 +97,11 @@ interface QuestionWithType extends TaskQuestion {
   taskType: string;
 }
 
+const PRIORITY_ITEMS = TASK_PRIORITIES.map((id) => ({
+  value: id,
+  label: TASK_PRIORITY_BADGE[id].label,
+}));
+
 interface TaskData {
   id: string;
   taskNumber: number;
@@ -146,6 +151,8 @@ interface Props {
   } | null;
   isAdmin: boolean;
   canDelete?: boolean;
+  /** Set when the server would refuse edits, and says why. See taskEditBlockedReason. */
+  editBlockedReason?: string | null;
   initialThreadId?: string | null;
   backToNoteId?: string | null;
   backToTab?: string | null;
@@ -164,6 +171,7 @@ export function TaskDetailPage({
   history = null,
   isAdmin,
   canDelete,
+  editBlockedReason = null,
   initialThreadId = null,
   backToNoteId = null,
   backToTab = null,
@@ -201,6 +209,9 @@ export function TaskDetailPage({
   const [editingTitle, setEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const [priorityValue, setPriorityValue] = useState<TaskPriorityId>(initialTask.priority);
+  const canEditDetails = !editBlockedReason;
+  /** Why the last edit was dropped. Cleared on the next attempt. */
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Questions
   const [answers, setAnswers] = useState<Record<string, string>>(initialAnswers);
@@ -384,23 +395,30 @@ export function TaskDetailPage({
       setTitleValue(initialTask.title);
       return;
     }
+    setSaveError(null);
     try {
       await updateTask({ taskId: initialTask.id, title: trimmed });
       setActivityKey((k) => k + 1);
-    } catch {
+    } catch (err) {
       setTitleValue(initialTask.title);
+      setSaveError(err instanceof Error ? err.message : "Couldn't save the title.");
     }
   }
 
   async function handlePrioritySave(newPriority: TaskPriorityId) {
     const oldPriority = priorityValue;
+    // Against the value on screen, not initialTask: that one is frozen at the
+    // first render, so picking the original level back was read as a no-op and
+    // never reached the server.
+    if (newPriority === oldPriority) return;
     setPriorityValue(newPriority);
-    if (newPriority === initialTask.priority) return;
+    setSaveError(null);
     try {
       await updateTask({ taskId: initialTask.id, priority: newPriority });
       setActivityKey((k) => k + 1);
-    } catch {
+    } catch (err) {
       setPriorityValue(oldPriority);
+      setSaveError(err instanceof Error ? err.message : "Couldn't save the priority.");
     }
   }
 
@@ -644,11 +662,23 @@ export function TaskDetailPage({
         <TaskIssueNote taskId={initialTask.id} fallbackTitle={titleValue} />
       ) : (
       <div className="mx-auto max-w-[54.6rem] px-app py-8 space-y-6">
+        {editBlockedReason && (
+          <div className="rounded-lg border border-orange/30 bg-orange/10 px-4 py-3">
+            <p className="text-s font-medium text-orange">{editBlockedReason}</p>
+          </div>
+        )}
+
+        {saveError && (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+            <p className="text-s font-medium text-destructive">{saveError}</p>
+          </div>
+        )}
+
         {/* Title */}
         <div className="rounded-lg border border-border/50 bg-card px-3 pb-3">
           <label className="text-s font-semibold text-foreground px-1 py-4 block">Title</label>
           <div className="group relative rounded-md border border-border bg-field px-3 py-3">
-            {editingTitle && !isPostClarification ? (
+            {editingTitle && !isPostClarification && canEditDetails ? (
               <textarea
                 ref={titleInputRef}
                 value={titleValue}
@@ -665,7 +695,7 @@ export function TaskDetailPage({
             ) : (
               <>
                 <h1 className="text-m font-bold leading-normal break-words pe-8">{titleValue}</h1>
-                {!isPostClarification && (
+                {!isPostClarification && canEditDetails && (
                   <button
                     onClick={() => setEditingTitle(true)}
                     className="absolute top-2 right-2 p-1 rounded-md text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-accent transition-all"
@@ -712,11 +742,19 @@ export function TaskDetailPage({
               <span className="text-s text-muted-foreground">Priority</span>
               <Select
                 value={priorityValue}
+                // Base UI reads the trigger's text from `items`; without it
+                // SelectValue falls back to the raw stored value, which showed
+                // the enum name "NORMAL" where the label "Normal" belongs.
+                items={PRIORITY_ITEMS}
+                disabled={!canEditDetails}
                 onValueChange={(val) => {
                   if (isTaskPriority(val)) handlePrioritySave(val);
                 }}
               >
-                <SelectTrigger className="h-8 w-auto min-w-[5rem] gap-1 rounded-lg border-border bg-transparent px-2.5 text-s">
+                <SelectTrigger
+                  className="h-8 w-auto min-w-[5rem] gap-1 rounded-lg border-border bg-transparent px-2.5 text-s"
+                  title={editBlockedReason ?? undefined}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1040,7 +1078,11 @@ export function TaskDetailPage({
           currentAssigneeAvatar={initialTask.assignee?.imageUrl ?? null}
           onConfirm={() => {
             setShowAssignDialog(false);
-            assignTaskToMe(initialTask.id).then(() => router.refresh());
+            setSaveError(null);
+            assignTaskToMe(initialTask.id).then((res) => {
+              if (res.success) router.refresh();
+              else setSaveError(res.error);
+            });
           }}
           onCancel={() => setShowAssignDialog(false)}
         />
