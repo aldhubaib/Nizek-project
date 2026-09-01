@@ -192,6 +192,7 @@ model User {
   aliasAssignments     AliasAssignment[]          @relation("UserAliasAssignments")
   overviewSnoozes      OverviewSnooze[]           @relation("UserOverviewSnoozes")
 
+
   @@index([systemRole])
   @@index([blocked])
 }
@@ -1480,9 +1481,13 @@ model EquityPerformanceValue {
   @@index([metricId])
 }
 
-// One financial field's value in one reported period. The twin of
+// One financial field's value for one month, as stated by one pack. The twin of
 // EquityPerformanceValue, and typed the same way for the same reason: a figure
-// reported quarter after quarter is only worth plotting if it stayed a number.
+// reported month after month is only worth plotting if it stayed a number.
+//
+// The month is on the value rather than on the pack because a pack reports
+// several of them at once — the quarterly pack that arrives in July carries
+// January through July, not a single figure for "the quarter".
 model EquityFinancialValue {
   id       String                @id @default(cuid())
   reportId String
@@ -1493,6 +1498,11 @@ model EquityFinancialValue {
   metricId String
   metric   EquityMetric @relation(fields: [metricId], references: [id], onDelete: Restrict)
 
+  // Which month this figure is for, at UTC midnight on the first — the same
+  // trick as a pack's reportedOn, so a stray time-of-day can't slip a duplicate
+  // past the unique constraint below.
+  month DateTime
+
   order Int @default(0)
 
   numberValue Float?
@@ -1501,41 +1511,34 @@ model EquityFinancialValue {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // A field reports once per period — a second row for it would be two answers
-  // to the same question.
-  @@unique([reportId, metricId])
+  // A field is stated once per month per pack. Twice would be one pack giving
+  // two answers about the same month. Two *packs* may both state a month —
+  // that's a restatement, and the later pack wins when the series is read.
+  @@unique([reportId, metricId, month])
   @@index([metricId])
+  @@index([month])
 }
 
-// A periodic financial check-in on the startup, entered by Nizek from figures
-// the founders report. The period and whether it was audited are fixed; what
-// gets reported for it isn't, and lives in the values above.
+// One pack of figures received from the founders — a quarterly management
+// report, an audit, a spreadsheet — entered by Nizek from what it says.
+//
+// A pack is not a period. It is dated by when it was reported, and it carries a
+// figure per field per month for however many months it covers. That split is
+// what lets a later pack restate an earlier month: both rows stay, and the pack
+// with the later reportedOn is the one the analysis reads. Nothing is
+// overwritten, so "January as first reported" and "January as restated in the
+// July pack" are both still answerable.
 model EquityFinancialReport {
   id          String          @id @default(cuid())
   portfolioId String
   portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
-  // periodType is the shape of the period, periodStart pins it to a specific
-  // one — Q3 2026 rather than just "a quarter". Held at UTC midnight on the
-  // first day, like TaskAudit.auditDate, so a stray time-of-day can't slip a
-  // duplicate past the unique constraint below.
-  periodType  String   // QUARTERLY | YEARLY
-  periodStart DateTime
-  audited     Boolean  @default(false)
-
-  // Nothing reads or writes these any more. P&L and cash became defined fields
-  // in the registry, and the operations block was taken off the form before
-  // that; both stay until the old values are confirmed disposable.
-  revenue            Float?
-  cost               Float?
-  cashInBank         Float?
-  periodBurn         Float?
-  customersGained    Int?
-  customersLost      Int?
-  teamSize           Int? // full-time employees
-  raisingNextQuarter Boolean?
-  risks              String?
-  wins               String?
+  // When this pack was reported, at UTC midnight on the first of its month.
+  // This orders packs against each other, which is the whole of the restatement
+  // rule — so it is the pack's identity here, rather than the months it happens
+  // to cover.
+  reportedOn DateTime
+  audited    Boolean  @default(false)
 
   needsHelp Boolean @default(false)
   helpNotes String?
@@ -1543,17 +1546,43 @@ model EquityFinancialReport {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // What was reported for the period, in the portfolio's valuationCurrency where
-  // the field is money — same reasoning as a round's post-money, the figures
-  // aren't comparable across currencies.
+  // What the pack states, month by month, in the portfolio's valuationCurrency
+  // where the field is money — same reasoning as a round's post-money, the
+  // figures aren't comparable across currencies without a rate.
   values EquityFinancialValue[]
 
   // The statements behind the figures — the P&L, bank statement or audit the
-  // period was reported from, uploaded alongside it.
+  // pack was entered from, uploaded alongside it.
   documents EquityFinancialDocument[]
 
-  @@unique([portfolioId, periodType, periodStart])
-  @@index([portfolioId, periodStart])
+  @@unique([portfolioId, reportedOn])
+  @@index([portfolioId, reportedOn])
+}
+
+// What one currency is worth in the base currency, for adding up figures across
+// projects that don't report in the same one.
+//
+// Rates are entered by hand rather than fetched: a portfolio total is read
+// months after the fact, and a live rate would make the same historical figure
+// read differently every time it was opened. One row per currency, the base
+// included at a rate of 1.
+model CurrencyRate {
+  id   String @id @default(cuid())
+  code String @unique
+
+  // How many units of the base currency one unit of this currency buys.
+  rate Float
+
+  // Set on the base currency's own row. Exactly one row carries it, enforced by
+  // a partial unique index in the migration — the same trick as EquityHolder's
+  // isUs, and for the same reason: a second base would make every total
+  // ambiguous.
+  isBase Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isBase])
 }
 
 // A file uploaded with a financial period: the founders' own statements, held

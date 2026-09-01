@@ -18,6 +18,8 @@ import {
 import { computePortfolioEquity, currentSet, formatPct } from "@/lib/equity-math";
 import { EquityRegistryManager } from "@/components/equity/equity-registry-manager";
 import { EquityMetricManager } from "@/components/equity/equity-metric-manager";
+import { CrossProjectFinancials } from "@/components/equity/cross-project-financials";
+import type { RateRow } from "@/lib/equity-financials";
 
 interface Props {
   portfolios: EquityPortfolioDTO[];
@@ -25,10 +27,12 @@ interface Props {
   holders: EquityHolderDTO[];
   roles: EquityRoleDTO[];
   metrics: EquityMetricDTO[];
+  rates: RateRow[];
 }
 
 const TABS = [
   { id: "portfolios", label: "Portfolios" },
+  { id: "financials", label: "Financials" },
   { id: "registry", label: "Names & roles" },
   { id: "data", label: "Data" },
 ] as const;
@@ -54,6 +58,7 @@ export function EquityPageClient({
   holders,
   roles,
   metrics,
+  rates,
 }: Props) {
   const router = useRouter();
   const [showPicker, setShowPicker] = useState(false);
@@ -110,6 +115,10 @@ export function EquityPageClient({
 
       {tab === "registry" && (
         <EquityRegistryManager holders={holders} roles={roles} />
+      )}
+
+      {tab === "financials" && (
+        <CrossProjectFinancials portfolios={portfolios} metrics={metrics} rates={rates} />
       )}
 
       {tab === "data" && <EquityMetricManager metrics={metrics} />}

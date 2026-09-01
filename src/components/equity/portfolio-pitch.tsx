@@ -56,11 +56,9 @@ import {
   computePortfolioEquity,
   currentSet,
   equityValueAt,
-  evaluateFormula,
   formatLiveStatus,
   formatMetricValue,
   formatPct,
-  formatPeriodLabel,
   formatValuation,
   formulaLabel,
   isDateMetric,
@@ -68,6 +66,13 @@ import {
   liveStatus,
   ourPctIn,
 } from "@/lib/equity-math";
+import {
+  formatMonth,
+  formatPackLabel,
+  monthColumn,
+  resolveMonthlySeries,
+  type MetricDef,
+} from "@/lib/equity-financials";
 
 /**
  * The portfolio read as a pitch rather than edited as a set of tables.
@@ -173,13 +178,18 @@ function chartedFields(
 }
 
 /**
- * Every figure a period is reported with, as a series across every period on
- * record.
+ * Every figure the project reports, as a series across every month on record.
  *
- * A calculated field is worked out here from the fields it stands on rather
- * than read from the report, so it always agrees with them; which fields those
- * are is said on the chart. Two kinds of field are left out, both because a
- * series needs something to plot: dates, and anything the project has never
+ * Months, not packs. A pack states several months at once, so plotting one
+ * point per pack would compress a year into three dots and hide the shape the
+ * chart exists to show. Where two packs state the same month, the later one is
+ * the point — the same rule the tables read by.
+ *
+ * A calculated field is worked out here from the fields it stands on rather than
+ * read from the pack, so it always agrees with them, and worked out recursively
+ * so a field standing on another calculated field still answers. Which fields it
+ * stands on is said on the chart. Two kinds of field are left out, both because
+ * a series needs something to plot: dates, and anything the project has never
  * reported a figure for.
  */
 function financialFigures(
@@ -187,27 +197,37 @@ function financialFigures(
   asked: EquityPortfolioDTO["reportFields"],
   registry: EquityMetricDTO[],
 ) {
-  // One lookup per period, so a field's value is found without rescanning.
-  const byPeriod = reports.map(
-    (report) => new Map(report.values.map((v) => [v.metricId, v.numberValue])),
+  const series = resolveMonthlySeries(
+    reports.map((r) => ({ id: r.id, reportedOn: r.reportedOn, values: r.values })),
   );
+  const fields = chartedFields(reports, asked).filter((f) => !isDateMetric(f.type));
+  const metricDefs = new Map<string, MetricDef>([
+    ...registry.map((m) => [m.id, m] as const),
+    // A field the project has stopped asking for is still charted, and its own
+    // row in chartedFields carries no formula, so the registry entry wins.
+    ...fields.map((f) => [f.id, f] as const),
+  ]);
 
-  return chartedFields(reports, asked)
-    .filter((field) => !isDateMetric(field.type))
+  // One resolved column per month, oldest first, so every series reads across
+  // the same axis and a formula is only worked out once per month.
+  const columns = series.months.map((month) => ({
+    month,
+    values: monthColumn(
+      series,
+      metricDefs,
+      fields.map((f) => f.id),
+      month,
+    ),
+  }));
+
+  return fields
     .map((field) => {
       const formula = isFormulaMetric(field.type);
 
-      const rows = reports.map((report, i) => {
-        const numbers = byPeriod[i];
-        const value = formula
-          ? evaluateFormula(
-              field.formulaOp,
-              numbers.get(field.leftId ?? "") ?? null,
-              numbers.get(field.rightId ?? "") ?? null,
-            )
-          : (numbers.get(field.id) ?? null);
+      const rows = columns.map(({ month, values }) => {
+        const value = values.get(field.id) ?? null;
         return {
-          label: formatPeriodLabel(report.periodType, report.periodStart),
+          label: formatMonth(month),
           value,
           display:
             value == null ? "—" : formatMetricValue(field, { numberValue: value }),
@@ -990,28 +1010,28 @@ export function PortfolioPitch({
     [portfolio.financialReports],
   );
 
-  // Every defined financial field as a series, and the periods they share.
+  // Every defined financial field as a series, and the months they share.
   const figures = useMemo(
     () => financialFigures(reports, portfolio.reportFields, fields),
     [reports, portfolio.reportFields, fields],
   );
-  const periodLabels = useMemo(
-    () =>
-      reports.map((r) => formatPeriodLabel(r.periodType, r.periodStart)),
-    [reports],
+  // Every series shares one axis, so any of them can name it.
+  const monthLabels = useMemo(
+    () => figures[0]?.rows.map((row) => row.label) ?? [],
+    [figures],
   );
-  // The statements uploaded with the periods, kept in the same oldest-first
-  // order as the chart so the two read together.
+  // The statements uploaded with the packs, kept in the same oldest-first order
+  // as the chart so the two read together.
   const documented = useMemo(
     () =>
       reports
-        .map((r, i) => ({
+        .map((r) => ({
           id: r.id,
-          label: periodLabels[i],
+          label: `${formatPackLabel(r.reportedOn)} report`,
           documents: r.documents,
         }))
         .filter((r) => r.documents.length > 0),
-    [reports, periodLabels],
+    [reports],
   );
 
   const metrics = useMemo(() => metricSeriesOf(portfolio), [portfolio]);
@@ -1391,7 +1411,7 @@ export function PortfolioPitch({
           )}
         </Section>
 
-        {/* ── Financials: every reported figure, period by period ── */}
+        {/* ── Financials: every reported figure, month by month ── */}
         <Section
           id="financials"
           icon={BarChart3}
@@ -1401,27 +1421,29 @@ export function PortfolioPitch({
             <NoData>
               {reports.length === 0
                 ? "No data"
-                : `No figures reported for ${
-                    reports.length === 1 ? "this period" : "these periods"
+                : `No figures reported in ${
+                    reports.length === 1 ? "this report" : "these reports"
                   } yet.`}
             </NoData>
           ) : (
             <ChartFrame
-              title="Every reported figure, period by period"
+              title="Every reported figure, month by month"
               note={financialsNote(figures)}
-              source={`Financials · ${reports.length} ${
-                reports.length === 1 ? "period" : "periods"
+              source={`Financials · ${monthLabels.length} ${
+                monthLabels.length === 1 ? "month" : "months"
+              } from ${reports.length} ${
+                reports.length === 1 ? "report" : "reports"
               }, oldest first`}
               data={{
-                columns: ["Period", ...figures.map((f) => f.label)],
-                rows: periodLabels.map((label, i) => [
+                columns: ["Month", ...figures.map((f) => f.label)],
+                rows: monthLabels.map((label, i) => [
                   label,
                   ...figures.map((f) => f.rows[i]?.display ?? "—"),
                 ]),
               }}
             >
               <SeriesArea
-                labels={periodLabels}
+                labels={monthLabels}
                 series={figures.map((figure) => ({
                   name: figure.label,
                   color: figure.color,
@@ -1437,7 +1459,7 @@ export function PortfolioPitch({
             </ChartFrame>
           )}
 
-          {/* The statements the figures were reported from, period by period.
+          {/* The statements the figures were reported from, report by report.
               Every claim above has its paperwork here. */}
           {documented.length > 0 && (
             <Panel className="mt-4">
@@ -1445,16 +1467,16 @@ export function PortfolioPitch({
                 Reported documents
               </p>
               <div className="space-y-2.5">
-                {documented.map((period) => (
+                {documented.map((pack) => (
                   <div
-                    key={period.id}
+                    key={pack.id}
                     className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-4"
                   >
-                    <span className="text-s font-medium text-foreground/80 tabular-nums w-20 shrink-0">
-                      {period.label}
+                    <span className="text-s font-medium text-foreground/80 w-36 shrink-0">
+                      {pack.label}
                     </span>
                     <span className="flex flex-wrap gap-x-4 gap-y-1 min-w-0">
-                      {period.documents.map((doc) => (
+                      {pack.documents.map((doc) => (
                         <a
                           key={doc.id}
                           href={doc.url}

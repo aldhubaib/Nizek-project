@@ -86,37 +86,11 @@ export function computeContractEndDate(
   return target.toISOString().slice(0, 10);
 }
 
-export const EQUITY_PERIOD_TYPE = {
-  QUARTERLY: "Quarterly",
-  YEARLY: "Yearly",
-} as const;
-
-/**
- * UTC midnight on the first day of the period. Reports are keyed by this, so
- * every quarter has exactly one representation and a report can't be filed
- * twice under slightly different dates.
- */
-export function periodStartFor(year: number, quarter: number | null): string {
-  const month = quarter && quarter >= 1 && quarter <= 4 ? (quarter - 1) * 3 : 0;
-  return new Date(Date.UTC(year, month, 1)).toISOString();
-}
-
-/** Which quarter a period start falls in, 1-4. */
-export function quarterOf(periodStart: string | Date): number {
-  return Math.floor(new Date(periodStart).getUTCMonth() / 3) + 1;
-}
-
-/** "Q3 2026" / "FY 2026". */
-export function formatPeriodLabel(
-  periodType: string | null | undefined,
-  periodStart: string | Date | null | undefined,
-): string {
-  if (!periodStart) return "—";
-  const date = new Date(periodStart);
-  if (Number.isNaN(date.getTime())) return "—";
-  const year = date.getUTCFullYear();
-  return periodType === "YEARLY" ? `FY ${year}` : `Q${quarterOf(date)} ${year}`;
-}
+// Financial reports used to be one figure per quarter, and had a small period
+// model here — EQUITY_PERIOD_TYPE, periodStartFor, quarterOf, formatPeriodLabel.
+// A report is now a pack of monthly figures, dated by when it was received, so
+// the quarter has nothing left to name. Month and pack labels live in
+// equity-financials.ts, beside the resolver that reads them.
 
 /**
  * What a tracked field holds. The type is picked once, when the field is

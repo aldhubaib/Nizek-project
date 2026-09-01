@@ -15,6 +15,7 @@ import {
   BellRing,
   ClipboardCheck,
   PieChart,
+  Coins,
   KeyRound,
   UserRoundSearch,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import { NotificationStatusClient } from "./notification-status-client";
 import { AliasManager } from "@/components/settings/alias-manager";
 import { AuditAccessManager } from "@/components/settings/audit-access-manager";
 import { EquityAccessManager } from "@/components/settings/equity-access-manager";
+import { CurrencyRateManager } from "@/components/settings/currency-rate-manager";
 import { VaultAccessManager } from "@/components/settings/vault-access-manager";
 import type { AliasDTO, AliasStatsDTO, AliasUsageDTO } from "@/actions/alias";
 import type { BrandingAssetDTO } from "@/actions/branding";
@@ -55,6 +57,7 @@ type TabId =
   | "notification-status"
   | "audit-access"
   | "equity-access"
+  | "exchange-rates"
   | "vault-access";
 
 type SettingsItem = {
@@ -154,6 +157,12 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         label: "Equity Access",
         icon: PieChart,
         desc: "Choose who can open the private Equity module.",
+      },
+      {
+        id: "exchange-rates",
+        label: "Exchange Rates",
+        icon: Coins,
+        desc: "What each currency is worth, for totalling financial figures across projects.",
       },
       {
         id: "vault-access",
@@ -291,6 +300,7 @@ export function AdminPageClient({
         )}
         {active.id === "audit-access" && <AuditAccessManager />}
         {active.id === "equity-access" && <EquityAccessManager />}
+        {active.id === "exchange-rates" && <CurrencyRateManager />}
         {active.id === "vault-access" && <VaultAccessManager />}
       </div>
     </div>

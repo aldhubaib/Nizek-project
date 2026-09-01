@@ -15,6 +15,12 @@ import {
   isOngoing,
   sumTrancheEquity,
 } from "@/lib/equity-math";
+import {
+  formatMonth,
+  formatPackLabel,
+  monthKeyOf,
+  wouldCycle,
+} from "@/lib/equity-financials";
 import { isCountryCode } from "@/lib/countries";
 import { formatMarketAmount } from "@/lib/market-size";
 import { addToTrash } from "@/lib/trash";
@@ -75,13 +81,13 @@ const PORTFOLIO_INCLUDE = {
       },
     },
   },
-  // Newest period first, for the same reason; within one, the order the fields
-  // are defined in.
+  // Newest pack first, for the same reason; within one, month order then the
+  // order the fields are defined in, so a pack reads as a table.
   financialReports: {
-    orderBy: { periodStart: "desc" as const },
+    orderBy: { reportedOn: "desc" as const },
     include: {
       values: {
-        orderBy: { order: "asc" as const },
+        orderBy: [{ month: "asc" as const }, { order: "asc" as const }],
         include: {
           metric: { select: { id: true, name: true, type: true, unit: true } },
         },
@@ -227,14 +233,14 @@ function serialize(p: {
   }[];
   financialReports: {
     id: string;
-    periodType: string;
-    periodStart: Date;
+    reportedOn: Date;
     audited: boolean;
     needsHelp: boolean;
     helpNotes: string | null;
     values: {
       id: string;
       metricId: string;
+      month: Date;
       order: number;
       numberValue: number | null;
       dateValue: Date | null;
@@ -409,14 +415,14 @@ function serialize(p: {
     })),
     financialReports: p.financialReports.map((r) => ({
       id: r.id,
-      periodType: r.periodType,
-      periodStart: r.periodStart.toISOString(),
+      reportedOn: r.reportedOn.toISOString(),
       audited: r.audited,
       needsHelp: r.needsHelp,
       helpNotes: r.helpNotes,
       values: r.values.map((v) => ({
         id: v.id,
         metricId: v.metricId,
+        month: v.month.toISOString(),
         order: v.order,
         numberValue: v.numberValue,
         dateValue: v.dateValue?.toISOString() ?? null,
@@ -1616,13 +1622,14 @@ function metricGroup(group: string | undefined) {
 /**
  * The two operands of a calculated field, checked before they're stored.
  *
- * Both have to exist, sit in the same group as the field itself, and be plain
- * figures: a formula over a formula would need an evaluation order to be
- * defined and a cycle to be guarded against, which is a lot of machinery for a
- * field that could just as easily be written out in full. A field that isn't
- * calculated has its operands cleared, so nothing stale is left pointing.
+ * Both have to exist and sit in the same group as the field itself. An operand
+ * may be calculated in its own right — a P&L needs that, since net profit is
+ * built on gross profit rather than on revenue a second time — so the one thing
+ * refused is a loop: a field that reaches itself has no value anybody could
+ * name. A field that isn't calculated has its operands cleared, so nothing
+ * stale is left pointing.
  */
-async function resolveFormula(data: MetricInput, group: string) {
+async function resolveFormula(data: MetricInput, group: string, metricId?: string) {
   if (metricType(data.type) !== "FORMULA") {
     return { formulaOp: null, leftId: null, rightId: null };
   }
@@ -1635,25 +1642,33 @@ async function resolveFormula(data: MetricInput, group: string) {
     throw new Error("A calculated field needs two fields to work from");
   }
 
-  const operands = await prisma.equityMetric.findMany({
-    where: { id: { in: [data.leftId, data.rightId] } },
-    select: { id: true, name: true, group: true, type: true },
+  // The whole group, not just the two operands: judging a cycle means following
+  // a calculated operand down to whatever it is itself built from.
+  const siblings = await prisma.equityMetric.findMany({
+    where: { group },
+    select: { id: true, name: true, group: true, type: true, leftId: true, rightId: true },
   });
+  const registry = new Map(siblings.map((m) => [m.id, m]));
+
   for (const id of [data.leftId, data.rightId]) {
-    const operand = operands.find((o) => o.id === id);
-    if (!operand) throw new Error("That field no longer exists");
-    if (operand.group !== group) {
+    const operand = registry.get(id) ?? null;
+    if (!operand) {
+      const elsewhere = await prisma.equityMetric.findUnique({
+        where: { id },
+        select: { name: true },
+      });
+      if (!elsewhere) throw new Error("That field no longer exists");
       throw new Error(
-        `${operand.name} is in a different group — a calculation can only use fields beside it`,
-      );
-    }
-    if (isFormulaMetric(operand.type)) {
-      throw new Error(
-        `${operand.name} is itself calculated, so it can't be used in another calculation`,
+        `${elsewhere.name} is in a different group — a calculation can only use fields beside it`,
       );
     }
     if (isDateMetric(operand.type)) {
       throw new Error(`${operand.name} is a date, so there's nothing to work out with it`);
+    }
+    if (metricId && wouldCycle(metricId, id, registry)) {
+      throw new Error(
+        `${operand.name} is already worked out from this field, so using it here would be circular`,
+      );
     }
   }
 
@@ -1728,12 +1743,7 @@ export async function updateEquityMetric(metricId: string, data: MetricInput) {
       } recorded, so it can't move to another group`,
     );
   }
-  // A field can't be an operand of the calculation it feeds, or of itself.
-  if (data.leftId === metricId || data.rightId === metricId) {
-    throw new Error("A calculation can't use itself");
-  }
-
-  const formula = await resolveFormula({ ...data, type }, group);
+  const formula = await resolveFormula({ ...data, type }, group, metricId);
 
   try {
     await prisma.equityMetric.update({
@@ -2303,15 +2313,24 @@ export async function deleteEquityTeamSnapshot(snapshotId: string) {
 // ─── Financial reports ──────────────────────────────────
 
 type FinancialReportInput = {
-  periodType: string;
-  periodStart: string;
+  /** When the pack was reported — what orders it against the other packs. */
+  reportedOn: string;
   audited: boolean;
   needsHelp: boolean;
   helpNotes: string | null;
-  /** One per defined financial field the period was reported with. */
-  values: PerformanceValueInput[];
-  /** The statements the period was reported from, already uploaded to R2. */
+  /** One per field per month the pack states a figure for. */
+  values: FinancialValueInput[];
+  /** The statements the pack was entered from, already uploaded to R2. */
   documents: FinancialDocumentInput[];
+};
+
+/**
+ * One figure in the pack. The month is what makes this different from a
+ * performance reading: a pack states the same field several times, once for each
+ * month it covers, so the field alone doesn't identify a figure.
+ */
+type FinancialValueInput = PerformanceValueInput & {
+  month: string;
 };
 
 type FinancialDocumentInput = {
@@ -2338,12 +2357,23 @@ function financialDocumentsData(documents: FinancialDocumentInput[]) {
     }));
 }
 
+/**
+ * A month pinned to UTC midnight on the first.
+ *
+ * Both the pack's date and each figure's month go through this. It is the only
+ * thing making the unique constraints mean what they say: two packs "reported in
+ * July" that differ by a time of day would both be stored, and the resolver
+ * would then have to guess which July restated the other.
+ */
+function asMonthStart(value: string, what: string): Date {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error(`${what} needs a valid date`);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+}
+
 function financialReportData(data: FinancialReportInput) {
-  const periodStart = new Date(data.periodStart);
-  if (Number.isNaN(periodStart.getTime())) throw new Error("Invalid period");
   return {
-    periodType: data.periodType === "YEARLY" ? "YEARLY" : "QUARTERLY",
-    periodStart,
+    reportedOn: asMonthStart(data.reportedOn, "The report date"),
     audited: data.audited,
     needsHelp: data.needsHelp,
     // Dropping the note when the answer flips back to "no" stops a stale ask
@@ -2354,35 +2384,47 @@ function financialReportData(data: FinancialReportInput) {
 
 const FINANCIAL_VALUES_INCLUDE = {
   values: {
-    orderBy: { order: "asc" as const },
+    orderBy: [{ month: "asc" as const }, { order: "asc" as const }],
     include: { metric: { select: { name: true, type: true, unit: true } } },
   },
   documents: { orderBy: { order: "asc" as const } },
 };
 
 /**
- * The reported figures as they'll be stored. The same shape as a performance
- * reading, and refused for the same reasons — a field named twice is two
- * answers to one question — with two more of its own: a field defined for the
- * other module has no business on a report, and a calculated field is read
+ * The pack's figures as they'll be stored. The same shape as a performance
+ * reading, and refused for the same reasons — a field named twice for one month
+ * is two answers to one question — with two more of its own: a field defined for
+ * the other module has no business on a pack, and a calculated field is read
  * rather than entered, so there's nothing of it to store.
+ *
+ * A field named twice for *different* months is normal, and is the point.
  */
-async function prepareFinancialValues(values: PerformanceValueInput[]) {
+async function prepareFinancialValues(values: FinancialValueInput[]) {
   const rows = values.filter((v) => v.metricId);
   if (rows.length === 0) return [];
 
-  const ids = rows.map((v) => v.metricId);
-  if (new Set(ids).size !== ids.length) {
-    throw new Error("A field can only be reported once per period");
+  const withMonths = rows.map((row) => ({
+    ...row,
+    monthStart: asMonthStart(row.month, "A figure's month"),
+  }));
+
+  const seen = new Set<string>();
+  for (const row of withMonths) {
+    const key = `${row.metricId}|${row.monthStart.toISOString()}`;
+    if (seen.has(key)) {
+      throw new Error("A field can only be reported once per month in a report");
+    }
+    seen.add(key);
   }
 
+  const ids = [...new Set(withMonths.map((v) => v.metricId))];
   const metrics = await prisma.equityMetric.findMany({
     where: { id: { in: ids } },
     select: { id: true, name: true, type: true, group: true },
   });
   const byId = new Map(metrics.map((m) => [m.id, m]));
 
-  return rows.map((row, i) => {
+  return withMonths.map((row, i) => {
     const metric = byId.get(row.metricId);
     if (!metric) throw new Error("That field no longer exists");
     if (metric.group !== "FINANCIAL") {
@@ -2399,6 +2441,7 @@ async function prepareFinancialValues(values: PerformanceValueInput[]) {
       }
       return {
         metricId: metric.id,
+        month: row.monthStart,
         order: i + 1,
         numberValue: null,
         dateValue: date,
@@ -2407,6 +2450,7 @@ async function prepareFinancialValues(values: PerformanceValueInput[]) {
 
     return {
       metricId: metric.id,
+      month: row.monthStart,
       order: i + 1,
       numberValue: row.numberValue ?? null,
       dateValue: null,
@@ -2415,21 +2459,22 @@ async function prepareFinancialValues(values: PerformanceValueInput[]) {
 }
 
 /**
- * Refuses a period that skips a figure the project has to report.
+ * Refuses a pack that states a month while skipping a figure the project has to
+ * report for it.
  *
- * A blank isn't the same as a zero and neither is guessed at here: if a project
- * says it reports Revenue every quarter, a quarter without one is an unfinished
- * report rather than a quarter with no revenue.
+ * Applied per month, not per pack: a pack covering January to July is seven
+ * months of reporting, and a July with no revenue figure is an unfinished July
+ * whatever the other six say.
  *
- * Checked when a period is filed and not when it's edited afterwards. Requiring
- * a field today says what the next report needs, not that every report already
- * closed is now unopenable — and a field added this year has no figures in the
- * quarters that closed before it.
+ * A month the pack says nothing at all about is left alone. A pack that only
+ * covers Q1 hasn't failed to report December — it isn't claiming to.
+ *
+ * A blank isn't the same as a zero and neither is guessed at here. Checked when
+ * a pack is filed and not when it's edited afterwards: requiring a field today
+ * says what the next pack needs, not that every pack already filed is now
+ * unopenable.
  */
-async function assertRequiredFields(
-  portfolioId: string,
-  values: PerformanceValueInput[],
-) {
+async function assertRequiredFields(portfolioId: string, values: FinancialValueInput[]) {
   const required = await prisma.equityPortfolioField.findMany({
     where: { portfolioId, required: true },
     orderBy: { order: "asc" },
@@ -2437,46 +2482,69 @@ async function assertRequiredFields(
   });
   if (required.length === 0) return;
 
-  const given = new Map(
-    values.filter((v) => v.metricId).map((v) => [v.metricId, v]),
-  );
-  const missing = required.filter(
-    ({ metricId, metric }) => !isFieldAnswered(metric, given.get(metricId)),
-  );
-  if (missing.length === 0) return;
+  const byMonth = new Map<string, Map<string, FinancialValueInput>>();
+  for (const value of values) {
+    if (!value.metricId) continue;
+    const month = asMonthStart(value.month, "A figure's month").toISOString();
+    const forMonth = byMonth.get(month) ?? new Map();
+    forMonth.set(value.metricId, value);
+    byMonth.set(month, forMonth);
+  }
 
-  const names = missing.map((f) => f.metric.name);
-  throw new Error(
-    `${names.join(", ")} ${
-      names.length === 1 ? "is" : "are"
-    } required on this project's reports`,
-  );
+  for (const [month, given] of [...byMonth].sort(([a], [b]) => a.localeCompare(b))) {
+    const missing = required.filter(
+      ({ metricId, metric }) => !isFieldAnswered(metric, given.get(metricId)),
+    );
+    if (missing.length === 0) continue;
+
+    const names = missing.map((f) => f.metric.name);
+    throw new Error(
+      `${names.join(", ")} ${names.length === 1 ? "is" : "are"} required, and ${
+        formatMonth(monthKeyOf(month) ?? "", true)
+      } is missing ${names.length === 1 ? "it" : "them"}`,
+    );
+  }
 }
 
 /**
- * The unique constraint on (portfolio, type, period) is what stops the same
- * quarter being filed twice; this turns Prisma's P2002 into something a person
- * can act on.
+ * Turns Prisma's P2002 into something a person can act on.
+ *
+ * Two different unique keys can fire here — one pack per date, and one figure
+ * per field per month within a pack — and they call for opposite responses, so
+ * the constraint is read rather than assumed. Blaming the pack date for a
+ * duplicated figure would send someone to change the one thing that was right.
  */
 function asDuplicatePeriodError(err: unknown): Error {
-  const code = (err as { code?: string })?.code;
-  if (code === "P2002") {
-    return new Error("A report for that period already exists — edit it instead.");
+  const meta = (err as { code?: string; meta?: { target?: unknown } })?.code === "P2002"
+    ? (err as { meta?: { target?: unknown } }).meta?.target
+    : null;
+  if (meta == null) return err as Error;
+
+  const target = (Array.isArray(meta) ? meta.join(",") : String(meta)).toLowerCase();
+  if (target.includes("month") || target.includes("metric")) {
+    return new Error("A field can only be reported once per month in a report");
   }
-  return err as Error;
+  return new Error("A report with that date already exists — edit it instead.");
 }
 
-/** A report as its fields read on the card, for the history. */
+/**
+ * A pack as its figures read on the card, for the history.
+ *
+ * Every figure is labelled with its month. Without that, a pack restating three
+ * months of revenue would write three entries called "Revenue" and the history
+ * would read as one number changing its mind twice.
+ */
 function reportSnapshot(report: {
   audited: boolean;
   needsHelp: boolean;
   helpNotes: string | null;
-  values: StoredValue[];
+  values: (StoredValue & { month: Date })[];
   documents: { filename: string }[];
 }): Snapshot {
   const snapshot: Snapshot = { Audited: asText(report.audited) };
   for (const value of report.values) {
-    snapshot[value.metric.name] = formatMetricValue(value.metric, value);
+    const month = formatMonth(monthKeyOf(value.month) ?? "", true);
+    snapshot[`${value.metric.name} — ${month}`] = formatMetricValue(value.metric, value);
   }
   snapshot["Needs help"] = asText(report.needsHelp);
   snapshot["Help notes"] = report.helpNotes;
@@ -2487,10 +2555,9 @@ function reportSnapshot(report: {
   return snapshot;
 }
 
-function reportPeriod(report: { periodType: string; periodStart: Date }) {
-  const start = report.periodStart;
-  if (report.periodType === "YEARLY") return `${start.getFullYear()}`;
-  return `Q${Math.floor(start.getMonth() / 3) + 1} ${start.getFullYear()}`;
+/** "July 2026 report" — how a pack is named in the history. */
+function reportPackLabel(report: { reportedOn: Date }) {
+  return `${formatPackLabel(report.reportedOn)} report`;
 }
 
 export async function addEquityFinancialReport(
@@ -2516,7 +2583,7 @@ export async function addEquityFinancialReport(
       userId: user.id,
       section: "FINANCIALS",
       action: "created",
-      subject: reportPeriod(report),
+      subject: reportPackLabel(report),
       changes: diffSnapshots(null, reportSnapshot(report)),
     });
     revalidatePath("/dashboard/equity");
@@ -2528,8 +2595,12 @@ export async function addEquityFinancialReport(
 }
 
 /**
- * Rewrites one period. Like the reading form, this submits the finished picture
- * rather than a diff, so a field absent from it has been taken off the report.
+ * Rewrites one pack. Like the reading form, this submits the finished picture
+ * rather than a diff, so a figure absent from it has been taken off the pack.
+ *
+ * Only this pack's own rows are replaced. A month another pack also states is
+ * untouched — editing the April pack cannot reach into the July one that
+ * restated it, which is the whole reason the two are separate rows.
  */
 export async function updateEquityFinancialReport(
   reportId: string,
@@ -2567,11 +2638,18 @@ export async function updateEquityFinancialReport(
     userId: user.id,
     section: "FINANCIALS",
     action: "updated",
-    subject: reportPeriod(updated),
+    subject: reportPackLabel(updated),
     changes: diffSnapshots(reportSnapshot(existing), {
-      // Fields dropped from the report are reported as cleared, which a plain
-      // diff of the new rows alone would miss.
-      ...Object.fromEntries(existing.values.map((v) => [v.metric.name, null])),
+      // Figures dropped from the pack are reported as cleared, which a plain
+      // diff of the new rows alone would miss. Keyed by field and month, the
+      // same way reportSnapshot keys them, so a month that stayed overwrites
+      // its own null rather than reading as cleared.
+      ...Object.fromEntries(
+        existing.values.map((v) => [
+          `${v.metric.name} — ${formatMonth(monthKeyOf(v.month) ?? "", true)}`,
+          null,
+        ]),
+      ),
       ...reportSnapshot(updated),
     }),
   });
@@ -2581,11 +2659,13 @@ export async function updateEquityFinancialReport(
 }
 
 /**
- * Deletes one reported period, once the project's name has been typed back.
+ * Deletes one pack, once the project's name has been typed back.
  *
  * The check is repeated here rather than trusted from the dialog, for the same
- * reason the portfolio's own delete repeats it: a closed quarter is figures
- * somebody had to go and ask the founders for, and nothing here re-derives them.
+ * reason the portfolio's own delete repeats it: a pack is figures somebody had
+ * to go and ask the founders for, and nothing here re-derives them. Deleting one
+ * also un-restates every month it corrected, so the months it covered fall back
+ * to whatever the pack before it said.
  */
 export async function deleteEquityFinancialReport(
   reportId: string,
@@ -2613,9 +2693,9 @@ export async function deleteEquityFinancialReport(
     userId: user.id,
     section: "FINANCIALS",
     action: "deleted",
-    subject: reportPeriod(report),
+    subject: reportPackLabel(report),
     label: "Report",
-    oldValue: reportPeriod(report),
+    oldValue: reportPackLabel(report),
   });
 
   revalidatePath("/dashboard/equity");

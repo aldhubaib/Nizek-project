@@ -38,6 +38,7 @@ import { ProductSection } from "@/components/equity/product-section";
 import { MarketSizeSection } from "@/components/equity/market-size-section";
 import { TractionSection } from "@/components/equity/traction-section";
 import { CollapsibleCard } from "@/components/equity/collapsible-card";
+import { FinancialsAnalysis } from "@/components/equity/financials-analysis";
 import { ConfirmDeleteDialog } from "@/components/equity/confirm-delete-dialog";
 import { GrowingTextarea } from "@/components/equity/growing-textarea";
 import {
@@ -54,7 +55,6 @@ import { PageHeader, PageBackButton } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { AddButton } from "@/components/add-button";
 import { uploadFileToR2 } from "@/lib/upload";
-import { usePasteFiles } from "@/hooks/use-paste-files";
 import {
   addEquityTranche,
   deleteEquityTranche,
@@ -75,31 +75,40 @@ import {
 } from "@/actions/equity";
 import {
   EQUITY_LENGTH_UNIT,
-  EQUITY_PERIOD_TYPE,
   EQUITY_STRUCTURE,
   FEE_STATUS,
   computePortfolioEquity,
   currentSet,
   computeContractEndDate,
   equityLabel,
-  evaluateFormula,
   feeStatus,
-  formulaLabel,
-  isDateMetric,
-  isFieldAnswered,
   isFormulaMetric,
   isOngoing,
   formatContractLength,
   formatMetricValue,
-  formatPeriodLabel,
   splitTotal,
-  periodStartFor,
-  quarterOf,
   formatPct,
   formatValuation,
   isTrancheDiluted,
   splitTranchesByDilution,
 } from "@/lib/equity-math";
+import {
+  figureAt,
+  formatMonth,
+  formatPackLabel,
+  formulaDependencies,
+  monthColumn,
+  resolveMonthlySeries,
+  type MetricDef,
+} from "@/lib/equity-financials";
+import {
+  MonthlyFiguresDialog,
+  emptyPackDraft,
+  packPayload,
+  packToDraft,
+  type PackDraft,
+  type ReportField,
+} from "@/components/equity/monthly-figures-grid";
 
 // The spin-button rules strip the steppers from every type="number" field here.
 // They're a poor fit for figures typed in full — the arrows sit over the text,
@@ -309,11 +318,19 @@ export function EquityPortfolioClient({
           valuation that prices it */}
         <GrantsTable portfolio={portfolio} holders={holders} roles={roles} />
 
-        {/* Periodic P&L and cash as reported by the startup */}
+        {/* Packs of monthly P&L and cash as reported by the startup */}
         <FinancialsTable
           portfolio={portfolio}
           currency={portfolio.valuationCurrency}
           metrics={metrics}
+        />
+
+        {/* The same figures read rather than entered: the effective monthly P&L
+          once the later reports have had their say */}
+        <FinancialsAnalysis
+          portfolio={portfolio}
+          metrics={metrics}
+          currency={portfolio.valuationCurrency}
         />
 
         {/* Dated readings of whatever this project is measured on */}
@@ -1822,123 +1839,10 @@ function parseAmount(raw: string | null | undefined): number {
   return parseFloat((raw ?? "").replace(/,/g, ""));
 }
 
-/**
- * One line of a report being written: a field and whichever value box its type
- * calls for. The key survives reordering and a change of field, which an index
- * wouldn't.
- */
-type FieldRow = { key: string; metricId: string; number: string; date: string };
-
-type FinancialReportDraft = {
-  periodType: string;
-  year: string;
-  quarter: string;
-  audited: boolean;
-  rows: FieldRow[];
-  needsHelp: boolean;
-  helpNotes: string;
-  /** The statements the period is reported from, already uploaded to R2. */
-  documents: ReportDocumentDraft[];
-};
-
-/** One uploaded statement on the form. The key is only for React's lists. */
-type ReportDocumentDraft = {
-  key: string;
-  filename: string;
-  url: string;
-  fileSize: number | null;
-  mimeType: string | null;
-};
-
-let reportDocumentSeq = 0;
-function documentKey(): string {
-  reportDocumentSeq += 1;
-  return `findoc-${reportDocumentSeq}`;
-}
-
-let financialRowSeq = 0;
-function blankFieldRow(): FieldRow {
-  financialRowSeq += 1;
-  return { key: `fin-${financialRowSeq}`, metricId: "", number: "", date: "" };
-}
-
-/**
- * Built fresh per open, so the period defaults to the quarter you're actually
- * in and the lines are whatever this project has to report. A required field
- * arrives as a line of its own: it isn't something to remember to add, it's the
- * form.
- */
-function emptyFinancialReport(fields: ReportField[]): FinancialReportDraft {
-  const now = new Date();
-  const required = fields.filter((f) => f.required);
-  return {
-    periodType: "QUARTERLY",
-    year: String(now.getUTCFullYear()),
-    quarter: String(quarterOf(now)),
-    audited: false,
-    rows:
-      required.length > 0
-        ? required.map((f) => ({ ...blankFieldRow(), metricId: f.metric.id }))
-        : [blankFieldRow()],
-    needsHelp: false,
-    helpNotes: "",
-    documents: [],
-  };
-}
-
-/**
- * An existing period opened for editing. Required fields it was filed without
- * are added as empty lines rather than left off: the rule may have arrived
- * after the period did, and a gap is easier to fill than to notice.
- */
-function reportToDraft(
-  r: EquityPortfolioDTO["financialReports"][number],
-  fields: ReportField[]
-): FinancialReportDraft {
-  const reported = r.values.map((v) => ({
-    ...blankFieldRow(),
-    metricId: v.metricId,
-    number: v.numberValue?.toLocaleString("en-US") ?? "",
-    date: v.dateValue?.slice(0, 10) ?? "",
-  }));
-  const filed = new Set(r.values.map((v) => v.metricId));
-  const missing = fields
-    .filter((f) => f.required && !filed.has(f.metric.id))
-    .map((f) => ({ ...blankFieldRow(), metricId: f.metric.id }));
-
-  const rows = [...reported, ...missing];
-  return {
-    periodType: r.periodType,
-    year: String(new Date(r.periodStart).getUTCFullYear()),
-    quarter: String(quarterOf(r.periodStart)),
-    audited: r.audited,
-    rows: rows.length > 0 ? rows : [blankFieldRow()],
-    needsHelp: r.needsHelp,
-    helpNotes: r.helpNotes ?? "",
-    documents: r.documents.map((d) => ({
-      key: documentKey(),
-      filename: d.filename,
-      url: d.url,
-      fileSize: d.fileSize,
-      mimeType: d.mimeType,
-    })),
-  };
-}
-
-/** Blank means "not reported", which is distinct from zero. */
-function optionalAmount(raw: string): number | null {
-  if (!raw.trim()) return null;
-  const parsed = parseAmount(raw);
-  return Number.isNaN(parsed) ? null : parsed;
-}
-
 /** Every field the registry offers a financial report, asked for or not. */
 function financialFields(metrics: EquityMetricDTO[]) {
   return metrics.filter((m) => m.group === "FINANCIAL");
 }
-
-/** One field this project's reports ask for, and whether they insist on it. */
-type ReportField = { metric: EquityMetricDTO; required: boolean };
 
 /**
  * The questionnaire: the registry's fields narrowed to the ones this project
@@ -1960,116 +1864,88 @@ function projectFields(
 }
 
 /**
- * One report read back field by field: what was entered, plus what the
- * calculated fields work out to from it. Calculations are done here rather than
- * stored, so a corrected figure corrects everything standing on it.
+ * One pack read back month by month: what it states, plus what the calculated
+ * fields work out to from it. Calculations are done here rather than stored, so
+ * a corrected figure corrects everything standing on it — including the formulas
+ * that stand on other formulas, which is what the recursive resolver is for.
  *
  * Figures reported against a field the project no longer asks for are listed
  * after the rest. Dropping a question doesn't unmake the answers given to it,
- * and a period that reported something should still say so.
+ * and a pack that reported something should still say so.
  */
-function readFinancialFields(
+function readPackMonths(
   fields: ReportField[],
-  values: EquityPortfolioDTO["financialReports"][number]["values"]
+  metrics: EquityMetricDTO[],
+  pack: EquityPortfolioDTO["financialReports"][number]
 ) {
-  const stored = new Map(values.map((v) => [v.metricId, v]));
-  const numbers = new Map(values.map((v) => [v.metricId, v.numberValue]));
+  // Just this pack, so a row shows what the pack itself says rather than what
+  // the project's latest figures are — a restated month is read on the pack
+  // that restated it, not on the one being looked at.
+  const series = resolveMonthlySeries([pack]);
+  const registry = new Map<string, MetricDef>(metrics.map((m) => [m.id, m]));
+  const onList = new Set(fields.map((f) => f.metric.id));
 
-  const asked = fields.map(({ metric }) => {
-    if (isFormulaMetric(metric.type)) {
-      const worked = evaluateFormula(
-        metric.formulaOp,
-        numbers.get(metric.leftId ?? "") ?? null,
-        numbers.get(metric.rightId ?? "") ?? null
-      );
-      return {
-        metric,
-        reported: worked != null,
-        display: formatMetricValue(metric, { numberValue: worked }),
-      };
-    }
-    const value = stored.get(metric.id);
-    const reported =
-      value != null && (value.numberValue != null || value.dateValue != null);
+  const dropped = new Map<string, EquityMetricDTO | { id: string; name: string; type: string; unit: string | null }>();
+  for (const value of pack.values) {
+    if (!onList.has(value.metricId)) dropped.set(value.metricId, value.metric);
+  }
+
+  const rows = [
+    ...fields.map((f) => ({ metric: f.metric as MetricDef & { name: string; unit: string | null }, asked: true })),
+    ...[...dropped.values()].map((metric) => ({
+      metric: metric as MetricDef & { name: string; unit: string | null },
+      asked: false,
+    })),
+  ];
+
+  return series.months.map((month) => {
+    const column = monthColumn(
+      series,
+      registry,
+      rows.map((r) => r.metric.id),
+      month
+    );
     return {
-      metric,
-      reported,
-      display: value ? formatMetricValue(metric, value) : "—",
+      month,
+      label: formatMonth(month),
+      fields: rows.flatMap(({ metric, asked }) => {
+        const stored = figureAt(series, metric.id, month);
+        // A calculated field has no stored figure, so it reads from the column;
+        // everything else reads its own value, dates included.
+        const display = isFormulaMetric(metric.type)
+          ? formatMetricValue(metric, { numberValue: column.get(metric.id) ?? null })
+          : stored
+            ? formatMetricValue(metric, stored)
+            : "—";
+        const reported = isFormulaMetric(metric.type)
+          ? column.get(metric.id) != null
+          : stored != null;
+        // A field this pack says nothing about isn't shown at all: a month the
+        // pack didn't report a figure for is a gap, not a dash to scan past.
+        if (!reported && !asked) return [];
+        return [{ metric, reported, display }];
+      }),
     };
   });
-
-  const onList = new Set(fields.map((f) => f.metric.id));
-  const dropped = values
-    .filter((v) => !onList.has(v.metricId))
-    .map((v) => ({
-      metric: v.metric,
-      reported: v.numberValue != null || v.dateValue != null,
-      display: formatMetricValue(v.metric, v),
-    }));
-
-  return [...asked, ...dropped];
 }
 
-/**
- * The period to read across from while filling one in: the one before it, or
- * the one after when nothing came before.
- *
- * Whoever is entering a quarter wants to know what the last one said — a figure
- * that halved is worth a second look before it's saved, and a balance that
- * didn't move at all is usually a copied number rather than a real one. Filing
- * a quarter older than everything on record is the case for looking forward
- * instead: there's still a neighbour to read against, it's just on the other
- * side.
- */
-function neighbouringReport(
+/** Every pack except one, resolved — what a cell in that pack is up against. */
+function otherPacksSeries(
   reports: EquityPortfolioDTO["financialReports"],
-  periodStart: string | null
+  exceptId: string | null
 ) {
-  if (!periodStart) return null;
-  const at = new Date(periodStart).getTime();
-  if (Number.isNaN(at)) return null;
-
-  const older = reports.filter((r) => new Date(r.periodStart).getTime() < at);
-  const newer = reports.filter((r) => new Date(r.periodStart).getTime() > at);
-  // Reports arrive newest first, so the nearest earlier one leads the first
-  // list and the nearest later one closes the second.
-  return older[0] ?? newer[newer.length - 1] ?? null;
-}
-
-/** What one period reported, by field, ready to read off beside a form. */
-function reportedValues(
-  report: EquityPortfolioDTO["financialReports"][number] | null
-) {
-  return new Map(
-    (report?.values ?? []).map((v) => [v.metricId, v] as const)
+  return resolveMonthlySeries(
+    reports.filter((r) => r.id !== exceptId).map(asPack)
   );
 }
 
-function financialReportPayload(draft: FinancialReportDraft) {
+/** A pack in the shape the resolver reads. */
+function asPack(report: EquityPortfolioDTO["financialReports"][number]) {
   return {
-    periodType: draft.periodType,
-    periodStart: periodStartFor(
-      parseInt(draft.year, 10),
-      draft.periodType === "YEARLY" ? null : parseInt(draft.quarter, 10)
-    ),
-    audited: draft.audited,
-    needsHelp: draft.needsHelp,
-    helpNotes: draft.helpNotes.trim() || null,
-    // Lines without a field picked are dropped rather than rejected — the form
-    // starts every new one empty, and an untouched line isn't an error.
-    values: draft.rows
-      .filter((row) => row.metricId)
-      .map((row) => ({
-        metricId: row.metricId,
-        numberValue: optionalAmount(row.number),
-        dateValue: row.date || null,
-      })),
-    documents: draft.documents.map((d) => ({
-      filename: d.filename,
-      url: d.url,
-      fileSize: d.fileSize,
-      mimeType: d.mimeType,
-    })),
+    id: report.id,
+    reportedOn: report.reportedOn,
+    audited: report.audited,
+    values: report.values,
   };
 }
 
@@ -2093,14 +1969,12 @@ function FinancialsTable({
   const fields = projectFields(metrics, portfolio.reportFields);
   const requiredCount = fields.filter((f) => f.required).length;
   const pendingDelete = reports.find((r) => r.id === deletingId) ?? null;
+  const editing = reports.find((r) => r.id === editingId) ?? null;
 
-  async function handleAdd(draft: FinancialReportDraft) {
+  async function handleAdd(draft: PackDraft) {
     setBusy(true);
     try {
-      await addEquityFinancialReport(
-        portfolio.id,
-        financialReportPayload(draft)
-      );
+      await addEquityFinancialReport(portfolio.id, packPayload(draft, fields));
       setAdding(false);
       router.refresh();
     } catch (err) {
@@ -2110,13 +1984,10 @@ function FinancialsTable({
     }
   }
 
-  async function handleUpdate(reportId: string, draft: FinancialReportDraft) {
+  async function handleUpdate(reportId: string, draft: PackDraft) {
     setBusy(true);
     try {
-      await updateEquityFinancialReport(
-        reportId,
-        financialReportPayload(draft)
-      );
+      await updateEquityFinancialReport(reportId, packPayload(draft, fields));
       setEditingId(null);
       router.refresh();
     } catch (err) {
@@ -2151,43 +2022,41 @@ function FinancialsTable({
       icon={BarChart3}
       title="Financials"
       summary={reports.length > 0 ? reports.length : undefined}
-      description={`What the startup reported for a quarter or a year. Which figures this project reports is set below${
+      description={`Each report is a pack of figures received from the founders, month by month. A later pack restates the months it covers and the earlier version stays as history. Which figures this project reports is set below${
         requiredCount > 0
-          ? `, and ${requiredCount} of them can't be left off a new period`
+          ? `, and ${requiredCount} of them can't be left off a month`
           : ""
       }. A calculated field is worked out from the figures rather than entered.`}
-      forceOpen={adding || picking || editingId !== null}
+      forceOpen={picking}
       actions={
-        !adding && (
-          <div className="flex items-center gap-2 shrink-0">
-            <button
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => {
+              setPicking((p) => !p);
+              setAdding(false);
+              setEditingId(null);
+            }}
+            className={cn(
+              "flex items-center gap-xs px-3 py-1.5 rounded-lg border text-s font-medium transition-colors",
+              picking
+                ? "border-primary/40 text-foreground bg-primary/10"
+                : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40"
+            )}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            Figures
+          </button>
+          {fields.length > 0 && (
+            <AddButton
+              label="Add report"
               onClick={() => {
-                setPicking((p) => !p);
-                setAdding(false);
+                setAdding(true);
+                setPicking(false);
                 setEditingId(null);
               }}
-              className={cn(
-                "flex items-center gap-xs px-3 py-1.5 rounded-lg border text-s font-medium transition-colors",
-                picking
-                  ? "border-primary/40 text-foreground bg-primary/10"
-                  : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40"
-              )}
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              Figures
-            </button>
-            {fields.length > 0 && (
-              <AddButton
-                label="Add report"
-                onClick={() => {
-                  setAdding(true);
-                  setPicking(false);
-                  setEditingId(null);
-                }}
-              />
-            )}
-          </div>
-        )
+            />
+          )}
+        </div>
       }
     >
       {picking && (
@@ -2225,48 +2094,31 @@ function FinancialsTable({
         <>
           {reports.length > 0 && (
             <div className="space-y-1.5 mb-3">
-              {reports.map((r) =>
-                editingId === r.id ? (
-                  <FinancialReportForm
-                    key={r.id}
-                    initial={reportToDraft(r, fields)}
-                    currency={currency}
-                    metrics={metrics}
-                    fields={fields}
-                    // Itself excluded: a period is no reference for itself.
-                    others={reports.filter((other) => other.id !== r.id)}
-                    // Editing a period filed before the rule arrived says so
-                    // rather than refusing to save it.
-                    enforceRequired={false}
-                    busy={busy}
-                    submitLabel="Save"
-                    onSubmit={(draft) => handleUpdate(r.id, draft)}
-                    onCancel={() => setEditingId(null)}
-                  />
-                ) : (
-                  <FinancialReportRow
-                    key={r.id}
-                    report={r}
-                    fields={fields}
-                    busy={busy}
-                    onEdit={() => {
-                      setEditingId(r.id);
-                      setAdding(false);
-                    }}
-                    onDelete={() => setDeletingId(r.id)}
-                  />
-                )
-              )}
+              {reports.map((r) => (
+                <FinancialReportRow
+                  key={r.id}
+                  report={r}
+                  fields={fields}
+                  metrics={metrics}
+                  busy={busy}
+                  onEdit={() => {
+                    setEditingId(r.id);
+                    setAdding(false);
+                  }}
+                  onDelete={() => setDeletingId(r.id)}
+                />
+              ))}
             </div>
           )}
 
           {adding && (
-            <FinancialReportForm
-              initial={emptyFinancialReport(fields)}
+            <MonthlyFiguresDialog
+              title={`${portfolio.project.name} — new financial report`}
+              initial={emptyPackDraft()}
               currency={currency}
               metrics={metrics}
               fields={fields}
-              others={reports}
+              otherPacks={otherPacksSeries(reports, null)}
               enforceRequired
               busy={busy}
               submitLabel="Add report"
@@ -2275,7 +2127,27 @@ function FinancialsTable({
             />
           )}
 
-          {reports.length === 0 && !adding && (
+          {editing && (
+            <MonthlyFiguresDialog
+              key={editing.id}
+              title={`${portfolio.project.name} — ${formatPackLabel(editing.reportedOn)} report`}
+              initial={packToDraft(editing)}
+              currency={currency}
+              metrics={metrics}
+              fields={fields}
+              // Itself excluded: a pack doesn't restate its own figures.
+              otherPacks={otherPacksSeries(reports, editing.id)}
+              // Editing a pack filed before the rule arrived says so rather
+              // than refusing to save it.
+              enforceRequired={false}
+              busy={busy}
+              submitLabel="Save"
+              onSubmit={(draft) => handleUpdate(editing.id, draft)}
+              onCancel={() => setEditingId(null)}
+            />
+          )}
+
+          {reports.length === 0 && (
             <p className="text-s text-muted-foreground py-2">
               No financial reports yet.
             </p>
@@ -2286,11 +2158,8 @@ function FinancialsTable({
               key={pendingDelete.id}
               open
               onOpenChange={(open) => !open && setDeletingId(null)}
-              title={`Delete ${formatPeriodLabel(
-                pendingDelete.periodType,
-                pendingDelete.periodStart
-              )}?`}
-              description="This removes the period and every figure reported for it. Unlike a portfolio, a report doesn't go to the trash — it's gone, and the figures have to be asked for again."
+              title={`Delete the ${formatPackLabel(pendingDelete.reportedOn)} report?`}
+              description="This removes the report and every figure it stated. Any month it restated falls back to what the report before it said. Unlike a portfolio, a report doesn't go to the trash — it's gone, and the figures have to be asked for again."
               confirmWord={portfolio.project.name}
               confirmLabel="Delete report"
               onConfirm={(typed) => handleDelete(pendingDelete.id, typed)}
@@ -2305,24 +2174,23 @@ function FinancialsTable({
 function FinancialReportRow({
   report: r,
   fields: asked,
+  metrics,
   busy,
   onEdit,
   onDelete,
 }: {
   report: EquityPortfolioDTO["financialReports"][number];
   fields: ReportField[];
+  metrics: EquityMetricDTO[];
   busy: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const fields = readFinancialFields(asked, r.values);
-  // The first two fields that were actually reported stand for the period on
-  // the closed row; which two they are is whatever this project asks for first.
-  const headline = fields.filter((f) => f.reported).slice(0, 2);
+  const months = readPackMonths(asked, metrics, r);
 
   return (
     <RecordRow
-      title={formatPeriodLabel(r.periodType, r.periodStart)}
+      title={`${formatPackLabel(r.reportedOn)} report`}
       badges={
         <>
           <RecordBadge tone={r.audited ? "good" : "neutral"}>
@@ -2331,12 +2199,15 @@ function FinancialReportRow({
           {r.needsHelp && <RecordBadge tone="warn">Needs help</RecordBadge>}
         </>
       }
+      // Which months it covers, rather than a figure from one of them: a pack of
+      // seven months has no single headline number, and picking one would read
+      // as the pack's total.
       meta={
-        headline.length > 0
-          ? headline
-              .map((f) => `${f.display} ${f.metric.name.toLowerCase()}`)
-              .join(" · ")
-          : "Nothing reported"
+        months.length === 0
+          ? "Nothing reported"
+          : months.length === 1
+            ? months[0].label
+            : `${months.length} months · ${months[0].label} to ${months[months.length - 1].label}`
       }
       actions={
         <RowActions
@@ -2347,14 +2218,19 @@ function FinancialReportRow({
         />
       }
     >
+      {months.map((month) => (
+        <div key={month.month} className="mb-2 last:mb-0">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            {month.label}
+          </div>
+          <RecordDetails>
+            {month.fields.map((f) => (
+              <RecordDetail key={f.metric.id} label={f.metric.name} value={f.display} />
+            ))}
+          </RecordDetails>
+        </div>
+      ))}
       <RecordDetails>
-        {fields.map((f) => (
-          <RecordDetail
-            key={f.metric.id}
-            label={f.metric.name}
-            value={f.display}
-          />
-        ))}
         {r.needsHelp && r.helpNotes && (
           <RecordDetail
             label="Help"
@@ -2433,12 +2309,15 @@ function ReportFieldPicker({
   }
 
   const asked = all.filter((m) => draft.has(m.id));
-  // A calculation only comes out if both the figures under it are reported, so
-  // the form says which ones those are rather than leaving it to be discovered
-  // on a chart with a hole in it.
+  // A calculation only comes out if the figures under it are reported, so the
+  // form says so here rather than leaving it to be discovered on a chart with a
+  // hole in it. Followed to the plain figures at the bottom, not just to the
+  // operands: a calculation standing on another one needs whatever *that* is
+  // built from, and the intermediate step is never reported itself.
+  const registry = useMemo(() => new Map(all.map((m) => [m.id, m])), [all]);
   const starved = asked.filter((m) => {
     if (!isFormulaMetric(m.type)) return false;
-    return !draft.has(m.leftId ?? "") || !draft.has(m.rightId ?? "");
+    return [...formulaDependencies(m.id, registry).leaves].some((id) => !draft.has(id));
   });
 
   return (
@@ -2455,9 +2334,9 @@ function ReportFieldPicker({
           >
             Financials data
           </Link>
-          ; what a given project is asked for is set here. Required means a new
-          period can&apos;t be filed without it — 0 is an answer, blank
-          isn&apos;t.
+          ; what a given project is asked for is set here, in the order the grid
+          shows them. Required means a pack can&apos;t be filed with the figure
+          missing from a month it reports — 0 is an answer, blank isn&apos;t.
         </p>
       </div>
 
@@ -2553,626 +2432,6 @@ function ReportFieldPicker({
   );
 }
 
-/**
- * The year as a list to pick from that can also be typed into.
- *
- * A datalist rather than a select, because the years offered are a guess — the
- * decade around today, plus whatever has already been reported — and a report
- * for a year outside that guess should still be possible to file. Typing
- * narrows the list, so a long span of years is no harder to use than a short
- * one.
- */
-function YearPicker({
-  value,
-  years,
-  onChange,
-}: {
-  value: string;
-  years: number[];
-  onChange: (year: string) => void;
-}) {
-  const listId = useId();
-
-  return (
-    <div className="w-[104px] shrink-0">
-      <input
-        type="text"
-        inputMode="numeric"
-        list={listId}
-        value={value}
-        onChange={(e) =>
-          onChange(e.target.value.replace(/\D/g, "").slice(0, 4))
-        }
-        placeholder="Year"
-        // The arrow is the browser's own, and drawn differently by each of
-        // them. Left alone deliberately: a second one painted over the top is
-        // what two arrows in the same box look like, and only the native one
-        // actually opens the list everywhere.
-        className={cn(
-          inputCls,
-          "[&::-webkit-calendar-picker-indicator]:cursor-pointer",
-          "[&::-webkit-list-button]:cursor-pointer"
-        )}
-      />
-      <datalist id={listId}>
-        {years.map((year) => (
-          <option key={year} value={year} />
-        ))}
-      </datalist>
-    </div>
-  );
-}
-
-/** Read-only box for a figure the form works out rather than accepts. */
-function DerivedField({
-  label,
-  value,
-  previously,
-}: {
-  label: string;
-  value: string;
-  /** What the neighbouring period worked out to, where there is one. */
-  previously?: string | null;
-}) {
-  return (
-    <div>
-      <label className={labelCls}>{label}</label>
-      <div className="flex h-9 items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-3 text-s text-foreground tabular-nums">
-        <span className="truncate">{value}</span>
-        {previously && (
-          <span className="ms-auto text-xs text-muted-foreground truncate">
-            {previously}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function FinancialReportForm({
-  initial,
-  currency,
-  metrics,
-  fields: asked,
-  others,
-  enforceRequired,
-  busy,
-  submitLabel,
-  onSubmit,
-  onCancel,
-}: {
-  initial: FinancialReportDraft;
-  currency: string;
-  /** The whole registry, for naming the fields a calculation stands on. */
-  metrics: EquityMetricDTO[];
-  /** What this project reports, which is what the form asks for. */
-  fields: ReportField[];
-  /** Every other period on record, to read the neighbouring one across from. */
-  others: EquityPortfolioDTO["financialReports"];
-  /** Off when editing: a rule made today doesn't reach back into last year. */
-  enforceRequired: boolean;
-  busy: boolean;
-  submitLabel: string;
-  onSubmit: (draft: FinancialReportDraft) => void;
-  onCancel: () => void;
-}) {
-  const [draft, setDraft] = useState<FinancialReportDraft>(initial);
-  const [uploadPct, setUploadPct] = useState<number | null>(null);
-  const documentInputRef = useRef<HTMLInputElement>(null);
-  const uploading = uploadPct !== null;
-
-  async function uploadDocuments(files: File[]) {
-    if (files.length === 0) return;
-    setUploadPct(0);
-    try {
-      for (const file of files) {
-        const uploaded = await uploadFileToR2(file, setUploadPct);
-        setDraft((d) => ({
-          ...d,
-          documents: [
-            ...d.documents,
-            {
-              key: documentKey(),
-              filename: uploaded.filename,
-              url: uploaded.url,
-              fileSize: uploaded.fileSize,
-              mimeType: uploaded.mimeType,
-            },
-          ],
-        }));
-      }
-    } catch (err) {
-      alert((err as Error).message || "Upload failed");
-    } finally {
-      setUploadPct(null);
-      if (documentInputRef.current) documentInputRef.current.value = "";
-    }
-  }
-
-  const documentsPasteRef = usePasteFiles(
-    (files) => {
-      void uploadDocuments(files);
-    },
-    { enabled: !busy && !uploading, capture: true },
-  );
-
-  function set<K extends keyof FinancialReportDraft>(
-    key: K,
-    value: FinancialReportDraft[K]
-  ) {
-    setDraft((d) => ({ ...d, [key]: value }));
-  }
-
-  // One at a time so the counter means something; a failure stops the batch
-  // where it happened rather than losing the files already through.
-  async function handleDocuments(e: React.ChangeEvent<HTMLInputElement>) {
-    await uploadDocuments(Array.from(e.target.files ?? []));
-  }
-
-  function patchRow(key: string, patch: Partial<FieldRow>) {
-    setDraft((d) => ({
-      ...d,
-      rows: d.rows.map((r) => (r.key === key ? { ...r, ...patch } : r)),
-    }));
-  }
-
-  // A calculated field can't be reported — it's read from the ones that can.
-  const enterable = asked
-    .filter((f) => !isFormulaMetric(f.metric.type))
-    .map((f) => f.metric);
-  const calculated = asked
-    .filter((f) => isFormulaMetric(f.metric.type))
-    .map((f) => f.metric);
-
-  const requiredIds = new Set(
-    asked.filter((f) => f.required).map((f) => f.metric.id)
-  );
-  // A required field already has a line of its own, so offering it again would
-  // only make a duplicate to reject.
-  const pickable = enterable.filter((m) => !requiredIds.has(m.id));
-
-  const filled = draft.rows.filter((r) => r.metricId);
-  const duplicate = new Set(filled.map((r) => r.metricId)).size !== filled.length;
-
-  // Worked out as you type, so a figure can be checked against what it feeds
-  // before the period is saved.
-  const entered = new Map(
-    filled.map((row) => [row.metricId, optionalAmount(row.number)])
-  );
-
-  /** A required field with nothing in its box. Zero counts as an answer. */
-  const missing = asked.filter(({ metric, required }) => {
-    if (!required) return false;
-    const row = draft.rows.find((r) => r.metricId === metric.id);
-    return !isFieldAnswered(metric, {
-      numberValue: row ? optionalAmount(row.number) : null,
-      dateValue: row?.date || null,
-    });
-  });
-  const missingNames = missing.map((f) => f.metric.name).join(", ");
-
-  const year = parseInt(draft.year, 10);
-  const validYear = Number.isFinite(year) && year > 1900 && year < 3000;
-
-  // Next year through the last ten, plus every year already on record and the
-  // one being edited, so the list covers the likely answers without ruling out
-  // an unlikely one.
-  const yearOptions = (() => {
-    const now = new Date().getUTCFullYear();
-    const years = new Set<number>();
-    for (let y = now + 1; y >= now - 10; y--) years.add(y);
-    for (const report of others) {
-      years.add(new Date(report.periodStart).getUTCFullYear());
-    }
-    if (validYear) years.add(year);
-    return [...years].sort((a, b) => b - a);
-  })();
-
-  // What the period next to this one said, to fill this one in against.
-  const neighbour = neighbouringReport(
-    others,
-    validYear
-      ? periodStartFor(
-          year,
-          draft.periodType === "YEARLY" ? null : parseInt(draft.quarter, 10)
-        )
-      : null
-  );
-  const before = reportedValues(neighbour);
-  const beforeNumbers = new Map(
-    [...before].map(([id, value]) => [id, value.numberValue])
-  );
-  const beforeLabel = neighbour
-    ? formatPeriodLabel(neighbour.periodType, neighbour.periodStart)
-    : null;
-  // The neighbour's column only exists when there's a neighbour, and only where
-  // there's room for it, so the lines and their header have to agree on the
-  // shape from one place.
-  const rowGrid = beforeLabel
-    ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] @md/card:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,120px)_auto]"
-    : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]";
-
-  const blocked = !validYear
-    ? "Enter the year this period belongs to"
-    : enforceRequired && missing.length > 0
-      ? `${missingNames} ${missing.length === 1 ? "is" : "are"} required`
-      : filled.length === 0
-        ? "Add at least one figure"
-        : duplicate
-          ? "A field can only be reported once per period"
-          : null;
-
-  // Said rather than enforced on an existing period: the figures were reported
-  // before the field was, and there may be nobody left to ask.
-  const warning =
-    !enforceRequired && missing.length > 0
-      ? `${missingNames} ${
-          missing.length === 1 ? "is" : "are"
-        } required on new reports and still empty here`
-      : null;
-
-  return (
-    <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-4">
-      <div className="grid gap-3 @md/card:grid-cols-[minmax(0,1fr)_200px]">
-        <div>
-          <label className={labelCls}>Reporting period</label>
-          <div className="flex items-center gap-2">
-            <select
-              value={draft.periodType}
-              onChange={(e) => set("periodType", e.target.value)}
-              className={cn(selectCls, "flex-1 min-w-0")}
-            >
-              {Object.entries(EQUITY_PERIOD_TYPE).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-            {draft.periodType === "QUARTERLY" && (
-              <select
-                value={draft.quarter}
-                onChange={(e) => set("quarter", e.target.value)}
-                className={cn(selectCls, "w-[84px] shrink-0")}
-              >
-                {[1, 2, 3, 4].map((q) => (
-                  <option key={q} value={q}>
-                    Q{q}
-                  </option>
-                ))}
-              </select>
-            )}
-            <YearPicker
-              value={draft.year}
-              years={yearOptions}
-              onChange={(next) => set("year", next)}
-            />
-          </div>
-        </div>
-        <div>
-          <label className={labelCls}>Audited</label>
-          <select
-            value={draft.audited ? "yes" : "no"}
-            onChange={(e) => set("audited", e.target.value === "yes")}
-            className={cn(
-              selectCls,
-              draft.audited &&
-                "bg-success/15 border-success/30 text-success"
-            )}
-          >
-            <option value="no">Not audited</option>
-            <option value="yes">Audited</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <div className={cn("@max-md/card:hidden @md/card:grid gap-2 px-0.5", rowGrid)}>
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">
-            Field
-          </span>
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">
-            Reported
-          </span>
-          {beforeLabel && (
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">
-              {beforeLabel}
-            </span>
-          )}
-          <span className="w-8" />
-        </div>
-
-        {draft.rows.map((row) => {
-          const metric = enterable.find((m) => m.id === row.metricId);
-          const locked = requiredIds.has(row.metricId);
-          return (
-            <div
-              key={row.key}
-              className={cn("grid gap-2 items-center", rowGrid)}
-            >
-              {locked ? (
-                <div className="flex h-9 items-center gap-xs rounded-lg border border-border bg-muted/30 px-3 text-s text-foreground">
-                  <span className="truncate">{metric?.name}</span>
-                  <span
-                    className="text-destructive"
-                    title="Required on this project's reports"
-                  >
-                    *
-                  </span>
-                </div>
-              ) : (
-                <select
-                  value={row.metricId}
-                  onChange={(e) =>
-                    patchRow(row.key, { metricId: e.target.value })
-                  }
-                  className={selectCls}
-                >
-                  <option value="">Pick a field…</option>
-                  {pickable.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {metric && isDateMetric(metric.type) ? (
-                <input
-                  type="date"
-                  value={row.date}
-                  onChange={(e) => patchRow(row.key, { date: e.target.value })}
-                  className={inputCls}
-                />
-              ) : (
-                <div className="relative">
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={row.number}
-                    onChange={(e) =>
-                      patchRow(row.key, {
-                        number: sanitizeAmount(e.target.value),
-                      })
-                    }
-                    placeholder={metric ? "e.g. 120,000" : "Pick a field first"}
-                    disabled={!metric}
-                    className={cn(
-                      inputCls,
-                      "disabled:opacity-50",
-                      metric?.type === "PERCENT" && "pe-7",
-                      metric?.unit && metric.type === "NUMBER" && "pe-14"
-                    )}
-                  />
-                  {metric?.type === "PERCENT" && (
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-s text-muted-foreground pointer-events-none">
-                      %
-                    </span>
-                  )}
-                  {metric?.type === "NUMBER" && metric.unit && (
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none max-w-12 truncate">
-                      {metric.unit}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {beforeLabel && (
-                <span className="hidden sm:block text-s text-muted-foreground tabular-nums truncate">
-                  {metric
-                    ? formatMetricValue(metric, before.get(metric.id) ?? {})
-                    : "—"}
-                </span>
-              )}
-
-              {locked ? (
-                <span className="w-8" />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setDraft((d) => ({
-                      ...d,
-                      rows:
-                        d.rows.length === 1
-                          ? [blankFieldRow()]
-                          : d.rows.filter((r) => r.key !== row.key),
-                    }))
-                  }
-                  className="w-8 h-9 grid place-items-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                  aria-label="Remove this line"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          );
-        })}
-
-        {pickable.length > 0 && (
-          <AddButton
-            label="Add row"
-            onClick={() =>
-              setDraft((d) => ({ ...d, rows: [...d.rows, blankFieldRow()] }))
-            }
-          />
-        )}
-
-        <p className="text-xs text-muted-foreground">
-          Amounts in {currency} unless the field says otherwise.{" "}
-          {requiredIds.size > 0
-            ? "A field marked * has to be filled in — enter 0 if that's the figure."
-            : "Leave a field off the report if it wasn't reported."}
-          {beforeLabel &&
-            ` The last column is what ${beforeLabel} reported, to check this period against.`}
-        </p>
-      </div>
-
-      {/* Read rather than entered, so they sit apart from the lines above. */}
-      {calculated.length > 0 && (
-        <div className="grid gap-2 @md/card:grid-cols-2">
-          {calculated.map((metric) => {
-            const worked = evaluateFormula(
-              metric.formulaOp,
-              entered.get(metric.leftId ?? "") ?? null,
-              entered.get(metric.rightId ?? "") ?? null
-            );
-            const from = formulaLabel(
-              metric.formulaOp,
-              metrics.find((m) => m.id === metric.leftId)?.name,
-              metrics.find((m) => m.id === metric.rightId)?.name
-            );
-            const previously = evaluateFormula(
-              metric.formulaOp,
-              beforeNumbers.get(metric.leftId ?? "") ?? null,
-              beforeNumbers.get(metric.rightId ?? "") ?? null
-            );
-            return (
-              <DerivedField
-                key={metric.id}
-                label={`${metric.name} — ${from ?? "calculated"}`}
-                value={
-                  worked == null
-                    ? "Report the fields it works from"
-                    : formatMetricValue(metric, { numberValue: worked })
-                }
-                previously={
-                  beforeLabel && previously != null
-                    ? `${beforeLabel}: ${formatMetricValue(metric, {
-                        numberValue: previously,
-                      })}`
-                    : null
-                }
-              />
-            );
-          })}
-        </div>
-      )}
-
-      <div className="grid gap-3 @md/card:grid-cols-[200px_minmax(0,1fr)]">
-        <div>
-          <label className={labelCls}>Do they need help?</label>
-          <select
-            value={draft.needsHelp ? "yes" : "no"}
-            onChange={(e) => set("needsHelp", e.target.value === "yes")}
-            className={cn(
-              selectCls,
-              draft.needsHelp &&
-                "bg-orange/15 border-orange/30 text-orange"
-            )}
-          >
-            <option value="no">No</option>
-            <option value="yes">Yes</option>
-          </select>
-        </div>
-        {draft.needsHelp && (
-          <div>
-            <label className={labelCls}>What do they need?</label>
-            <input
-              type="text"
-              value={draft.helpNotes}
-              onChange={(e) => set("helpNotes", e.target.value)}
-              placeholder="e.g. intros to investors, hiring a senior backend engineer"
-              className={inputCls}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* The statements the figures above were read from, kept with the
-          period so a figure can always be checked against its source. */}
-      <div>
-        <label className={labelCls}>Financial documents</label>
-        <div ref={documentsPasteRef} className="space-y-1.5">
-          {draft.documents.map((doc) => (
-            <div
-              key={doc.key}
-              className="flex items-center gap-2 h-9 px-3 rounded-lg border border-border bg-muted/30"
-            >
-              <Paperclip
-                className="w-3.5 h-3.5 shrink-0 text-muted-foreground"
-                strokeWidth={1.5}
-              />
-              <a
-                href={doc.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-s text-foreground truncate no-underline hover:underline"
-              >
-                {doc.filename}
-              </a>
-              {formatFileSize(doc.fileSize) && (
-                <span className="text-xs text-muted-foreground/60 shrink-0">
-                  {formatFileSize(doc.fileSize)}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() =>
-                  setDraft((d) => ({
-                    ...d,
-                    documents: d.documents.filter((x) => x.key !== doc.key),
-                  }))
-                }
-                disabled={busy}
-                className="ms-auto w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
-                title="Remove this document"
-              >
-                <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => documentInputRef.current?.click()}
-            disabled={busy || uploading}
-            className="flex items-center gap-2 w-full h-9 px-3 rounded-lg border border-dashed border-border bg-card text-s text-muted-foreground hover:text-foreground hover:border-muted-foreground/40 transition-colors disabled:opacity-50"
-          >
-            <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
-            {uploading
-              ? `Uploading… ${uploadPct}%`
-              : "Upload or paste the financials this period was reported from (PDF, spreadsheet, image)"}
-          </button>
-          <input
-            ref={documentInputRef}
-            type="file"
-            multiple
-            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,image/*"
-            onChange={handleDocuments}
-            className="hidden"
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center justify-end gap-2">
-        {blocked ? (
-          <span className="text-xs text-muted-foreground me-auto">
-            {blocked}
-          </span>
-        ) : (
-          warning && (
-            <span className="text-xs text-orange me-auto">{warning}</span>
-          )
-        )}
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={busy}
-          className="px-3 h-9 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={() => onSubmit(draft)}
-          disabled={busy || uploading || blocked != null}
-          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-s font-medium hover:bg-primary/90 transition-colors disabled:opacity-40"
-        >
-          {busy ? "Saving…" : submitLabel}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function TranchesTable({
   portfolio,

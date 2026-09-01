@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Activity, BarChart3, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddButton } from "@/components/add-button";
+import { wouldCycle } from "@/lib/equity-financials";
 import {
   EQUITY_FORMULA_OP,
   EQUITY_METRIC_GROUP,
@@ -43,14 +44,22 @@ const EMPTY: Draft = {
   rightId: "",
 };
 
-/** What a calculated field is allowed to stand on: plain figures beside it. */
+/**
+ * What a calculated field is allowed to stand on: any figure beside it,
+ * including another calculation.
+ *
+ * That nesting is the point — net profit is gross profit plus other income less
+ * overheads, and writing it out in terms of revenue again would let the two
+ * disagree. What's withheld is only what would close a loop: the field itself,
+ * and anything already worked out from it.
+ */
 function operandsIn(metrics: EquityMetricDTO[], group: string, selfId?: string) {
+  const registry = new Map(metrics.map((m) => [m.id, m]));
   return metrics.filter(
     (m) =>
       m.group === group &&
-      m.id !== selfId &&
-      !isFormulaMetric(m.type) &&
-      !isDateMetric(m.type),
+      !isDateMetric(m.type) &&
+      !(selfId && wouldCycle(selfId, m.id, registry)),
   );
 }
 
@@ -184,7 +193,7 @@ export function EquityMetricManager({ metrics }: { metrics: EquityMetricDTO[] })
       <MetricGroup
         group="FINANCIAL"
         icon={BarChart3}
-        description="What a period is reported with — revenue, cost, cash in bank. Recorded per project under Financials, one closed quarter or year at a time. A calculated field is worked out from two others every time it's read, so it can never disagree with them."
+        description="What a month is reported with — revenue, cost, cash in bank. Recorded per project under Financials, a year at a time, in packs that can restate a month an earlier pack already stated. A calculated field is worked out from two others every time it's read, so it can never disagree with them, and it may stand on another calculation."
         metrics={metrics}
       />
     </div>
