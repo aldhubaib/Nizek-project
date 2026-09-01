@@ -23,6 +23,8 @@ function task(id: string, title: string, extra?: Partial<SprintPlanningTask>): S
     assignee: extra?.assignee ?? null,
     questions: extra?.questions ?? [],
     unplanned: extra?.unplanned,
+    ...(extra?.decision !== undefined ? { decision: extra.decision } : {}),
+    ...(extra?.risk !== undefined ? { risk: extra.risk } : {}),
   };
 }
 
@@ -84,6 +86,71 @@ describe("sprint planning document tasks", () => {
     const synced = syncPlanningDocTasks(saved, live);
     expect(synced).toContain("Ada");
     expect(synced).toContain("90");
+  });
+
+  // The reported bug. A task dragged out of Next kept its row, and because a
+  // departed task has no estimate, assignee, Decision or Risk, that row made
+  // the Start sprint button permanently refuse over work not in the sprint.
+  it("removes the row for a task that has left the sprint", () => {
+    const saved = sprintPlanningDocHtml([task("a", "One"), task("b", "Two")], info);
+    const synced = syncPlanningDocTasks(saved, [task("a", "One")]);
+    expect(planningTaskIdsFromHtml(synced)).toEqual(["a"]);
+    expect(synced).not.toContain("Two");
+  });
+
+  it("adds and removes in the same pass", () => {
+    const saved = sprintPlanningDocHtml([task("a", "One"), task("b", "Two")], info);
+    const synced = syncPlanningDocTasks(saved, [task("a", "One"), task("c", "Three")]);
+    expect(planningTaskIdsFromHtml(synced).sort()).toEqual(["a", "c"]);
+  });
+
+  it("restores the placeholder when the last task leaves", () => {
+    const saved = sprintPlanningDocHtml([task("a", "One")], info);
+    const synced = syncPlanningDocTasks(saved, []);
+    expect(planningTaskIdsFromHtml(synced)).toEqual([]);
+    expect(synced).toContain("No tasks in this sprint yet.");
+  });
+
+  it("leaves a node it cannot parse rather than deleting it", () => {
+    const saved = `${sprintPlanningDocHtml([task("a", "One")], info)}<div data-type="sprint-task"><br></div>`;
+    const synced = syncPlanningDocTasks(saved, [task("a", "One")]);
+    expect(synced).toContain('data-type="sprint-task"><br></div>');
+  });
+
+  it("seeds Decision and Risk from the server rather than blank", () => {
+    const saved = sprintPlanningDocHtml([], info);
+    const synced = syncPlanningDocTasks(saved, [
+      task("a", "One", { decision: "Ship it", risk: "Vendor may slip" }),
+    ]);
+    expect(synced).toContain('data-decision="Ship it"');
+    expect(synced).toContain('data-risk="Vendor may slip"');
+  });
+
+  it("overlays Decision and Risk onto a node that already exists", () => {
+    const saved = sprintTaskNodeHtml(task("a", "One"));
+    const synced = syncPlanningDocTasks(saved, [
+      task("a", "One", { decision: "Agreed", risk: "None" }),
+    ]);
+    expect(synced).toContain('data-decision="Agreed"');
+    expect(synced).toContain('data-risk="None"');
+  });
+
+  it("escapes Decision and Risk so quotes cannot break out of the attribute", () => {
+    const synced = syncPlanningDocTasks(sprintTaskNodeHtml(task("a", "One")), [
+      task("a", "One", { decision: 'He said "go"', risk: "a < b & c" }),
+    ]);
+    expect(synced).toContain("&quot;go&quot;");
+    expect(synced).toContain("&amp;");
+    expect(planningTaskIdsFromHtml(synced)).toEqual(["a"]);
+  });
+
+  it("does not store Decision and Risk twice in one node", () => {
+    const synced = syncPlanningDocTasks(sprintTaskNodeHtml(task("a", "One")), [
+      task("a", "One", { decision: "Agreed", risk: "None" }),
+    ]);
+    const embedded = synced.match(/data-task="([^"]*)"/)?.[1] ?? "";
+    expect(embedded).not.toContain("decision");
+    expect(embedded).not.toContain("risk");
   });
 });
 

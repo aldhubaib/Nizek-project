@@ -41,6 +41,13 @@ export function planTaskSync(
   if (!ev?.type) return NOTHING;
   const held = ctx.dragging || ctx.busy;
 
+  // Decision and Risk are planning-document text, not task fields. This fires
+  // on a debounce while someone types, so re-reading the task each time would
+  // be pure waste; the sprint consumer refreshes its own plan flags.
+  if (ev.type === "sprint.task-plan-changed") {
+    return { notifySprint: true, resync: false };
+  }
+
   if (ev.type.startsWith("sprint.")) {
     // Sprint actions rewrite task stages in bulk — starting a sprint drops
     // every backlog task into Todo — yet publish no task-* event of their own.

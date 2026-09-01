@@ -1,13 +1,18 @@
 "use client";
 
-import { Node, mergeAttributes } from "@tiptap/core";
+import { useEffect, useRef } from "react";
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from "@tiptap/react";
+import { SprintTaskBlockSchema } from "@/lib/tiptap-schema";
 import { EstimateBadge, SprintTaskRow } from "@/components/project/sprint-task-row";
 import { PlanningAssigneePicker, PlanningEstimateInput } from "@/components/project/planning-task-controls";
+import { updateSprintTaskPlan } from "@/actions/sprint";
 import {
   formatPlanningAnswer,
   type SprintPlanningTask,
 } from "@/lib/sprint-planning-doc";
+
+/** Matches the other planning fields, which already autosave on a short pause. */
+const PLAN_SAVE_DELAY_MS = 600;
 
 function SprintTaskNodeView({ node, updateAttributes, editor, extension }: ReactNodeViewProps) {
   const task = node.attrs.task as SprintPlanningTask | null;
@@ -19,6 +24,7 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
   const incompleteReason = String(node.attrs.incompleteReason ?? "");
   const options = extension.options as {
     projectId?: string;
+    sprintId?: string;
     sprintTasks?: SprintPlanningTask[];
     hideAssignee?: boolean;
     onTasksPatched?: (taskId: string, patch: Partial<SprintPlanningTask>) => void;
@@ -28,6 +34,36 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
   const liveTasks = options.sprintTasks ?? [];
   const live = task ? liveTasks.find((item) => item.id === task.id) : undefined;
   const editable = editor.isEditable;
+
+  // Decision and Risk are rows in SprintTaskPlan; the node attributes are just
+  // what is on screen between keystrokes. Saving is debounced and the pending
+  // write is flushed on unmount so closing the document does not drop it.
+  const saveTimer = useRef<number | null>(null);
+  const pending = useRef<{ decision?: string; risk?: string }>({});
+  const saveCtx = useRef({ sprintId: options.sprintId, taskId: task?.id });
+  saveCtx.current = { sprintId: options.sprintId, taskId: task?.id };
+
+  function flushPlan() {
+    const { sprintId, taskId } = saveCtx.current;
+    const patch = pending.current;
+    pending.current = {};
+    if (!sprintId || !taskId || Object.keys(patch).length === 0) return;
+    void updateSprintTaskPlan({ sprintId, taskId, ...patch }).catch(() => {});
+  }
+
+  function savePlan(patch: { decision?: string; risk?: string }) {
+    pending.current = { ...pending.current, ...patch };
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(flushPlan, PLAN_SAVE_DELAY_MS);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) window.clearTimeout(saveTimer.current);
+      flushPlan();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const decisionEmpty = !decision.trim();
   const riskEmpty = !risk.trim();
   const reasonEmpty = !incompleteReason.trim();
@@ -136,7 +172,11 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
               required
               rows={3}
               placeholder="What was decided for this item?"
-              onChange={(e) => updateAttributes({ decision: e.target.value })}
+              onChange={(e) => {
+                updateAttributes({ decision: e.target.value });
+                savePlan({ decision: e.target.value });
+              }}
+              onBlur={flushPlan}
               onMouseDown={(e) => e.stopPropagation()}
               className={`w-full resize-y rounded-md border bg-transparent px-3 py-2 text-s text-foreground outline-none placeholder:text-muted-foreground/40 read-only:cursor-default ${
                 decisionEmpty ? "border-destructive/50" : "border-border"
@@ -153,7 +193,11 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
               required
               rows={3}
               placeholder="What could block or delay this item?"
-              onChange={(e) => updateAttributes({ risk: e.target.value })}
+              onChange={(e) => {
+                updateAttributes({ risk: e.target.value });
+                savePlan({ risk: e.target.value });
+              }}
+              onBlur={flushPlan}
               onMouseDown={(e) => e.stopPropagation()}
               className={`w-full resize-y rounded-md border bg-transparent px-3 py-2 text-s text-foreground outline-none placeholder:text-muted-foreground/40 read-only:cursor-default ${
                 riskEmpty ? "border-destructive/50" : "border-border"
@@ -166,99 +210,7 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
   );
 }
 
-export const SprintTaskBlock = Node.create<{
-  projectId?: string;
-  sprintTasks?: SprintPlanningTask[];
-  hideAssignee?: boolean;
-  onTasksPatched?: (taskId: string, patch: Partial<SprintPlanningTask>) => void;
-}>({
-  name: "sprintTask",
-  group: "block",
-  atom: true,
-  isolating: true,
-  selectable: true,
-  draggable: false,
-  addOptions() {
-    return { projectId: "", sprintTasks: [], hideAssignee: false, onTasksPatched: undefined };
-  },
-  addAttributes() {
-    return {
-      id: {
-        default: null as string | null,
-        parseHTML: (element) => {
-          const attr = element.getAttribute("data-id");
-          if (attr) return attr;
-          try {
-            const task = JSON.parse(element.getAttribute("data-task") || "null") as {
-              id?: string;
-            } | null;
-            return task?.id ?? null;
-          } catch {
-            return null;
-          }
-        },
-        renderHTML: (attributes) =>
-          attributes.id ? { "data-id": attributes.id as string } : {},
-      },
-      task: {
-        default: null as SprintPlanningTask | null,
-        parseHTML: (element) => {
-          try {
-            return JSON.parse(element.getAttribute("data-task") || "null") as SprintPlanningTask | null;
-          } catch {
-            return null;
-          }
-        },
-        renderHTML: (attributes) => ({
-          "data-task": JSON.stringify(attributes.task ?? null),
-        }),
-      },
-      showQuestions: {
-        default: true,
-        parseHTML: (element) => element.getAttribute("data-show-questions") === "true",
-        renderHTML: (attributes) =>
-          attributes.showQuestions ? { "data-show-questions": "true" } : {},
-      },
-      decision: {
-        default: "",
-        parseHTML: (element) => element.getAttribute("data-decision") ?? "",
-        renderHTML: (attributes) => ({ "data-decision": attributes.decision ?? "" }),
-      },
-      risk: {
-        default: "",
-        parseHTML: (element) => element.getAttribute("data-risk") ?? "",
-        renderHTML: (attributes) => ({ "data-risk": attributes.risk ?? "" }),
-      },
-      variant: {
-        default: "planning",
-        parseHTML: (element) => element.getAttribute("data-variant") || "planning",
-        renderHTML: (attributes) =>
-          attributes.variant && attributes.variant !== "planning"
-            ? { "data-variant": attributes.variant }
-            : {},
-      },
-      incompleteReason: {
-        default: "",
-        parseHTML: (element) => element.getAttribute("data-incomplete-reason") ?? "",
-        renderHTML: (attributes) => ({
-          "data-incomplete-reason": attributes.incompleteReason ?? "",
-        }),
-      },
-    };
-  },
-  parseHTML() {
-    return [{ tag: 'div[data-type="sprint-task"]' }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return [
-      "div",
-      mergeAttributes(HTMLAttributes, {
-        "data-type": "sprint-task",
-        contenteditable: "false",
-      }),
-      ["br"],
-    ];
-  },
+export const SprintTaskBlock = SprintTaskBlockSchema.extend({
   addNodeView() {
     return ReactNodeViewRenderer(SprintTaskNodeView, {
       stopEvent: () => true,

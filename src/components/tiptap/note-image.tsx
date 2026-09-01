@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import Image from "@tiptap/extension-image";
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from "@tiptap/react";
+import { NoteImageSchema } from "@/lib/tiptap-schema";
 import {
   AlignCenter,
   AlignLeft,
@@ -116,29 +116,7 @@ function ToolbarBtn({
   );
 }
 
-export const NoteImage = Image.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      align: {
-        default: "center",
-        parseHTML: (el) => {
-          const value = el.getAttribute("data-align");
-          return value === "left" || value === "right" || value === "center" ? value : "center";
-        },
-        renderHTML: (attrs) => ({ "data-align": attrs.align ?? "center" }),
-      },
-      display: {
-        default: "normal",
-        parseHTML: (el) => {
-          const value = el.getAttribute("data-display");
-          return value === "full" ? "full" : "normal";
-        },
-        renderHTML: (attrs) => ({ "data-display": attrs.display ?? "normal" }),
-      },
-    };
-  },
-
+export const NoteImage = NoteImageSchema.extend({
   addNodeView() {
     return ReactNodeViewRenderer(NoteImageView);
   },

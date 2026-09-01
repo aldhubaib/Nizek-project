@@ -23,13 +23,18 @@ export function sprintIdFromReviewHtml(html: string): string | null {
   return match?.[1] ?? sprintIdFromPlanningHtml(html);
 }
 
-/** Review document date keyed by sprint, newest note wins if several exist. */
+/**
+ * Review document date keyed by sprint, newest note wins if several exist.
+ *
+ * Prefers the note's sprintId column and falls back to digging it out of the
+ * HTML, which is only still needed for documents predating that column.
+ */
 export function reviewDateBySprintId(
-  notes: { content: string; date?: Date | string | null }[],
+  notes: { content: string; sprintId?: string | null; date?: Date | string | null }[],
 ): Map<string, string> {
   const map = new Map<string, string>();
   for (const note of notes) {
-    const sprintId = sprintIdFromReviewHtml(note.content);
+    const sprintId = note.sprintId ?? sprintIdFromReviewHtml(note.content);
     if (!sprintId || map.has(sprintId)) continue;
     const iso =
       documentDateIsoFromPlanningHtml(note.content) ||

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { Node, mergeAttributes } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from "@tiptap/react";
 import { CheckCircle2, Play } from "lucide-react";
@@ -18,6 +17,7 @@ import {
   type SprintPlanningInfo,
   type SprintPlanningTask,
 } from "@/lib/sprint-planning-doc";
+import { SprintInfoBlockSchema } from "@/lib/tiptap-schema";
 import { countWorkingDays, endDateForWorkingDays } from "@/lib/working-days";
 import { useChannel } from "@/components/realtime/hooks";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
@@ -150,27 +150,43 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
       let incomplete = 0;
       let unplanned = 0;
       const review = info?.variant === "review";
-      const liveById = new Map(tasksRef.current.map((task) => [task.id, task]));
+
+      // Index the document by task, then walk the sprint. Walking the document
+      // instead meant a row left behind by a task that had moved on counted as
+      // missing everything, which disabled Start sprint over work the sprint no
+      // longer contained and gave no way to clear it.
+      const nodeByTask = new Map<string, { attrs: Record<string, unknown> }>();
       editor.state.doc.descendants((node) => {
         if (node.type.name !== "sprintTask") return;
-        const task = node.attrs.task as SprintPlanningTask | null;
-        if (!task?.id) return;
-        const live = liveById.get(task.id);
+        const id =
+          (node.attrs.id as string | null) ??
+          (node.attrs.task as SprintPlanningTask | null)?.id ??
+          null;
+        if (id) nodeByTask.set(id, { attrs: node.attrs });
+      });
+
+      for (const live of tasksRef.current) {
+        const attrs = nodeByTask.get(live.id)?.attrs;
         if (review) {
-          if (node.attrs.variant === "incomplete") {
+          const variant = attrs?.variant ?? (live.stage === "DONE" ? "completed" : "incomplete");
+          if (variant === "incomplete") {
             incomplete += 1;
-            if (!String(node.attrs.incompleteReason ?? "").trim()) missing = true;
-          } else if (node.attrs.variant === "completed") {
+            if (!String(attrs?.incompleteReason ?? "").trim()) missing = true;
+          } else if (variant === "completed") {
             completed += 1;
           }
-          if (task.unplanned || live?.unplanned) unplanned += 1;
-          return;
+          if (live.unplanned) unplanned += 1;
+          continue;
         }
-        if (!String(node.attrs.decision ?? "").trim()) missing = true;
-        if (!String(node.attrs.risk ?? "").trim()) missing = true;
-        if (!(task.estimatedMinutes || live?.estimatedMinutes)) missingEst = true;
-        if (!(task.assignee || live?.assignee)) missingAsg = true;
-      });
+        // Decision and Risk are SprintTaskPlan rows; the node attribute is only
+        // what has been typed since the last save, so either counts as filled.
+        const decision = String(attrs?.decision ?? live.decision ?? "").trim();
+        const risk = String(attrs?.risk ?? live.risk ?? "").trim();
+        if (!decision || !risk) missing = true;
+        if (!live.estimatedMinutes) missingEst = true;
+        if (!live.assignee) missingAsg = true;
+      }
+
       setDocIncomplete(missing);
       setMissingEstimates(missingEst);
       setMissingAssignees(missingAsg);
@@ -299,23 +315,30 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
       setTasks(data.tasks);
       tasksRef.current = data.tasks;
       if (data.status !== "PLANNED" && data.status !== "NEXT") return;
+      // Same source as the button's disabled state: the sprint's own task list,
+      // with the document consulted only for text not yet saved. Walking the
+      // document instead used to let the two disagree, so the button could be
+      // enabled and then refuse, or refuse and name a task nobody could find.
+      const nodeByTask = new Map<string, Record<string, unknown>>();
+      editor.state.doc.descendants((node) => {
+        if (node.type.name !== "sprintTask") return;
+        const id =
+          (node.attrs.id as string | null) ??
+          (node.attrs.task as SprintPlanningTask | null)?.id ??
+          null;
+        if (id) nodeByTask.set(id, node.attrs);
+      });
       const reason = sprintStartBlockedReason({
         activeSprintName: data.activeSprintName,
         infoIncomplete,
         missingEstimates: data.tasks.some((task) => !task.estimatedMinutes),
         missingAssignees: data.tasks.some((task) => !task.assignee),
-        docIncomplete: (() => {
-          let missingRequired = false;
-          editor.state.doc.descendants((node) => {
-            if (node.type.name !== "sprintTask") return;
-            const task = node.attrs.task as SprintPlanningTask | null;
-            if (!task?.id) return;
-            const decision = String(node.attrs.decision ?? "").trim();
-            const risk = String(node.attrs.risk ?? "").trim();
-            if (!decision || !risk) missingRequired = true;
-          });
-          return missingRequired;
-        })(),
+        docIncomplete: data.tasks.some((task) => {
+          const attrs = nodeByTask.get(task.id);
+          const decision = String(attrs?.decision ?? task.decision ?? "").trim();
+          const risk = String(attrs?.risk ?? task.risk ?? "").trim();
+          return !decision || !risk;
+        }),
       });
       if (reason) {
         setError(reason);
@@ -582,62 +605,7 @@ function countSprintInfo(doc: { descendants: (fn: (node: { type: { name: string 
   return count;
 }
 
-export const SprintInfoBlock = Node.create<{
-  projectId?: string;
-  isAdmin?: boolean;
-  getIsAdmin?: () => boolean;
-  canStartSprint?: boolean;
-  getCanStartSprint?: () => boolean;
-  canEndSprint?: boolean;
-  getCanEndSprint?: () => boolean;
-  onSprintStatusChange?: (status: string) => void;
-}>({
-  name: "sprintInfo",
-  group: "block",
-  atom: true,
-  selectable: false,
-  draggable: false,
-  addOptions() {
-    return {
-      projectId: undefined,
-      isAdmin: false,
-      getIsAdmin: undefined,
-      canStartSprint: false,
-      getCanStartSprint: undefined,
-      canEndSprint: false,
-      getCanEndSprint: undefined,
-      onSprintStatusChange: undefined,
-    };
-  },
-  addAttributes() {
-    return {
-      info: {
-        default: null as SprintPlanningInfo | null,
-        parseHTML: (element) => {
-          try {
-            return JSON.parse(element.getAttribute("data-info") || "null") as SprintPlanningInfo | null;
-          } catch {
-            return null;
-          }
-        },
-        renderHTML: (attributes) => ({
-          "data-info": JSON.stringify(attributes.info ?? null),
-        }),
-      },
-    };
-  },
-  parseHTML() {
-    return [{ tag: 'div[data-type="sprint-info"]' }];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return [
-      "div",
-      mergeAttributes(HTMLAttributes, {
-        "data-type": "sprint-info",
-        contenteditable: "false",
-      }),
-    ];
-  },
+export const SprintInfoBlock = SprintInfoBlockSchema.extend({
   addProseMirrorPlugins() {
     return [
       new Plugin({

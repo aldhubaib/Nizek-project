@@ -48,6 +48,7 @@ import { Button } from "@/components/ui/button";
 import { SprintInfoBlock } from "@/components/tiptap/sprint-info-block";
 import { SprintTaskBlock } from "@/components/tiptap/sprint-task-block";
 import { type SprintPlanningTask } from "@/lib/sprint-planning-doc";
+import { isUnstartedSprint } from "@/lib/sprint-status";
 
 function planningDocIsReview(editor: Editor): boolean {
   let review = false;
@@ -59,13 +60,22 @@ function planningDocIsReview(editor: Editor): boolean {
   return review;
 }
 
+/**
+ * Make the open document show exactly the sprint's current tasks.
+ *
+ * Reconciles in both directions. Adding only, as this used to do, left a row
+ * behind for every task dragged out of the sprint, and those rows carry no
+ * assignee, estimate, Decision or Risk — which is what disabled Start sprint
+ * with a complaint about work the sprint no longer contained.
+ */
 function syncSprintTasksIntoEditor(editor: Editor, tasks: SprintPlanningTask[]) {
-  if (tasks.length === 0) return;
   if (planningDocIsReview(editor)) return;
   const type = editor.schema.nodes.sprintTask;
   if (!type) return;
 
+  const liveIds = new Set(tasks.map((task) => task.id));
   const existing = new Set<string>();
+  const departed: { from: number; to: number }[] = [];
   const scan = {
     lastTaskEnd: null as number | null,
     placeholderFrom: null as number | null,
@@ -73,7 +83,14 @@ function syncSprintTasksIntoEditor(editor: Editor, tasks: SprintPlanningTask[]) 
   };
   editor.state.doc.descendants((node, pos) => {
     if (node.type.name === "sprintTask") {
-      const id = (node.attrs.task as SprintPlanningTask | null)?.id;
+      const id =
+        (node.attrs.id as string | null) ??
+        (node.attrs.task as SprintPlanningTask | null)?.id ??
+        null;
+      if (id && !liveIds.has(id)) {
+        departed.push({ from: pos, to: pos + node.nodeSize });
+        return;
+      }
       if (id) existing.add(id);
       scan.lastTaskEnd = pos + node.nodeSize;
     }
@@ -87,10 +104,22 @@ function syncSprintTasksIntoEditor(editor: Editor, tasks: SprintPlanningTask[]) 
   });
 
   const missing = tasks.filter((task) => !existing.has(task.id));
-  if (missing.length === 0) return;
+  if (missing.length === 0 && departed.length === 0) return;
 
   let tr = editor.state.tr;
-  if (scan.placeholderFrom != null && scan.placeholderTo != null) {
+
+  // Back to front, so each deletion leaves the earlier positions untouched.
+  for (const range of [...departed].reverse()) {
+    tr = tr.delete(range.from, range.to);
+    const removed = range.to - range.from;
+    if (scan.lastTaskEnd != null && scan.lastTaskEnd > range.from) scan.lastTaskEnd -= removed;
+    if (scan.placeholderFrom != null && scan.placeholderFrom > range.from) {
+      scan.placeholderFrom -= removed;
+      if (scan.placeholderTo != null) scan.placeholderTo -= removed;
+    }
+  }
+
+  if (missing.length > 0 && scan.placeholderFrom != null && scan.placeholderTo != null) {
     const from = scan.placeholderFrom;
     const to = scan.placeholderTo;
     tr = tr.delete(from, to);
@@ -105,8 +134,8 @@ function syncSprintTasksIntoEditor(editor: Editor, tasks: SprintPlanningTask[]) 
       id: task.id,
       task,
       showQuestions: true,
-      decision: "",
-      risk: "",
+      decision: task.decision ?? "",
+      risk: task.risk ?? "",
       variant: "planning",
     });
     tr = tr.insert(insertPos, node);
@@ -135,6 +164,10 @@ export interface RichTextEditorProps {
   borderless?: boolean;
   editable?: boolean;
   projectId?: string;
+  /** Set on sprint documents so task blocks can persist Decision and Risk. */
+  sprintId?: string;
+  /** Task-list mirroring stops once this leaves PLANNED / NEXT. */
+  sprintStatus?: string;
   isAdmin?: boolean;
   canStartSprint?: boolean;
   canEndSprint?: boolean;
@@ -155,6 +188,8 @@ export function RichTextEditor({
   borderless = false,
   editable = true,
   projectId,
+  sprintId,
+  sprintStatus,
   isAdmin = false,
   canStartSprint = false,
   canEndSprint = false,
@@ -212,6 +247,7 @@ export function RichTextEditor({
       }),
       SprintTaskBlock.configure({
         projectId,
+        sprintId,
         sprintTasks,
         hideAssignee: hideAssignees,
         onTasksPatched: (taskId, patch) => onSprintTaskPatchRef.current?.(taskId, patch),
@@ -539,10 +575,15 @@ export function RichTextEditor({
     editor.view.dispatch(editor.state.tr.setMeta("sprintTasks", sprintTasks.length));
   }, [editor, sprintTasks, hideAssignees]);
 
+  // Mirroring stops the moment the sprint starts. From then on the document is
+  // the record of what was committed to, so it must not follow later changes —
+  // not even for an admin, who can still edit it by hand.
+  const mirrorsSprint = sprintStatus === undefined || isUnstartedSprint(sprintStatus);
+
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || !mirrorsSprint) return;
     syncSprintTasksIntoEditor(editor, sprintTasks);
-  }, [editor, sprintTasks, collabSynced]);
+  }, [editor, sprintTasks, collabSynced, mirrorsSprint]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

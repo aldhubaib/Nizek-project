@@ -120,6 +120,9 @@ export type SprintPlanningTask = {
   assignee: { id?: string; name: string | null; imageUrl: string | null } | null;
   questions: SprintPlanningQa[];
   unplanned?: boolean;
+  /** From SprintTaskPlan, not the document. The server is the authority on both. */
+  decision?: string;
+  risk?: string;
 };
 
 export type SprintTaskSummary = {
@@ -187,14 +190,32 @@ export function formatPlanningAnswer(raw: string) {
   return trimmed;
 }
 
+/** Replace an attribute on an opening tag, appending it when not already there. */
+function setTagAttr(tag: string, name: string, value: string): string {
+  const encoded = `${name}="${escapeHtml(value)}"`;
+  const existing = new RegExp(`\\s${name}="[^"]*"`, "i");
+  if (existing.test(tag)) return tag.replace(existing, ` ${encoded}`);
+  return tag.replace(/\s*\/?>$/, (close) => ` ${encoded}${close}`);
+}
+
+/**
+ * Refresh each sprint-task node from live server data.
+ *
+ * Decision and Risk live in SprintTaskPlan now, so they are overlaid here too:
+ * the document is a view of the server's copy rather than the other way round.
+ * They are stripped from the embedded task JSON so the node carries exactly one
+ * copy of each, in its own attribute.
+ */
 export function overlayPlanningTaskAssignees(
   html: string,
   tasks: SprintPlanningTask[],
 ): string {
   const byId = new Map(tasks.map((task) => [task.id, task]));
-  return html.replace(/\sdata-task="([^"]*)"/g, (full, encoded: string) => {
+  return html.replace(SPRINT_TASK_TAG_RE, (tag) => {
+    const taskMatch = tag.match(/\sdata-task="([^"]*)"/i);
+    if (!taskMatch) return tag;
     try {
-      const task = JSON.parse(unescapeAttr(encoded)) as SprintPlanningTask;
+      const task = JSON.parse(unescapeAttr(taskMatch[1])) as SprintPlanningTask;
       const live = byId.get(task.id);
       const next = {
         ...task,
@@ -203,63 +224,116 @@ export function overlayPlanningTaskAssignees(
         questions: live?.questions?.length ? live.questions : task.questions,
         unplanned: live?.unplanned ?? task.unplanned,
       };
-      return ` data-task="${escapeHtml(JSON.stringify(next))}"`;
+      delete next.decision;
+      delete next.risk;
+
+      let out = tag.replace(
+        /\sdata-task="[^"]*"/i,
+        ` data-task="${escapeHtml(JSON.stringify(next))}"`,
+      );
+      if (live?.decision !== undefined) out = setTagAttr(out, "data-decision", live.decision);
+      if (live?.risk !== undefined) out = setTagAttr(out, "data-risk", live.risk);
+      return out;
     } catch {
-      return full;
+      return tag;
     }
   });
 }
 
 const EMPTY_SPRINT_TASKS_HTML = `<p><em>No tasks in this sprint yet.</em></p>`;
 const SPRINT_TASK_BLOCK_RE = /<div\b[^>]*data-type="sprint-task"[^>]*>[\s\S]*?<\/div>/gi;
+/** Opening tag only. Safe as `[^>]*` because every attribute value is escaped. */
+const SPRINT_TASK_TAG_RE = /<div[^>]*data-type="sprint-task"[^>]*>/gi;
+
+/** The task a sprint-task node refers to, from its own attribute or its JSON. */
+function taskIdFromSprintTaskTag(tagOrBlock: string): string | null {
+  const direct = tagOrBlock.match(/\sdata-id="([^"]*)"/i);
+  if (direct && direct[1].trim()) return unescapeAttr(direct[1]).trim();
+  const taskMatch = tagOrBlock.match(/\sdata-task="([^"]*)"/i);
+  if (!taskMatch) return null;
+  try {
+    const task = JSON.parse(unescapeAttr(taskMatch[1])) as { id?: string };
+    return task.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export function planningTaskIdsFromHtml(html: string): string[] {
   const ids: string[] = [];
-  const tags = html.match(/<div\b[^>]*data-type="sprint-task"[^>]*>/gi) ?? [];
-  for (const tag of tags) {
-    const taskMatch = tag.match(/\sdata-task="([^"]*)"/i);
-    if (!taskMatch) continue;
-    try {
-      const task = JSON.parse(unescapeAttr(taskMatch[1])) as { id?: string };
-      if (task.id) ids.push(task.id);
-    } catch {
-      /* skip malformed nodes */
-    }
+  for (const tag of html.match(SPRINT_TASK_TAG_RE) ?? []) {
+    const id = taskIdFromSprintTaskTag(tag);
+    if (id) ids.push(id);
   }
   return ids;
 }
 
-/** Keep saved planning HTML in sync with the sprint: overlay live fields and insert missing tasks. */
-export function syncPlanningDocTasks(html: string, tasks: SprintPlanningTask[]): string {
-  let next = overlayPlanningTaskAssignees(html, tasks);
-  if (tasks.length === 0) return next;
+/** Drop the blocks in `html` whose task is no longer in the sprint. */
+function removeDepartedTaskBlocks(html: string, liveIds: Set<string>): string {
+  return html.replace(SPRINT_TASK_BLOCK_RE, (block) => {
+    const id = taskIdFromSprintTaskTag(block);
+    // An unreadable node is left alone: better a stale row than silently eating
+    // something we failed to parse.
+    if (!id) return block;
+    return liveIds.has(id) ? block : "";
+  });
+}
 
-  const existing = new Set(planningTaskIdsFromHtml(next));
-  const missing = tasks.filter((task) => !existing.has(task.id));
-  if (missing.length === 0) return next;
-
-  const blocks = missing.map((task) => sprintTaskNodeHtml(task)).join("");
-  if (next.includes(EMPTY_SPRINT_TASKS_HTML)) {
-    return next.replace(EMPTY_SPRINT_TASKS_HTML, blocks);
+/** Put `blocks` where the sprint item list belongs. */
+function insertTaskBlocks(html: string, blocks: string): string {
+  if (html.includes(EMPTY_SPRINT_TASKS_HTML)) {
+    return html.replace(EMPTY_SPRINT_TASKS_HTML, blocks);
   }
 
-  const matches = [...next.matchAll(SPRINT_TASK_BLOCK_RE)];
+  const matches = [...html.matchAll(SPRINT_TASK_BLOCK_RE)];
   const last = matches.at(-1);
   if (last?.index != null) {
     const insertAt = last.index + last[0].length;
-    return `${next.slice(0, insertAt)}${blocks}${next.slice(insertAt)}`;
+    return `${html.slice(0, insertAt)}${blocks}${html.slice(insertAt)}`;
   }
 
-  const heading = next.search(/<h2>List of Sprint Items<\/h2>/i);
+  const heading = html.search(/<h2>List of Sprint Items<\/h2>/i);
   if (heading >= 0) {
-    const afterHeading = next.slice(heading);
+    const afterHeading = html.slice(heading);
     const paragraphEnd = afterHeading.search(/<\/p>/i);
     if (paragraphEnd >= 0) {
       const insertAt = heading + paragraphEnd + 4;
-      return `${next.slice(0, insertAt)}${blocks}${next.slice(insertAt)}`;
+      return `${html.slice(0, insertAt)}${blocks}${html.slice(insertAt)}`;
     }
   }
-  return next + blocks;
+  return html + blocks;
+}
+
+/**
+ * Make the saved planning HTML say exactly what the sprint holds.
+ *
+ * Reconciles in both directions. It used to only add, so a task dragged out of
+ * Next kept its row forever — and since that row has no assignee, estimate,
+ * Decision or Risk, it permanently disabled the Start sprint button with a
+ * complaint about a task that was no longer in the sprint.
+ *
+ * Callers must stop invoking this once the sprint starts; the document is the
+ * record of what was committed to, not a live view.
+ */
+export function syncPlanningDocTasks(html: string, tasks: SprintPlanningTask[]): string {
+  const liveIds = new Set(tasks.map((task) => task.id));
+
+  let next = overlayPlanningTaskAssignees(html, tasks);
+  next = removeDepartedTaskBlocks(next, liveIds);
+
+  const existing = new Set(planningTaskIdsFromHtml(next));
+  const missing = tasks.filter((task) => !existing.has(task.id));
+
+  if (missing.length === 0) {
+    // An emptied sprint gets its placeholder back, otherwise the item list is a
+    // bare heading with nothing under it.
+    if (existing.size === 0 && !next.includes(EMPTY_SPRINT_TASKS_HTML)) {
+      return insertTaskBlocks(next, EMPTY_SPRINT_TASKS_HTML);
+    }
+    return next;
+  }
+
+  return insertTaskBlocks(next, missing.map((task) => sprintTaskNodeHtml(task)).join(""));
 }
 
 export function sprintTaskNodeHtml(
@@ -273,15 +347,20 @@ export function sprintTaskNodeHtml(
   const variant = options?.variant ?? "planning";
   const showQuestions = options?.showQuestions ?? true;
   const reason = options?.incompleteReason ?? "";
+  // Decision and Risk ride in their own attributes, so they are dropped from the
+  // embedded task JSON rather than stored twice in the same node.
+  const embedded = { ...task };
+  delete embedded.decision;
+  delete embedded.risk;
   const attrs = [
     `data-type="sprint-task"`,
     `data-id="${escapeHtml(task.id)}"`,
-    `data-task="${escapeHtml(JSON.stringify(task))}"`,
+    `data-task="${escapeHtml(JSON.stringify(embedded))}"`,
     showQuestions ? `data-show-questions="true"` : "",
     variant !== "planning" ? `data-variant="${variant}"` : "",
     variant === "incomplete" ? `data-incomplete-reason="${escapeHtml(reason)}"` : "",
-    `data-decision=""`,
-    `data-risk=""`,
+    `data-decision="${escapeHtml(task.decision ?? "")}"`,
+    `data-risk="${escapeHtml(task.risk ?? "")}"`,
   ]
     .filter(Boolean)
     .join(" ");

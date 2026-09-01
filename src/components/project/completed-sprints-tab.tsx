@@ -25,8 +25,9 @@ import { CSS } from "@dnd-kit/utilities";
 import { AlertCircle, ClipboardCheck, MoreHorizontal, Play } from "lucide-react";
 import { RoadmapTaskRow, SprintTaskRow } from "@/components/project/sprint-task-row";
 import {
-  createSprint,
   deleteSprint,
+  ensureSprintForColumn,
+  getSprintPlanFlags,
   getSprintSnapshots,
   listSprints,
   reorderPlannedSprints,
@@ -39,7 +40,9 @@ import {
 import { moveTask as moveTaskAction } from "@/actions/task";
 import { isMissingDataTask } from "@/lib/task-readiness";
 import { promoteToBacklogBottom } from "@/lib/backlog-placement";
+import { fieldsClearedByMove } from "@/lib/sprint-task-move";
 import { AddToActiveSprintDialog } from "@/components/project/add-to-active-sprint-dialog";
+import { RemoveFromSprintDialog } from "@/components/project/remove-from-sprint-dialog";
 import { CollapsibleSection } from "@/components/project/collapsible-section";
 import {
   DropdownMenu,
@@ -135,25 +138,6 @@ function sprintIdFromDrag(id: string) {
   return id.startsWith("sprint:") ? id.slice("sprint:".length) : "";
 }
 
-function nextSprintName(sprints: SprintDTO[]): string {
-  let max = 0;
-  for (const sprint of sprints) {
-    const match = sprint.name.match(/^Sprint\s+(\d+)$/i);
-    if (match) max = Math.max(max, Number(match[1]));
-  }
-  return `Sprint ${max + 1}`;
-}
-
-function defaultSprintDates() {
-  const start = new Date();
-  const end = new Date();
-  end.setUTCDate(end.getUTCDate() + 13);
-  return {
-    startDate: start.toISOString().slice(0, 10),
-    endDate: end.toISOString().slice(0, 10),
-  };
-}
-
 export function CompletedSprintsTab({
   projectId,
   sprints,
@@ -185,6 +169,19 @@ export function CompletedSprintsTab({
     task: KanbanTask;
     sprint: SprintDTO;
   } | null>(null);
+  // Which tasks already carry a Decision or Risk, so a drag that would discard
+  // them can say so before it happens.
+  const [planFlags, setPlanFlags] = useState<
+    Record<string, { decision: boolean; risk: boolean }>
+  >({});
+  const [confirmMove, setConfirmMove] = useState<{
+    task: KanbanTask;
+    nextSprintId: string | null;
+    estimatedMinutes?: number | null;
+    fromSprintName: string;
+    toLabel: string;
+    clearedFields: string[];
+  } | null>(null);
   const [reviewSprint, setReviewSprint] = useState<SprintDTO | null>(null);
   const [planningSprint, setPlanningSprint] = useState<SprintDTO | null>(null);
   const [docsSprint, setDocsSprint] = useState<SprintDTO | null>(null);
@@ -209,6 +206,14 @@ export function CompletedSprintsTab({
     onSprintsChangeRef.current = onSprintsChange;
   });
 
+  const reloadPlanFlags = useCallback(() => {
+    void getSprintPlanFlags(projectId).then(setPlanFlags).catch(() => {});
+  }, [projectId]);
+
+  useEffect(() => {
+    reloadPlanFlags();
+  }, [reloadPlanFlags]);
+
   // Sprint payloads carry no sprint body, and starting a sprint fires several
   // at once, so coalesce them into one list read.
   const reloadSprints = useCallback(() => {
@@ -218,8 +223,9 @@ export function CompletedSprintsTab({
       void listSprints(projectId)
         .then((next) => onSprintsChangeRef.current(next))
         .catch(() => {});
+      reloadPlanFlags();
     }, 250);
-  }, [projectId]);
+  }, [projectId, reloadPlanFlags]);
 
   useEffect(
     () => () => {
@@ -404,6 +410,36 @@ export function CompletedSprintsTab({
     }
     const prevSprintId = task.sprintId ?? null;
     if (prevSprintId === nextSprintId) return;
+
+    const plan = prevSprintId ? planFlags[`${prevSprintId}:${task.id}`] : undefined;
+    const clearedFields = fieldsClearedByMove(
+      { fromSprintId: prevSprintId, toSprintId: nextSprintId },
+      {
+        hasDecision: Boolean(plan?.decision),
+        hasRisk: Boolean(plan?.risk),
+        hasEstimate: Boolean(task.estimatedMinutes),
+        hasAssignee: Boolean(task.assignee),
+      },
+    );
+    if (clearedFields.length > 0) {
+      const target = nextSprintId ? sprints.find((s) => s.id === nextSprintId) : null;
+      setConfirmMove({
+        task,
+        nextSprintId,
+        estimatedMinutes,
+        fromSprintName:
+          sprints.find((s) => s.id === prevSprintId)?.name ?? task.sprintName ?? "the sprint",
+        toLabel: target?.name ?? "Backlog",
+        clearedFields,
+      });
+      return;
+    }
+
+    performAssignTaskToSprint(task, nextSprintId, estimatedMinutes);
+  }
+
+  function performAssignTaskToSprint(task: KanbanTask, nextSprintId: string | null, estimatedMinutes?: number | null) {
+    const prevSprintId = task.sprintId ?? null;
     const sprintName = nextSprintId
       ? (sprints.find((s) => s.id === nextSprintId)?.name ?? null)
       : null;
@@ -424,6 +460,9 @@ export function CompletedSprintsTab({
     startTransition(async () => {
       try {
         await setTaskSprint(task.id, nextSprintId, estimatedMinutes);
+        // The departing task's Decision and Risk are gone now, so the warning
+        // must stop offering to protect them.
+        reloadPlanFlags();
         router.refresh();
       } catch (err) {
         updateTask(task.id, {
@@ -440,21 +479,15 @@ export function CompletedSprintsTab({
     });
   }
 
+  /**
+   * The sprint in a column, created on the server if the column is empty.
+   *
+   * Deliberately not decided from local props: two people dragging into an empty
+   * column both saw it empty and each created their own sprint, and the board
+   * only ever renders one of them.
+   */
   async function ensureColumnSprint(column: "PLANNED" | "NEXT"): Promise<SprintDTO> {
-    const existing =
-      column === "NEXT"
-        ? nextSprint
-        : sprints.filter((s) => s.status === "PLANNED").slice().sort(comparePlannedSprints)[0];
-    if (existing) return existing;
-    const dates = defaultSprintDates();
-    const created = await createSprint({
-      projectId,
-      name: nextSprintName(sprints),
-      startDate: dates.startDate,
-      endDate: dates.endDate,
-    });
-    const sprint =
-      column === "NEXT" ? await setSprintBoardStatus(created.id, "NEXT") : created;
+    const sprint = await ensureSprintForColumn(projectId, column);
     onSprintsChange((prev) =>
       prev.some((s) => s.id === sprint.id) ? prev.map((s) => (s.id === sprint.id ? sprint : s)) : [...prev, sprint],
     );
@@ -968,6 +1001,28 @@ export function CompletedSprintsTab({
         const pendingAdd = addToActive;
         setAddToActive(null);
         assignTaskToSprint(pendingAdd.task, pendingAdd.sprint.id);
+      }}
+    />
+    <RemoveFromSprintDialog
+      key={confirmMove ? `${confirmMove.task.id}:${confirmMove.nextSprintId ?? "backlog"}` : "idle"}
+      open={confirmMove != null}
+      projectId={projectId}
+      task={confirmMove?.task ?? null}
+      fromSprintName={confirmMove?.fromSprintName ?? ""}
+      toLabel={confirmMove?.toLabel ?? ""}
+      clearedFields={confirmMove?.clearedFields ?? []}
+      onOpenChange={(open) => {
+        if (!open) setConfirmMove(null);
+      }}
+      onConfirm={() => {
+        if (!confirmMove) return;
+        const pendingMove = confirmMove;
+        setConfirmMove(null);
+        performAssignTaskToSprint(
+          pendingMove.task,
+          pendingMove.nextSprintId,
+          pendingMove.estimatedMinutes,
+        );
       }}
     />
     {deletingSprint ? (

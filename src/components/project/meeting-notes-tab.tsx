@@ -727,7 +727,9 @@ export function NoteFullScreenDetail({
     (isSprintPlanning && !planningLocked && canCreateSprintPlanning) ||
     (isSprintReview && canEndSprint);
   const { ydoc, provider: collabProvider, synced: collabSynced, enabled: collabEnabled } =
-    useCollaboration(isSprintDoc && liveEdit ? note.id : null);
+    // Viewers join as well as editors: they push nothing, and it is the
+    // difference between seeing the document change and seeing a snapshot.
+    useCollaboration(isSprintDoc ? note.id : null);
   const { saveError: autoSaveError } = useNoteAutosave({
     noteId: note.id,
     title,
@@ -1332,6 +1334,8 @@ export function NoteFullScreenDetail({
                 canStartSprint={canStartSprint}
                 canEndSprint={canEndSprint}
                 projectId={projectId}
+                sprintId={sprintIdFromPlanningHtml(note.content) ?? undefined}
+                sprintStatus={sprintStatus}
                 sprintTasks={sprintTasks}
                 onSprintStatusChange={setSprintStatus}
                 ydoc={ydoc}

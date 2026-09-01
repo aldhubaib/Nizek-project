@@ -382,6 +382,7 @@ model Sprint {
   tasks     Task[]
   snapshots SprintTaskSnapshot[]
   taskPlans SprintTaskPlan[]
+  notes     MeetingNote[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -666,6 +667,11 @@ model MeetingNote {
   author    User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
   taskId    String?
   task      Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  /// Set on sprint planning and review documents. Previously the link existed
+  /// only as a sprint id buried in the content HTML, so finding a sprint's
+  /// document meant loading every note's full body and substring-matching it.
+  sprintId  String?
+  sprint    Sprint? @relation(fields: [sprintId], references: [id], onDelete: Cascade)
   ydoc      Bytes?
 
   history         NoteHistory[]
@@ -678,6 +684,7 @@ model MeetingNote {
 
   @@index([projectId])
   @@index([taskId])
+  @@index([sprintId])
   @@index([projectId, date])
   @@index([noteType, completedAt, dueDate])
   @@index([noteType, roadmapStatus])

@@ -38,6 +38,7 @@ export async function createMeetingNote(data: {
   noteType?: "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "SPRINT_PLANNING" | "SPRINT_REVIEW" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
   dueDate?: string;
   taskId?: string;
+  sprintId?: string;
   roadmapStatus?: RoadmapStatus;
   workingDays?: number | string | null;
 }) {
@@ -98,6 +99,7 @@ export async function createMeetingNote(data: {
       ...(data.dueDate && { dueDate: new Date(data.dueDate) }),
       ...(workingDays != null && { workingDays }),
       ...(data.taskId && { taskId: data.taskId }),
+      ...(data.sprintId && { sprintId: data.sprintId }),
       ...(roadmapStatus === "SHIPPED" ? { completedAt: new Date() } : {}),
     },
   });
@@ -616,12 +618,13 @@ async function getSprintTypedNote(
   noteType: "SPRINT_PLANNING" | "SPRINT_REVIEW",
 ) {
   await requireProjectMember(projectId);
-  const notes = await prisma.meetingNote.findMany({
-    where: { projectId, noteType },
+  // One indexed row, guaranteed unique by MeetingNote_one_doc_per_sprint_type.
+  // This used to load every sprint note's full HTML body and substring-match it,
+  // which was both slow and undefined when a sprint had two documents.
+  return prisma.meetingNote.findFirst({
+    where: { projectId, sprintId, noteType },
     select: { id: true, title: true, content: true },
-    orderBy: { createdAt: "desc" },
   });
-  return notes.find((n) => n.content.includes(sprintId)) ?? null;
 }
 
 async function syncSprintDocPeerTitle(
@@ -634,11 +637,10 @@ async function syncSprintDocPeerTitle(
   if (!sprintId) return;
   const peerType = fromType === "SPRINT_PLANNING" ? "SPRINT_REVIEW" : "SPRINT_PLANNING";
   const peerTitle = sprintDocTitle(title, peerType === "SPRINT_REVIEW" ? "review" : "planning");
-  const peer = await prisma.meetingNote.findMany({
-    where: { projectId, noteType: peerType },
-    select: { id: true, title: true, content: true },
+  const match = await prisma.meetingNote.findFirst({
+    where: { projectId, sprintId, noteType: peerType },
+    select: { id: true, title: true },
   });
-  const match = peer.find((n) => n.content.includes(sprintId));
   if (match && match.title !== peerTitle) {
     await prisma.meetingNote.update({
       where: { id: match.id },
@@ -649,6 +651,54 @@ async function syncSprintDocPeerTitle(
 
 export async function getSprintPlanningNote(projectId: string, sprintId: string) {
   return getSprintTypedNote(projectId, sprintId, "SPRINT_PLANNING");
+}
+
+/**
+ * The sprint's document, created with `fallback` if it does not exist yet.
+ *
+ * The browser used to do this: read, and if it saw nothing, create. Two people
+ * opening the planning view at the same moment both read nothing and both
+ * created a document, and whichever one the lookup happened to return got the
+ * edits while the other person typed into a copy nobody would ever open.
+ *
+ * MeetingNote_one_doc_per_sprint_type makes the second create fail rather than
+ * succeed, and the re-read below hands that caller the winner.
+ */
+export async function getOrCreateSprintDocNote(input: {
+  projectId: string;
+  sprintId: string;
+  noteType: "SPRINT_PLANNING" | "SPRINT_REVIEW";
+  title: string;
+  content: string;
+  date: string;
+}): Promise<{ id: string; title: string; content: string; created: boolean }> {
+  const existing = await getSprintTypedNote(input.projectId, input.sprintId, input.noteType);
+  if (existing) return { ...existing, created: false };
+
+  try {
+    const created = await createMeetingNote({
+      projectId: input.projectId,
+      sprintId: input.sprintId,
+      title: input.title,
+      content: input.content,
+      date: input.date,
+      noteType: input.noteType,
+    });
+    return {
+      id: created.id,
+      title: created.title,
+      content: created.content,
+      created: true,
+    };
+  } catch (err) {
+    const code =
+      typeof err === "object" && err && "code" in err ? String((err as { code: string }).code) : "";
+    if (code !== "P2002") throw err;
+
+    const winner = await getSprintTypedNote(input.projectId, input.sprintId, input.noteType);
+    if (!winner) throw err;
+    return { ...winner, created: false };
+  }
 }
 
 export async function getSprintReviewNote(projectId: string, sprintId: string) {

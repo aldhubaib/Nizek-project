@@ -1,13 +1,9 @@
 "use client";
 
-import { Node, mergeAttributes } from "@tiptap/core";
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from "@tiptap/react";
+import { AttendanceBlockSchema, type AttendancePerson } from "@/lib/tiptap-schema";
 
-export type AttendancePerson = {
-  id: string;
-  name: string | null;
-  imageUrl: string | null;
-};
+export type { AttendancePerson };
 
 function PersonAvatar({ person }: { person: AttendancePerson }) {
   const name = person.name ?? "Someone";
@@ -45,63 +41,7 @@ function AttendanceNodeView({ node }: ReactNodeViewProps) {
   );
 }
 
-function personHtml(person: AttendancePerson) {
-  const name = person.name ?? "Someone";
-  return [
-    "span",
-    {
-      class: "note-people-avatar",
-      "data-user-id": person.id,
-      title: name,
-    },
-    person.imageUrl
-      ? ["img", { src: person.imageUrl, alt: "", class: "note-people-photo" }]
-      : ["span", { class: "note-people-fallback" }, name.charAt(0).toUpperCase()],
-  ];
-}
-
-export const AttendanceBlock = Node.create({
-  name: "attendance",
-  group: "inline",
-  inline: true,
-  atom: true,
-  selectable: true,
-  draggable: false,
-  addAttributes() {
-    return {
-      people: {
-        default: [] as AttendancePerson[],
-        parseHTML: (element) => {
-          try {
-            return JSON.parse(element.getAttribute("data-people") || "[]") as AttendancePerson[];
-          } catch {
-            return [];
-          }
-        },
-        renderHTML: (attributes) => ({
-          "data-people": JSON.stringify(attributes.people ?? []),
-        }),
-      },
-    };
-  },
-  parseHTML() {
-    return [
-      { tag: 'span[data-type="attendance"]' },
-      { tag: 'div[data-type="attendance"]' },
-    ];
-  },
-  renderHTML({ HTMLAttributes, node }) {
-    const people = (node.attrs.people ?? []) as AttendancePerson[];
-    return [
-      "span",
-      mergeAttributes(HTMLAttributes, {
-        "data-type": "attendance",
-        class: "note-people-inline",
-        contenteditable: "false",
-      }),
-      ...people.map(personHtml),
-    ];
-  },
+export const AttendanceBlock = AttendanceBlockSchema.extend({
   addNodeView() {
     return ReactNodeViewRenderer(AttendanceNodeView, { as: "span" });
   },

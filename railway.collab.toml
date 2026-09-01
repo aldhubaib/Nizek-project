@@ -1,0 +1,13 @@
+[build]
+dockerfilePath = "Dockerfile.collab"
+
+[deploy]
+startCommand = "./start-collab.sh"
+# Deliberately one replica. Hocuspocus keeps each open document in memory and
+# broadcasts edits to the clients connected to that same process; a second
+# replica would host its own copy of the same document and the two halves of a
+# session would never see each other. Scaling out needs the Redis extension
+# first.
+numReplicas = 1
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

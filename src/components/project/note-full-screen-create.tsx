@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createMeetingNote, getMeetingNote, getSprintPlanningNote, getSprintReviewNote, updateMeetingNote } from "@/actions/meeting-note";
+import { createMeetingNote, getMeetingNote, getOrCreateSprintDocNote, getSprintPlanningNote, getSprintReviewNote, updateMeetingNote } from "@/actions/meeting-note";
 import { getSprintPlanningTasks, getSprintReviewTasks } from "@/actions/sprint";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { PageHeaderActions } from "@/components/page-header-actions";
@@ -26,7 +26,7 @@ import {
   reviewInfoFromExisting,
   sprintReviewDocHtml,
 } from "@/lib/sprint-review-doc";
-import { isClosedSprint } from "@/lib/sprint-status";
+import { isClosedSprint, isUnstartedSprint } from "@/lib/sprint-status";
 import { useCollaboration } from "@/components/realtime/use-collaboration";
 import { useChannel } from "@/components/realtime/hooks";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
@@ -102,7 +102,10 @@ export function NoteFullScreenCreate({
     readOnly;
 
   const { ydoc, provider: collabProvider, synced: collabSynced, enabled: collabEnabled } =
-    useCollaboration(isSprintDoc && noteId && !readOnly ? noteId : null);
+    // Read-only viewers join too. They cannot type, so they push nothing, but
+    // joining is the difference between watching the sprint being planned and
+    // staring at whatever HTML happened to be saved when they opened it.
+    useCollaboration(isSprintDoc && noteId ? noteId : null);
 
   const { saveError: autoSaveError } = useNoteAutosave({
     noteId,
@@ -161,16 +164,23 @@ export function NoteFullScreenCreate({
           setContent(html);
           setTitle(reviewTitle);
           if (readOnly) return;
-          const created = await createMeetingNote({
+          const doc = await getOrCreateSprintDocNote({
             projectId,
+            sprintId,
+            noteType: "SPRINT_REVIEW",
             title: reviewTitle,
             content: html,
             date: info.documentDateIso,
-            noteType: "SPRINT_REVIEW",
           });
           if (cancelled) return;
-          setNoteId(created.id);
-          const full = await getMeetingNote(created.id);
+          setNoteId(doc.id);
+          // Someone else created it first; theirs is the one being edited.
+          if (!doc.created) {
+            setTitle(doc.title);
+            setContent(overlayPlanningTaskAssignees(doc.content, allTasks));
+            return;
+          }
+          const full = await getMeetingNote(doc.id);
           if (!cancelled) onCreatedRef.current(full);
           return;
         }
@@ -185,24 +195,42 @@ export function NoteFullScreenCreate({
         if (existing) {
           setNoteId(existing.id);
           setTitle(existing.title);
-          setContent(syncPlanningDocTasks(existing.content, planning.tasks));
+          // Once started, the document is the record of what was committed to,
+          // so it stops following the sprint's task list.
+          setContent(
+            isUnstartedSprint(planning.status)
+              ? syncPlanningDocTasks(existing.content, planning.tasks)
+              : overlayPlanningTaskAssignees(existing.content, planning.tasks),
+          );
           return;
         }
         const info = blankPlanningSchedule(planning.info);
         const html = sprintPlanningDocHtml(planning.tasks, info);
+        const planningTitle = (initialTitle || `${planning.sprintName} planning`).trim();
         setContent(html);
-        setTitle(initialTitle || `${planning.sprintName} planning`);
+        setTitle(planningTitle);
         if (readOnly) return;
-        const created = await createMeetingNote({
+        const doc = await getOrCreateSprintDocNote({
           projectId,
-          title: (initialTitle || `${planning.sprintName} planning`).trim(),
+          sprintId,
+          noteType: "SPRINT_PLANNING",
+          title: planningTitle,
           content: html,
           date: new Date().toISOString().slice(0, 10),
-          noteType: "SPRINT_PLANNING",
         });
         if (cancelled) return;
-        setNoteId(created.id);
-        const full = await getMeetingNote(created.id);
+        setNoteId(doc.id);
+        // Someone else created it first; theirs is the one being edited.
+        if (!doc.created) {
+          setTitle(doc.title);
+          setContent(
+            isUnstartedSprint(planning.status)
+              ? syncPlanningDocTasks(doc.content, planning.tasks)
+              : overlayPlanningTaskAssignees(doc.content, planning.tasks),
+          );
+          return;
+        }
+        const full = await getMeetingNote(doc.id);
         if (!cancelled) onCreatedRef.current(full);
       } catch (err) {
         if (!cancelled) {
@@ -407,6 +435,8 @@ export function NoteFullScreenCreate({
               canEndSprint={canEndSprint}
               hideAssignees={hideAssignees}
               projectId={projectId}
+              sprintId={sprintId}
+              sprintStatus={sprintStatus}
               sprintTasks={sprintTasks}
               onSprintStatusChange={setSprintStatus}
               ydoc={ydoc}

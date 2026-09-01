@@ -32,6 +32,21 @@ import {
 import { incompleteReasonsFromReviewHtml, reviewDateBySprintId } from "@/lib/sprint-review-doc";
 import { announceSprintNoteToChat } from "@/actions/meeting-note";
 
+/**
+ * A partial unique index rejected the write.
+ *
+ * The one-ACTIVE and one-NEXT indexes are what actually keep two replicas from
+ * both winning; the reads before them only exist to produce a better message.
+ */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    String((err as { code: unknown }).code) === "P2002"
+  );
+}
+
 const SPRINT_SELECT = {
   id: true,
   name: true,
@@ -198,7 +213,7 @@ export async function listSprints(projectId: string): Promise<SprintDTO[]> {
     }),
     prisma.meetingNote.findMany({
       where: { projectId, noteType: "SPRINT_REVIEW" },
-      select: { content: true, date: true },
+      select: { content: true, date: true, sprintId: true },
       orderBy: { createdAt: "desc" },
     }),
   ]);
@@ -261,6 +276,89 @@ export async function createSprint(data: {
   });
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
+  return serializeSprint(sprint);
+}
+
+/** `Sprint 1`, `Sprint 2`, ... continuing from the highest already used. */
+function nextSprintName(names: string[]): string {
+  let max = 0;
+  for (const name of names) {
+    const match = name.match(/^Sprint\s+(\d+)$/i);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `Sprint ${max + 1}`;
+}
+
+/**
+ * The sprint sitting in a board column, created if the column is empty.
+ *
+ * The roadmap used to do this itself: read its own props, and if it saw nothing
+ * there, call createSprint and then setSprintBoardStatus. Two people dragging
+ * into an empty Next each read empty and each created a sprint, and only one of
+ * them was ever rendered — the other person's tasks went somewhere they could
+ * not see. The advisory lock makes the read and the create one step, so the
+ * second caller waits and then finds the first caller's sprint.
+ */
+export async function ensureSprintForColumn(
+  projectId: string,
+  column: "PLANNED" | "NEXT",
+): Promise<SprintDTO> {
+  const { user } = await requireSprintAction(projectId, "createPlanning");
+
+  const sprint = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`
+      SELECT true AS locked
+      FROM pg_advisory_xact_lock(hashtext(${`sprint-column:${projectId}:${column}`})::bigint)
+    `;
+
+    const existing = await tx.sprint.findFirst({
+      where: { projectId, status: column },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      select: SPRINT_SELECT,
+    });
+    if (existing) return existing;
+
+    const open = await tx.sprint.findMany({
+      where: { projectId, status: { in: ["PLANNED", "NEXT"] } },
+      select: { name: true, sortOrder: true },
+    });
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setUTCDate(endDate.getUTCDate() + 13);
+
+    const created = await tx.sprint.create({
+      data: {
+        projectId,
+        name: nextSprintName(open.map((s) => s.name)),
+        startDate,
+        endDate,
+        status: column,
+        sortOrder: Math.max(-1, ...open.map((s) => s.sortOrder)) + 1,
+      },
+      select: SPRINT_SELECT,
+    });
+
+    // Created directly in the column rather than created-then-moved, so there is
+    // no moment where a Next sprint is briefly Planned and visible in the wrong
+    // place to everyone else.
+    if (column === "NEXT") {
+      await projectSprintOntoTasks(tx, {
+        sprintId: created.id,
+        sprintName: created.name,
+        status: "NEXT",
+        actorId: user.id,
+      });
+    }
+
+    return created;
+  });
+
+  revalidatePath(`/dashboard/projects/${projectId}`);
+  await publish(projectChannel(projectId), {
+    type: "sprint.status-changed",
+    sprintId: sprint.id,
+    status: sprint.status,
+  });
   return serializeSprint(sprint);
 }
 
@@ -358,15 +456,6 @@ export async function setSprintBoardStatus(
   }
 
   if (!next) throw new Error("Could not move sprint");
-  if (next === "NEXT" && from !== "NEXT") {
-    const otherNext = await prisma.sprint.findFirst({
-      where: { projectId: existing.projectId, status: "NEXT", id: { not: sprintId } },
-      select: { name: true },
-    });
-    if (otherNext) {
-      throw new Error(`Next already has "${otherNext.name}". Move it first.`);
-    }
-  }
   if (next === from) {
     const current = await prisma.sprint.findUniqueOrThrow({
       where: { id: sprintId },
@@ -376,7 +465,21 @@ export async function setSprintBoardStatus(
   }
 
   const nextStatus = next;
-  const sprint = await prisma.$transaction(async (tx) => {
+  try {
+    const sprint = await prisma.$transaction(async (tx) => {
+    // Read inside the transaction so a second person dragging another sprint
+    // into Next at the same moment cannot slip past this. Sprint_one_next_per_project
+    // is the real guarantee; this exists to name the sprint already in the way.
+    if (nextStatus === "NEXT") {
+      const otherNext = await tx.sprint.findFirst({
+        where: { projectId: existing.projectId, status: "NEXT", id: { not: sprintId } },
+        select: { name: true },
+      });
+      if (otherNext) {
+        throw new Error(`Next already has "${otherNext.name}". Move it first.`);
+      }
+    }
+
     const updated = await tx.sprint.update({
       where: { id: sprintId },
       data: { status: nextStatus },
@@ -399,11 +502,19 @@ export async function setSprintBoardStatus(
           : `${existing.name} moved to ${nextStatus.replace("_", " ").toLowerCase()}`,
     });
 
-    return updated;
-  });
+      return updated;
+    });
 
-  revalidatePath(`/dashboard/projects/${existing.projectId}`);
-  return serializeSprint(sprint);
+    revalidatePath(`/dashboard/projects/${existing.projectId}`);
+    return serializeSprint(sprint);
+  } catch (err) {
+    // The other transaction committed between the read above and this write, so
+    // Sprint_one_next_per_project caught what the read could not.
+    if (nextStatus === "NEXT" && isUniqueViolation(err)) {
+      throw new Error("Someone else just moved a sprint into Next. Refresh and try again.");
+    }
+    throw err;
+  }
 }
 
 /**
@@ -454,27 +565,61 @@ export async function startSprint(sprintId: string): Promise<SprintDTO> {
   const { user } = await requireSprintAction(existing.projectId, "start");
   if (!isUnstartedSprint(existing.status)) throw new Error("Only a planned sprint can be started");
 
-  const otherActive = await prisma.sprint.findFirst({
-    where: { projectId: existing.projectId, status: "ACTIVE" },
-    select: { name: true },
-  });
-  if (otherActive) {
-    throw new Error(`Finish "${otherActive.name}" before starting another sprint`);
-  }
-
-  const sprintTasks = await prisma.task.findMany({
-    where: { sprintId, archivedAt: null },
-    select: { estimatedMinutes: true, assigneeId: true },
-  });
-  if (sprintTasks.some((task) => !task.estimatedMinutes)) {
-    throw new Error("Add an estimate to every task before starting the sprint.");
-  }
-  if (sprintTasks.some((task) => !task.assigneeId)) {
-    throw new Error("Assign every task before starting the sprint.");
-  }
-
   try {
     const sprint = await prisma.$transaction(async (tx) => {
+      // Everything below reads the sprint's contents and then acts on them, so
+      // it has to be serialised against a concurrent drag or a second person
+      // pressing Start. Previously the checks ran outside the transaction and a
+      // task added in the gap was promoted to Todo without an estimate.
+      await tx.$queryRaw`
+        SELECT true AS locked
+        FROM pg_advisory_xact_lock(hashtext(${`sprint-start:${existing.projectId}`})::bigint)
+      `;
+
+      const otherActive = await tx.sprint.findFirst({
+        where: { projectId: existing.projectId, status: "ACTIVE" },
+        select: { name: true },
+      });
+      if (otherActive) {
+        throw new Error(`Finish "${otherActive.name}" before starting another sprint`);
+      }
+
+      const current = await tx.sprint.findUnique({
+        where: { id: sprintId },
+        select: { status: true },
+      });
+      if (!current || !isUnstartedSprint(current.status)) {
+        throw new Error("Only a planned sprint can be started");
+      }
+
+      const sprintTasks = await tx.task.findMany({
+        where: { sprintId, archivedAt: null },
+        select: { id: true, estimatedMinutes: true, assigneeId: true },
+      });
+      if (sprintTasks.some((task) => !task.estimatedMinutes)) {
+        throw new Error("Add an estimate to every task before starting the sprint.");
+      }
+      if (sprintTasks.some((task) => !task.assigneeId)) {
+        throw new Error("Assign every task before starting the sprint.");
+      }
+
+      // Decision and Risk used to be checked only in the browser, so anything
+      // that skipped the editor skipped the rule entirely.
+      const plans = await tx.sprintTaskPlan.findMany({
+        where: { sprintId },
+        select: { taskId: true, decision: true, risk: true },
+      });
+      const planByTask = new Map(plans.map((p) => [p.taskId, p]));
+      const unplanned = sprintTasks.filter((task) => {
+        const plan = planByTask.get(task.id);
+        return !plan?.decision.trim() || !plan?.risk.trim();
+      });
+      if (unplanned.length > 0) {
+        throw new Error(
+          "Fill in Decision and Risk for every task in the planning document before starting the sprint.",
+        );
+      }
+
       await promoteSprintTasksToTodo(tx, { id: sprintId, name: existing.name }, user.id);
       await tx.task.updateMany({
         where: { sprintId, archivedAt: null },
@@ -499,8 +644,7 @@ export async function startSprint(sprintId: string): Promise<SprintDTO> {
     });
     return serializeSprint(sprint);
   } catch (err) {
-    const code = typeof err === "object" && err && "code" in err ? String((err as { code: string }).code) : "";
-    if (code === "P2002") {
+    if (isUniqueViolation(err)) {
       throw new Error("This project already has an active sprint");
     }
     throw err;
@@ -528,12 +672,10 @@ export async function completeSprint(
     },
   });
 
-  const reviewNotes = await prisma.meetingNote.findMany({
-    where: { projectId: existing.projectId, noteType: "SPRINT_REVIEW" },
+  const review = await prisma.meetingNote.findFirst({
+    where: { projectId: existing.projectId, sprintId, noteType: "SPRINT_REVIEW" },
     select: { content: true },
-    orderBy: { createdAt: "desc" },
   });
-  const review = reviewNotes.find((note) => note.content.includes(sprintId));
   if (!review) {
     throw new Error("Fill in the sprint review before ending the sprint.");
   }
@@ -799,6 +941,13 @@ export async function setTaskSprint(
       });
     }
 
+    // The Decision and Risk were agreed for this task in that sprint. It is no
+    // longer in it, so they no longer describe anything. The board warns before
+    // getting here, so this is a confirmed discard rather than a silent one.
+    if (task.sprintId && task.sprintId !== sprintId) {
+      await tx.sprintTaskPlan.deleteMany({ where: { sprintId: task.sprintId, taskId } });
+    }
+
     // A task that comes back to a sprint it had left is in that sprint now, so
     // the record of it leaving is no longer history — and left in place it would
     // be counted a second time in the task's sprint tally, which adds the
@@ -834,11 +983,14 @@ export async function setTaskSprint(
   }
 
   revalidatePath(`/dashboard/projects/${task.projectId}`);
+  // Always sent, not only on removal: a move between two sprints changes the
+  // task list of both, and an open planning document for the sprint being left
+  // needs to hear about it to drop the row.
   await publish(projectChannel(task.projectId), {
     type: sprintId ? "sprint.task-assigned" : "sprint.task-removed",
     taskId: updated.id,
     sprintId: sprintId ?? undefined,
-    previousSprintId: sprintId ? undefined : task.projectId,
+    previousSprintId: task.sprintId ?? undefined,
   });
   return {
     taskId: updated.id,
@@ -928,6 +1080,36 @@ export async function getSprintSnapshots(
   return result;
 }
 
+/**
+ * Which tasks already have a Decision or a Risk written, keyed `sprintId:taskId`.
+ *
+ * The roadmap needs this to warn before a drag throws that text away. It reports
+ * only whether each field is filled, because that is all the warning turns on
+ * and the text itself belongs to the planning document.
+ */
+export async function getSprintPlanFlags(
+  projectId: string,
+): Promise<Record<string, { decision: boolean; risk: boolean }>> {
+  await requireProjectMember(projectId);
+
+  const plans = await prisma.sprintTaskPlan.findMany({
+    where: {
+      sprint: { projectId, status: { in: ["PLANNED", "NEXT", "ACTIVE"] } },
+      OR: [{ decision: { not: "" } }, { risk: { not: "" } }],
+    },
+    select: { sprintId: true, taskId: true, decision: true, risk: true },
+  });
+
+  const flags: Record<string, { decision: boolean; risk: boolean }> = {};
+  for (const plan of plans) {
+    flags[`${plan.sprintId}:${plan.taskId}`] = {
+      decision: plan.decision.trim().length > 0,
+      risk: plan.risk.trim().length > 0,
+    };
+  }
+  return flags;
+}
+
 export async function getSprintPlanningTasks(sprintId: string): Promise<{
   sprintName: string;
   status: string;
@@ -960,13 +1142,19 @@ export async function getSprintPlanningTasks(sprintId: string): Promise<{
     select: { name: true },
   });
 
-  const questions = await prisma.defaultQuestion.findMany({
-    orderBy: { order: "asc" },
-  });
+  const [questions, plans] = await Promise.all([
+    prisma.defaultQuestion.findMany({ orderBy: { order: "asc" } }),
+    prisma.sprintTaskPlan.findMany({
+      where: { sprintId },
+      select: { taskId: true, decision: true, risk: true },
+    }),
+  ]);
+  const planByTask = new Map(plans.map((p) => [p.taskId, p]));
 
   const tasks: SprintPlanningTask[] = sprint.tasks.map((task) => {
     const answerByQuestion = new Map(task.answers.map((a) => [a.questionId, a.answer]));
     const typed = questions.filter((q) => q.taskType === task.taskType && !isBuiltInTaskFieldQuestion(q.question));
+    const plan = planByTask.get(task.id);
     return {
       id: task.id,
       code: taskCode(task.taskType, task.taskNumber),
@@ -979,6 +1167,10 @@ export async function getSprintPlanningTasks(sprintId: string): Promise<{
         (task.sprint && isCurrentSprintStatus(task.sprint.status) ? 1 : 0),
       assignee: task.assignee,
       unplanned: task.unplannedInSprint,
+      // Absent row means nothing has been written yet, which reads the same as
+      // empty. The block upserts on first keystroke.
+      decision: plan?.decision ?? "",
+      risk: plan?.risk ?? "",
       questions: typed.map((q) => ({
         question: q.question,
         answer: answerByQuestion.get(q.id) ?? "",
@@ -1096,6 +1288,63 @@ export async function updateSprintPlanningTask(data: {
     estimatedMinutes: updated.estimatedMinutes,
     assignee: nextAssignee !== undefined ? nextAssignee : updated.assignee,
   };
+}
+
+/**
+ * Persist the Decision or Risk agreed for one task in one sprint.
+ *
+ * Only the field that was edited is written, so two people working on the same
+ * task's two fields do not overwrite each other the way the old document
+ * attributes did.
+ */
+export async function updateSprintTaskPlan(data: {
+  sprintId: string;
+  taskId: string;
+  decision?: string;
+  risk?: string;
+}): Promise<{ decision: string; risk: string }> {
+  const task = await prisma.task.findUnique({
+    where: { id: data.taskId },
+    select: { id: true, projectId: true, archivedAt: true, sprintId: true },
+  });
+  if (!task || task.archivedAt) throw new Error("Task not found");
+  if (task.sprintId !== data.sprintId) {
+    throw new Error("That task is no longer in this sprint");
+  }
+
+  const { perms } = await requireSprintEditor(task.projectId);
+  const sprint = await prisma.sprint.findUnique({
+    where: { id: data.sprintId },
+    select: { status: true, projectId: true },
+  });
+  if (!sprint || sprint.projectId !== task.projectId) throw new Error("Sprint not found");
+  assertCanEditStartedPlanning(perms.isAdmin, sprint.status);
+
+  const decision = data.decision?.trim();
+  const risk = data.risk?.trim();
+
+  const plan = await prisma.sprintTaskPlan.upsert({
+    where: { sprintId_taskId: { sprintId: data.sprintId, taskId: data.taskId } },
+    create: {
+      sprintId: data.sprintId,
+      taskId: data.taskId,
+      decision: decision ?? "",
+      risk: risk ?? "",
+    },
+    update: {
+      ...(decision !== undefined ? { decision } : {}),
+      ...(risk !== undefined ? { risk } : {}),
+    },
+    select: { decision: true, risk: true },
+  });
+
+  await publish(projectChannel(task.projectId), {
+    type: "sprint.task-plan-changed",
+    sprintId: data.sprintId,
+    taskId: data.taskId,
+  });
+
+  return plan;
 }
 
 export async function getSprintReviewTasks(sprintId: string): Promise<{
