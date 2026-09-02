@@ -28,7 +28,6 @@ import {
   FileSignature,
   PieChart,
   Paperclip,
-  SlidersHorizontal,
   Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -64,10 +63,10 @@ import {
   addEquitySet,
   updateEquitySet,
   deleteEquitySet,
-  addEquityFinancialReport,
-  updateEquityFinancialReport,
+  saveEquityFinancialDraft,
+  publishEquityFinancialReport,
+  discardEquityFinancialDraft,
   deleteEquityFinancialReport,
-  setEquityReportFields,
   type EquityHolderDTO,
   type EquityMetricDTO,
   type EquityRoleDTO,
@@ -96,18 +95,18 @@ import {
   figureAt,
   formatMonth,
   formatPackLabel,
-  formulaDependencies,
   monthColumn,
+  packCellsToValues,
+  publishedPacks,
   resolveMonthlySeries,
   type MetricDef,
 } from "@/lib/equity-financials";
 import {
   MonthlyFiguresDialog,
   emptyPackDraft,
-  packPayload,
+  packDraftToStored,
   packToDraft,
   type PackDraft,
-  type ReportField,
 } from "@/components/equity/monthly-figures-grid";
 
 // The spin-button rules strip the steppers from every type="number" field here.
@@ -1844,24 +1843,6 @@ function financialFields(metrics: EquityMetricDTO[]) {
   return metrics.filter((m) => m.group === "FINANCIAL");
 }
 
-/**
- * The questionnaire: the registry's fields narrowed to the ones this project
- * reports, in the order it asks for them.
- *
- * A row pointing at a field that has since left the registry is dropped rather
- * than shown as a blank line — the database cascades those away, so this only
- * covers the moment between a deletion and a refresh.
- */
-function projectFields(
-  metrics: EquityMetricDTO[],
-  reportFields: EquityPortfolioDTO["reportFields"]
-): ReportField[] {
-  const byId = new Map(metrics.map((m) => [m.id, m]));
-  return reportFields.flatMap((f) => {
-    const metric = byId.get(f.metricId);
-    return metric ? [{ metric, required: f.required }] : [];
-  });
-}
 
 /**
  * One pack read back month by month: what it states, plus what the calculated
@@ -1869,29 +1850,31 @@ function projectFields(
  * a corrected figure corrects everything standing on it — including the formulas
  * that stand on other formulas, which is what the recursive resolver is for.
  *
- * Figures reported against a field the project no longer asks for are listed
- * after the rest. Dropping a question doesn't unmake the answers given to it,
- * and a pack that reported something should still say so.
+ * Figures reported against a field that has since left the registry are listed
+ * after the rest. Deleting a field doesn't unmake the answers given to it, and
+ * a pack that reported something should still say so.
  */
 function readPackMonths(
-  fields: ReportField[],
+  fields: EquityMetricDTO[],
   metrics: EquityMetricDTO[],
   pack: EquityPortfolioDTO["financialReports"][number]
 ) {
+  const registry = new Map<string, MetricDef>(metrics.map((m) => [m.id, m]));
+  const values = packRowValues(pack, metrics);
+
   // Just this pack, so a row shows what the pack itself says rather than what
   // the project's latest figures are — a restated month is read on the pack
   // that restated it, not on the one being looked at.
-  const series = resolveMonthlySeries([pack]);
-  const registry = new Map<string, MetricDef>(metrics.map((m) => [m.id, m]));
-  const onList = new Set(fields.map((f) => f.metric.id));
+  const series = resolveMonthlySeries([{ ...pack, values }]);
+  const onList = new Set(fields.map((f) => f.id));
 
   const dropped = new Map<string, EquityMetricDTO | { id: string; name: string; type: string; unit: string | null }>();
-  for (const value of pack.values) {
+  for (const value of values) {
     if (!onList.has(value.metricId)) dropped.set(value.metricId, value.metric);
   }
 
   const rows = [
-    ...fields.map((f) => ({ metric: f.metric as MetricDef & { name: string; unit: string | null }, asked: true })),
+    ...fields.map((f) => ({ metric: f as MetricDef & { name: string; unit: string | null }, asked: true })),
     ...[...dropped.values()].map((metric) => ({
       metric: metric as MetricDef & { name: string; unit: string | null },
       asked: false,
@@ -1929,24 +1912,51 @@ function readPackMonths(
   });
 }
 
-/** Every pack except one, resolved — what a cell in that pack is up against. */
+/**
+ * The figures a pack's row shows.
+ *
+ * A published pack shows what it published. A pack that has never been
+ * published has no published figures at all, so its row is read from the
+ * working copy instead — a draft somebody has spent an hour on should not read
+ * as "Nothing reported" in the list.
+ *
+ * The draft is text, so this is also where a cell that never became a figure is
+ * dropped, the same way publishing would drop it.
+ */
+function packRowValues(
+  report: EquityPortfolioDTO["financialReports"][number],
+  metrics: EquityMetricDTO[]
+) {
+  if (report.publishedAt || !report.draft) return report.values;
+
+  const byId = new Map(metrics.map((m) => [m.id, m]));
+  return packCellsToValues(report.draft.cells, byId).flatMap((v) => {
+    const metric = byId.get(v.metricId);
+    return metric ? [{ ...v, metric, id: `${v.metricId}|${v.month}`, order: 0 }] : [];
+  });
+}
+
+/**
+ * Every other pack except one, resolved — what a cell in that pack is up
+ * against.
+ *
+ * Published only. A draft restates nothing, so marking a cell as superseded by
+ * one would be telling somebody their figure doesn't count when it does.
+ */
 function otherPacksSeries(
   reports: EquityPortfolioDTO["financialReports"],
   exceptId: string | null
 ) {
   return resolveMonthlySeries(
-    reports.filter((r) => r.id !== exceptId).map(asPack)
+    publishedPacks(reports)
+      .filter((r) => r.id !== exceptId)
+      .map((r) => ({
+        id: r.id,
+        reportedOn: r.reportedOn,
+        audited: r.audited,
+        values: r.values,
+      }))
   );
-}
-
-/** A pack in the shape the resolver reads. */
-function asPack(report: EquityPortfolioDTO["financialReports"][number]) {
-  return {
-    id: report.id,
-    reportedOn: report.reportedOn,
-    audited: report.audited,
-    values: report.values,
-  };
 }
 
 function FinancialsTable({
@@ -1962,39 +1972,29 @@ function FinancialsTable({
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [picking, setPicking] = useState(false);
-  const [busy, setBusy] = useState(false);
 
   const reports = portfolio.financialReports;
-  const fields = projectFields(metrics, portfolio.reportFields);
-  const requiredCount = fields.filter((f) => f.required).length;
+  // Every financial field in the registry, in the order the registry lists
+  // them. There is no per-project questionnaire: a field a project has nothing
+  // to say about is a blank month, which the grid already distinguishes from a
+  // reported zero.
+  const fields = financialFields(metrics);
   const pendingDelete = reports.find((r) => r.id === deletingId) ?? null;
   const editing = reports.find((r) => r.id === editingId) ?? null;
 
-  async function handleAdd(draft: PackDraft) {
-    setBusy(true);
-    try {
-      await addEquityFinancialReport(portfolio.id, packPayload(draft, fields));
-      setAdding(false);
-      router.refresh();
-    } catch (err) {
-      alert((err as Error).message || "Failed to add report");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleUpdate(reportId: string, draft: PackDraft) {
-    setBusy(true);
-    try {
-      await updateEquityFinancialReport(reportId, packPayload(draft, fields));
-      setEditingId(null);
-      router.refresh();
-    } catch (err) {
-      alert((err as Error).message || "Failed to save report");
-    } finally {
-      setBusy(false);
-    }
+  /**
+   * The grid's autosave. Deliberately silent — no refresh, no spinner on the
+   * page behind. It fires while somebody is mid-figure, and a page re-rendering
+   * under a grid being typed into is worse than a list that's a few seconds out
+   * of date until the pack is closed.
+   */
+  async function handleSaveDraft(reportId: string | null, draft: PackDraft) {
+    const saved = await saveEquityFinancialDraft(
+      portfolio.id,
+      reportId,
+      packDraftToStored(draft),
+    );
+    return saved.id;
   }
 
   // Errors are left to the dialog, which keeps them beside the box that has to
@@ -2004,91 +2004,31 @@ function FinancialsTable({
     router.refresh();
   }
 
-  async function handleFields(next: ReportFieldChoice[]) {
-    setBusy(true);
-    try {
-      await setEquityReportFields(portfolio.id, next);
-      setPicking(false);
-      router.refresh();
-    } catch (err) {
-      alert((err as Error).message || "Failed to save fields");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <CollapsibleCard
       icon={BarChart3}
       title="Financials"
       summary={reports.length > 0 ? reports.length : undefined}
-      description={`Each report is a pack of figures received from the founders, month by month. A later pack restates the months it covers and the earlier version stays as history. Which figures this project reports is set below${
-        requiredCount > 0
-          ? `, and ${requiredCount} of them can't be left off a month`
-          : ""
-      }. A calculated field is worked out from the figures rather than entered.`}
-      forceOpen={picking}
+      description="Each report is a pack of figures received from the founders, month by month. A later pack restates the months it covers and the earlier version stays as history. A calculated field is worked out from the figures rather than entered. Figures don't count anywhere until the report is published."
       actions={
-        <div className="flex items-center gap-2 shrink-0">
-          <button
+        fields.length > 0 && (
+          <AddButton
+            label="Add report"
             onClick={() => {
-              setPicking((p) => !p);
-              setAdding(false);
+              setAdding(true);
               setEditingId(null);
             }}
-            className={cn(
-              "flex items-center gap-xs px-3 py-1.5 rounded-lg border text-s font-medium transition-colors",
-              picking
-                ? "border-primary/40 text-foreground bg-primary/10"
-                : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40"
-            )}
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            Figures
-          </button>
-          {fields.length > 0 && (
-            <AddButton
-              label="Add report"
-              onClick={() => {
-                setAdding(true);
-                setPicking(false);
-                setEditingId(null);
-              }}
-            />
-          )}
-        </div>
+          />
+        )
       }
     >
-      {picking && (
-        <ReportFieldPicker
-          all={financialFields(metrics)}
-          chosen={portfolio.reportFields}
-          busy={busy}
-          onSubmit={handleFields}
-          onCancel={() => setPicking(false)}
-        />
-      )}
-
       {fields.length === 0 ? (
         <p className="text-s text-muted-foreground py-2">
-          {financialFields(metrics).length === 0 ? (
-            <>
-              Nothing to report on yet — define what a period is reported with
-              under{" "}
-              <Link
-                href="/dashboard/equity"
-                className="text-primary hover:underline"
-              >
-                Financials data
-              </Link>{" "}
-              first.
-            </>
-          ) : (
-            <>
-              This project isn&apos;t asked for any figures yet — choose them
-              under Figures above.
-            </>
-          )}
+          Nothing to report on yet — define what a report is made of under{" "}
+          <Link href="/dashboard/equity" className="text-primary hover:underline">
+            Financials data
+          </Link>{" "}
+          first.
         </p>
       ) : (
         <>
@@ -2100,7 +2040,6 @@ function FinancialsTable({
                   report={r}
                   fields={fields}
                   metrics={metrics}
-                  busy={busy}
                   onEdit={() => {
                     setEditingId(r.id);
                     setAdding(false);
@@ -2115,15 +2054,19 @@ function FinancialsTable({
             <MonthlyFiguresDialog
               title={`${portfolio.project.name} — new financial report`}
               initial={emptyPackDraft()}
+              reportId={null}
+              published={false}
               currency={currency}
               metrics={metrics}
               fields={fields}
               otherPacks={otherPacksSeries(reports, null)}
-              enforceRequired
-              busy={busy}
-              submitLabel="Add report"
-              onSubmit={handleAdd}
-              onCancel={() => setAdding(false)}
+              onSave={handleSaveDraft}
+              onPublish={publishEquityFinancialReport}
+              onDiscard={discardEquityFinancialDraft}
+              onClose={() => {
+                setAdding(false);
+                router.refresh();
+              }}
             />
           )}
 
@@ -2132,18 +2075,20 @@ function FinancialsTable({
               key={editing.id}
               title={`${portfolio.project.name} — ${formatPackLabel(editing.reportedOn)} report`}
               initial={packToDraft(editing)}
+              reportId={editing.id}
+              published={editing.publishedAt != null}
               currency={currency}
               metrics={metrics}
               fields={fields}
               // Itself excluded: a pack doesn't restate its own figures.
               otherPacks={otherPacksSeries(reports, editing.id)}
-              // Editing a pack filed before the rule arrived says so rather
-              // than refusing to save it.
-              enforceRequired={false}
-              busy={busy}
-              submitLabel="Save"
-              onSubmit={(draft) => handleUpdate(editing.id, draft)}
-              onCancel={() => setEditingId(null)}
+              onSave={handleSaveDraft}
+              onPublish={publishEquityFinancialReport}
+              onDiscard={discardEquityFinancialDraft}
+              onClose={() => {
+                setEditingId(null);
+                router.refresh();
+              }}
             />
           )}
 
@@ -2173,30 +2118,36 @@ function FinancialsTable({
 
 function FinancialReportRow({
   report: r,
-  fields: asked,
+  fields,
   metrics,
-  busy,
   onEdit,
   onDelete,
 }: {
   report: EquityPortfolioDTO["financialReports"][number];
-  fields: ReportField[];
+  fields: EquityMetricDTO[];
   metrics: EquityMetricDTO[];
-  busy: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const months = readPackMonths(asked, metrics, r);
+  const months = readPackMonths(fields, metrics, r);
+  const published = r.publishedAt != null;
 
   return (
     <RecordRow
       title={`${formatPackLabel(r.reportedOn)} report`}
       badges={
         <>
+          {/* Whether the figures count comes first, ahead of whether they were
+              audited: a draft's figures are nowhere yet, which matters more
+              about a row than how well attested they are. */}
+          {!published ? (
+            <RecordBadge tone="warn">Draft</RecordBadge>
+          ) : (
+            r.draft != null && <RecordBadge tone="warn">Unpublished changes</RecordBadge>
+          )}
           <RecordBadge tone={r.audited ? "good" : "neutral"}>
             {r.audited ? "Audited" : "Unaudited"}
           </RecordBadge>
-          {r.needsHelp && <RecordBadge tone="warn">Needs help</RecordBadge>}
         </>
       }
       // Which months it covers, rather than a figure from one of them: a pack of
@@ -2212,7 +2163,6 @@ function FinancialReportRow({
       actions={
         <RowActions
           label="Report options"
-          disabled={busy}
           onEdit={onEdit}
           onDelete={onDelete}
         />
@@ -2231,17 +2181,6 @@ function FinancialReportRow({
         </div>
       ))}
       <RecordDetails>
-        {r.needsHelp && r.helpNotes && (
-          <RecordDetail
-            label="Help"
-            span
-            value={
-              <span className="whitespace-pre-wrap text-muted-foreground">
-                {r.helpNotes}
-              </span>
-            }
-          />
-        )}
         {r.documents.length > 0 && (
           <RecordDetail
             label="Documents"
@@ -2271,167 +2210,6 @@ function FinancialReportRow({
     </RecordRow>
   );
 }
-
-type ReportFieldChoice = { metricId: string; required: boolean };
-
-/**
- * Which of the registry's financial fields this project is asked for, and which
- * of them a new period can't be filed without.
- *
- * Three states per field rather than two checkboxes: not asked, asked, and
- * required. They're one choice — a field can't be required without being asked
- * — so they read as one control instead of two that have to agree.
- */
-function ReportFieldPicker({
-  all,
-  chosen,
-  busy,
-  onSubmit,
-  onCancel,
-}: {
-  all: EquityMetricDTO[];
-  chosen: EquityPortfolioDTO["reportFields"];
-  busy: boolean;
-  onSubmit: (fields: ReportFieldChoice[]) => void;
-  onCancel: () => void;
-}) {
-  const [draft, setDraft] = useState<Map<string, boolean>>(
-    () => new Map(chosen.map((f) => [f.metricId, f.required]))
-  );
-
-  function setState(metricId: string, state: "off" | "asked" | "required") {
-    setDraft((d) => {
-      const next = new Map(d);
-      if (state === "off") next.delete(metricId);
-      else next.set(metricId, state === "required");
-      return next;
-    });
-  }
-
-  const asked = all.filter((m) => draft.has(m.id));
-  // A calculation only comes out if the figures under it are reported, so the
-  // form says so here rather than leaving it to be discovered on a chart with a
-  // hole in it. Followed to the plain figures at the bottom, not just to the
-  // operands: a calculation standing on another one needs whatever *that* is
-  // built from, and the intermediate step is never reported itself.
-  const registry = useMemo(() => new Map(all.map((m) => [m.id, m])), [all]);
-  const starved = asked.filter((m) => {
-    if (!isFormulaMetric(m.type)) return false;
-    return [...formulaDependencies(m.id, registry).leaves].some((id) => !draft.has(id));
-  });
-
-  return (
-    <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-3 mb-3">
-      <div>
-        <h4 className="text-s font-semibold text-foreground">
-          Figures this project reports
-        </h4>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          The fields come from{" "}
-          <Link
-            href="/dashboard/equity"
-            className="text-primary hover:underline"
-          >
-            Financials data
-          </Link>
-          ; what a given project is asked for is set here, in the order the grid
-          shows them. Required means a pack can&apos;t be filed with the figure
-          missing from a month it reports — 0 is an answer, blank isn&apos;t.
-        </p>
-      </div>
-
-      <div className="space-y-1.5">
-        {all.map((metric) => {
-          const required = draft.get(metric.id);
-          const state =
-            required === undefined ? "off" : required ? "required" : "asked";
-          const formula = isFormulaMetric(metric.type);
-          return (
-            <div
-              key={metric.id}
-              className="flex items-center gap-3 rounded-lg border border-border px-3 h-10"
-            >
-              <span className="text-s text-foreground truncate flex-1 min-w-0">
-                {metric.name}
-                {formula && (
-                  <span className="text-xs text-muted-foreground ms-1.5">
-                    calculated
-                  </span>
-                )}
-              </span>
-              <div className="flex items-center gap-1 shrink-0">
-                {(["off", "asked", "required"] as const).map((option) => {
-                  // Nothing to leave blank on a calculated field, so there's
-                  // nothing to insist on either.
-                  if (option === "required" && formula) return null;
-                  return (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => setState(metric.id, option)}
-                      className={cn(
-                        "px-2.5 h-7 rounded-md text-xs font-medium transition-colors",
-                        state === option
-                          ? option === "off"
-                            ? "bg-muted text-foreground"
-                            : "bg-primary/15 text-primary"
-                          : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                      )}
-                    >
-                      {option === "off"
-                        ? "Not asked"
-                        : option === "asked"
-                          ? "Optional"
-                          : "Required"}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {starved.length > 0 && (
-        <p className="text-xs text-orange">
-          {starved.map((m) => m.name).join(", ")}{" "}
-          {starved.length === 1 ? "needs a figure" : "need figures"} this
-          project isn&apos;t asked for, so{" "}
-          {starved.length === 1 ? "it" : "they"} will come out blank.
-        </p>
-      )}
-
-      <div className="flex items-center justify-end gap-2">
-        <span className="text-xs text-muted-foreground me-auto">
-          Taking a field off keeps what was already reported for it.
-        </span>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={busy}
-          className="px-3 h-9 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            onSubmit(
-              all
-                .filter((m) => draft.has(m.id))
-                .map((m) => ({ metricId: m.id, required: !!draft.get(m.id) }))
-            )
-          }
-          disabled={busy}
-          className="px-3 h-9 rounded-lg bg-primary text-primary-foreground text-s font-medium hover:bg-primary/90 transition-colors disabled:opacity-40"
-        >
-          {busy ? "Saving…" : "Save fields"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 
 function TranchesTable({
   portfolio,

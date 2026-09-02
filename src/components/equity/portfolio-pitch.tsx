@@ -70,6 +70,7 @@ import {
   formatMonth,
   formatPackLabel,
   monthColumn,
+  publishedPacks,
   resolveMonthlySeries,
   type MetricDef,
 } from "@/lib/equity-financials";
@@ -153,15 +154,17 @@ type FinancialField = {
 };
 
 /**
- * The figures to chart, in the order the project's own form asks for them, plus
- * anything reported against a field it has since stopped asking for — a figure
- * somebody went and got is worth showing whether or not the question survived.
+ * The figures to chart: every financial field in the registry, in the order it
+ * lists them, plus anything reported against a field that has since left the
+ * registry — a figure somebody went and got is worth showing whether or not the
+ * field it was reported under survived.
  */
 function chartedFields(
   reports: FinancialReport[],
-  asked: EquityPortfolioDTO["reportFields"],
+  registry: EquityMetricDTO[],
 ): FinancialField[] {
-  const onList = new Set(asked.map((f) => f.metricId));
+  const asked = registry.filter((m) => m.group === "FINANCIAL");
+  const onList = new Set(asked.map((f) => f.id));
   const dropped = new Map<string, FinancialField>();
   for (const report of reports) {
     for (const value of report.values) {
@@ -174,7 +177,7 @@ function chartedFields(
       });
     }
   }
-  return [...asked.map((f) => f.metric), ...dropped.values()];
+  return [...asked, ...dropped.values()];
 }
 
 /**
@@ -192,19 +195,19 @@ function chartedFields(
  * a series needs something to plot: dates, and anything the project has never
  * reported a figure for.
  */
-function financialFigures(
-  reports: FinancialReport[],
-  asked: EquityPortfolioDTO["reportFields"],
-  registry: EquityMetricDTO[],
-) {
+function financialFigures(reports: FinancialReport[], registry: EquityMetricDTO[]) {
   const series = resolveMonthlySeries(
-    reports.map((r) => ({ id: r.id, reportedOn: r.reportedOn, values: r.values })),
+    publishedPacks(reports).map((r) => ({
+      id: r.id,
+      reportedOn: r.reportedOn,
+      values: r.values,
+    })),
   );
-  const fields = chartedFields(reports, asked).filter((f) => !isDateMetric(f.type));
+  const fields = chartedFields(reports, registry).filter((f) => !isDateMetric(f.type));
   const metricDefs = new Map<string, MetricDef>([
     ...registry.map((m) => [m.id, m] as const),
-    // A field the project has stopped asking for is still charted, and its own
-    // row in chartedFields carries no formula, so the registry entry wins.
+    // A field that has left the registry is still charted, and its own row in
+    // chartedFields carries no formula, so the registry entry wins.
     ...fields.map((f) => [f.id, f] as const),
   ]);
 
@@ -1005,15 +1008,17 @@ export function PortfolioPitch({
     [splits, currency],
   );
 
+  // The pitch reads the figures rather than editing them, so it only shows
+  // packs that have been published.
   const reports = useMemo(
-    () => [...portfolio.financialReports].reverse(),
+    () => publishedPacks(portfolio.financialReports).reverse(),
     [portfolio.financialReports],
   );
 
   // Every defined financial field as a series, and the months they share.
   const figures = useMemo(
-    () => financialFigures(reports, portfolio.reportFields, fields),
-    [reports, portfolio.reportFields, fields],
+    () => financialFigures(reports, fields),
+    [reports, fields],
   );
   // Every series shares one axis, so any of them can name it.
   const monthLabels = useMemo(

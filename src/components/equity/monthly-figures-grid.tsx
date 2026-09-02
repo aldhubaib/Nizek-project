@@ -8,9 +8,9 @@
 // time would make somebody transpose a table by hand — which is where a figure
 // lands in the wrong column.
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Paperclip, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, Check, Paperclip, Trash2, Upload, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
@@ -19,7 +19,6 @@ import {
   formatMetricValue,
   formulaLabel,
   isDateMetric,
-  isFieldAnswered,
   isFormulaMetric,
 } from "@/lib/equity-math";
 import {
@@ -27,10 +26,8 @@ import {
   formatMonth,
   formatPackLabel,
   monthKeysOfYear,
-  monthStartOf,
   parsePastedNumber,
   resolveNumber,
-  splitPastedGrid,
   ytdTotal,
   type MetricDef,
   type MonthlySeries,
@@ -51,8 +48,6 @@ function formatFileSize(bytes: number | null): string | null {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
-/** One field this project's reports ask for, and whether they insist on it. */
-export type ReportField = { metric: EquityMetricDTO; required: boolean };
 
 /** One uploaded statement on the form. The key is only for React's lists. */
 export type PackDocumentDraft = {
@@ -74,14 +69,31 @@ export type PackDraft = {
   /** "2026-07" — the pack's own month, which is what orders it against others. */
   reportedOn: string;
   audited: boolean;
-  needsHelp: boolean;
-  helpNotes: string;
   /** Which year's twelve columns are on screen. */
   year: number;
   /** `${metricId}|${monthKey}` → what was typed in that cell. */
   cells: Record<string, string>;
   documents: PackDocumentDraft[];
 };
+
+/**
+ * The draft as it is stored — the same thing without the list keys, which are
+ * React's business and mean nothing once the pack is written down.
+ */
+export function packDraftToStored(draft: PackDraft) {
+  return {
+    reportedOn: draft.reportedOn,
+    audited: draft.audited,
+    year: draft.year,
+    cells: draft.cells,
+    documents: draft.documents.map(({ filename, url, fileSize, mimeType }) => ({
+      filename,
+      url,
+      fileSize,
+      mimeType,
+    })),
+  };
+}
 
 let packDocumentSeq = 0;
 export function packDocumentKey(): string {
@@ -99,26 +111,24 @@ export function emptyPackDraft(): PackDraft {
   return {
     reportedOn: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`,
     audited: false,
-    needsHelp: false,
-    helpNotes: "",
     year: now.getUTCFullYear(),
     cells: {},
     documents: [],
   };
 }
 
-/**
- * An existing pack opened for editing.
- *
- * The grid opens on the latest year the pack has figures for rather than on
- * today's. A pack filed last year is edited where its figures actually are, not
- * on a blank grid that looks like the figures were lost.
- */
-export function packToDraft(pack: {
+/** A pack as the page hands it over — either being entered, or already filed. */
+export type StoredPack = {
   reportedOn: string;
   audited: boolean;
-  needsHelp: boolean;
-  helpNotes: string | null;
+  publishedAt: string | null;
+  draft: {
+    reportedOn: string;
+    audited: boolean;
+    year: number;
+    cells: Record<string, string>;
+    documents: { filename: string; url: string; fileSize: number | null; mimeType: string | null }[];
+  } | null;
   values: {
     metricId: string;
     month: string;
@@ -126,7 +136,29 @@ export function packToDraft(pack: {
     dateValue: string | null;
   }[];
   documents: { filename: string; url: string; fileSize: number | null; mimeType: string | null }[];
-}): PackDraft {
+};
+
+/**
+ * An existing pack opened for editing.
+ *
+ * A saved working copy wins over the published figures, which is what makes
+ * leaving and coming back the same as never having left — including for a pack
+ * that was published and then edited again, where the two differ and the edit
+ * is the one still being worked on.
+ *
+ * Failing that, the grid is filled from what the pack published, and opens on
+ * the latest year it has figures for rather than on today's. A pack filed last
+ * year is edited where its figures actually are, not on a blank grid that looks
+ * like the figures were lost.
+ */
+export function packToDraft(pack: StoredPack): PackDraft {
+  if (pack.draft) {
+    return {
+      ...pack.draft,
+      documents: pack.draft.documents.map((d) => ({ key: packDocumentKey(), ...d })),
+    };
+  }
+
   const cells: Record<string, string> = {};
   const years = new Set<number>();
 
@@ -143,65 +175,9 @@ export function packToDraft(pack: {
   return {
     reportedOn: `${reported.getUTCFullYear()}-${String(reported.getUTCMonth() + 1).padStart(2, "0")}`,
     audited: pack.audited,
-    needsHelp: pack.needsHelp,
-    helpNotes: pack.helpNotes ?? "",
     year: years.size > 0 ? Math.max(...years) : reported.getUTCFullYear(),
     cells,
     documents: pack.documents.map((d) => ({ key: packDocumentKey(), ...d })),
-  };
-}
-
-/**
- * The draft as the server takes it: one row per filled cell.
- *
- * Empty cells are dropped rather than sent as nulls. A grid opened on a year
- * nobody reported would otherwise file twelve months of blank claims, and the
- * analysis can't tell a filed blank from a reported zero.
- */
-export function packPayload(draft: PackDraft, fields: ReportField[]) {
-  const byId = new Map(fields.map((f) => [f.metric.id, f.metric]));
-
-  const values: {
-    metricId: string;
-    month: string;
-    numberValue: number | null;
-    dateValue: string | null;
-  }[] = [];
-
-  for (const [key, raw] of Object.entries(draft.cells)) {
-    const text = raw.trim();
-    if (!text) continue;
-
-    const [metricId, month] = key.split("|");
-    const metric = byId.get(metricId ?? "");
-    // A calculated field is read, never entered, so it has nothing to send.
-    if (!metric || isFormulaMetric(metric.type)) continue;
-
-    const monthStart = monthStartOf(month ?? "");
-    if (!monthStart) continue;
-
-    if (isDateMetric(metric.type)) {
-      values.push({ metricId, month: monthStart, numberValue: null, dateValue: text });
-      continue;
-    }
-
-    const number = parsePastedNumber(text);
-    if (number == null) continue;
-    values.push({ metricId, month: monthStart, numberValue: number, dateValue: null });
-  }
-
-  return {
-    reportedOn: `${draft.reportedOn}-01T00:00:00.000Z`,
-    audited: draft.audited,
-    needsHelp: draft.needsHelp,
-    helpNotes: draft.helpNotes.trim() || null,
-    values,
-    documents: draft.documents.map((d) => ({
-      filename: d.filename,
-      url: d.url,
-      fileSize: d.fileSize,
-      mimeType: d.mimeType,
-    })),
   };
 }
 
@@ -216,40 +192,177 @@ function draftMonths(draft: PackDraft): MonthKey[] {
   return [...months].sort();
 }
 
-/** The form itself. Reached through MonthlyFiguresDialog, which frames it. */
-function MonthlyFiguresGrid({
-  initial,
-  currency,
-  metrics,
-  fields,
-  otherPacks,
-  enforceRequired,
-  busy,
-  submitLabel,
-  onSubmit,
-  onCancel,
+/** Where the working copy has got to, as the header reports it. */
+type SaveState = "clean" | "typing" | "saving" | "saved" | "failed";
+
+/** How long after the last keystroke the working copy is written down. */
+const AUTOSAVE_DELAY = 800;
+
+/**
+ * Keeps the working copy written down while somebody types.
+ *
+ * Two things are being held apart here. Keystrokes are coalesced by the timer,
+ * so typing a figure is one save rather than six; and the saves themselves are
+ * chained, so they land in the order they were made. Without the chain a slow
+ * request could finish after a later one and put back a figure that had already
+ * been corrected.
+ *
+ * Nothing is saved until something is typed. The draft still being the object
+ * the grid opened with is what "nothing typed" means — so opening a pack,
+ * reading it and closing it again leaves no half-written pack behind in the
+ * list.
+ *
+ * A pack that had never been saved becomes one on the first save, and the id it
+ * comes back with is kept here: everything after that has to be an edit of the
+ * same pack, or a year of figures would arrive as twelve separate packs.
+ */
+function useAutosave({
+  draft,
+  reportId,
+  onSave,
 }: {
+  draft: PackDraft;
+  reportId: string | null;
+  onSave: (reportId: string | null, draft: PackDraft) => Promise<string>;
+}) {
+  const [saveState, setSaveState] = useState<SaveState>("clean");
+  const [savedId, setSavedId] = useState(reportId);
+
+  const idRef = useRef(reportId);
+  const chainRef = useRef<Promise<void>>(Promise.resolve());
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unsavedRef = useRef(false);
+
+  // Mirrored rather than read from the closure, because a save runs from a
+  // timer: by the time it fires, the draft it was scheduled for is several
+  // keystrokes old and it is the current one that has to be written down.
+  const latestRef = useRef(draft);
+  const saveRef = useRef(onSave);
+  useEffect(() => {
+    latestRef.current = draft;
+    saveRef.current = onSave;
+  }, [draft, onSave]);
+
+  /**
+   * Saves now, and answers with the pack's id.
+   *
+   * Answering with the id rather than leaving it to be read from state is what
+   * lets Publish work on a pack typed a moment ago: the id arrives with the
+   * first save, and a component rendered before that save finished would
+   * otherwise still be holding null and conclude nothing had been entered.
+   */
+  const flush = useCallback(async (): Promise<string | null> => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!unsavedRef.current) {
+      await chainRef.current;
+      return idRef.current;
+    }
+    unsavedRef.current = false;
+    setSaveState("saving");
+
+    chainRef.current = chainRef.current.then(async () => {
+      try {
+        const id = await saveRef.current(idRef.current, latestRef.current);
+        idRef.current = id;
+        setSavedId(id);
+        // Only "saved" if nothing was typed while this was in flight; saying
+        // so otherwise would be describing a version of the pack that has
+        // already been superseded on screen.
+        setSaveState(unsavedRef.current ? "typing" : "saved");
+      } catch {
+        // Left unsaved on purpose, so the next keystroke or the close tries
+        // again rather than the work sitting only in this browser tab.
+        unsavedRef.current = true;
+        setSaveState("failed");
+      }
+    });
+
+    await chainRef.current;
+    return idRef.current;
+  }, []);
+
+  const markEdited = useCallback(() => {
+    unsavedRef.current = true;
+    setSaveState("typing");
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => void flush(), AUTOSAVE_DELAY);
+  }, [flush]);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    [],
+  );
+
+  return { saveState, savedId, flush, markEdited };
+}
+
+type GridProps = {
+  title: string;
   initial: PackDraft;
+  /** Null for a pack that has never been saved — the first save creates it. */
+  reportId: string | null;
+  /** Whether this pack already has figures the analysis is reading. */
+  published: boolean;
   currency: string;
   metrics: EquityMetricDTO[];
-  fields: ReportField[];
+  /** Every financial field in the registry, in the order it lists them. */
+  fields: EquityMetricDTO[];
   /**
    * Every other pack on the project, resolved so a cell can say when a later
    * one has already restated it — editing a figure nobody reads any more should
    * not look like editing the figure the analysis uses.
    */
   otherPacks: MonthlySeries;
-  enforceRequired: boolean;
-  busy: boolean;
-  submitLabel: string;
-  onSubmit: (draft: PackDraft) => void;
-  onCancel: () => void;
-}) {
+  /** Saves the working copy, answering with the pack's id. */
+  onSave: (reportId: string | null, draft: PackDraft) => Promise<string>;
+  onPublish: (reportId: string) => Promise<void>;
+  onDiscard: (reportId: string) => Promise<void>;
+  onClose: () => void;
+};
+
+/** The form itself. Reached through MonthlyFiguresDialog, which frames it. */
+function MonthlyFiguresGrid({
+  title,
+  initial,
+  reportId,
+  published,
+  currency,
+  metrics,
+  fields,
+  otherPacks,
+  onSave,
+  onPublish,
+  onDiscard,
+  onClose,
+}: GridProps) {
   const [draft, setDraft] = useState<PackDraft>(initial);
-  const [pasting, setPasting] = useState(false);
   const [uploadPct, setUploadPct] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const uploading = uploadPct !== null;
+
+  const { saveState, savedId, flush, markEdited } = useAutosave({
+    draft,
+    reportId,
+    onSave,
+  });
+
+  /**
+   * Every change to the pack goes through here rather than through setDraft, so
+   * that nothing can be typed without also being queued to be saved. A pack
+   * with no Save button has no second chance to catch an edit that skipped the
+   * autosave.
+   */
+  const edit = useCallback(
+    (next: (d: PackDraft) => PackDraft) => {
+      setDraft(next);
+      markEdited();
+    },
+    [markEdited],
+  );
 
   const months = useMemo(() => monthKeysOfYear(draft.year), [draft.year]);
   const registry = useMemo(
@@ -258,11 +371,11 @@ function MonthlyFiguresGrid({
   );
 
   function set<K extends keyof PackDraft>(key: K, value: PackDraft[K]) {
-    setDraft((d) => ({ ...d, [key]: value }));
+    edit((d) => ({ ...d, [key]: value }));
   }
 
   function setCell(metricId: string, month: MonthKey, raw: string) {
-    setDraft((d) => ({ ...d, cells: { ...d.cells, [cellKey(metricId, month)]: raw } }));
+    edit((d) => ({ ...d, cells: { ...d.cells, [cellKey(metricId, month)]: raw } }));
   }
 
   async function uploadDocuments(files: File[]) {
@@ -273,7 +386,7 @@ function MonthlyFiguresGrid({
       // where it happened rather than losing the files already through.
       for (const file of files) {
         const uploaded = await uploadFileToR2(file, setUploadPct);
-        setDraft((d) => ({
+        edit((d) => ({
           ...d,
           documents: [...d.documents, { key: packDocumentKey(), ...uploaded }],
         }));
@@ -307,7 +420,7 @@ function MonthlyFiguresGrid({
       const stored = (metricId: string) =>
         parsePastedNumber(draft.cells[cellKey(metricId, month)] ?? "");
       const resolved = new Map<string, number | null>();
-      for (const { metric } of fields) {
+      for (const metric of fields) {
         resolved.set(metric.id, resolveNumber(metric.id, registry, stored, memo));
       }
       byMonth.set(month, resolved);
@@ -317,52 +430,96 @@ function MonthlyFiguresGrid({
 
   const filledMonths = draftMonths(draft);
 
-  /**
-   * A month the pack states while leaving a required field blank.
-   *
-   * Checked per month, matching the server: a pack covering January to July is
-   * seven months of reporting, and a July missing revenue is unfinished whatever
-   * the other six say. A month the pack says nothing about isn't missing
-   * anything — it isn't claiming to cover it.
-   */
-  const incomplete = useMemo(() => {
-    const required = fields.filter((f) => f.required && !isFormulaMetric(f.metric.type));
-    if (required.length === 0) return [];
-
-    return filledMonths.flatMap((month) => {
-      const missing = required.filter(({ metric }) => {
-        const raw = (draft.cells[cellKey(metric.id, month)] ?? "").trim();
-        return !isFieldAnswered(metric, {
-          numberValue: isDateMetric(metric.type) ? null : parsePastedNumber(raw),
-          dateValue: isDateMetric(metric.type) ? raw || null : null,
-        });
-      });
-      return missing.length > 0 ? [{ month, names: missing.map((f) => f.metric.name) }] : [];
-    });
-  }, [fields, filledMonths, draft.cells]);
-
   const validReportedOn = /^\d{4}-\d{2}$/.test(draft.reportedOn);
 
+  // The only two things that stop a pack being published. A pack with no date
+  // can't be ordered against the others, and a pack stating no month isn't a
+  // report of anything. A pack that arrived with a line blank is otherwise
+  // filed as it arrived — there is no field it must fill in, because there may
+  // be nobody left to ask.
   const blocked = !validReportedOn
     ? "Set the date this report was received"
     : filledMonths.length === 0
       ? "Fill in at least one month"
-      : enforceRequired && incomplete.length > 0
-        ? `${formatMonth(incomplete[0].month)} is missing ${incomplete[0].names.join(", ")}`
-        : null;
-
-  // Said rather than enforced on an existing pack: the figures were entered
-  // before the field was required, and there may be nobody left to ask.
-  const warning =
-    !enforceRequired && incomplete.length > 0
-      ? `${incomplete.length} month${incomplete.length === 1 ? "" : "s"} still missing a required figure`
       : null;
+
+  /** Everything typed is saved before the pack leaves the screen. */
+  async function close() {
+    setBusy(true);
+    await flush();
+    onClose();
+  }
+
+  async function publish() {
+    setError(null);
+    setBusy(true);
+    try {
+      // The published figures are read from the saved working copy, not from
+      // this component, so what is on screen has to be written down first.
+      const id = await flush();
+      if (!id) {
+        throw new Error(
+          "Couldn't save these figures, so there's nothing to publish yet — check your connection and try again",
+        );
+      }
+      await onPublish(id);
+      onClose();
+    } catch (err) {
+      setError((err as Error).message || "Failed to publish");
+      setBusy(false);
+    }
+  }
+
+  async function discard() {
+    setBusy(true);
+    try {
+      if (savedId) await onDiscard(savedId);
+      onClose();
+    } catch (err) {
+      setError((err as Error).message || "Failed to discard");
+      setBusy(false);
+    }
+  }
 
   // A column at least as tall as the panel it scrolls in, so the footer below
   // can be pushed to the bottom of the screen on a project reporting three
   // fields and stick to it on one reporting thirty.
   return (
     <div className="flex min-h-full flex-col gap-4">
+      {/* Stuck to the top of the same scrolling panel as the footer, so the
+          pack's name, whether it counts yet, and the way out all stay on screen
+          while a year of figures scrolls past underneath. */}
+      <div className="sticky top-0 z-20 -mx-4 -mt-4 mb-0 flex items-center gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur-sm">
+        <button
+          type="button"
+          onClick={() => void close()}
+          disabled={busy}
+          className="flex shrink-0 items-center gap-xs text-s text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+        >
+          <X className="h-4 w-4" strokeWidth={1.5} />
+          Close
+        </button>
+        <span className="text-border">|</span>
+        <span className="truncate text-s font-semibold text-foreground">{title}</span>
+        <span
+          className={cn(
+            "shrink-0 rounded-full border px-2 py-0.5 text-xs",
+            published
+              ? "border-success/30 bg-success/10 text-success"
+              : "border-orange/30 bg-orange/10 text-orange",
+          )}
+        >
+          {published ? "Published" : "Draft"}
+        </span>
+        {!published && (
+          // Hidden on a narrow screen, where the title and badge are already
+          // all the header has room for.
+          <span className="hidden truncate text-xs text-muted-foreground lg:block">
+            These figures don&apos;t count anywhere until you publish them.
+          </span>
+        )}
+      </div>
+
       {/* ── The pack itself ── */}
       <div className="grid gap-3 @md/card:grid-cols-[minmax(0,200px)_minmax(0,200px)_minmax(0,1fr)]">
         <div>
@@ -442,7 +599,7 @@ function MonthlyFiguresGrid({
                 </tr>
               </thead>
               <tbody>
-                {fields.map(({ metric, required }) => {
+                {fields.map((metric) => {
                   const formula = isFormulaMetric(metric.type);
                   const from = formula
                     ? formulaLabel(
@@ -470,17 +627,7 @@ function MonthlyFiguresGrid({
                           formula && "bg-primary/[0.04] font-medium",
                         )}
                       >
-                        <span className="flex items-baseline gap-xs">
-                          <span className="truncate text-foreground">{metric.name}</span>
-                          {required && !formula && (
-                            <span
-                              className="text-destructive"
-                              title="Required on this project's reports"
-                            >
-                              *
-                            </span>
-                          )}
-                        </span>
+                        <span className="truncate text-foreground">{metric.name}</span>
                         {from && (
                           <span className="block truncate text-xs text-muted-foreground">
                             {from}
@@ -531,69 +678,13 @@ function MonthlyFiguresGrid({
             </table>
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <button
-              type="button"
-              onClick={() => setPasting((p) => !p)}
-              className={cn(
-                "flex items-center gap-xs rounded-lg border px-3 py-1.5 text-s font-medium transition-colors",
-                pasting
-                  ? "border-primary/40 bg-primary/10 text-foreground"
-                  : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground",
-              )}
-            >
-              Paste figures
-            </button>
-            <p className="text-xs text-muted-foreground">
-              Amounts in {currency} unless the field says otherwise. A blank month is a month
-              nobody reported, which is not the same as a month of zero — enter 0 if that&apos;s
-              the figure.
-            </p>
-          </div>
-
-          {pasting && (
-            <PasteFigures
-              fields={fields}
-              months={months}
-              onApply={(cells) => {
-                setDraft((d) => ({ ...d, cells: { ...d.cells, ...cells } }));
-                setPasting(false);
-              }}
-              onCancel={() => setPasting(false)}
-            />
-          )}
+          <p className="text-xs text-muted-foreground">
+            Amounts in {currency} unless the field says otherwise. A blank month is a month
+            nobody reported, which is not the same as a month of zero — enter 0 if that&apos;s
+            the figure.
+          </p>
         </div>
       )}
-
-      {/* ── Help and documents ── */}
-      <div className="grid gap-3 @md/card:grid-cols-[200px_minmax(0,1fr)]">
-        <div>
-          <label className={labelCls}>Do they need help?</label>
-          <select
-            value={draft.needsHelp ? "yes" : "no"}
-            onChange={(e) => set("needsHelp", e.target.value === "yes")}
-            className={cn(
-              selectCls,
-              draft.needsHelp && "bg-orange/15 border-orange/30 text-orange",
-            )}
-          >
-            <option value="no">No</option>
-            <option value="yes">Yes</option>
-          </select>
-        </div>
-        {draft.needsHelp && (
-          <div>
-            <label className={labelCls}>What do they need?</label>
-            <input
-              type="text"
-              value={draft.helpNotes}
-              onChange={(e) => set("helpNotes", e.target.value)}
-              placeholder="e.g. intros to investors, hiring a senior backend engineer"
-              className={inputCls}
-            />
-          </div>
-        )}
-      </div>
 
       {/* The statements the figures were read from, kept with the pack so a
           figure can always be checked against its source. */}
@@ -622,7 +713,7 @@ function MonthlyFiguresGrid({
               <button
                 type="button"
                 onClick={() =>
-                  setDraft((d) => ({
+                  edit((d) => ({
                     ...d,
                     documents: d.documents.filter((x) => x.key !== doc.key),
                   }))
@@ -660,30 +751,85 @@ function MonthlyFiguresGrid({
       {/* Stuck to the bottom of the scrolling panel: a year of figures is taller
           than the screen, and the reason a save is refused is written here, so
           neither may scroll out of sight while the grid is being filled. */}
-      <div className="sticky bottom-0 -mx-4 -mb-4 mt-auto flex items-center justify-end gap-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur-sm">
-        {blocked ? (
-          <span className="me-auto text-xs text-muted-foreground">{blocked}</span>
-        ) : (
-          warning && <span className="me-auto text-xs text-orange">{warning}</span>
+      <div className="sticky bottom-0 -mx-4 -mb-4 mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur-sm">
+        <div className="me-auto flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <SaveIndicator state={saveState} />
+          <span
+            className={cn("text-xs", error ? "text-destructive" : "text-muted-foreground")}
+          >
+            {error ?? blocked ?? ""}
+          </span>
+        </div>
+
+        {/* Only offered once there is something to throw away. Discarding is
+            how you get out of an edit to a published pack you didn't mean to
+            start, and how a draft nobody wants leaves the list. */}
+        {savedId && (
+          <button
+            type="button"
+            onClick={() => void discard()}
+            disabled={busy}
+            className="h-9 rounded-lg px-3 text-s text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+          >
+            {published ? "Discard changes" : "Delete draft"}
+          </button>
         )}
         <button
           type="button"
-          onClick={onCancel}
+          onClick={() => void close()}
           disabled={busy}
-          className="h-9 rounded-lg px-3 text-s text-muted-foreground transition-colors hover:bg-muted"
+          className="h-9 rounded-lg px-3 text-s text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40"
         >
-          Cancel
+          Save and close
         </button>
         <button
           type="button"
-          onClick={() => onSubmit(draft)}
+          onClick={() => void publish()}
           disabled={busy || uploading || blocked != null}
           className="h-9 rounded-lg bg-primary px-3 text-s font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
         >
-          {busy ? "Saving…" : submitLabel}
+          {published ? "Publish changes" : "Publish"}
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * What the working copy is doing, in the dialog's header.
+ *
+ * Worth saying out loud rather than leaving to be assumed. Somebody entering a
+ * year of figures into a form with no Save button needs to be told the work is
+ * safe, and told plainly when it isn't.
+ */
+function SaveIndicator({ state }: { state: SaveState }) {
+  if (state === "clean") return null;
+
+  const label =
+    state === "typing"
+      ? "Unsaved…"
+      : state === "saving"
+        ? "Saving…"
+        : state === "saved"
+          ? "Draft saved"
+          : "Couldn't save — check your connection";
+
+  return (
+    <span
+      className={cn(
+        "flex shrink-0 items-center gap-xs text-xs",
+        state === "failed" ? "text-destructive" : "text-muted-foreground",
+      )}
+    >
+      {state === "failed" ? (
+        <AlertTriangle className="h-3.5 w-3.5" strokeWidth={1.5} />
+      ) : state === "saved" ? (
+        <Check className="h-3.5 w-3.5 text-success" strokeWidth={2} />
+      ) : (
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/60" />
+      )}
+      {label}
+    </span>
   );
 }
 
@@ -701,10 +847,7 @@ function MonthlyFiguresGrid({
  * one stray keypress must not be able to throw them away. Leaving is explicit,
  * through Close or Cancel.
  */
-export function MonthlyFiguresDialog({
-  title,
-  ...grid
-}: { title: string } & Parameters<typeof MonthlyFiguresGrid>[0]) {
+export function MonthlyFiguresDialog(props: GridProps) {
   useScrollLock(true);
 
   if (typeof document === "undefined") return null;
@@ -713,24 +856,11 @@ export function MonthlyFiguresDialog({
   // panel that is meant to cover the page.
   return createPortal(
     <div data-scroll-lock-root className="fixed inset-0 z-[9999] flex flex-col bg-background">
-      <div className="app-top-bar flex shrink-0 items-center gap-3 border-b border-border">
-        <button
-          type="button"
-          onClick={grid.onCancel}
-          disabled={grid.busy}
-          className="flex items-center gap-xs text-s text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <X className="h-4 w-4" strokeWidth={1.5} />
-          Close
-        </button>
-        <span className="text-border">|</span>
-        <span className="truncate text-s font-semibold text-foreground">{title}</span>
-      </div>
-
       {/* The container the grid's @md/card: rules measure against, which inside
-          the card was the card itself. */}
+          the card was the card itself. Also the scroller the grid's own header
+          and footer stick to. */}
       <div className="app-card flex-1 overflow-y-auto p-4">
-        <MonthlyFiguresGrid {...grid} />
+        <MonthlyFiguresGrid {...props} />
       </div>
     </div>,
     document.body,
@@ -838,8 +968,8 @@ function Cell({
         )}
       />
       {standing && (
-        // A corner dot rather than a colour on the text, so it survives beside
-        // the required-field asterisk and still reads on twelve narrow cells.
+        // A corner dot rather than a colour on the text, so it still reads on
+        // twelve narrow cells.
         <span
           aria-hidden
           title={title}
@@ -851,169 +981,4 @@ function Cell({
       )}
     </span>
   );
-}
-
-// ─── Pasting a block ────────────────────────────────────────────────────────
-
-const PASTE_PLACEHOLDER = `Revenue (net)\t45,000\t52,000\t61,500
-Cost of sales\t(18,000)\t(21,400)\t(24,000)
-G&A expenses\t(9,200)\t(9,400)\t(9,900)`;
-
-/**
- * Fill the grid from a block copied out of the report.
- *
- * Rows are matched to fields by name, and columns to months in order from a
- * chosen starting month. Nothing is applied until the preview has been read:
- * a paste that silently matched the wrong row would put a cost line into
- * revenue, and the total would still look plausible.
- */
-function PasteFigures({
-  fields,
-  months,
-  onApply,
-  onCancel,
-}: {
-  fields: ReportField[];
-  months: MonthKey[];
-  onApply: (cells: Record<string, string>) => void;
-  onCancel: () => void;
-}) {
-  const [text, setText] = useState("");
-  const [startMonth, setStartMonth] = useState<MonthKey>(months[0]);
-
-  const enterable = fields.filter((f) => !isFormulaMetric(f.metric.type));
-
-  const parsed = useMemo(() => {
-    const startAt = months.indexOf(startMonth);
-    const byName = new Map(
-      enterable.map((f) => [normaliseName(f.metric.name), f.metric] as const),
-    );
-
-    const matched: { name: string; metric: EquityMetricDTO; figures: (number | null)[] }[] = [];
-    const unmatched: string[] = [];
-
-    for (const row of splitPastedGrid(text)) {
-      const [label, ...rest] = row;
-      if (!label) continue;
-      const metric = byName.get(normaliseName(label));
-      if (!metric) {
-        unmatched.push(label);
-        continue;
-      }
-      // Only as many columns as there are months left in the year; a block
-      // wider than that is a paste that started in the wrong month.
-      matched.push({
-        name: label,
-        metric,
-        figures: rest.slice(0, months.length - startAt).map(parsePastedNumber),
-      });
-    }
-
-    const cells: Record<string, string> = {};
-    let filled = 0;
-    for (const row of matched) {
-      row.figures.forEach((figure, i) => {
-        if (figure == null) return;
-        const month = months[startAt + i];
-        if (!month) return;
-        cells[cellKey(row.metric.id, month)] = String(figure);
-        filled += 1;
-      });
-    }
-
-    return { matched, unmatched, cells, filled };
-  }, [text, enterable, months, startMonth]);
-
-  return (
-    <div className="space-y-2 rounded-lg border border-primary/30 bg-muted/20 p-3">
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label className={labelCls}>First column is</label>
-          <select
-            value={startMonth}
-            onChange={(e) => setStartMonth(e.target.value)}
-            className={cn(selectCls, "w-[130px]")}
-          >
-            {months.map((month) => (
-              <option key={month} value={month}>
-                {formatMonth(month)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <p className="flex-1 min-w-[240px] pb-2 text-xs text-muted-foreground">
-          One line per field, starting with its name, then a figure per month. Tabs or two or
-          more spaces separate the columns, and brackets read as a negative.
-        </p>
-      </div>
-
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={PASTE_PLACEHOLDER}
-        rows={6}
-        spellCheck={false}
-        className="w-full resize-y rounded-md border border-border bg-field px-3 py-2 font-mono text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-ring/50"
-      />
-
-      {parsed.matched.length > 0 && (
-        <div className="space-y-1 rounded-md border border-primary/30 bg-primary/5 px-3 py-2.5">
-          <p className="text-xs font-medium text-foreground">
-            {parsed.filled} figure{parsed.filled === 1 ? "" : "s"} across{" "}
-            {parsed.matched.length} field{parsed.matched.length === 1 ? "" : "s"}
-          </p>
-          {parsed.matched.slice(0, 6).map((row) => (
-            <p key={row.metric.id} className="truncate text-xs text-muted-foreground">
-              • {row.metric.name}:{" "}
-              {row.figures
-                .map((f) => (f == null ? "—" : f.toLocaleString("en-US")))
-                .join(", ")}
-            </p>
-          ))}
-          {parsed.matched.length > 6 && (
-            <p className="text-xs text-muted-foreground">
-              • and {parsed.matched.length - 6} more
-            </p>
-          )}
-        </div>
-      )}
-
-      {parsed.unmatched.length > 0 && (
-        <div className="space-y-0.5 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5">
-          <p className="text-xs font-medium text-destructive">
-            {parsed.unmatched.length} line{parsed.unmatched.length === 1 ? "" : "s"} match no
-            field this project reports — skipped
-          </p>
-          {parsed.unmatched.slice(0, 4).map((name, i) => (
-            <p key={`${name}-${i}`} className="truncate text-xs text-destructive/80">
-              • {name}
-            </p>
-          ))}
-        </div>
-      )}
-
-      <div className="flex items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="h-8 rounded-lg px-3 text-s text-muted-foreground transition-colors hover:bg-muted"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={() => onApply(parsed.cells)}
-          disabled={parsed.filled === 0}
-          className="flex h-8 items-center gap-xs rounded-lg bg-primary px-3 text-s font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
-        >
-          Fill {parsed.filled} cell{parsed.filled === 1 ? "" : "s"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** Loose enough that "G&A Expenses" finds "G&A expenses" pasted out of a PDF. */
-function normaliseName(raw: string): string {
-  return raw.toLowerCase().replace(/[^a-z0-9]/g, "");
 }

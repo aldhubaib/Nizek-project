@@ -21,6 +21,7 @@ import {
   formatPackLabel,
   marginOf,
   monthColumn,
+  publishedPacks,
   resolveMonthlySeries,
   supersededAt,
   ytdTotal,
@@ -28,8 +29,6 @@ import {
   type MonthKey,
 } from "@/lib/equity-financials";
 import type { EquityMetricDTO, EquityPortfolioDTO } from "@/actions/equity";
-
-type ReportField = { metric: EquityMetricDTO; required: boolean };
 
 function compactNumber(value: number) {
   return new Intl.NumberFormat(undefined, {
@@ -54,17 +53,15 @@ function formatShare(fraction: number | null): string {
  * The field margins are measured against, guessed from its name.
  *
  * A margin is a share of revenue, and nothing in the registry says which field
- * that is — the fields are whatever each project reports. The guess is only a
- * default: the picker beside the table names it and lets it be changed, so a
- * project whose top line is called something else isn't stuck with a wrong
+ * that is — the fields are whatever the registry has been given. The guess is
+ * only a default: the picker beside the table names it and lets it be changed,
+ * so a project whose top line is called something else isn't stuck with a wrong
  * denominator it can't see.
  */
-function guessBaseField(fields: ReportField[]): string | null {
-  const numeric = fields.filter(
-    (f) => !isDateMetric(f.metric.type) && !isFormulaMetric(f.metric.type),
-  );
-  const revenue = numeric.find((f) => /revenue|sales|turnover|top line/i.test(f.metric.name));
-  return (revenue ?? numeric[0])?.metric.id ?? null;
+function guessBaseField(fields: EquityMetricDTO[]): string | null {
+  const numeric = fields.filter((f) => !isDateMetric(f.type) && !isFormulaMetric(f.type));
+  const revenue = numeric.find((f) => /revenue|sales|turnover|top line/i.test(f.name));
+  return (revenue ?? numeric[0])?.id ?? null;
 }
 
 export function FinancialsAnalysis({
@@ -76,7 +73,13 @@ export function FinancialsAnalysis({
   metrics: EquityMetricDTO[];
   currency: string;
 }) {
-  const packs = portfolio.financialReports;
+  // Published only. A pack still being entered states nothing yet, so it can
+  // neither add a month to the analysis nor restate one already there.
+  const packs = useMemo(
+    () => publishedPacks(portfolio.financialReports),
+    [portfolio.financialReports],
+  );
+  const draftCount = portfolio.financialReports.length - packs.length;
 
   const series = useMemo(
     () =>
@@ -86,13 +89,13 @@ export function FinancialsAnalysis({
     [packs],
   );
 
-  const fields = useMemo<ReportField[]>(() => {
-    const byId = new Map(metrics.map((m) => [m.id, m]));
-    return portfolio.reportFields.flatMap((f) => {
-      const metric = byId.get(f.metricId);
-      return metric ? [{ metric, required: f.required }] : [];
-    });
-  }, [metrics, portfolio.reportFields]);
+  // Every financial field in the registry. There is no per-project shortlist:
+  // a field this project has nothing to say about simply has no figures, and
+  // the tables below already leave an unreported month blank.
+  const fields = useMemo(
+    () => metrics.filter((m) => m.group === "FINANCIAL"),
+    [metrics],
+  );
 
   const registry = useMemo(
     () => new Map<string, MetricDef>(metrics.map((m) => [m.id, m])),
@@ -110,7 +113,7 @@ export function FinancialsAnalysis({
 
   const [baseId, setBaseId] = useState<string | null>(null);
   const base = baseId ?? guessBaseField(fields);
-  const baseMetric = fields.find((f) => f.metric.id === base)?.metric ?? null;
+  const baseMetric = fields.find((f) => f.id === base) ?? null;
 
   // Only the months this project actually reported, rather than a blank twelve.
   // A gap in the middle of a year is worth seeing; four empty columns after the
@@ -121,7 +124,7 @@ export function FinancialsAnalysis({
   );
 
   const columns = useMemo(() => {
-    const ids = fields.map((f) => f.metric.id);
+    const ids = fields.map((f) => f.id);
     return months.map((month) => ({
       month,
       values: monthColumn(series, registry, ids, month),
@@ -139,7 +142,7 @@ export function FinancialsAnalysis({
       by: string;
     }[] = [];
 
-    for (const { metric } of fields) {
+    for (const metric of fields) {
       if (isFormulaMetric(metric.type)) continue;
       for (const month of series.months) {
         const history = supersededAt(series, metric.id, month);
@@ -163,9 +166,7 @@ export function FinancialsAnalysis({
   // Charted across every month on record rather than the shown year: a trend
   // cut at a year boundary is the one place a series most needs to continue.
   const chart = useMemo(() => {
-    const plotted = fields
-      .map((f) => f.metric)
-      .filter((metric) => !isDateMetric(metric.type));
+    const plotted = fields.filter((metric) => !isDateMetric(metric.type));
 
     const allColumns = series.months.map((month) => ({
       month,
@@ -193,7 +194,15 @@ export function FinancialsAnalysis({
       icon={LineChart}
       title="Financials analysis"
       summary={series.months.length > 0 ? series.months.length : undefined}
-      description={`The figures as they now stand, month by month, taking the latest report's version of any month two reports disagree about. YTD adds up only the months that were reported — a blank month is a month nobody filed, not a month of nothing.`}
+      description={`The figures as they now stand, month by month, taking the latest report's version of any month two reports disagree about. YTD adds up only the months that were reported — a blank month is a month nobody filed, not a month of nothing.${
+        // Said out loud, because a figure entered and visible in the list above
+        // but missing from here reads as a bug rather than as a draft.
+        draftCount > 0
+          ? ` ${draftCount} unpublished report${
+              draftCount === 1 ? "" : "s"
+            } ${draftCount === 1 ? "is" : "are"} left out until published.`
+          : ""
+      }`}
       actions={
         years.length > 1 && (
           <select
@@ -256,7 +265,7 @@ export function FinancialsAnalysis({
                 </tr>
               </thead>
               <tbody>
-                {fields.map(({ metric }) => {
+                {fields.map((metric) => {
                   const formula = isFormulaMetric(metric.type);
                   const values = columns.map(({ values }) => values.get(metric.id) ?? null);
                   const last = values[values.length - 1];
@@ -348,10 +357,10 @@ export function FinancialsAnalysis({
                   className="h-7 rounded-md border border-border bg-card px-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
                 >
                   {fields
-                    .filter((f) => !isDateMetric(f.metric.type))
+                    .filter((f) => !isDateMetric(f.type))
                     .map((f) => (
-                      <option key={f.metric.id} value={f.metric.id}>
-                        {f.metric.name}
+                      <option key={f.id} value={f.id}>
+                        {f.name}
                       </option>
                     ))}
                 </select>

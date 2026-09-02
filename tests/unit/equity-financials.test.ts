@@ -14,10 +14,11 @@ import {
   monthKeyOf,
   monthKeysOfYear,
   monthStartOf,
+  packCellsToValues,
   parsePastedNumber,
+  publishedPacks,
   resolveMonthlySeries,
   resolveNumber,
-  splitPastedGrid,
   summariseFinancials,
   supersededAt,
   wouldCycle,
@@ -547,7 +548,80 @@ describe("draftToValues", () => {
   });
 });
 
-describe("pasting", () => {
+describe("publishedPacks", () => {
+  const filed = { ...pack("filed", month(2026, 4), [["revenue", month(2026, 1), 100]]), publishedAt: month(2026, 4) };
+  const beingEntered = { ...pack("entering", month(2026, 7), [] as [string, string, number][]), publishedAt: null };
+
+  it("leaves out a pack that is still being entered", () => {
+    expect(publishedPacks([filed, beingEntered]).map((p) => p.id)).toEqual(["filed"]);
+  });
+
+  // The point of the whole thing: an unpublished July sitting in front of a
+  // published April must not reach into April on its way to being finished.
+  it("stops an unpublished pack restating a month that was published", () => {
+    const restating = {
+      ...pack("restating", month(2026, 7), [["revenue", month(2026, 1), 999]]),
+      publishedAt: null,
+    };
+
+    const withDraft = resolveMonthlySeries(publishedPacks([filed, restating]));
+    expect(figureAt(withDraft, "revenue", "2026-01")?.numberValue).toBe(100);
+
+    // And once it is published, it does restate it.
+    const published = resolveMonthlySeries(
+      publishedPacks([filed, { ...restating, publishedAt: month(2026, 7) }]),
+    );
+    expect(figureAt(published, "revenue", "2026-01")?.numberValue).toBe(999);
+  });
+
+  it("counts a pack that says nothing about publishing as published", () => {
+    expect(publishedPacks([pack("plain", month(2026, 4), [])]).map((p) => p.id)).toEqual([
+      "plain",
+    ]);
+  });
+});
+
+describe("packCellsToValues", () => {
+  it("reads a typed figure, thousands separators and all", () => {
+    expect(packCellsToValues({ "revenue|2026-03": " 14,032 " }, registry)).toEqual([
+      { metricId: "revenue", month: month(2026, 3), numberValue: 14032, dateValue: null },
+    ]);
+  });
+
+  // A draft holds what was typed, so it holds half-typed things too. Publishing
+  // has to skip them rather than store a nonsense figure or refuse the pack.
+  it("skips a blank and a cell that never became a number", () => {
+    expect(
+      packCellsToValues(
+        { "revenue|2026-03": "  ", "cost|2026-03": "-", "ga|2026-03": "0" },
+        registry,
+      ),
+    ).toEqual([
+      { metricId: "ga", month: month(2026, 3), numberValue: 0, dateValue: null },
+    ]);
+  });
+
+  it("never stores a calculated field, which is worked out when it is read", () => {
+    expect(packCellsToValues({ "gross|2026-03": "60" }, registry)).toEqual([]);
+  });
+
+  it("ignores a cell for a field that has since been deleted", () => {
+    expect(packCellsToValues({ "ghost|2026-03": "5" }, registry)).toEqual([]);
+  });
+
+  it("ignores a malformed key rather than throwing on it", () => {
+    expect(packCellsToValues({ revenue: "5", "revenue|nonsense": "5" }, registry)).toEqual([]);
+  });
+
+  it("stores a date field as a date", () => {
+    const dated = new Map<string, MetricDef>([["closed", { id: "closed", type: "DATE" }]]);
+    expect(packCellsToValues({ "closed|2026-03": "2026-03-28" }, dated)).toEqual([
+      { metricId: "closed", month: month(2026, 3), numberValue: null, dateValue: "2026-03-28" },
+    ]);
+  });
+});
+
+describe("parsePastedNumber", () => {
   it("reads the notation a management report is written in", () => {
     expect(parsePastedNumber("1,234,567")).toBe(1234567);
     expect(parsePastedNumber("KD 4,500.50")).toBe(4500.5);
@@ -555,7 +629,7 @@ describe("pasting", () => {
   });
 
   // Accountants write a loss in brackets, and reading it as positive would flip
-  // the sign of every cost line pasted out of a PDF.
+  // the sign of every cost line copied off a P&L.
   it("reads brackets as a negative, the way a P&L writes a loss", () => {
     expect(parsePastedNumber("(3,275)")).toBe(-3275);
   });
@@ -566,12 +640,5 @@ describe("pasting", () => {
     expect(parsePastedNumber("—")).toBeNull();
     expect(parsePastedNumber("-")).toBeNull();
     expect(parsePastedNumber("n/a")).toBeNull();
-  });
-
-  it("splits a pasted block on tabs or runs of spaces", () => {
-    expect(splitPastedGrid("Revenue\t100\t200\n\nCost   40   50")).toEqual([
-      ["Revenue", "100", "200"],
-      ["Cost", "40", "50"],
-    ]);
   });
 });

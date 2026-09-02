@@ -16,6 +16,7 @@ import { SeriesArea, SERIES } from "@/components/equity/pitch-charts";
 import { formatMetricValue, isDateMetric, isFormulaMetric } from "@/lib/equity-math";
 import {
   financialMonths,
+  publishedPacks,
   formatMonth,
   summariseFinancials,
   type MetricDef,
@@ -64,7 +65,9 @@ export function CrossProjectFinancials({
         id: p.id,
         name: p.project.name,
         currency: p.valuationCurrency,
-        packs: p.financialReports.map((r) => ({
+        // Published only, so a project mid-way through entering a year doesn't
+        // drag a total down with columns nobody has finished.
+        packs: publishedPacks(p.financialReports).map((r) => ({
           id: r.id,
           reportedOn: r.reportedOn,
           values: r.values,

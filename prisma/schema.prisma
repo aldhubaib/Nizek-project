@@ -970,7 +970,6 @@ model EquityPortfolio {
   tranches   EquityTranche[]
   financialReports EquityFinancialReport[]
   performance      EquityPerformanceEntry[]
-  reportFields     EquityPortfolioField[]
   opportunity      EquityOpportunity?
   productPhotos    EquityProductPhoto[]
   marketTiers      EquityMarketTier[]
@@ -1425,50 +1424,8 @@ model EquityMetric {
 
   values          EquityPerformanceValue[]
   financialValues EquityFinancialValue[]
-  portfolioFields EquityPortfolioField[]
 
   @@index([group, order])
-}
-
-// Which of the registry's fields one project is actually asked for, and which of
-// them it can't file a period without.
-//
-// The registry above is the vocabulary — every figure anyone might report — and
-// this is the questionnaire, per project. They have to be separate: a SaaS
-// company reports MRR and a marketplace reports GMV, and asking either for the
-// other's figures produces blanks that look like missing data rather than what
-// they are, which is a question that doesn't apply.
-//
-// Required is enforced when a period is first filed and only warned about
-// afterwards. Tightening the rule shouldn't make an old report unopenable, and
-// a field added today has no history in the periods that closed before it.
-model EquityPortfolioField {
-  id          String          @id @default(cuid())
-  portfolioId String
-  portfolio   EquityPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
-
-  // Cascading rather than restricting, unlike the tables that hold values: this
-  // row is a question, not an answer, and a field deleted from the registry is
-  // a question nobody can be asked any more. Deleting one that carries reported
-  // figures is blocked by those tables regardless.
-  metricId String
-  metric   EquityMetric @relation(fields: [metricId], references: [id], onDelete: Cascade)
-
-  required Boolean @default(false)
-
-  // Where it sits on this project's form, which is why the registry's own order
-  // isn't enough: two projects can want the same fields asked in a different
-  // order.
-  order Int @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // A field is asked once per project. Twice would be the same question with
-  // two answers about whether it's required.
-  @@unique([portfolioId, metricId])
-  @@index([portfolioId, order])
-  @@index([metricId])
 }
 
 // Where a project stood on a given day, across whichever metrics were worth
@@ -1579,8 +1536,22 @@ model EquityFinancialReport {
   reportedOn DateTime
   audited    Boolean  @default(false)
 
-  needsHelp Boolean @default(false)
-  helpNotes String?
+  /// When these figures were published, or null while the pack is still being
+  /// entered. Only a published pack is read by the analysis, so a half-entered
+  /// year cannot move a total or restate a month by accident.
+  publishedAt DateTime?
+
+  /// The working copy: the pack as it currently stands in the entry grid,
+  /// saved as you type.
+  ///
+  /// Held as a blob rather than as value rows because it is never queried —
+  /// only the grid reads it, and only ever whole. Keeping it out of
+  /// EquityFinancialValue is also what lets a published pack be edited without
+  /// disturbing the figures the analysis is reading: the published rows stay
+  /// exactly as they were until the edit is published over them.
+  ///
+  /// Null once published with nothing pending.
+  draft Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1594,8 +1565,13 @@ model EquityFinancialReport {
   // pack was entered from, uploaded alongside it.
   documents EquityFinancialDocument[]
 
-  @@unique([portfolioId, reportedOn])
+  // One pack per date is a rule about *published* packs, so it is a partial
+  // unique index created in the migration rather than an @@unique here, which
+  // Prisma cannot express. Drafts are deliberately exempt: a date typed on the
+  // way to the right one must not collide with a pack already filed, and the
+  // clash is caught when the pack is published.
   @@index([portfolioId, reportedOn])
+  @@index([portfolioId, publishedAt])
 }
 
 // What one currency is worth in the base currency, for adding up figures across

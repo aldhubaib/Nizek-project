@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { canAccessEquity } from "@/lib/equity-access";
 import {
   computeContractEndDate,
@@ -10,7 +11,6 @@ import {
   EQUITY_METRIC_TYPE,
   formatMetricValue,
   isDateMetric,
-  isFieldAnswered,
   isFormulaMetric,
   isOngoing,
   sumTrancheEquity,
@@ -19,6 +19,7 @@ import {
   formatMonth,
   formatPackLabel,
   monthKeyOf,
+  packCellsToValues,
   wouldCycle,
 } from "@/lib/equity-financials";
 import { isCountryCode } from "@/lib/countries";
@@ -93,24 +94,6 @@ const PORTFOLIO_INCLUDE = {
         },
       },
       documents: { orderBy: { order: "asc" as const } },
-    },
-  },
-  // Which financial fields this project is asked for, in the order it asks for
-  // them. The form is built from this rather than from the whole registry.
-  reportFields: {
-    orderBy: { order: "asc" as const },
-    include: {
-      metric: {
-        select: {
-          id: true,
-          name: true,
-          type: true,
-          unit: true,
-          formulaOp: true,
-          leftId: true,
-          rightId: true,
-        },
-      },
     },
   },
   // Newest reading first; within one, the order the metrics were entered in.
@@ -235,8 +218,8 @@ function serialize(p: {
     id: string;
     reportedOn: Date;
     audited: boolean;
-    needsHelp: boolean;
-    helpNotes: string | null;
+    publishedAt: Date | null;
+    draft: unknown;
     values: {
       id: string;
       metricId: string;
@@ -254,21 +237,6 @@ function serialize(p: {
       mimeType: string | null;
       order: number;
     }[];
-  }[];
-  reportFields: {
-    id: string;
-    metricId: string;
-    required: boolean;
-    order: number;
-    metric: {
-      id: string;
-      name: string;
-      type: string;
-      unit: string | null;
-      formulaOp: string | null;
-      leftId: string | null;
-      rightId: string | null;
-    };
   }[];
   performance: {
     id: string;
@@ -417,8 +385,8 @@ function serialize(p: {
       id: r.id,
       reportedOn: r.reportedOn.toISOString(),
       audited: r.audited,
-      needsHelp: r.needsHelp,
-      helpNotes: r.helpNotes,
+      publishedAt: r.publishedAt?.toISOString() ?? null,
+      draft: asPackDraft(r.draft),
       values: r.values.map((v) => ({
         id: v.id,
         metricId: v.metricId,
@@ -436,13 +404,6 @@ function serialize(p: {
         mimeType: d.mimeType,
         order: d.order,
       })),
-    })),
-    reportFields: p.reportFields.map((f) => ({
-      id: f.id,
-      metricId: f.metricId,
-      required: f.required,
-      order: f.order,
-      metric: f.metric,
     })),
     performance: p.performance.map((entry) => ({
       id: entry.id,
@@ -1792,109 +1753,6 @@ export async function deleteEquityMetric(metricId: string) {
 
 // ─── What one project reports ───────────────────────────
 
-type ReportFieldInput = { metricId: string; required: boolean };
-
-/**
- * Sets which financial fields a project's reports ask for, and which of them a
- * new period can't be filed without.
- *
- * The whole list is submitted rather than a change to it, like the split form
- * and the reading form: a field left out has been taken off this project's
- * questionnaire, and there's no separate remove to forget to call.
- *
- * Taking a field off doesn't touch what was already reported for it. The
- * figures stay, and keep showing up in the history and the charts — the field
- * just stops being asked for from here on.
- */
-export async function setEquityReportFields(
-  portfolioId: string,
-  fields: ReportFieldInput[],
-) {
-  const user = await requireEquityAccess();
-
-  const rows = fields.filter((f) => f.metricId);
-  const ids = rows.map((f) => f.metricId);
-  if (new Set(ids).size !== ids.length) {
-    throw new Error("A field can only be listed once");
-  }
-
-  const metrics = await prisma.equityMetric.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, name: true, type: true, group: true },
-  });
-  const byId = new Map(metrics.map((m) => [m.id, m]));
-
-  for (const row of rows) {
-    const metric = byId.get(row.metricId);
-    if (!metric) throw new Error("That field no longer exists");
-    if (metric.group !== "FINANCIAL") {
-      throw new Error(`${metric.name} isn't a financial field`);
-    }
-    // Nobody types a calculated field in, so there's no box to leave empty and
-    // nothing for "required" to mean. Requiring what it stands on is the way to
-    // guarantee it comes out.
-    if (row.required && isFormulaMetric(metric.type)) {
-      throw new Error(`${metric.name} is calculated, so it can't be required`);
-    }
-  }
-
-  const existing = await prisma.equityPortfolioField.findMany({
-    where: { portfolioId },
-    include: { metric: { select: { name: true } } },
-  });
-
-  await prisma.$transaction([
-    prisma.equityPortfolioField.deleteMany({
-      where: { portfolioId, metricId: { notIn: ids.length > 0 ? ids : [""] } },
-    }),
-    ...rows.map((row, i) =>
-      prisma.equityPortfolioField.upsert({
-        where: {
-          portfolioId_metricId: { portfolioId, metricId: row.metricId },
-        },
-        create: {
-          portfolioId,
-          metricId: row.metricId,
-          required: row.required,
-          order: i + 1,
-        },
-        update: { required: row.required, order: i + 1 },
-      }),
-    ),
-  ]);
-
-  await logEquityChanges({
-    portfolioId,
-    userId: user.id,
-    section: "FINANCIALS",
-    action: "updated",
-    subject: "Reported figures",
-    changes: diffSnapshots(reportFieldsSnapshot(existing), {
-      // A field dropped from the list is reported as cleared, which a diff of
-      // the remaining ones alone would pass over in silence.
-      ...Object.fromEntries(existing.map((f) => [f.metric.name, null])),
-      ...reportFieldsSnapshot(
-        rows.map((row) => ({
-          required: row.required,
-          metric: { name: byId.get(row.metricId)?.name ?? "" },
-        })),
-      ),
-    }),
-  });
-
-  revalidatePath("/dashboard/equity");
-  revalidatePath(`/dashboard/equity/${portfolioId}`);
-}
-
-/** The questionnaire as a line per field, so the history reads as prose. */
-function reportFieldsSnapshot(
-  fields: { required: boolean; metric: { name: string } }[],
-): Snapshot {
-  return Object.fromEntries(
-    fields.map((f) => [f.metric.name, f.required ? "Required" : "Optional"]),
-  );
-}
-
 // ─── Performance readings ───────────────────────────────
 
 type PerformanceValueInput = {
@@ -2312,17 +2170,55 @@ export async function deleteEquityTeamSnapshot(snapshotId: string) {
 
 // ─── Financial reports ──────────────────────────────────
 
-type FinancialReportInput = {
-  /** When the pack was reported — what orders it against the other packs. */
+/**
+ * The pack as the entry grid holds it, saved verbatim as it is typed.
+ *
+ * Deliberately the grid's own shape — a month string, a year, and cells keyed
+ * `metricId|YYYY-MM` — rather than the shape the figures are eventually stored
+ * in. A working copy has to be able to hold a half-typed date and a cell
+ * reading "14,0", neither of which is a figure yet. Turning it into figures is
+ * what publishing is.
+ */
+export type PackDraft = {
   reportedOn: string;
   audited: boolean;
-  needsHelp: boolean;
-  helpNotes: string | null;
-  /** One per field per month the pack states a figure for. */
-  values: FinancialValueInput[];
-  /** The statements the pack was entered from, already uploaded to R2. */
+  year: number;
+  cells: Record<string, string>;
   documents: FinancialDocumentInput[];
 };
+
+/**
+ * A stored draft blob, read back defensively.
+ *
+ * It is JSON in the database rather than columns, so nothing but this check
+ * stands between a blob written by an older version of the grid and the code
+ * reading it. Anything unrecognisable reads as no draft, which shows the pack
+ * as published with nothing pending rather than throwing on the page.
+ */
+function asPackDraft(value: unknown): PackDraft | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.reportedOn !== "string") return null;
+
+  const cells: Record<string, string> = {};
+  if (raw.cells && typeof raw.cells === "object" && !Array.isArray(raw.cells)) {
+    for (const [key, cell] of Object.entries(raw.cells as Record<string, unknown>)) {
+      if (typeof cell === "string") cells[key] = cell;
+    }
+  }
+
+  return {
+    reportedOn: raw.reportedOn,
+    audited: raw.audited === true,
+    year: typeof raw.year === "number" ? raw.year : new Date().getUTCFullYear(),
+    cells,
+    documents: Array.isArray(raw.documents)
+      ? (raw.documents as FinancialDocumentInput[]).filter(
+          (d) => d && typeof d.url === "string" && d.url.trim(),
+        )
+      : [],
+  };
+}
 
 /**
  * One figure in the pack. The month is what makes this different from a
@@ -2371,15 +2267,17 @@ function asMonthStart(value: string, what: string): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
 }
 
-function financialReportData(data: FinancialReportInput) {
-  return {
-    reportedOn: asMonthStart(data.reportedOn, "The report date"),
-    audited: data.audited,
-    needsHelp: data.needsHelp,
-    // Dropping the note when the answer flips back to "no" stops a stale ask
-    // from lingering invisibly behind a collapsed field.
-    helpNotes: data.needsHelp ? data.helpNotes : null,
-  };
+/**
+ * A pack's date, or null while it is still being typed.
+ *
+ * The grid's month input reports every keystroke, so a draft legitimately holds
+ * "2026-0" on the way to "2026-04". A draft saves anyway and keeps the last
+ * date that parsed; publishing is where a date is insisted on.
+ */
+function asMonthStartOrNull(value: string): Date | null {
+  if (!/^\d{4}-\d{2}/.test(value.trim())) return null;
+  const date = new Date(`${value.trim().slice(0, 7)}-01T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 const FINANCIAL_VALUES_INCLUDE = {
@@ -2458,53 +2356,6 @@ async function prepareFinancialValues(values: FinancialValueInput[]) {
   });
 }
 
-/**
- * Refuses a pack that states a month while skipping a figure the project has to
- * report for it.
- *
- * Applied per month, not per pack: a pack covering January to July is seven
- * months of reporting, and a July with no revenue figure is an unfinished July
- * whatever the other six say.
- *
- * A month the pack says nothing at all about is left alone. A pack that only
- * covers Q1 hasn't failed to report December — it isn't claiming to.
- *
- * A blank isn't the same as a zero and neither is guessed at here. Checked when
- * a pack is filed and not when it's edited afterwards: requiring a field today
- * says what the next pack needs, not that every pack already filed is now
- * unopenable.
- */
-async function assertRequiredFields(portfolioId: string, values: FinancialValueInput[]) {
-  const required = await prisma.equityPortfolioField.findMany({
-    where: { portfolioId, required: true },
-    orderBy: { order: "asc" },
-    include: { metric: { select: { name: true, type: true } } },
-  });
-  if (required.length === 0) return;
-
-  const byMonth = new Map<string, Map<string, FinancialValueInput>>();
-  for (const value of values) {
-    if (!value.metricId) continue;
-    const month = asMonthStart(value.month, "A figure's month").toISOString();
-    const forMonth = byMonth.get(month) ?? new Map();
-    forMonth.set(value.metricId, value);
-    byMonth.set(month, forMonth);
-  }
-
-  for (const [month, given] of [...byMonth].sort(([a], [b]) => a.localeCompare(b))) {
-    const missing = required.filter(
-      ({ metricId, metric }) => !isFieldAnswered(metric, given.get(metricId)),
-    );
-    if (missing.length === 0) continue;
-
-    const names = missing.map((f) => f.metric.name);
-    throw new Error(
-      `${names.join(", ")} ${names.length === 1 ? "is" : "are"} required, and ${
-        formatMonth(monthKeyOf(month) ?? "", true)
-      } is missing ${names.length === 1 ? "it" : "them"}`,
-    );
-  }
-}
 
 /**
  * Turns Prisma's P2002 into something a person can act on.
@@ -2536,8 +2387,6 @@ function asDuplicatePeriodError(err: unknown): Error {
  */
 function reportSnapshot(report: {
   audited: boolean;
-  needsHelp: boolean;
-  helpNotes: string | null;
   values: (StoredValue & { month: Date })[];
   documents: { filename: string }[];
 }): Snapshot {
@@ -2546,8 +2395,6 @@ function reportSnapshot(report: {
     const month = formatMonth(monthKeyOf(value.month) ?? "", true);
     snapshot[`${value.metric.name} — ${month}`] = formatMetricValue(value.metric, value);
   }
-  snapshot["Needs help"] = asText(report.needsHelp);
-  snapshot["Help notes"] = report.helpNotes;
   snapshot["Documents"] =
     report.documents.length > 0
       ? report.documents.map((d) => d.filename).join(", ")
@@ -2560,52 +2407,88 @@ function reportPackLabel(report: { reportedOn: Date }) {
   return `${formatPackLabel(report.reportedOn)} report`;
 }
 
-export async function addEquityFinancialReport(
+/**
+ * Saves the pack as it currently stands, without judging it.
+ *
+ * Called on a timer while somebody types, so it does the least it can: no
+ * required-field check, no date check, no conversion into figures. A working
+ * copy that refused to save until it was correct would lose the work it exists
+ * to protect, and would refuse most of the time, since a pack is incorrect for
+ * as long as it is half-entered.
+ *
+ * Nothing here can move a published figure. An unpublished pack has no value
+ * rows at all, and a published one keeps the rows it already had — the draft
+ * sits beside them until it is published over them.
+ *
+ * Returns the pack's id, which is how the grid learns what it has been
+ * creating on the first save of a new pack.
+ */
+export async function saveEquityFinancialDraft(
   portfolioId: string,
-  data: FinancialReportInput
-) {
-  const user = await requireEquityAccess();
-  await assertRequiredFields(portfolioId, data.values);
-  const values = await prepareFinancialValues(data.values);
+  reportId: string | null,
+  draft: PackDraft,
+): Promise<{ id: string }> {
+  await requireEquityAccess();
+  const clean = asPackDraft(draft);
+  if (!clean) throw new Error("That draft can't be read");
 
-  try {
+  const dated = asMonthStartOrNull(clean.reportedOn);
+
+  if (!reportId) {
     const report = await prisma.equityFinancialReport.create({
       data: {
         portfolioId,
-        ...financialReportData(data),
-        values: { create: values },
-        documents: { create: financialDocumentsData(data.documents) },
+        // A pack being entered has to sit somewhere in the list before its date
+        // is settled, so an unparsed date falls back to this month. The column
+        // is only decorative until publishing, which takes the date from the
+        // draft and is where an unusable one is refused.
+        reportedOn: dated ?? asMonthStart(new Date().toISOString(), "Today"),
+        audited: clean.audited,
+        draft: clean,
       },
-      include: FINANCIAL_VALUES_INCLUDE,
+      select: { id: true },
     });
-    await logEquityChanges({
-      portfolioId,
-      userId: user.id,
-      section: "FINANCIALS",
-      action: "created",
-      subject: reportPackLabel(report),
-      changes: diffSnapshots(null, reportSnapshot(report)),
-    });
-    revalidatePath("/dashboard/equity");
     revalidatePath(`/dashboard/equity/${portfolioId}`);
     return { id: report.id };
-  } catch (err) {
-    throw asDuplicatePeriodError(err);
   }
+
+  const existing = await prisma.equityFinancialReport.findUnique({
+    where: { id: reportId },
+    select: { id: true, portfolioId: true, publishedAt: true },
+  });
+  if (!existing || existing.portfolioId !== portfolioId) {
+    throw new Error("Report not found");
+  }
+
+  await prisma.equityFinancialReport.update({
+    where: { id: reportId },
+    data: {
+      draft: clean,
+      // A published pack keeps its filed date and audited flag until the edit
+      // is published; moving them now would change what the list and the
+      // analysis say about figures nobody has republished.
+      ...(existing.publishedAt
+        ? {}
+        : { audited: clean.audited, ...(dated ? { reportedOn: dated } : {}) }),
+    },
+  });
+
+  revalidatePath(`/dashboard/equity/${portfolioId}`);
+  return { id: reportId };
 }
 
 /**
- * Rewrites one pack. Like the reading form, this submits the finished picture
- * rather than a diff, so a figure absent from it has been taken off the pack.
+ * Turns the working copy into the pack's figures.
  *
- * Only this pack's own rows are replaced. A month another pack also states is
- * untouched — editing the April pack cannot reach into the July one that
- * restated it, which is the whole reason the two are separate rows.
+ * This is the only thing that writes value rows, and so the only thing the
+ * analysis can see. Until it runs, a pack states nothing: a draft cannot move a
+ * portfolio total, cannot restate a month, and cannot appear in a chart.
+ *
+ * A pack missing a figure it is supposed to report is published anyway — the
+ * grid says so before the button is pressed, and refusing would leave somebody
+ * holding a real pack they cannot file because the founders left a line blank.
  */
-export async function updateEquityFinancialReport(
-  reportId: string,
-  data: FinancialReportInput
-) {
+export async function publishEquityFinancialReport(reportId: string) {
   const user = await requireEquityAccess();
   const existing = await prisma.equityFinancialReport.findUnique({
     where: { id: reportId },
@@ -2613,18 +2496,38 @@ export async function updateEquityFinancialReport(
   });
   if (!existing) throw new Error("Report not found");
 
-  const values = await prepareFinancialValues(data.values);
+  const draft = asPackDraft(existing.draft);
+  if (!draft) throw new Error("There's nothing to publish");
 
-  let updated;
+  const reportedOn = asMonthStartOrNull(draft.reportedOn);
+  if (!reportedOn) throw new Error("Set the date this report was received");
+
+  const metrics = await prisma.equityMetric.findMany({
+    where: { group: "FINANCIAL" },
+    select: { id: true, type: true },
+  });
+  const values = await prepareFinancialValues(
+    packCellsToValues(draft.cells, new Map(metrics.map((m) => [m.id, m]))),
+  );
+  if (values.length === 0) throw new Error("Fill in at least one month first");
+
+  let published;
   try {
-    updated = await prisma.equityFinancialReport.update({
+    published = await prisma.equityFinancialReport.update({
       where: { id: reportId },
       data: {
-        ...financialReportData(data),
+        reportedOn,
+        audited: draft.audited,
+        publishedAt: new Date(),
+        draft: Prisma.DbNull,
+        // The pack submits its finished picture rather than a diff, so a figure
+        // taken off it has to leave. Only this pack's rows are touched: a month
+        // another pack also states is untouched, which is the whole reason the
+        // two are separate rows.
         values: { deleteMany: {}, create: values },
         documents: {
           deleteMany: {},
-          create: financialDocumentsData(data.documents),
+          create: financialDocumentsData(draft.documents),
         },
       },
       include: FINANCIAL_VALUES_INCLUDE,
@@ -2637,22 +2540,54 @@ export async function updateEquityFinancialReport(
     portfolioId: existing.portfolioId,
     userId: user.id,
     section: "FINANCIALS",
-    action: "updated",
-    subject: reportPackLabel(updated),
-    changes: diffSnapshots(reportSnapshot(existing), {
-      // Figures dropped from the pack are reported as cleared, which a plain
-      // diff of the new rows alone would miss. Keyed by field and month, the
-      // same way reportSnapshot keys them, so a month that stayed overwrites
-      // its own null rather than reading as cleared.
-      ...Object.fromEntries(
-        existing.values.map((v) => [
-          `${v.metric.name} — ${formatMonth(monthKeyOf(v.month) ?? "", true)}`,
-          null,
-        ]),
-      ),
-      ...reportSnapshot(updated),
-    }),
+    action: existing.publishedAt ? "updated" : "created",
+    subject: reportPackLabel(published),
+    changes: diffSnapshots(
+      existing.publishedAt ? reportSnapshot(existing) : null,
+      {
+        // Figures dropped from the pack are reported as cleared, which a plain
+        // diff of the new rows alone would miss. Keyed by field and month, the
+        // same way reportSnapshot keys them, so a month that stayed overwrites
+        // its own null rather than reading as cleared.
+        ...Object.fromEntries(
+          existing.values.map((v) => [
+            `${v.metric.name} — ${formatMonth(monthKeyOf(v.month) ?? "", true)}`,
+            null,
+          ]),
+        ),
+        ...reportSnapshot(published),
+      },
+    ),
   });
+
+  revalidatePath("/dashboard/equity");
+  revalidatePath(`/dashboard/equity/${existing.portfolioId}`);
+}
+
+/**
+ * Throws the working copy away.
+ *
+ * A pack that was never published goes with it — there is nothing underneath a
+ * draft that was never anything else, and leaving an empty row in the list
+ * would be a pack that states nothing. A published pack keeps its figures and
+ * simply stops having an edit pending.
+ */
+export async function discardEquityFinancialDraft(reportId: string) {
+  await requireEquityAccess();
+  const existing = await prisma.equityFinancialReport.findUnique({
+    where: { id: reportId },
+    select: { id: true, portfolioId: true, publishedAt: true },
+  });
+  if (!existing) return;
+
+  if (existing.publishedAt) {
+    await prisma.equityFinancialReport.update({
+      where: { id: reportId },
+      data: { draft: Prisma.DbNull },
+    });
+  } else {
+    await prisma.equityFinancialReport.delete({ where: { id: reportId } });
+  }
 
   revalidatePath("/dashboard/equity");
   revalidatePath(`/dashboard/equity/${existing.portfolioId}`);

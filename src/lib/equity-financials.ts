@@ -97,6 +97,27 @@ export interface Pack {
   reportedOn: string | Date;
   audited?: boolean;
   values: PackValue[];
+  /** Null while the pack is still being entered. See {@link publishedPacks}. */
+  publishedAt?: string | Date | null;
+}
+
+/**
+ * Only the packs that have been published.
+ *
+ * Every reading of the figures goes through this — a chart, a total, a
+ * comparison across projects, the restatement resolver. A pack still being
+ * entered has to state nothing at all, and "nothing at all" has to mean it
+ * cannot restate a month either: an unpublished July sitting in front of a
+ * published April must not blank out April's figures on its way to being
+ * finished.
+ *
+ * A pack with no publishedAt field at all counts as published, so a pack
+ * assembled by hand — in a test, say — doesn't have to say so.
+ */
+export function publishedPacks<T extends { publishedAt?: string | Date | null }>(
+  packs: T[],
+): T[] {
+  return packs.filter((p) => p.publishedAt !== null);
 }
 
 /** One field's figure for one month, and which pack said so. */
@@ -588,6 +609,56 @@ export function financialMonths(portfolios: PortfolioFinancials[]): MonthKey[] {
 export type GridDraft = Map<string, { numberValue: number | null; dateValue: string | null }>;
 
 /**
+ * The typed cells of a pack, read as figures.
+ *
+ * The grid stores what was typed, so this is where text becomes a number and a
+ * cell that never became one is dropped. Run on the server when a pack is
+ * published rather than trusting figures sent from the browser, and shared with
+ * the grid so the preview and the stored pack cannot disagree.
+ *
+ * A blank, an unparseable cell, a field that has since been deleted and a
+ * calculated field are all skipped — the last because a calculation is worked
+ * out from the figures every time it is read and has nothing of its own to
+ * store.
+ */
+export function packCellsToValues(
+  cells: Record<string, string>,
+  registry: Map<string, MetricDef>,
+): { metricId: string; month: string; numberValue: number | null; dateValue: string | null }[] {
+  const rows: {
+    metricId: string;
+    month: string;
+    numberValue: number | null;
+    dateValue: string | null;
+  }[] = [];
+
+  for (const [key, raw] of Object.entries(cells)) {
+    const text = raw.trim();
+    if (!text) continue;
+
+    const [metricId, month] = key.split("|");
+    if (!metricId || !month) continue;
+
+    const metric = registry.get(metricId);
+    if (!metric || isFormulaMetric(metric.type)) continue;
+
+    const monthStart = monthStartOf(month);
+    if (!monthStart) continue;
+
+    if (isDateMetric(metric.type)) {
+      rows.push({ metricId, month: monthStart, numberValue: null, dateValue: text });
+      continue;
+    }
+
+    const number = parsePastedNumber(text);
+    if (number == null) continue;
+    rows.push({ metricId, month: monthStart, numberValue: number, dateValue: null });
+  }
+
+  return rows;
+}
+
+/**
  * Turn a grid back into rows for saving, dropping the cells nobody filled.
  *
  * A blank cell is not a figure and must not become one — see ytdTotal. Dropping
@@ -630,12 +701,16 @@ export function draftToValues(
 }
 
 /**
- * Numbers as they come off a pasted spreadsheet block.
+ * A figure read the way it is written in a management report.
  *
- * Accounting notation is kept rather than rejected: thousands separators, a
- * currency symbol, and "(3,275)" for a negative, which is how every management
- * report writes a loss. Anything left unparseable comes back null so the paste
- * preview can show it as skipped instead of guessing.
+ * Accounting notation is accepted rather than rejected, because that is what
+ * gets typed when somebody is copying a statement line by line: thousands
+ * separators, a currency symbol, and "(3,275)" for a negative, which is how
+ * every management report writes a loss.
+ *
+ * Anything left unparseable comes back null rather than zero. A cell reading
+ * "n/a", or one still half-typed, is not a figure, and guessing it as nothing
+ * would file a claim the report never made.
  */
 export function parsePastedNumber(raw: string): number | null {
   const text = raw.trim();
@@ -648,13 +723,4 @@ export function parsePastedNumber(raw: string): number | null {
   const value = Number(digits);
   if (!Number.isFinite(value)) return null;
   return negative ? -Math.abs(value) : value;
-}
-
-/** Split a pasted block into rows of cells, tab- or multi-space separated. */
-export function splitPastedGrid(text: string): string[][] {
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => line.split(/\t|\s{2,}/).map((cell) => cell.trim()));
 }
