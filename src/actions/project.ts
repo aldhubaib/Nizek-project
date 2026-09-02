@@ -289,15 +289,47 @@ export async function updateProject(data: {
 }
 
 /**
+ * Refuse a change that would leave a project tracking work nowhere.
+ *
+ * Sprints and the board are independent systems and either can be switched off,
+ * but not both — a project with neither has no Road map, no Active sprint and no
+ * Board tab, and no way back except another trip through settings. `turningOff`
+ * names the side being switched off; this checks the other side is on.
+ */
+async function assertOtherSystemRemains(
+  projectId: string,
+  turningOff: "sprints" | "board",
+) {
+  const [project, board] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id: projectId },
+      select: { sprintsEnabled: true },
+    }),
+    prisma.board.findUnique({
+      where: { projectId },
+      select: { enabled: true },
+    }),
+  ]);
+
+  if (turningOff === "sprints" && !board?.enabled) {
+    throw new Error(
+      "Add a board and switch it on before turning sprints off, or this project would have nowhere to track work.",
+    );
+  }
+  if (turningOff === "board" && !project?.sprintsEnabled) {
+    throw new Error(
+      "Switch sprints on before hiding the board, or this project would have nowhere to track work.",
+    );
+  }
+}
+
+/**
  * Turn the sprint pipeline on or off for a project.
  *
  * Nothing is deleted either way — this only decides whether the Road map and
  * Active sprint tabs are offered, so a project switched off and back on finds
- * its sprints and tasks untouched.
- *
- * Switching off is refused unless the project has a board, since that would
- * leave it with no way to track work at all. Switching back on is always
- * allowed, which is what makes this recoverable from the UI.
+ * its sprints and tasks untouched. Switching back on is always allowed, which is
+ * what makes this recoverable from the UI.
  */
 export async function setProjectSprints(data: {
   projectId: string;
@@ -306,21 +338,48 @@ export async function setProjectSprints(data: {
   await requireProjectMember(data.projectId);
   await requireProjectRole(data.projectId, ["ADMIN", "PROJECT_MANAGER"]);
 
-  if (!data.enabled) {
-    const board = await prisma.board.findUnique({
-      where: { projectId: data.projectId },
-      select: { id: true },
-    });
-    if (!board) {
-      throw new Error(
-        "Add a board before turning sprints off, or this project would have nowhere to track work.",
-      );
-    }
-  }
+  if (!data.enabled) await assertOtherSystemRemains(data.projectId, "sprints");
 
   await prisma.project.update({
     where: { id: data.projectId },
     data: { sprintsEnabled: data.enabled },
+  });
+
+  revalidatePath(`/dashboard/projects/${data.projectId}`);
+  revalidatePath("/dashboard/projects");
+  return { enabled: data.enabled };
+}
+
+/**
+ * Show or hide a project's board.
+ *
+ * The mirror of `setProjectSprints`, and just as non-destructive: hiding leaves
+ * every column, card type and card in place, so switching it back on returns the
+ * board exactly as it was.
+ *
+ * Lives here rather than in the board actions because it is a project-level
+ * decision — a project admin or manager makes it from project settings, and it
+ * is guarded against the same both-off state as sprints. Board roles govern what
+ * happens inside a board, not whether the project has one.
+ */
+export async function setProjectBoard(data: {
+  projectId: string;
+  enabled: boolean;
+}) {
+  await requireProjectMember(data.projectId);
+  await requireProjectRole(data.projectId, ["ADMIN", "PROJECT_MANAGER"]);
+
+  const board = await prisma.board.findUnique({
+    where: { projectId: data.projectId },
+    select: { id: true },
+  });
+  if (!board) throw new Error("This project has no board to show or hide.");
+
+  if (!data.enabled) await assertOtherSystemRemains(data.projectId, "board");
+
+  await prisma.board.update({
+    where: { id: board.id },
+    data: { enabled: data.enabled },
   });
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);

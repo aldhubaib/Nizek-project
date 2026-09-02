@@ -2359,6 +2359,14 @@ model Board {
 
   name String @default("Board")
 
+  /// Whether the Board tab is offered for this project.
+  ///
+  /// False hides the board without touching a single column, card type or card,
+  /// so switching it back on returns the board exactly as it was. This is the
+  /// mirror of Project.sprintsEnabled, and the two are guarded together: a
+  /// project can never have both switched off.
+  enabled Boolean @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

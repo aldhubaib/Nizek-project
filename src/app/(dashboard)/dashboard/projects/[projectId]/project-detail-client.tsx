@@ -204,6 +204,13 @@ interface Props {
    */
   hasBoard?: boolean;
   /**
+   * Whether a board has been added at all, and whether it is switched on. Only
+   * project settings cares: it needs "hidden" and "never added" to offer
+   * different controls. Use `hasBoard` for anything that renders the board.
+   */
+  boardExists?: boolean;
+  boardEnabled?: boolean;
+  /**
    * Whether this project runs sprints. False hides the Road map and Active
    * sprint tabs and the New task button, for a project tracked on a board
    * instead. Nothing is deleted — turning it back on restores the tabs.
@@ -234,6 +241,8 @@ export function ProjectDetailClient({
   activeContractType,
   canAccessVault = false,
   hasBoard = false,
+  boardExists = false,
+  boardEnabled = false,
   sprintsEnabled = true,
 }: Props) {
   const canEdit = userPermissions.canModifyTask || userPermissions.isAdmin;
@@ -768,7 +777,8 @@ export function ProjectDetailClient({
             .filter((m) => m.user.systemRole !== "CLIENT")
             .map((m) => ({ id: m.user.id, name: m.user.name, imageUrl: m.user.imageUrl }))}
           isAdmin={isAdmin}
-          hasBoard={hasBoard}
+          boardExists={boardExists}
+          boardEnabled={boardEnabled}
           sprintsEnabled={sprintsEnabled}
           onClose={() => { setSettingsOpen(false); router.refresh(); }}
         />,

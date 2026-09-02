@@ -159,34 +159,50 @@ export async function createBoard(projectId: string): Promise<BoardResult<{ id: 
 }
 
 /**
- * Whether this viewer should be offered a board tab at all.
+ * Where this project stands on boards, from this viewer's seat.
  *
- * Both halves of the question in one answer: the project has a board, and the
- * person looking is allowed to open it. Access failures come back as false
- * rather than as an exception so a client account simply sees no tab, instead
- * of a tab that errors when clicked.
+ * Three separate questions, because project settings needs to tell them apart:
+ * a board that was never added offers an "Add a board" button, while one that
+ * exists but is switched off offers a switch to bring it back. Only `visible`
+ * drives the tab.
+ *
+ * Access failures come back as false rather than as an exception, so someone
+ * without board access simply sees no tab instead of one that errors when
+ * clicked.
  */
-export async function viewerHasBoard(projectId: string): Promise<boolean> {
+export async function viewerBoardState(projectId: string): Promise<{
+  /** A board has been added to this project, switched on or not. */
+  exists: boolean;
+  /** It exists and is not hidden. */
+  enabled: boolean;
+  /** It exists, is not hidden, and this viewer may open it. */
+  visible: boolean;
+}> {
   const board = await prisma.board.findUnique({
     where: { projectId },
-    select: { id: true },
+    select: { id: true, enabled: true },
   });
-  if (!board) return false;
+  if (!board) return { exists: false, enabled: false, visible: false };
+  if (!board.enabled) return { exists: true, enabled: false, visible: false };
   try {
     await boardContextForProject(projectId);
-    return true;
+    return { exists: true, enabled: true, visible: true };
   } catch {
-    return false;
+    return { exists: true, enabled: true, visible: false };
   }
 }
 
-/** Null when the project has no board, or this viewer may not open it. */
+/**
+ * Null when the project has no board, the board is switched off, or this viewer
+ * may not open it. The `enabled` check matters for a tab left open in another
+ * window while somebody hides the board.
+ */
 export async function getBoard(projectId: string): Promise<BoardDTO | null> {
   const board = await prisma.board.findUnique({
     where: { projectId },
-    select: { id: true },
+    select: { id: true, enabled: true },
   });
-  if (!board) return null;
+  if (!board || !board.enabled) return null;
 
   let context;
   try {

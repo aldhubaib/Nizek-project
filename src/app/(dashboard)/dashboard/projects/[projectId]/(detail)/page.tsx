@@ -10,7 +10,7 @@ import { canAccessProjectVault } from "@/lib/vault-access";
 import { isClientUser } from "@/lib/client-chat";
 import { notFound, redirect } from "next/navigation";
 import { ProjectDetailClient } from "../project-detail-client";
-import { viewerHasBoard } from "@/actions/board";
+import { viewerBoardState } from "@/actions/board";
 import type { KanbanTask } from "@/store/kanban";
 
 interface Props {
@@ -33,9 +33,9 @@ export default async function ProjectDetailPage({ params }: Props) {
   if (isClientUser(user)) redirect("/dashboard/messages");
 
   const canAccessVault = await canAccessProjectVault(user.id, projectId);
-  // False for every project that has no board, which is all of them until one
-  // is added — so the tab set below is unchanged for existing projects.
-  const hasBoard = await viewerHasBoard(projectId);
+  // All false for every project that has no board, which is all of them until
+  // one is added — so the tab set below is unchanged for existing projects.
+  const board = await viewerBoardState(projectId);
 
   const isSystemAdmin = user.systemRole === "ADMIN";
   const isProjectAdmin = member.projectRole?.isAdmin ?? false;
@@ -86,7 +86,9 @@ export default async function ProjectDetailPage({ params }: Props) {
       allowedTaskTypes={allowedTaskTypes}
       activeContractType={activeContract?.contractType ?? null}
       canAccessVault={canAccessVault}
-      hasBoard={hasBoard}
+      hasBoard={board.visible}
+      boardExists={board.exists}
+      boardEnabled={board.enabled}
       sprintsEnabled={project.sprintsEnabled}
     />
   );

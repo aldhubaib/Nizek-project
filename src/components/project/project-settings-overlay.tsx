@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { deleteProject, updateProject, deleteContract, toggleLatePayment, setProjectClientChat, setProjectSprints } from "@/actions/project";
+import { deleteProject, updateProject, deleteContract, toggleLatePayment, setProjectClientChat, setProjectSprints, setProjectBoard } from "@/actions/project";
 import { getRoles } from "@/actions/role";
 import { createBoard } from "@/actions/board";
 import { getArchivedTasks, restoreTask, permanentlyDeleteTask } from "@/actions/task";
@@ -68,8 +68,10 @@ interface ProjectSettingsProps {
   /** Non-client project members for the internal review user picker. */
   internalMembers?: ClientMember[];
   isAdmin?: boolean;
-  /** Whether this project already runs a board, which is a one-way switch on. */
-  hasBoard?: boolean;
+  /** Whether a board has been added to this project, switched on or not. */
+  boardExists?: boolean;
+  /** Whether that board is switched on. */
+  boardEnabled?: boolean;
   /** Whether this project runs the sprint pipeline. */
   sprintsEnabled?: boolean;
   onClose: () => void;
@@ -81,7 +83,8 @@ export function ProjectSettingsOverlay({
   contractPrefixes = [],
   internalMembers = [],
   isAdmin = false,
-  hasBoard = false,
+  boardExists = false,
+  boardEnabled = false,
   sprintsEnabled = true,
   onClose,
 }: ProjectSettingsProps) {
@@ -452,9 +455,10 @@ export function ProjectSettingsOverlay({
           </div>
 
           {isAdmin && (
-            <BoardSection
+            <WorkTrackingSection
               projectId={project.id}
-              hasBoard={hasBoard}
+              boardExists={boardExists}
+              boardEnabled={boardEnabled}
               sprintsEnabled={sprintsEnabled}
             />
           )}
@@ -616,13 +620,15 @@ function ContractList({ contracts, isAdmin, projectId, contractPrefixes = [] }: 
  * to the cards on it, and quietly discarding them is not a decision a settings
  * toggle should make on someone's behalf.
  */
-function BoardSection({
+function WorkTrackingSection({
   projectId,
-  hasBoard,
+  boardExists,
+  boardEnabled,
   sprintsEnabled,
 }: {
   projectId: string;
-  hasBoard: boolean;
+  boardExists: boolean;
+  boardEnabled: boolean;
   sprintsEnabled: boolean;
 }) {
   const router = useRouter();
@@ -642,13 +648,20 @@ function BoardSection({
     }
   }
 
+  // Whether this side is the only one left on, and so cannot be switched off.
+  // The server refuses it too; this just stops the switch looking available.
+  const boardOn = boardExists && boardEnabled;
+  const isLastOne = (side: "sprints" | "board") =>
+    side === "sprints" ? sprintsEnabled && !boardOn : boardOn && !sprintsEnabled;
+
   return (
     <div className="rounded-lg border border-border p-5 space-y-4">
       <div>
         <h3 className="text-s font-semibold">How this project tracks work</h3>
         <p className="text-xs text-muted-foreground mt-0.5">
           Sprints and boards are separate systems. A project can run either, or
-          both — turning one off only hides its tabs and never deletes anything.
+          both, but not neither — switching one off only hides its tabs and never
+          deletes anything.
         </p>
       </div>
 
@@ -662,15 +675,17 @@ function BoardSection({
               ? "Road map and Active sprint are shown."
               : "Hidden. Existing sprints and tasks are untouched and come back if you switch this on."}
           </p>
-          {sprintsEnabled && !hasBoard && (
+          {isLastOne("sprints") && (
             <p className="text-xs text-muted-foreground/70 mt-0.5">
-              Add a board first — a project needs somewhere to track work.
+              {boardExists
+                ? "Switch the board on first — a project needs somewhere to track work."
+                : "Add a board first — a project needs somewhere to track work."}
             </p>
           )}
         </div>
         <Switch
           checked={sprintsEnabled}
-          disabled={busy || (sprintsEnabled && !hasBoard)}
+          disabled={busy || isLastOne("sprints")}
           onCheckedChange={(next) =>
             run(() => setProjectSprints({ projectId, enabled: next }))
           }
@@ -681,13 +696,26 @@ function BoardSection({
         <div className="min-w-0">
           <p className="text-s font-medium">Board</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {hasBoard
-              ? "Columns, card types and roles are managed from the Board tab."
-              : "A Trello-style board with your own columns, card types and fields."}
+            {!boardExists
+              ? "A Trello-style board with your own columns, card types and fields."
+              : boardEnabled
+                ? "Shown. Columns, card types and roles are managed from the Board tab."
+                : "Hidden. Its columns, card types and cards are untouched and come back if you switch this on."}
           </p>
+          {isLastOne("board") && (
+            <p className="text-xs text-muted-foreground/70 mt-0.5">
+              Switch sprints on first — a project needs somewhere to track work.
+            </p>
+          )}
         </div>
-        {hasBoard ? (
-          <span className="shrink-0 text-xs text-muted-foreground">Added</span>
+        {boardExists ? (
+          <Switch
+            checked={boardEnabled}
+            disabled={busy || isLastOne("board")}
+            onCheckedChange={(next) =>
+              run(() => setProjectBoard({ projectId, enabled: next }))
+            }
+          />
         ) : (
           <Button
             size="sm"
