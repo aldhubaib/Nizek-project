@@ -4,7 +4,7 @@ import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
 import { AlertCircle, Bug, CircleAlert, Clock, Palette, Sparkles, UserRound, Wrench } from "lucide-react";
 import { PriorityIconBadge } from "@/components/task/priority-icon";
 import { isMissingDataTask } from "@/lib/task-readiness";
-import { type TaskPriorityId } from "@/lib/task-label";
+import { taskCode, type TaskPriorityId } from "@/lib/task-label";
 import { cn } from "@/lib/utils";
 
 export function getTypeIcon(taskType: string) {
@@ -83,6 +83,11 @@ export interface SprintTaskRowData {
   title: string;
   taskType: string;
   stage: string;
+  /**
+   * Drives the issue key in the card's top-left corner. Optional because the
+   * sprint-doc rows carry no number; those keep the single-line card they had.
+   */
+  taskNumber?: number;
   /** Absent on the sprint-doc rows, which carry no priority and hide the slot. */
   priority?: TaskPriorityId;
   assignee?: { name: string | null; imageUrl: string | null } | null;
@@ -206,6 +211,19 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
       </>
     );
 
+    const code =
+      task.taskNumber == null ? null : (
+        <span className="font-mono text-xs leading-none text-muted-foreground/60">
+          {taskCode(task.taskType, task.taskNumber)}
+        </span>
+      );
+
+    const rowWrapper = (
+      <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
+        {row}
+      </div>
+    );
+
     return (
       <Comp
         ref={ref as never}
@@ -213,7 +231,9 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
         className={cn(
           "flex w-full rounded-md border border-border bg-field px-3 text-start",
           compact ? "min-h-12 py-3" : "min-h-16 py-4",
-          footer
+          // A key or a footer both turn the card into stacked lines. Without
+          // either it stays the single centred row it has always been.
+          footer || code
             ? "flex-col items-stretch gap-3"
             : "flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3",
           !disableHoverBorder && "hover:border-foreground/40",
@@ -221,10 +241,15 @@ export const SprintTaskRow = forwardRef<HTMLElement, SprintTaskRowProps>(
         )}
         {...props}
       >
-        {footer ? (
-          <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
-            {row}
+        {code ? (
+          // Tighter than the card's own gap: the key labels the row beneath it
+          // rather than standing as a line of its own.
+          <div className="flex w-full flex-col items-stretch gap-1.5">
+            {code}
+            {rowWrapper}
           </div>
+        ) : footer ? (
+          rowWrapper
         ) : (
           row
         )}
