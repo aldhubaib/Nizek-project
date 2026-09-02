@@ -203,6 +203,12 @@ interface Props {
    * types and roles; a project without one shows exactly the tabs it always did.
    */
   hasBoard?: boolean;
+  /**
+   * Whether this project runs sprints. False hides the Road map and Active
+   * sprint tabs and the New task button, for a project tracked on a board
+   * instead. Nothing is deleted — turning it back on restores the tabs.
+   */
+  sprintsEnabled?: boolean;
 }
 
 function TabSpinner() {
@@ -228,6 +234,7 @@ export function ProjectDetailClient({
   activeContractType,
   canAccessVault = false,
   hasBoard = false,
+  sprintsEnabled = true,
 }: Props) {
   const canEdit = userPermissions.canModifyTask || userPermissions.isAdmin;
   const isAdmin = userPermissions.isAdmin;
@@ -235,10 +242,27 @@ export function ProjectDetailClient({
   const canManageTeam = userPermissions.canInviteMembers || userPermissions.canInviteClients;
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTabState] = useState(() => {
+  const [requestedTab, setActiveTabState] = useState(() => {
     const tab = searchParams.get("tab") ?? "roadmap";
     return normalizeProjectTab(tab);
   });
+
+  // Which tabs this project actually offers. Sprints and the board are both
+  // optional now, so a `?tab=` from a bookmark or a task's back link can name
+  // one that is no longer there.
+  const availableTabs = new Set<string>(["notes", "assets"]);
+  if (sprintsEnabled) {
+    availableTabs.add("roadmap");
+    availableTabs.add("sprints");
+  }
+  if (hasBoard) availableTabs.add("boards");
+  if (canManageTeam) availableTabs.add("team");
+  if (canAccessVault) availableTabs.add("vault");
+
+  // Falls back rather than rendering an empty page. Notes is the last resort
+  // for the case the server guard is meant to prevent: neither system enabled.
+  const defaultTab = sprintsEnabled ? "roadmap" : hasBoard ? "boards" : "notes";
+  const activeTab = availableTabs.has(requestedTab) ? requestedTab : defaultTab;
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Lazy-loaded tab data
@@ -424,8 +448,12 @@ export function ProjectDetailClient({
   const assetsCount = assets ? assets.length : project._count.assets;
 
   const projectTabs: OverflowTabItem<string>[] = [
-    { id: "roadmap", label: "Road map" },
-    { id: "sprints", label: "Active sprint" },
+    ...(sprintsEnabled
+      ? [
+          { id: "roadmap", label: "Road map" },
+          { id: "sprints", label: "Active sprint" },
+        ]
+      : []),
     // "boards", not "board": `normalizeProjectTab` already treats `?tab=board`
     // as a legacy alias for the road map, so that id would never survive a
     // page load.
@@ -503,7 +531,7 @@ export function ProjectDetailClient({
             onChanged={reloadTeam}
           />
         </PageHeaderActions>
-      ) : canCreateTask && isActive && !noteFullscreen && activeTab !== "notes" ? (
+      ) : canCreateTask && isActive && sprintsEnabled && !noteFullscreen && activeTab !== "notes" ? (
         <PageHeaderActions>
           <AddButton
             label="New task"
@@ -583,8 +611,8 @@ export function ProjectDetailClient({
             />
           </div>
           <TabsList className="hidden">
-            <TabsTrigger value="roadmap" className={PROJECT_TAB_CLASS} />
-            <TabsTrigger value="sprints" className={PROJECT_TAB_CLASS} />
+            {sprintsEnabled && <TabsTrigger value="roadmap" className={PROJECT_TAB_CLASS} />}
+            {sprintsEnabled && <TabsTrigger value="sprints" className={PROJECT_TAB_CLASS} />}
             {hasBoard && <TabsTrigger value="boards" className={PROJECT_TAB_CLASS} />}
             <TabsTrigger value="notes" className={PROJECT_TAB_CLASS} />
             <TabsTrigger value="assets" className={PROJECT_TAB_CLASS} />
@@ -607,6 +635,7 @@ export function ProjectDetailClient({
                 : "px-app py-4",
         )}
       >
+          {sprintsEnabled && (
           <TabsContent value="sprints" className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
             {activeTab === "sprints" && (loadingSprints || !sprints ? (
               <TabSpinner />
@@ -628,6 +657,7 @@ export function ProjectDetailClient({
               />
             ))}
           </TabsContent>
+          )}
 
           {/* Mounted only while it is the open tab, so a project that has a
               board but never opens it costs nothing to load. */}
@@ -637,6 +667,7 @@ export function ProjectDetailClient({
             </TabsContent>
           )}
 
+          {sprintsEnabled && (
           <TabsContent value="roadmap" className="flex min-h-0 w-full flex-1 flex-col overflow-visible lg:overflow-hidden">
             {activeTab === "roadmap" && (loadingSprints || !sprints ? (
               <TabSpinner />
@@ -656,6 +687,7 @@ export function ProjectDetailClient({
               />
             ))}
           </TabsContent>
+          )}
 
           <TabsContent value="notes">
             {activeTab === "notes" && (loadingNotes || !notes ? (
@@ -737,6 +769,7 @@ export function ProjectDetailClient({
             .map((m) => ({ id: m.user.id, name: m.user.name, imageUrl: m.user.imageUrl }))}
           isAdmin={isAdmin}
           hasBoard={hasBoard}
+          sprintsEnabled={sprintsEnabled}
           onClose={() => { setSettingsOpen(false); router.refresh(); }}
         />,
         document.body

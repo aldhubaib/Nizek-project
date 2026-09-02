@@ -288,6 +288,46 @@ export async function updateProject(data: {
   return updated;
 }
 
+/**
+ * Turn the sprint pipeline on or off for a project.
+ *
+ * Nothing is deleted either way — this only decides whether the Road map and
+ * Active sprint tabs are offered, so a project switched off and back on finds
+ * its sprints and tasks untouched.
+ *
+ * Switching off is refused unless the project has a board, since that would
+ * leave it with no way to track work at all. Switching back on is always
+ * allowed, which is what makes this recoverable from the UI.
+ */
+export async function setProjectSprints(data: {
+  projectId: string;
+  enabled: boolean;
+}) {
+  await requireProjectMember(data.projectId);
+  await requireProjectRole(data.projectId, ["ADMIN", "PROJECT_MANAGER"]);
+
+  if (!data.enabled) {
+    const board = await prisma.board.findUnique({
+      where: { projectId: data.projectId },
+      select: { id: true },
+    });
+    if (!board) {
+      throw new Error(
+        "Add a board before turning sprints off, or this project would have nowhere to track work.",
+      );
+    }
+  }
+
+  await prisma.project.update({
+    where: { id: data.projectId },
+    data: { sprintsEnabled: data.enabled },
+  });
+
+  revalidatePath(`/dashboard/projects/${data.projectId}`);
+  revalidatePath("/dashboard/projects");
+  return { enabled: data.enabled };
+}
+
 /** Enable or disable the project's isolated client chat room. */
 export async function setProjectClientChat(data: {
   projectId: string;

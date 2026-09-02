@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { deleteProject, updateProject, deleteContract, toggleLatePayment, setProjectClientChat } from "@/actions/project";
+import { Switch } from "@/components/ui/switch";
+import { deleteProject, updateProject, deleteContract, toggleLatePayment, setProjectClientChat, setProjectSprints } from "@/actions/project";
 import { getRoles } from "@/actions/role";
 import { createBoard } from "@/actions/board";
 import { getArchivedTasks, restoreTask, permanentlyDeleteTask } from "@/actions/task";
@@ -69,6 +70,8 @@ interface ProjectSettingsProps {
   isAdmin?: boolean;
   /** Whether this project already runs a board, which is a one-way switch on. */
   hasBoard?: boolean;
+  /** Whether this project runs the sprint pipeline. */
+  sprintsEnabled?: boolean;
   onClose: () => void;
 }
 
@@ -79,6 +82,7 @@ export function ProjectSettingsOverlay({
   internalMembers = [],
   isAdmin = false,
   hasBoard = false,
+  sprintsEnabled = true,
   onClose,
 }: ProjectSettingsProps) {
   const router = useRouter();
@@ -447,7 +451,13 @@ export function ProjectSettingsOverlay({
             )}
           </div>
 
-          {isAdmin && <BoardSection projectId={project.id} hasBoard={hasBoard} />}
+          {isAdmin && (
+            <BoardSection
+              projectId={project.id}
+              hasBoard={hasBoard}
+              sprintsEnabled={sprintsEnabled}
+            />
+          )}
 
           {/* Danger Zone */}
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-5 space-y-4">
@@ -606,48 +616,99 @@ function ContractList({ contracts, isAdmin, projectId, contractPrefixes = [] }: 
  * to the cards on it, and quietly discarding them is not a decision a settings
  * toggle should make on someone's behalf.
  */
-function BoardSection({ projectId, hasBoard }: { projectId: string; hasBoard: boolean }) {
+function BoardSection({
+  projectId,
+  hasBoard,
+  sprintsEnabled,
+}: {
+  projectId: string;
+  hasBoard: boolean;
+  sprintsEnabled: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+      router.refresh();
+    } catch (err) {
+      setError((err as Error).message || "Something went wrong.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="rounded-lg border border-border p-5 space-y-4">
       <div>
-        <h3 className="text-s font-semibold">Board</h3>
+        <h3 className="text-s font-semibold">How this project tracks work</h3>
         <p className="text-xs text-muted-foreground mt-0.5">
-          {hasBoard
-            ? "This project has a board. Its columns, card types and roles are managed from the Board tab."
-            : "Add a Trello-style board with your own columns, card types and fields. It runs alongside sprints and changes nothing about them."}
+          Sprints and boards are separate systems. A project can run either, or
+          both — turning one off only hides its tabs and never deletes anything.
         </p>
       </div>
 
       {error && <p className="text-s text-destructive">{error}</p>}
 
-      {!hasBoard && (
-        <Button
-          size="sm"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            setError("");
-            const result = await createBoard(projectId);
-            setBusy(false);
-            if (!result.success) {
-              setError(result.error);
-              return;
-            }
-            router.refresh();
-          }}
-        >
-          {busy ? (
-            <Loader2 className="w-3.5 h-3.5 me-1.5 animate-spin" />
-          ) : (
-            <SquareKanban className="w-3.5 h-3.5 me-1.5" />
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-s font-medium">Sprints</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {sprintsEnabled
+              ? "Road map and Active sprint are shown."
+              : "Hidden. Existing sprints and tasks are untouched and come back if you switch this on."}
+          </p>
+          {sprintsEnabled && !hasBoard && (
+            <p className="text-xs text-muted-foreground/70 mt-0.5">
+              Add a board first — a project needs somewhere to track work.
+            </p>
           )}
-          Add a board
-        </Button>
-      )}
+        </div>
+        <Switch
+          checked={sprintsEnabled}
+          disabled={busy || (sprintsEnabled && !hasBoard)}
+          onCheckedChange={(next) =>
+            run(() => setProjectSprints({ projectId, enabled: next }))
+          }
+        />
+      </div>
+
+      <div className="flex items-start justify-between gap-4 border-t border-border/50 pt-4">
+        <div className="min-w-0">
+          <p className="text-s font-medium">Board</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {hasBoard
+              ? "Columns, card types and roles are managed from the Board tab."
+              : "A Trello-style board with your own columns, card types and fields."}
+          </p>
+        </div>
+        {hasBoard ? (
+          <span className="shrink-0 text-xs text-muted-foreground">Added</span>
+        ) : (
+          <Button
+            size="sm"
+            className="shrink-0"
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                const result = await createBoard(projectId);
+                if (!result.success) throw new Error(result.error);
+              })
+            }
+          >
+            {busy ? (
+              <Loader2 className="w-3.5 h-3.5 me-1.5 animate-spin" />
+            ) : (
+              <SquareKanban className="w-3.5 h-3.5 me-1.5" />
+            )}
+            Add a board
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

@@ -87,6 +87,7 @@ export default async function ProjectDetailPage({ params }: Props) {
       activeContractType={activeContract?.contractType ?? null}
       canAccessVault={canAccessVault}
       hasBoard={hasBoard}
+      sprintsEnabled={project.sprintsEnabled}
     />
   );
 }

@@ -249,6 +249,17 @@ model Project {
   /// When true, a sibling Conversation (kind=client) is the client-facing room.
   clientChatEnabled Boolean @default(false)
 
+  /// Whether this project runs the sprint pipeline at all.
+  ///
+  /// Turning it off hides the Road map and Active sprint tabs and the New task
+  /// button; it deletes nothing, so a project switched off and back on finds its
+  /// sprints and tasks where it left them. Defaults true because every project
+  /// predating the Boards module runs on sprints.
+  ///
+  /// Unlike the board, which is enabled by the presence of a Board row, this
+  /// needs storing: "no sprints" and "no sprints yet" look identical otherwise.
+  sprintsEnabled Boolean @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
