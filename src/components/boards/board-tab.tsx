@@ -6,6 +6,8 @@ import { getBoard, type BoardDTO } from "@/actions/board";
 import { BoardCanvas } from "./board-canvas";
 import { CardDetailPanel } from "./card-detail-panel";
 import { BoardSettingsOverlay } from "./board-settings/board-settings-overlay";
+import { PageOverflowItems } from "@/components/page-overflow-menu";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 /**
  * The board, loaded when its tab is opened.
@@ -72,17 +74,17 @@ export function BoardTab({ projectId }: { projectId: string }) {
         </div>
       )}
 
+      {/* Into the shell's single ⋮ rather than a button of its own, alongside
+          the project's own Settings. Registered from here, so it appears only
+          while the board tab is open and leaves with it. Ordered just above
+          project settings, the item it is most easily confused with. */}
       {canConfigure && (
-        <div className="mb-3 flex shrink-0 justify-end">
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-s font-medium text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
-          >
-            <Settings2 className="size-3.5" />
-            Board settings
-          </button>
-        </div>
+        <PageOverflowItems id="board-settings" order={90}>
+          <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
+            <Settings2 className="h-4 w-4" />
+            <span className="flex-1">Board settings</span>
+          </DropdownMenuItem>
+        </PageOverflowItems>
       )}
 
       <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
