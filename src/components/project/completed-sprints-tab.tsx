@@ -987,8 +987,12 @@ export function CompletedSprintsTab({
           ) : null}
         </DragOverlay>
       </DndContext>
+    {/* Keyed so the dialog remounts on a new target and drops the previous
+        task's state. Namespaced per dialog because these are siblings: a shared
+        "idle" sentinel collides whenever both are closed, which is most of the
+        time. */}
     <AddToActiveSprintDialog
-      key={addToActive?.task.id ?? "idle"}
+      key={addToActive ? `add:${addToActive.task.id}` : "add:idle"}
       open={addToActive != null}
       projectId={projectId}
       sprintName={addToActive?.sprint.name ?? ""}
@@ -1004,7 +1008,7 @@ export function CompletedSprintsTab({
       }}
     />
     <RemoveFromSprintDialog
-      key={confirmMove ? `${confirmMove.task.id}:${confirmMove.nextSprintId ?? "backlog"}` : "idle"}
+      key={confirmMove ? `move:${confirmMove.task.id}:${confirmMove.nextSprintId ?? "backlog"}` : "move:idle"}
       open={confirmMove != null}
       projectId={projectId}
       task={confirmMove?.task ?? null}

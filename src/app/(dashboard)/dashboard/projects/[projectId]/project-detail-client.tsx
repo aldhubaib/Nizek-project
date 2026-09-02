@@ -516,7 +516,10 @@ export function ProjectDetailClient({
         onValueChange={(val) => setActiveTab(val as string)}
         className={cn(
           "w-full min-w-0 gap-0",
-          (activeTab === "sprints" || activeTab === "roadmap") &&
+          // Middle link in the full-height chain: the page wrapper below sets
+          // `lg:basis-0`, so any tab listed there must be listed here too or it
+          // collapses to nothing at all.
+          (activeTab === "sprints" || activeTab === "roadmap" || activeTab === "boards") &&
             !noteFullscreen &&
             "lg:min-h-0 lg:h-full lg:flex-1 lg:overflow-hidden",
         )}
