@@ -30,6 +30,7 @@ import {
   Check,
   Loader2,
   ListTodo,
+  AlignCenter,
   AlignLeft,
   AlignRight,
 } from "lucide-react";
@@ -38,6 +39,8 @@ import { uploadFileToR2 } from "@/lib/upload";
 import { NoteAnnotation } from "@/components/tiptap/note-annotation-mark";
 import { NoteImage } from "@/components/tiptap/note-image";
 import { TextDirection } from "@/components/tiptap/text-direction";
+import { ALIGNABLE_TYPES, BlockTextAlign } from "@/components/tiptap/block-align";
+import { HeadingBreak } from "@/components/tiptap/heading-break";
 import {
   AttendanceBlock,
   type AttendancePerson,
@@ -162,6 +165,13 @@ export interface RichTextEditorProps {
   onChange: (html: string) => void;
   placeholder?: string;
   borderless?: boolean;
+  /**
+   * Show the formatting buttons. Defaults to on only for the bordered variant,
+   * because the note editors are borderless and teach `/` through their
+   * placeholder instead. Turn it on alongside `borderless` for a document that
+   * wants both the full-size writing surface and discoverable controls.
+   */
+  toolbar?: boolean;
   editable?: boolean;
   projectId?: string;
   /** Set on sprint documents so task blocks can persist Decision and Risk. */
@@ -186,6 +196,7 @@ export function RichTextEditor({
   onChange,
   placeholder = "Type '/' for commands...",
   borderless = false,
+  toolbar = !borderless,
   editable = true,
   projectId,
   sprintId,
@@ -233,6 +244,10 @@ export function RichTextEditor({
       Placeholder.configure({ placeholder }),
       NoteImage.configure({ inline: false }),
       TextDirection,
+      // Alignment, which is a different thing from TextDirection above: this
+      // centres a line, that swaps the whole reading order for Arabic.
+      BlockTextAlign.configure({ types: [...ALIGNABLE_TYPES] }),
+      HeadingBreak,
       NoteAnnotation,
       AttendanceBlock,
       SprintInfoBlock.configure({
@@ -632,75 +647,166 @@ export function RichTextEditor({
     />
   ) : null;
 
-  if (borderless) {
-    return (
-      <div className="relative">
-        {hiddenInput}
-        <EditorContent editor={editor} />
-        {editable && slashMenu && filteredCmds.length > 0 && (
-          <SlashCommandMenu
-            ref={menuRef}
-            commands={filteredCmds}
-            activeIndex={slashIndex}
-            x={slashMenu.x}
-            y={slashMenu.y}
-            onSelect={executeCommand}
-          />
-        )}
-        {picker}
-      </div>
-    );
-  }
+  /*
+    The block types the slash menu offers, as buttons, plus alignment. The
+    slash menu still works and is the faster route once you know it, but a
+    toolbar is the only version of this that can be found without being told
+    about it.
 
-  return (
-    <div className="rounded-md border border-input bg-background">
-      {hiddenInput}
-      <div className="flex items-center gap-0.5 border-b border-border px-1.5 py-1">
+    Hidden when the editor is locked, so a read-only document does not offer
+    controls that cannot do anything.
+  */
+  const toolbarBar =
+    toolbar && editable ? (
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-0.5",
+          borderless
+            ? "mb-6 border-b border-border/60 pb-2"
+            : "border-b border-border px-1.5 py-1",
+        )}
+      >
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBold().run()}
           active={editor.isActive("bold")}
+          title="Bold"
         >
           <Bold className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleItalic().run()}
           active={editor.isActive("italic")}
+          title="Italic"
         >
           <Italic className="h-3.5 w-3.5" />
+        </ToolbarButton>
+
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+
+        <ToolbarButton
+          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+          active={editor.isActive("heading", { level: 1 })}
+          title="Heading 1"
+        >
+          <Heading1 className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
           active={editor.isActive("heading", { level: 2 })}
+          title="Heading 2"
         >
           <Heading2 className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
+          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+          active={editor.isActive("heading", { level: 3 })}
+          title="Heading 3"
+        >
+          <Heading3 className="h-3.5 w-3.5" />
+        </ToolbarButton>
+
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+
+        <ToolbarButton
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           active={editor.isActive("bulletList")}
+          title="Bullet list"
         >
           <List className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           active={editor.isActive("orderedList")}
+          title="Numbered list"
         >
           <ListOrdered className="h-3.5 w-3.5" />
         </ToolbarButton>
+        <ToolbarButton
+          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+          active={editor.isActive("blockquote")}
+          title="Quote"
+        >
+          <Quote className="h-3.5 w-3.5" />
+        </ToolbarButton>
+
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+
+        {/*
+          Alignment has no `/` equivalent — it is not a block type, so it does
+          not belong in a menu that inserts one.
+        */}
+        <ToolbarButton
+          onClick={() => editor.chain().focus().setTextAlign("left").run()}
+          active={editor.isActive({ textAlign: "left" })}
+          title="Align left"
+        >
+          <AlignLeft className="h-3.5 w-3.5" />
+        </ToolbarButton>
+        <ToolbarButton
+          onClick={() => editor.chain().focus().setTextAlign("center").run()}
+          active={editor.isActive({ textAlign: "center" })}
+          title="Align centre"
+        >
+          <AlignCenter className="h-3.5 w-3.5" />
+        </ToolbarButton>
+        <ToolbarButton
+          onClick={() => editor.chain().focus().setTextAlign("right").run()}
+          active={editor.isActive({ textAlign: "right" })}
+          title="Align right"
+        >
+          <AlignRight className="h-3.5 w-3.5" />
+        </ToolbarButton>
+
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+
+        <ToolbarButton
+          onClick={() => editor.chain().focus().setHorizontalRule().run()}
+          active={false}
+          title="Divider"
+        >
+          <Minus className="h-3.5 w-3.5" />
+        </ToolbarButton>
       </div>
-      <div className="relative">
-        <EditorContent editor={editor} />
-        {editable && slashMenu && filteredCmds.length > 0 && (
-          <SlashCommandMenu
-            ref={menuRef}
-            commands={filteredCmds}
-            activeIndex={slashIndex}
-            x={slashMenu.x}
-            y={slashMenu.y}
-            onSelect={executeCommand}
-          />
-        )}
-        {picker}
+    ) : null;
+
+  /*
+    The slash menu is placed from the ProseMirror element's rect but positioned
+    inside this wrapper, so the two have to start at the same y — which is why
+    the toolbar sits outside it rather than above the content within it.
+  */
+  const surface = (
+    <div className="relative">
+      {hiddenInput}
+      <EditorContent editor={editor} />
+      {editable && slashMenu && filteredCmds.length > 0 && (
+        <SlashCommandMenu
+          ref={menuRef}
+          commands={filteredCmds}
+          activeIndex={slashIndex}
+          x={slashMenu.x}
+          y={slashMenu.y}
+          onSelect={executeCommand}
+        />
+      )}
+      {picker}
+    </div>
+  );
+
+  if (borderless) {
+    return toolbarBar ? (
+      <div>
+        {toolbarBar}
+        {surface}
       </div>
+    ) : (
+      surface
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-input bg-background">
+      {toolbarBar}
+      {surface}
     </div>
   );
 }
