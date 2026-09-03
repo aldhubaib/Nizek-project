@@ -50,7 +50,7 @@ import { NoteHistoryDialog } from "@/components/project/note-history-dialog";
 import { NoteSlideOver } from "@/components/project/note-slide-over";
 import { LinkedCountPopover } from "@/components/project/linked-count-popover";
 import { RoadmapWarningDialog } from "@/components/project/roadmap-commit-dialog";
-import { normalizeRoadmapStatus, roadmapAllowsCreateTask, roadmapScheduleError, type RoadmapStatus } from "@/lib/roadmap-status";
+import { normalizeRoadmapStatus, roadmapScheduleError, type RoadmapStatus } from "@/lib/roadmap-status";
 import { formatWorkingDays, parseWorkingDays, toDateInputValue } from "@/lib/working-days";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
@@ -804,10 +804,7 @@ export function NoteFullScreenDetail({
   );
 
   const currentRoadmapStatus = normalizeRoadmapStatus(note.roadmapStatus, completedAt);
-  const canCreateTaskFromNote =
-    isActive &&
-    allowedTaskTypes.length > 0 &&
-    (!isDeadline || roadmapAllowsCreateTask(currentRoadmapStatus));
+  const canCreateTaskFromNote = isActive && allowedTaskTypes.length > 0;
   const deadlineStatus =
     isDeadline && note.dueDate
       ? getDeadlineStatus(note.dueDate, completedAt)

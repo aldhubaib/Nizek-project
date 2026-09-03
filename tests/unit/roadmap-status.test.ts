@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   ROADMAP_NEXT_FULL_ERROR,
-  roadmapAllowsCreateTask,
-  roadmapCreateTaskError,
   roadmapNextColumnError,
   roadmapScheduleError,
 } from "@/lib/roadmap-status";
@@ -31,18 +29,6 @@ describe("roadmapNextColumnError", () => {
   });
 });
 
-describe("roadmapAllowsCreateTask", () => {
-  it("blocks Planned and Next", () => {
-    expect(roadmapAllowsCreateTask("PLANNED")).toBe(false);
-    expect(roadmapAllowsCreateTask("NEXT")).toBe(false);
-    expect(roadmapCreateTaskError("PLANNED")).toMatch(/In Progress/);
-    expect(roadmapCreateTaskError("NEXT")).toMatch(/In Progress/);
-  });
-
-  it("allows In Progress and Shipped", () => {
-    expect(roadmapAllowsCreateTask("PROGRESS")).toBe(true);
-    expect(roadmapAllowsCreateTask("SHIPPED")).toBe(true);
-    expect(roadmapCreateTaskError("PROGRESS")).toBeNull();
-    expect(roadmapCreateTaskError("SHIPPED")).toBeNull();
-  });
-});
+// Creating a task from a highlight used to be blocked until an item reached In
+// Progress. It is no longer tied to the status at all — a roadmap note behaves
+// like every other note type — so there is nothing left here to assert.

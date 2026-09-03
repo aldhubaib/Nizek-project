@@ -22,8 +22,6 @@ import {
   ROADMAP_NEXT_FULL_ERROR,
   ROADMAP_NEXT_MAX,
   isRoadmapStatus,
-  normalizeRoadmapStatus,
-  roadmapCreateTaskError,
   roadmapScheduleError,
   type RoadmapStatus,
 } from "@/lib/roadmap-status";
@@ -1004,21 +1002,12 @@ export async function createTaskFromNoteHighlight(data: {
       title: true,
       content: true,
       projectId: true,
-      noteType: true,
-      roadmapStatus: true,
-      completedAt: true,
     },
   });
   if (!note) throw new Error("Note not found");
 
   const { member } = await requireProjectMember(note.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot create tasks");
-
-  if (note.noteType === "DEADLINE") {
-    const status = normalizeRoadmapStatus(note.roadmapStatus, note.completedAt);
-    const blocked = roadmapCreateTaskError(status);
-    if (blocked) throw new Error(blocked);
-  }
 
   const quote = data.quoteText.trim();
 

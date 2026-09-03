@@ -39,15 +39,10 @@ export function roadmapStatusLabel(status: string | null | undefined): string {
   return LABELS.PLANNED;
 }
 
-/** Tasks can be created from a roadmap item once work has started. */
-export function roadmapAllowsCreateTask(status: RoadmapStatus): boolean {
-  return status === "PROGRESS" || status === "SHIPPED";
-}
-
-export function roadmapCreateTaskError(status: RoadmapStatus): string | null {
-  if (roadmapAllowsCreateTask(status)) return null;
-  return "Move this to In Progress before creating a task.";
-}
+// Creating a task from a highlight is deliberately not tied to the status.
+// A roadmap item is a note like any other, and the point of highlighting a line
+// in one is to spin work out of it — which is most useful while it is still
+// Planned. The schedule rules below are what the columns enforce.
 
 function hasEffort(workingDays: number | null | undefined): boolean {
   return (
