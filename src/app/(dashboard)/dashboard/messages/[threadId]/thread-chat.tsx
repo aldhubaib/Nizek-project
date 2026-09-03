@@ -1354,6 +1354,15 @@ export function ThreadChat({
 
   const replyingTo = replyTo ? byId.get(replyTo) : null;
 
+  // Enter inserts a newline, so the composer has to grow with the draft. The
+  // CSS max-height clamps it and hands the overflow back to the scrollbar.
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft]);
+
 
   // First link in the draft — previewed above the composer until dismissed.
   const composerUrl = useMemo(() => {

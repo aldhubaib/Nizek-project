@@ -196,9 +196,6 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
       } else if (e.key === "Escape") {
         setShowMentions(false);
       }
-    } else if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
     }
   }
 
@@ -538,7 +535,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
         <p className="text-xs text-muted-foreground/40 mt-1">
           {uploading
             ? "Uploading files..."
-            : "Paste a screenshot to attach · Enter to send, Shift+Enter for a new line"}
+            : "Paste a screenshot to attach"}
         </p>
       </div>
 
