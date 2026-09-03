@@ -17,6 +17,7 @@ import {
   Pause,
   Play,
   MoreVertical,
+  ScrollText,
   Reply,
   Copy,
   Trash2,
@@ -47,6 +48,7 @@ import {
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { AccountMenuItems, SignOutDialog } from "@/components/user-menu";
 import { ProfileDialog } from "@/components/profile-dialog";
+import { ClientAgreementDialog } from "@/components/client-agreement-dialog";
 import {
   mountThreadProjectOverlay,
   unmountThreadProjectOverlay,
@@ -329,6 +331,7 @@ export function ThreadChat({
   }, [view, projectTab]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
+  const [agreementOpen, setAgreementOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [importantList, setImportantList] = useState<ImportantMessageDTO[]>([]);
   const [importantLoading, setImportantLoading] = useState(false);
@@ -1686,6 +1689,10 @@ export function ThreadChat({
             {clientUser ? (
               <>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setAgreementOpen(true)}>
+                  <ScrollText className="h-4 w-4" />
+                  <span className="flex-1">User agreement</span>
+                </DropdownMenuItem>
                 <AccountMenuItems
                   profileLabel={null}
                   onProfile={() => setProfileOpen(true)}
@@ -1708,6 +1715,10 @@ export function ThreadChat({
             }}
           />
           <SignOutDialog open={signOutOpen} onOpenChange={setSignOutOpen} />
+          <ClientAgreementDialog
+            open={agreementOpen}
+            onOpenChange={setAgreementOpen}
+          />
         </>
       )}
 
@@ -2161,12 +2172,6 @@ export function ThreadChat({
               <DropdownMenuTrigger
                 aria-label="Attach"
                 className="inline-flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
               >
                 <Paperclip className="h-4 w-4" />
               </DropdownMenuTrigger>
@@ -2191,12 +2196,6 @@ export function ThreadChat({
               className="hidden rounded-full lg:inline-flex"
               aria-label="Attach"
               onClick={() => fileInputRef.current?.click()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  send();
-                }
-              }}
             >
               <Paperclip className="h-4 w-4" />
             </Button>
@@ -2212,7 +2211,7 @@ export function ThreadChat({
             <Textarea
               ref={composerRef}
               value={draft}
-              enterKeyHint="send"
+              enterKeyHint="enter"
               inputMode="text"
               autoCapitalize="sentences"
               onScroll={(e) => {
@@ -2275,15 +2274,6 @@ export function ThreadChat({
                     setDraft((d) => d.replace(/(^|\s)#[^\s#]*$/, "$1"));
                     return;
                   }
-                }
-                // Return / iOS keyboard Send sends. Shift+Enter stays a newline.
-                if (
-                  e.key === "Enter" &&
-                  !e.shiftKey &&
-                  !e.nativeEvent.isComposing
-                ) {
-                  e.preventDefault();
-                  send();
                 }
                 if (e.key === "Escape" && replyTo) {
                   e.preventDefault();

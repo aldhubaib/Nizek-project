@@ -10,6 +10,7 @@ import { canAccessAnyVault } from "@/lib/vault-access";
 import { getNotificationSoundUrl, getBrandingMap, brandingUrlWithBust } from "@/lib/branding";
 import { isClientUser } from "@/lib/client-chat";
 import { isClientAllowedPath } from "@/lib/client-routes";
+import { pendingAgreementFor } from "@/lib/client-agreement";
 import { prisma } from "@/lib/prisma";
 import { BlockedAccountPage } from "@/components/auth/blocked-account-page";
 
@@ -28,6 +29,13 @@ export default async function DashboardLayout({
 
   if (await needsProfilePhoto()) {
     redirect("/setup-photo");
+  }
+
+  // Clients only: they cannot reach their chat until they have accepted the
+  // agreement version currently in force. Publishing a new one brings everybody
+  // back through here.
+  if (await pendingAgreementFor(user)) {
+    redirect("/agreement");
   }
 
   const isClient = isClientUser(user);

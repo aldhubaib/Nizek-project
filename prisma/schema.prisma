@@ -197,6 +197,9 @@ model User {
   boardCardsCreated    BoardCard[]                @relation("BoardCardCreator")
   boardCardComments    BoardCardComment[]         @relation("BoardCardCommentAuthor")
 
+  agreementVersions    ClientAgreementVersion[]     @relation("ClientAgreementAuthor")
+  agreementAcceptances ClientAgreementAcceptance[]  @relation("ClientAgreementAcceptor")
+
   @@index([systemRole])
   @@index([blocked])
 }
@@ -2130,6 +2133,63 @@ model LoginPhoto {
   createdAt   DateTime @default(now())
 
   @@index([column, order])
+}
+
+// ─── Client user agreement ───────────────────────────────────────────────────
+//
+// One global document every client must read and accept before they can reach
+// their chat. Admins author it here; the gate lives in lib/client-agreement.ts
+// and fires from the dashboard layout.
+
+/// A version of the client user agreement.
+///
+/// Published versions are immutable. An acceptance points at a version id, so
+/// editing text somebody already signed would silently rewrite what they agreed
+/// to — changes go into a new draft instead.
+///
+/// At most one draft exists at a time, enforced by a partial unique index on
+/// the rows where publishedAt is null.
+model ClientAgreementVersion {
+  id String @id @default(cuid())
+
+  /// 1, 2, 3 … handed out at publish time, so a draft has no number yet and
+  /// the numbers a client has seen are never reused.
+  version Int? @unique
+  title   String
+  content String @db.Text
+
+  /// Null while this is still a draft. Nothing gates clients until the first
+  /// version is published.
+  publishedAt DateTime?
+
+  createdById String
+  createdBy   User   @relation("ClientAgreementAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  acceptances ClientAgreementAcceptance[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([publishedAt])
+}
+
+/// One client's acceptance of one version. The row is the record that they
+/// agreed, so it is never rewritten when a new version is published — a new
+/// version simply has no row for them yet, which is what re-gates them.
+model ClientAgreementAcceptance {
+  id String @id @default(cuid())
+
+  versionId String
+  version   ClientAgreementVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("ClientAgreementAcceptor", fields: [userId], references: [id], onDelete: Cascade)
+
+  acceptedAt DateTime @default(now())
+
+  @@unique([versionId, userId])
+  @@index([userId])
+  @@index([versionId])
 }
 
 // App-wide switches an admin can flip at runtime, as a single row.

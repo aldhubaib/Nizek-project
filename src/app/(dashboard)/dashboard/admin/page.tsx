@@ -7,6 +7,7 @@ import { getRoles } from "@/actions/role";
 import { getProjectOptions } from "@/actions/project";
 import { getContractPrefixes } from "@/actions/contract-prefix";
 import { getAliases, getAliasUsage, getAliasStats, getAliasSwitch } from "@/actions/alias";
+import { getAgreementAdminView } from "@/actions/client-agreement";
 import { getDefaultQuestions } from "@/actions/default-question";
 import { getBrandingAssets } from "@/actions/branding";
 import { getLoginPhotos } from "@/actions/login-photos";
@@ -20,7 +21,7 @@ export default async function AdminPage() {
 
   await ensureDefaultTeams();
 
-  const [teams, pendingInvites, members, invitations, teamInvites, roles, prefixes, questions, aliases, aliasUsage, aliasStats, aliasSwitch, branding, loginPhotos, notificationSound, projectOptions] = await Promise.all([
+  const [teams, pendingInvites, members, invitations, teamInvites, roles, prefixes, questions, aliases, aliasUsage, aliasStats, aliasSwitch, agreement, branding, loginPhotos, notificationSound, projectOptions] = await Promise.all([
     getTeams(),
     getPendingInvitesForTeam(),
     getTeamMembers(),
@@ -33,6 +34,7 @@ export default async function AdminPage() {
     getAliasUsage(),
     getAliasStats(),
     getAliasSwitch(),
+    getAgreementAdminView(),
     getBrandingAssets(),
     getLoginPhotos(),
     getNotificationSound(),
@@ -54,6 +56,7 @@ export default async function AdminPage() {
         aliasUsage={aliasUsage}
         aliasStats={aliasStats}
         aliasSwitch={aliasSwitch}
+        agreement={agreement}
         branding={branding}
         loginPhotos={loginPhotos}
         notificationSound={notificationSound}

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Users,
@@ -18,6 +19,7 @@ import {
   Coins,
   KeyRound,
   UserRoundSearch,
+  ScrollText,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { TeamsManager } from "@/components/settings/teams-manager";
@@ -30,11 +32,16 @@ import { LoginSettingsClient } from "./login-settings-client";
 import { NotificationSoundClient } from "./notification-sound-client";
 import { NotificationStatusClient } from "./notification-status-client";
 import { AliasManager } from "@/components/settings/alias-manager";
+import {
+  ClientAgreementManager,
+  type AgreementFullscreen,
+} from "@/components/settings/client-agreement-manager";
 import { AuditAccessManager } from "@/components/settings/audit-access-manager";
 import { EquityAccessManager } from "@/components/settings/equity-access-manager";
 import { CurrencyRateManager } from "@/components/settings/currency-rate-manager";
 import { VaultAccessManager } from "@/components/settings/vault-access-manager";
 import type { AliasDTO, AliasStatsDTO, AliasSwitchDTO, AliasUsageDTO } from "@/actions/alias";
+import type { AgreementAdminView } from "@/actions/client-agreement";
 import type { BrandingAssetDTO } from "@/actions/branding";
 import type { LoginPhotoDTO } from "@/actions/login-photos";
 import type { NotificationSoundDTO } from "@/actions/notification-sound-settings";
@@ -49,6 +56,7 @@ type TabId =
   | "roles"
   | "contracts"
   | "aliases"
+  | "client-agreement"
   | "questions"
   | "app-logo"
   | "login"
@@ -94,6 +102,12 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         label: "Aliases",
         icon: UserRoundSearch,
         desc: "Alias names and photos shown to clients instead of real staff identities.",
+      },
+      {
+        id: "client-agreement",
+        label: "Client Agreement",
+        icon: ScrollText,
+        desc: "The agreement clients must accept before using their chat, its versions, and who has agreed.",
       },
     ],
   },
@@ -189,6 +203,7 @@ interface Props {
   aliasUsage: AliasUsageDTO[];
   aliasStats: AliasStatsDTO;
   aliasSwitch: AliasSwitchDTO;
+  agreement: AgreementAdminView;
   branding: Partial<Record<BrandingSlotId, BrandingAssetDTO>>;
   loginPhotos: LoginPhotoDTO[];
   notificationSound: NotificationSoundDTO;
@@ -209,6 +224,7 @@ export function AdminPageClient({
   aliasUsage,
   aliasStats,
   aliasSwitch,
+  agreement,
   branding,
   loginPhotos,
   notificationSound,
@@ -216,6 +232,9 @@ export function AdminPageClient({
   currentUserId,
 }: Props) {
   const searchParams = useSearchParams();
+  // Set by the agreement tab while it has a version open, so the header can
+  // point back at its list instead of out to Settings.
+  const [agreementDoc, setAgreementDoc] = useState<AgreementFullscreen>(null);
   const rawTab = searchParams.get("tab") as TabId | null;
   // Push Health folded into Member Notifications; old links keep working.
   const activeTab = rawTab === "push-health" ? "notification-status" : rawTab;
@@ -250,17 +269,50 @@ export function AdminPageClient({
   return (
     <div>
       {/* Tabs that park a button in the top-right chrome need the extra room. */}
-      <PageHeader hasMenu={active.id === "members" || active.id === "aliases"}>
-        <PageBackButton href="/dashboard/admin" label="Back to settings" />
-        <PageBreadcrumb
-          items={[
-            { label: "Settings", href: "/dashboard/admin" },
-            { label: active.label },
-          ]}
-        />
+      <PageHeader
+        hasMenu={
+          active.id === "members" || active.id === "aliases" || !!agreementDoc
+        }
+      >
+        {/*
+          An open agreement version takes the header over, the way a note does
+          on a project: back goes to the list of versions, not out to Settings.
+        */}
+        {agreementDoc ? (
+          <>
+            <PageBackButton onClick={agreementDoc.goBack} label="Back to versions" />
+            <PageBreadcrumb
+              items={[
+                { label: "Settings", href: "/dashboard/admin" },
+                { label: active.label, onClick: agreementDoc.goBack },
+                { label: agreementDoc.title },
+              ]}
+            />
+          </>
+        ) : (
+          <>
+            <PageBackButton href="/dashboard/admin" label="Back to settings" />
+            <PageBreadcrumb
+              items={[
+                { label: "Settings", href: "/dashboard/admin" },
+                { label: active.label },
+              ]}
+            />
+          </>
+        )}
       </PageHeader>
 
-      <div className={cn("min-w-0 px-app", active.id === "members" ? "max-w-full py-4" : "py-6 max-w-3xl")}>
+      {/* An open version brings its own centred column and padding. */}
+      <div
+        className={cn(
+          "min-w-0",
+          agreementDoc
+            ? "max-w-full"
+            : active.id === "members"
+              ? "max-w-full px-app py-4"
+              : "max-w-3xl px-app py-6",
+        )}
+      >
         {active.id === "teams" && (
           <TeamsManager teams={teams} pendingInvites={pendingInvites} />
         )}
@@ -288,6 +340,12 @@ export function AdminPageClient({
             usage={aliasUsage}
             stats={aliasStats}
             aliasSwitch={aliasSwitch}
+          />
+        )}
+        {active.id === "client-agreement" && (
+          <ClientAgreementManager
+            view={agreement}
+            onFullscreenChange={setAgreementDoc}
           />
         )}
         {active.id === "questions" && (
