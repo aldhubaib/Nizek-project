@@ -14,6 +14,28 @@ import type { Gender, Prisma, PrismaClient } from "@/generated/prisma/client";
 /** Either the singleton client or an interactive-transaction client. */
 export type AliasDb = PrismaClient | Prisma.TransactionClient;
 
+/** The one AppSettings row's fixed id. */
+export const APP_SETTINGS_ID = "global";
+
+/**
+ * Whether the alias mechanism is switched on at all (admin → Aliases).
+ *
+ * Takes its client rather than reaching for the singleton so a claim running
+ * inside a transaction reads the switch through that same transaction, and so
+ * this is testable with a stub.
+ *
+ * Absent row, absent column, unreachable — all read as on. Every default here
+ * leans towards masking, because the failure worth avoiding is a client being
+ * shown a real employee name because a settings lookup came back empty.
+ */
+export async function aliasesEnabled(db: AliasDb): Promise<boolean> {
+  const row = await db.appSettings.findUnique({
+    where: { id: APP_SETTINGS_ID },
+    select: { aliasesEnabled: true },
+  });
+  return row?.aliasesEnabled ?? true;
+}
+
 /**
  * What a client sees instead of a person. `realName` comes along so already
  * rendered text (notification titles, quoted comment bodies) can be scrubbed
@@ -192,12 +214,18 @@ async function claimInTransaction(
  *
  * Throws for both ways a claim can fail — an empty pool and a missing gender —
  * so a caller inside a transaction refuses the membership instead of seating
- * someone whose real name a client would then read.
+ * someone whose real name a client would then read. With the mechanism switched
+ * off nothing is claimed and nothing throws, so seating a member never depends
+ * on the pool.
  */
 export async function claimAliasForMember(
   db: AliasDb,
   input: { userId: string; projectId: string; memberRole?: string },
 ): Promise<{ id: string; aliasId: string } | null> {
+  // Ahead of every other check: with aliases off, an empty pool or a missing
+  // gender must not refuse a membership over an alias nobody is going to use.
+  if (!(await aliasesEnabled(db))) return null;
+
   const user = await db.user.findUnique({
     where: { id: input.userId },
     select: {

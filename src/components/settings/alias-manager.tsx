@@ -12,6 +12,7 @@ import {
   Link2,
   Loader2,
   Pencil,
+  ShieldOff,
   Shuffle,
   Trash2,
   UserRound,
@@ -32,6 +33,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { parseAliasImport } from "@/lib/alias-import";
 import {
@@ -40,9 +42,11 @@ import {
   deleteAlias,
   replaceAliasPhoto,
   reshuffleAliasPool,
+  setAliasesEnabled,
   updateAlias,
   type AliasDTO,
   type AliasStatsDTO,
+  type AliasSwitchDTO,
   type AliasUsageDTO,
 } from "@/actions/alias";
 
@@ -73,10 +77,12 @@ export function AliasManager({
   aliases,
   usage,
   stats,
+  aliasSwitch,
 }: {
   aliases: AliasDTO[];
   usage: AliasUsageDTO[];
   stats: AliasStatsDTO;
+  aliasSwitch: AliasSwitchDTO;
 }) {
   const [view, setView] = useState<View>("pool");
 
@@ -92,17 +98,19 @@ export function AliasManager({
           Aliases
         </h2>
         <p className="mt-1 text-s text-muted-foreground">
-          Clients never see real names or photos. Each person on each project claims one
-          alias from this pool permanently, matched to their gender and drawn in random
-          order. An alias is never reused on another project. People marked{" "}
+          While this is on, clients never see real names or photos. Each person on each
+          project claims one alias from this pool permanently, matched to their gender and
+          drawn in random order. An alias is never reused on another project. People marked{" "}
           <span className="font-medium text-foreground">Exclude from Alias</span> keep
           their real identity. Nationality is for organising the pool — it does not
           affect who gets which alias.
         </p>
       </div>
 
+      <AliasSwitch value={aliasSwitch} />
+
       <PoolHealth stats={stats} />
-      <ExistingMembers stats={stats} />
+      <ExistingMembers stats={stats} enabled={aliasSwitch.enabled} />
 
       <div className="flex gap-xs rounded-lg border border-border bg-card p-1">
         <TabButton active={view === "pool"} onClick={() => setView("pool")}>
@@ -228,6 +236,135 @@ function MetaRow({
   );
 }
 
+// ─── Master switch ───────────────────────────────────────────────────────────
+
+/**
+ * Turns the whole mechanism off: no masking anywhere, and nobody is handed an
+ * alias when they join a project.
+ *
+ * Switching off asks first, because it is the one action on this page a client
+ * sees the moment it is taken. Switching back on needs no prompt — assignments
+ * are never released, so it restores the exact identities clients had already
+ * learned.
+ */
+function AliasSwitch({ value }: { value: AliasSwitchDTO }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const on = value.enabled;
+
+  async function apply(enabled: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      await setAliasesEnabled(enabled);
+      setConfirming(false);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't change this setting");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section
+      className={cn(
+        "rounded-lg border px-3 pb-4",
+        on ? "border-border/50 bg-card" : "border-destructive/40 bg-destructive/5",
+      )}
+    >
+      <div className="flex items-start justify-between gap-s px-1 py-4">
+        <div className="min-w-0">
+          <h3 className="flex items-center gap-2 text-s font-semibold">
+            {on ? (
+              <UserRoundSearch
+                className="h-4 w-4 shrink-0 text-muted-foreground"
+                strokeWidth={1.5}
+              />
+            ) : (
+              <ShieldOff className="h-4 w-4 shrink-0 text-destructive" strokeWidth={1.5} />
+            )}
+            Alias masking
+          </h3>
+          <p className="mt-1 text-s text-muted-foreground">
+            {on ? (
+              <>
+                On. Clients see aliases instead of real names and photos, and everyone
+                added to a project claims one.
+              </>
+            ) : (
+              <>
+                <span className="font-medium text-destructive">
+                  Off — clients see real names and photos
+                </span>{" "}
+                everywhere: chat, mentions, boards, notifications and sprint docs. Nobody
+                claims an alias when they join a project.
+              </>
+            )}
+          </p>
+          {!on && (
+            <p className="mt-2 text-s text-muted-foreground">
+              Aliases already handed out are kept, so turning this back on restores the
+              same identities clients saw before. Anyone who joined while it was off has
+              none yet — use{" "}
+              <span className="font-medium text-foreground">Assign missing aliases</span>{" "}
+              below after turning it on.
+            </p>
+          )}
+          {error && <p className="mt-2 text-s text-destructive">{error}</p>}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2 pt-0.5">
+          {busy && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          <Switch
+            checked={on}
+            disabled={busy}
+            aria-label="Alias masking"
+            onCheckedChange={(next) => {
+              if (next) void apply(true);
+              else setConfirming(true);
+            }}
+          />
+        </div>
+      </div>
+
+      <Dialog open={confirming} onOpenChange={setConfirming}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive" strokeWidth={1.5} />
+              Turn off alias masking?
+            </DialogTitle>
+            <DialogDescription>
+              Every client will immediately see the real names and photos of the people on
+              their projects, everywhere those people appear. Aliases already handed out
+              are kept, so you can turn this back on and clients will see the same
+              identities as before.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setConfirming(false)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void apply(false)} disabled={busy}>
+              {busy ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Turning off
+                </>
+              ) : (
+                "Turn off masking"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
 // ─── Health ──────────────────────────────────────────────────────────────────
 
 function PoolHealth({ stats }: { stats: AliasStatsDTO }) {
@@ -256,7 +393,14 @@ function PoolHealth({ stats }: { stats: AliasStatsDTO }) {
  * backfill is a one-time action people go looking for, and hiding it inside a
  * conditional warning made it undiscoverable.
  */
-function ExistingMembers({ stats }: { stats: AliasStatsDTO }) {
+function ExistingMembers({
+  stats,
+  /** Backfilling assigns nothing while masking is off, so the button is held. */
+  enabled,
+}: {
+  stats: AliasStatsDTO;
+  enabled: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{
@@ -287,7 +431,8 @@ function ExistingMembers({ stats }: { stats: AliasStatsDTO }) {
         <Button
           size="sm"
           onClick={runBackfill}
-          disabled={busy || pending === 0}
+          disabled={busy || pending === 0 || !enabled}
+          title={enabled ? undefined : "Turn alias masking on first"}
           className="h-8 shrink-0 gap-xs px-2"
         >
           {busy ? (

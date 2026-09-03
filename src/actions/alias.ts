@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { generateR2Key, uploadToR2, deleteFromR2 } from "@/lib/r2";
 import {
+  APP_SETTINGS_ID,
+  aliasesEnabled,
   claimAliasForMember,
   isAliasPoolExhausted,
   needsAlias,
@@ -71,6 +73,50 @@ async function requireAliasAdmin() {
 function parseGender(value: unknown): Gender {
   if (value === "MALE" || value === "FEMALE") return value;
   throw new Error("Gender must be MALE or FEMALE");
+}
+
+// ─── The master switch ───────────────────────────────────────────────────────
+
+export type AliasSwitchDTO = {
+  enabled: boolean;
+  /** When it was last flipped, or null if it has never been touched. */
+  changedAt: string | null;
+};
+
+export async function getAliasSwitch(): Promise<AliasSwitchDTO> {
+  await requireAliasAdmin();
+  const row = await prisma.appSettings.findUnique({
+    where: { id: APP_SETTINGS_ID },
+    select: { aliasesEnabled: true, updatedAt: true },
+  });
+  return {
+    enabled: row?.aliasesEnabled ?? true,
+    changedAt: row ? row.updatedAt.toISOString() : null,
+  };
+}
+
+/**
+ * Turn the whole alias mechanism on or off.
+ *
+ * Off stops two things at once: clients stop seeing aliases in place of real
+ * names, and nobody is handed an alias when they join a project. Assignments
+ * already made are deliberately left in the table — an alias a client has
+ * already learned belongs to that person for good, so switching back on has to
+ * restore the identities clients saw rather than reshuffling them.
+ *
+ * Every client-facing surface is revalidated, since masking is decided server
+ * side and cached pages would otherwise keep serving the old identities.
+ */
+export async function setAliasesEnabled(enabled: boolean): Promise<void> {
+  const admin = await requireAliasAdmin();
+
+  await prisma.appSettings.upsert({
+    where: { id: APP_SETTINGS_ID },
+    create: { id: APP_SETTINGS_ID, aliasesEnabled: enabled, updatedById: admin.id },
+    update: { aliasesEnabled: enabled, updatedById: admin.id },
+  });
+
+  revalidatePath("/dashboard", "layout");
 }
 
 // ─── Pool CRUD ───────────────────────────────────────────────────────────────
@@ -525,6 +571,12 @@ export async function backfillAliasAssignments(): Promise<{
   failed: { userName: string; projectName: string; reason: string }[];
 }> {
   await requireAliasAdmin();
+
+  // Say so rather than reporting nought assigned: with the mechanism off every
+  // claim below is a no-op, which reads like a broken button.
+  if (!(await aliasesEnabled(prisma))) {
+    throw new Error("Aliases are switched off. Turn them on before assigning any.");
+  }
 
   const members = await prisma.projectMember.findMany({
     where: { role: { not: "CLIENT" }, showRealName: false },

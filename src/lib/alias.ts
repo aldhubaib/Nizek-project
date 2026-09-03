@@ -1,12 +1,18 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { Gender } from "@/generated/prisma/client";
-import type { AliasIdentity } from "@/lib/alias-mask";
+import { aliasesEnabled, type AliasIdentity } from "@/lib/alias-mask";
 
 /**
  * Alias lookups against the database. The masking helpers themselves live in
  * `@/lib/alias-mask` (no Prisma dependency, unit tested) and are re-exported
  * here so app code has a single import.
+ *
+ * Every map built here is empty when the mechanism is switched off, which is
+ * the whole of the kill switch on the read side: masking is driven by what is
+ * in these maps, so nothing downstream needs to know about the switch. The
+ * assignment rows are left alone, so switching back on restores exactly the
+ * identities clients saw before.
  */
 
 export * from "@/lib/alias-mask";
@@ -53,6 +59,7 @@ export async function getAliasMap(
   projectId: string | null | undefined,
 ): Promise<Map<string, AliasIdentity>> {
   if (!projectId) return new Map();
+  if (!(await aliasesEnabled(prisma))) return new Map();
   const rows = await prisma.aliasAssignment.findMany({
     where: {
       projectId,
@@ -73,6 +80,7 @@ export async function getAliasMapsForProjects(
 ): Promise<Map<string, Map<string, AliasIdentity>>> {
   const ids = [...new Set(projectIds.filter((id): id is string => Boolean(id)))];
   if (ids.length === 0) return new Map();
+  if (!(await aliasesEnabled(prisma))) return new Map();
 
   // The exceptions are read separately and matched per pair, not filtered in the
   // query: with several projects in play, a relation filter would drop someone
@@ -109,6 +117,7 @@ export async function getAliasMapsForProjects(
 export async function getAliasesForUser(
   userId: string,
 ): Promise<Map<string, AliasIdentity>> {
+  if (!(await aliasesEnabled(prisma))) return new Map();
   const rows = await prisma.aliasAssignment.findMany({
     where: {
       userId,

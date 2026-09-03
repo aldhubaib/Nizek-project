@@ -34,7 +34,7 @@ import { AuditAccessManager } from "@/components/settings/audit-access-manager";
 import { EquityAccessManager } from "@/components/settings/equity-access-manager";
 import { CurrencyRateManager } from "@/components/settings/currency-rate-manager";
 import { VaultAccessManager } from "@/components/settings/vault-access-manager";
-import type { AliasDTO, AliasStatsDTO, AliasUsageDTO } from "@/actions/alias";
+import type { AliasDTO, AliasStatsDTO, AliasSwitchDTO, AliasUsageDTO } from "@/actions/alias";
 import type { BrandingAssetDTO } from "@/actions/branding";
 import type { LoginPhotoDTO } from "@/actions/login-photos";
 import type { NotificationSoundDTO } from "@/actions/notification-sound-settings";
@@ -188,6 +188,7 @@ interface Props {
   aliases: AliasDTO[];
   aliasUsage: AliasUsageDTO[];
   aliasStats: AliasStatsDTO;
+  aliasSwitch: AliasSwitchDTO;
   branding: Partial<Record<BrandingSlotId, BrandingAssetDTO>>;
   loginPhotos: LoginPhotoDTO[];
   notificationSound: NotificationSoundDTO;
@@ -207,6 +208,7 @@ export function AdminPageClient({
   aliases,
   aliasUsage,
   aliasStats,
+  aliasSwitch,
   branding,
   loginPhotos,
   notificationSound,
@@ -281,7 +283,12 @@ export function AdminPageClient({
           <ContractPrefixManager prefixes={prefixes} />
         )}
         {active.id === "aliases" && (
-          <AliasManager aliases={aliases} usage={aliasUsage} stats={aliasStats} />
+          <AliasManager
+            aliases={aliases}
+            usage={aliasUsage}
+            stats={aliasStats}
+            aliasSwitch={aliasSwitch}
+          />
         )}
         {active.id === "questions" && (
           <DefaultQuestionsManager questions={questions} />

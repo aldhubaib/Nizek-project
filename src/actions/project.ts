@@ -23,6 +23,7 @@ import { joinDisplayName, splitDisplayName } from "@/lib/display-name";
 import type { Gender } from "@/generated/prisma/client";
 import { parseGender } from "@/lib/member-profile";
 import {
+  aliasesEnabled,
   aliasRequirement,
   AliasGenderMissingError,
   AliasPoolExhaustedError,
@@ -67,6 +68,9 @@ async function requireClaimableAlias(
    */
   showRealName?: boolean,
 ): Promise<void> {
+  // Nothing to claim while the mechanism is off, so nothing to refuse over.
+  if (!(await aliasesEnabled(prisma))) return;
+
   const held = await prisma.aliasAssignment.findUnique({
     where: { userId_projectId: { userId, projectId } },
     select: { id: true },
@@ -567,8 +571,13 @@ export async function inviteMember(data: {
   if (!assigningClient && !canInviteMembers) throw new Error("You don't have permission to invite team members");
 
   // Refuse the invite now rather than letting them sign up and land on the
-  // project with no alias to hide behind.
-  if (!excludeFromAlias && (await availableAliasCount(gender)) === 0) {
+  // project with no alias to hide behind. Skipped entirely when the mechanism
+  // is off, where landing with no alias is the intended outcome.
+  if (
+    !excludeFromAlias &&
+    (await aliasesEnabled(prisma)) &&
+    (await availableAliasCount(gender)) === 0
+  ) {
     throw new Error(
       `No unused ${gender === "MALE" ? "male" : "female"} aliases left. Upload more in Settings → Aliases.`,
     );

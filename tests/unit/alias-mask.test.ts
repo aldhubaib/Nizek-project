@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  aliasesEnabled,
   aliasRequirement,
   AliasPoolExhaustedError,
   claimAlias,
@@ -311,6 +312,84 @@ describe("claimAliasForMember", () => {
   });
 });
 
+// ─── The master switch ───────────────────────────────────────────────────────
+
+describe("aliasesEnabled", () => {
+  it("reads no settings row as on", async () => {
+    // The safety-critical default. An install that has never opened the admin
+    // toggle, or a lookup that comes back empty, must keep masking rather than
+    // put a real employee name in front of a client.
+    expect(await aliasesEnabled(fakeDb([]))).toBe(true);
+  });
+
+  it("reads the row when there is one", async () => {
+    expect(await aliasesEnabled(fakeDb([], undefined, { aliasesEnabled: true }))).toBe(
+      true,
+    );
+    expect(await aliasesEnabled(fakeDb([], undefined, { aliasesEnabled: false }))).toBe(
+      false,
+    );
+  });
+});
+
+describe("claimAliasForMember with the mechanism off", () => {
+  const off = { aliasesEnabled: false };
+
+  const withUser = (
+    db: ReturnType<typeof fakeDb>,
+    user: { systemRole: string; excludeFromAlias: boolean; gender: "MALE" | "FEMALE" | null },
+  ) =>
+    Object.assign(db, {
+      user: {
+        findUnique: async () => ({
+          name: "Ali Hassan",
+          email: "ali@example.com",
+          systemRole: user.systemRole,
+          excludeFromAlias: user.excludeFromAlias,
+          gender: user.gender,
+        }),
+      },
+      projectMember: { findUnique: async () => ({ showRealName: false }) },
+    }) as unknown as AliasDb;
+
+  it("spends no alias on someone who would otherwise claim one", async () => {
+    const db = fakeDb(["a1"], undefined, off);
+    const claim = await claimAliasForMember(
+      withUser(db, { systemRole: "DEVELOPER", excludeFromAlias: false, gender: "MALE" }),
+      { userId: "u1", projectId: "p1" },
+    );
+
+    expect(claim).toBeNull();
+    expect(db.assignments).toHaveLength(0);
+  });
+
+  it("stops an empty pool from refusing a membership", async () => {
+    // The gate has to come before the pool check, or seating anyone would still
+    // depend on a pool that is no longer being used for anything.
+    const db = fakeDb([], undefined, off);
+    await expect(
+      claimAliasForMember(
+        withUser(db, {
+          systemRole: "DEVELOPER",
+          excludeFromAlias: false,
+          gender: "FEMALE",
+        }),
+        { userId: "u1", projectId: "p1" },
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it("stops a missing gender from refusing a membership", async () => {
+    const db = fakeDb(["a1"], undefined, off);
+    await expect(
+      claimAliasForMember(
+        withUser(db, { systemRole: "DEVELOPER", excludeFromAlias: false, gender: null }),
+        { userId: "u1", projectId: "p1" },
+      ),
+    ).resolves.toBeNull();
+  });
+});
+
 describe("needsAlias", () => {
   it("skips clients, excluded users, and anyone with no gender", () => {
     expect(
@@ -372,7 +451,15 @@ type Assignment = {
  * defaults to insertion order so the ordering tests can assert deliberately;
  * pass explicit keys to model a shuffled pool.
  */
-function fakeDb(aliasIds: string[], shuffleKeys?: Record<string, number>) {
+function fakeDb(
+  aliasIds: string[],
+  shuffleKeys?: Record<string, number>,
+  /**
+   * What the AppSettings row says. Left out it stands for no row at all, which
+   * is the state every other test here runs in and must read as masking-on.
+   */
+  settings?: { aliasesEnabled: boolean },
+) {
   const committed: Assignment[] = [];
   let seq = 0;
   let transactions = 0;
@@ -383,6 +470,8 @@ function fakeDb(aliasIds: string[], shuffleKeys?: Record<string, number>) {
   const lockedRows = new Set<string>();
   /** Tail of the waiter chain per advisory key. */
   const advisoryTail = new Map<string, Promise<void>>();
+
+  const appSettings = { findUnique: async () => settings ?? null };
 
   /** A transaction's own uncommitted state. */
   type Tx = { rows: Set<string>; release: (() => void)[]; writes: Assignment[] };
@@ -404,6 +493,7 @@ function fakeDb(aliasIds: string[], shuffleKeys?: Record<string, number>) {
     const visible = () => [...committed, ...tx.writes];
 
     return {
+      appSettings,
       $queryRaw: async (
         strings: TemplateStringsArray,
         ...values: unknown[]
@@ -476,6 +566,7 @@ function fakeDb(aliasIds: string[], shuffleKeys?: Record<string, number>) {
   }
 
   const db = {
+    appSettings,
     /** Committed assignments. */
     get assignments() {
       return committed;

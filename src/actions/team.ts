@@ -8,7 +8,7 @@ import { cache } from "react";
 import type { Gender, SystemRole, TeamRole } from "@/generated/prisma/client";
 import { parseGender } from "@/lib/member-profile";
 import { membershipRoleFromProjectRole } from "@/lib/client-role";
-import { availableAliasCount } from "@/lib/alias";
+import { aliasesEnabled, availableAliasCount } from "@/lib/alias";
 
 async function requireAdmin() {
   const user = await requireUser();
@@ -409,8 +409,9 @@ export async function inviteToTeam(data: {
   const excludeFromAlias = asClient || Boolean(data.excludeFromAlias);
 
   // One alias is consumed per project, so the pool must cover every assignment
-  // up front. Catching it here beats letting them sign in and get stuck.
-  if (!excludeFromAlias && assignments.length > 0) {
+  // up front. Catching it here beats letting them sign in and get stuck. With
+  // the mechanism off no alias is consumed, so the pool size is irrelevant.
+  if (!excludeFromAlias && assignments.length > 0 && (await aliasesEnabled(prisma))) {
     const available = await availableAliasCount(gender);
     if (available < assignments.length) {
       throw new Error(

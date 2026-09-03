@@ -2132,6 +2132,39 @@ model LoginPhoto {
   @@index([column, order])
 }
 
+// App-wide switches an admin can flip at runtime, as a single row.
+//
+// One row with typed columns rather than a key/value table, so each switch is
+// documented where it lives and cannot be misspelled at a call site. The id is
+// a fixed string, which is what makes an upsert unable to create a second row —
+// there is no such thing as two sets of app settings.
+//
+// A missing row means every switch is at its default. Nothing creates the row
+// until something is changed, so the defaults below are the app's behaviour out
+// of the box, and each one is chosen to be the safe direction.
+model AppSettings {
+  id String @id @default("global")
+
+  /// Whether client-facing surfaces hide staff behind aliases at all.
+  ///
+  /// Defaults to on, and a missing row reads as on, because the unsafe
+  /// direction here is the one that shows a client a real employee name. Turning
+  /// it off stops masking and stops handing out aliases, but deliberately keeps
+  /// every assignment already made: an alias a client has already learned must
+  /// come back to the same person if this is switched on again, rather than
+  /// being handed to somebody else.
+  aliasesEnabled Boolean @default(true)
+
+  updatedAt DateTime @updatedAt
+
+  /// Who last changed a switch here. A plain column rather than a relation on
+  /// purpose: this is the record of who took a decision, and deleting their
+  /// account should not quietly erase it.
+  updatedById String?
+
+  @@map("AppSettings")
+}
+
 // ─── Aliases (client-facing identities) ──────────────────────────────────────
 //
 // Clients never see real employee names or photos — competitors in the region
@@ -2139,6 +2172,9 @@ model LoginPhoto {
 // name/photo pairs, and each person on each project claims one permanently.
 // Users flagged excludeFromAlias (clients, founders, anyone public) keep their
 // real identity.
+//
+// The whole mechanism can be switched off from the admin Aliases tab; see
+// AppSettings.aliasesEnabled above.
 
 model Alias {
   id     String @id @default(cuid())
