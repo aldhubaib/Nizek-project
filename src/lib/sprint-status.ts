@@ -17,6 +17,15 @@ export function isUnstartedSprint(status: string): boolean {
 }
 
 /**
+ * Delivered, and not yet accepted by the client — the window in which approving
+ * does anything. Shipping is the client's call, so a sprint sits here until they
+ * make it.
+ */
+export function isAwaitingApproval(status: string): boolean {
+  return status === "COMPLETED" || status === "PARTIALLY_COMPLETED";
+}
+
+/**
  * The sprint a task is parting from, when that departure is worth recording in
  * the task's sprint history — or null when there is nothing to record.
  *

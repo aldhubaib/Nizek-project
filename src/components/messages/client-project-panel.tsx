@@ -1,12 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { FileText, Hourglass, Loader2 } from "lucide-react";
 import { getTypeIcon } from "@/components/project/sprint-task-row";
 import { cn } from "@/lib/utils";
+import { isAwaitingApproval } from "@/lib/sprint-status";
+import { ACTIVITY_ACTION_CLASS } from "@/components/messages/activity-card";
+import { SprintApproveAction } from "@/components/messages/sprint-approve-action";
+import { SprintDocSlideOver } from "@/components/messages/sprint-doc-slide-over";
 import {
   getClientProjectOverview,
   type ClientProjectOverview,
+  type ClientSprintEntry,
 } from "@/actions/client-project";
 import { listSprints, type SprintDTO } from "@/actions/sprint";
 import { getTasksByProject } from "@/actions/task";
@@ -187,9 +192,88 @@ export function ClientProjectPanel({
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto w-full max-w-5xl px-app py-4">
-        <DashboardTab data={data} />
+        <DashboardTab data={data} projectId={projectId} />
       </div>
     </div>
+  );
+}
+
+/**
+ * The sprints the team has delivered and handed over, waiting on the client to
+ * accept them.
+ *
+ * Until now this only existed on the review card in chat, which scrolls away —
+ * a sprint could sit finished for days with nobody's screen saying so. This is
+ * the client's own view of their project, so it is where the question belongs.
+ */
+function AwaitingApproval({
+  sprints,
+  projectId,
+}: {
+  sprints: ClientSprintEntry[];
+  projectId: string;
+}) {
+  const [reviewing, setReviewing] = useState<ClientSprintEntry | null>(null);
+  const waiting = sprints.filter((s) => isAwaitingApproval(s.status));
+  if (waiting.length === 0) return null;
+
+  return (
+    <>
+      <Card className="mb-6 border-orange/30">
+        <div className="mb-1 flex items-center gap-2">
+          <Hourglass className="size-4 shrink-0 text-orange" strokeWidth={2} />
+          <h2 className="text-s font-semibold text-foreground">
+            Awaiting your approval
+          </h2>
+        </div>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Approving a sprint declares that you have tested the work and it is ready
+          to deploy.
+        </p>
+        <div className="space-y-4">
+          {waiting.map((sprint) => (
+            <div
+              key={sprint.id}
+              className="flex flex-col gap-2 border-t border-border/60 pt-4 first:border-t-0 first:pt-0 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-s font-semibold text-foreground">
+                  {sprint.name}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {sprint.taskCount === 1 ? "1 item" : `${sprint.taskCount} items`}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-col gap-1.5 sm:w-64">
+                <button
+                  type="button"
+                  onClick={() => setReviewing(sprint)}
+                  className={cn(
+                    ACTIVITY_ACTION_CLASS,
+                    "border-border/60 bg-muted/30 hover:bg-muted/50",
+                  )}
+                >
+                  <FileText className="size-4 shrink-0" strokeWidth={2} />
+                  <span className="min-w-0 flex-1 truncate text-foreground">
+                    Read the sprint document
+                  </span>
+                </button>
+                <SprintApproveAction sprintId={sprint.id} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+      {reviewing ? (
+        <SprintDocSlideOver
+          projectId={projectId}
+          sprintId={reviewing.id}
+          title={reviewing.name}
+          isClientViewer
+          onClose={() => setReviewing(null)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -248,8 +332,10 @@ function ClientRoadmapBoard({ projectId }: { projectId: string }) {
 
 function DashboardTab({
   data,
+  projectId,
 }: {
   data: ClientProjectOverview;
+  projectId: string;
 }) {
   const nowMs = Date.now();
   const typeGroups = TYPE_RING.map((slice) => {
@@ -263,6 +349,9 @@ function DashboardTab({
 
   return (
     <div>
+      {/* First, because it is the only thing on this screen waiting on them. */}
+      <AwaitingApproval sprints={data.sprints} projectId={projectId} />
+
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {typeGroups.map((group) => {
           const { icon: Icon, color } = getTypeIcon(group.key);

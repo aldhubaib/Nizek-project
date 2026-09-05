@@ -10,7 +10,7 @@ import {
 } from "@/lib/permissions";
 import { revalidatePath } from "next/cache";
 import type { SprintStatus } from "@/generated/prisma/client";
-import { isClosedSprint, isCurrentSprintStatus, isUnstartedSprint, comparePlannedSprints, compareClosedSprints, sprintDepartureToRecord, type SprintBoardColumn } from "@/lib/sprint-status";
+import { isAwaitingApproval, isClosedSprint, isCurrentSprintStatus, isUnstartedSprint, comparePlannedSprints, compareClosedSprints, sprintDepartureToRecord, type SprintBoardColumn } from "@/lib/sprint-status";
 import { moveNeedsReason } from "@/lib/sprint-task-move";
 import { NO_SPRINT_DOC_RIGHTS, type SprintDocRights } from "@/lib/sprint-doc-access";
 import { stageForSprintStatus } from "@/lib/task-stage";
@@ -151,11 +151,6 @@ async function requireSprintAction(projectId: string, action: SprintAction) {
   return { user, member, perms };
 }
 
-/** Completed, and not yet accepted — the window in which Approve does anything. */
-function isApprovableSprintStatus(status: string): boolean {
-  return status === "COMPLETED" || status === "PARTIALLY_COMPLETED";
-}
-
 export type SprintApprovalState = {
   status: SprintStatus;
   /** Named in the confirmation, so they can see what they are signing off. */
@@ -177,7 +172,7 @@ export async function getSprintApprovalState(
   if (!sprint) throw new Error("Sprint not found");
   const { user } = await requireProjectMember(sprint.projectId);
 
-  const awaitingApproval = isApprovableSprintStatus(sprint.status);
+  const awaitingApproval = isAwaitingApproval(sprint.status);
   return {
     status: sprint.status,
     sprintName: sprint.name,
@@ -238,7 +233,7 @@ export async function approveSprint(sprintId: string): Promise<SprintDTO> {
     });
     return serializeSprint(current);
   }
-  if (!isApprovableSprintStatus(existing.status)) {
+  if (!isAwaitingApproval(existing.status)) {
     throw new Error("A sprint can be approved once it is completed");
   }
 
