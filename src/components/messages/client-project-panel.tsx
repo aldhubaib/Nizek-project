@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileText, Hourglass, Loader2 } from "lucide-react";
+import { ChevronDown, FileText, Hourglass, Loader2 } from "lucide-react";
+import { CountBadge } from "@/components/ui/count-badge";
 import { getTypeIcon } from "@/components/project/sprint-task-row";
 import { cn } from "@/lib/utils";
 import { isAwaitingApproval } from "@/lib/sprint-status";
@@ -215,55 +216,77 @@ function AwaitingApproval({
   projectId: string;
 }) {
   const [reviewing, setReviewing] = useState<ClientSprintEntry | null>(null);
+  // Shut until asked. A project that has run for a while can have a row of
+  // these, and unopened they would push the whole dashboard off the screen.
+  const [open, setOpen] = useState(false);
   const waiting = sprints.filter((s) => isAwaitingApproval(s.status));
   if (waiting.length === 0) return null;
 
   return (
     <>
       <Card className="mb-6 border-orange/30">
-        <div className="mb-1 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex w-full items-center gap-2 text-left"
+        >
           <Hourglass className="size-4 shrink-0 text-orange" strokeWidth={2} />
-          <h2 className="text-s font-semibold text-foreground">
-            Awaiting your approval
+          <h2 className="min-w-0 truncate text-s font-semibold text-foreground">
+            Waiting for approval
           </h2>
-        </div>
-        <p className="mb-4 text-xs text-muted-foreground">
-          Approving a sprint declares that you have tested the work and it is ready
-          to deploy.
-        </p>
-        <div className="space-y-4">
-          {waiting.map((sprint) => (
-            <div
-              key={sprint.id}
-              className="flex flex-col gap-2 border-t border-border/60 pt-4 first:border-t-0 first:pt-0 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-s font-semibold text-foreground">
-                  {sprint.name}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {sprint.taskCount === 1 ? "1 item" : `${sprint.taskCount} items`}
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-col gap-1.5 sm:w-64">
-                <button
-                  type="button"
-                  onClick={() => setReviewing(sprint)}
-                  className={cn(
-                    ACTIVITY_ACTION_CLASS,
-                    "border-border/60 bg-muted/30 hover:bg-muted/50",
-                  )}
+          <CountBadge count={waiting.length} />
+          <ChevronDown
+            className={cn(
+              "ms-auto size-4 shrink-0 text-muted-foreground transition-transform",
+              open && "rotate-180",
+            )}
+            strokeWidth={2}
+          />
+        </button>
+        {open && (
+          <>
+            <p className="mt-1 mb-4 text-xs text-muted-foreground">
+              Approving a sprint declares that you have tested the work and it is
+              ready to deploy.
+            </p>
+            <div className="space-y-4">
+              {waiting.map((sprint) => (
+                <div
+                  key={sprint.id}
+                  className="flex flex-col gap-2 border-t border-border/60 pt-4 first:border-t-0 first:pt-0 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <FileText className="size-4 shrink-0" strokeWidth={2} />
-                  <span className="min-w-0 flex-1 truncate text-foreground">
-                    Read the sprint document
-                  </span>
-                </button>
-                <SprintApproveAction sprintId={sprint.id} />
-              </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-s font-semibold text-foreground">
+                      {sprint.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {sprint.taskCount === 1
+                        ? "1 item"
+                        : `${sprint.taskCount} items`}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col gap-1.5 sm:w-64">
+                    <button
+                      type="button"
+                      onClick={() => setReviewing(sprint)}
+                      className={cn(
+                        ACTIVITY_ACTION_CLASS,
+                        "border-border/60 bg-muted/30 hover:bg-muted/50",
+                      )}
+                    >
+                      <FileText className="size-4 shrink-0" strokeWidth={2} />
+                      <span className="min-w-0 flex-1 truncate text-foreground">
+                        Read the sprint document
+                      </span>
+                    </button>
+                    <SprintApproveAction sprintId={sprint.id} />
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
       </Card>
       {reviewing ? (
         <SprintDocSlideOver
