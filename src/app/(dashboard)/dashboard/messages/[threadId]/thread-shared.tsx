@@ -7,12 +7,15 @@ import type {
   MessageTaskRef,
   ReactionSummary,
 } from "@/actions/messages";
-import type { DeadlineReminderPayload } from "@/lib/deadline-reminder-payload";
-import type { NoteCommentPayload } from "@/lib/note-comment-payload";
-import type { TaskCommentPayload } from "@/lib/task-comment-payload";
-import type { NoteActivityPayload } from "@/lib/note-activity-payload";
-import type { ClientIssuePayload } from "@/lib/client-issue-payload";
-import type { ProofBypassPayload } from "@/lib/proof-bypass-payload";
+import {
+  deadlineReminderPreview,
+  type DeadlineReminderPayload,
+} from "@/lib/deadline-reminder-payload";
+import { noteCommentPreview, type NoteCommentPayload } from "@/lib/note-comment-payload";
+import { taskCommentPreview, type TaskCommentPayload } from "@/lib/task-comment-payload";
+import { noteActivityPreview, type NoteActivityPayload } from "@/lib/note-activity-payload";
+import { clientIssuePreview, type ClientIssuePayload } from "@/lib/client-issue-payload";
+import { proofBypassPreview, type ProofBypassPayload } from "@/lib/proof-bypass-payload";
 
 export const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
@@ -51,19 +54,42 @@ export type ThreadTarget = {
 // A file picked in the composer, held locally until the user presses Send.
 export type PendingFile = { key: string; file: File; previewUrl: string | null };
 
-export function isFeedCardKind(kind?: string) {
-  return (
-    kind === "deadline_reminder" ||
-    kind === "note_activity" ||
-    kind === "note_comment" ||
-    kind === "task_comment" ||
-    kind === "proof_bypass" ||
-    kind === "rejection"
+/**
+ * Messages the thread draws as a card instead of a bubble.
+ *
+ * They can be replied to and reacted to like anything else, but never edited:
+ * what they carry in `body` is an encoded payload the card is rendered from,
+ * not prose someone typed.
+ */
+export function isCardMessage(m: ChatMessage) {
+  return Boolean(
+    m.noteActivity ||
+      m.clientIssue ||
+      m.noteComment ||
+      m.taskComment ||
+      m.deadlineReminder ||
+      m.proofBypass ||
+      m.kind === "proof_bypass" ||
+      m.kind === "rejection" ||
+      isProofOfWorkChatMessage(m),
   );
 }
 
-export function isFeedMessage(m: ChatMessage) {
-  return isFeedCardKind(m.kind) || isProofOfWorkChatMessage(m);
+/**
+ * The one line that stands in for a message wherever it is quoted rather than
+ * rendered — in a reply, or on the clipboard.
+ *
+ * Cards keep an encoded payload in `body`, so quoting `body` as it stands would
+ * hand the reader a blob of JSON.
+ */
+export function messageQuoteText(m: ChatMessage): string {
+  if (m.noteActivity) return noteActivityPreview(m.noteActivity);
+  if (m.clientIssue) return clientIssuePreview(m.clientIssue);
+  if (m.noteComment) return noteCommentPreview(m.noteComment);
+  if (m.taskComment) return taskCommentPreview(m.taskComment);
+  if (m.proofBypass) return proofBypassPreview(m.proofBypass);
+  if (m.deadlineReminder) return deadlineReminderPreview(m.deadlineReminder);
+  return m.body;
 }
 
 export const fmtTaskNumber = (n: number) => `T-${String(n).padStart(3, "0")}`;

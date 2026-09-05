@@ -55,7 +55,9 @@ import {
   formatDay,
   formatTime,
   initialsFrom,
+  isCardMessage,
   isDesktopViewport,
+  messageQuoteText,
   renderMessageBody,
   type ChatMessage,
 } from "./thread-shared";
@@ -335,9 +337,9 @@ export const MessageRow = memo(function MessageRow({
   const actionHandlers: MessageActionHandlers = {
     onReact: (emoji) => react(m.id, emoji),
     onReply: () => handleReply(m.id),
-    onCopy: () => handleCopy(m.body),
+    onCopy: () => handleCopy(messageQuoteText(m)),
     onDelete: () => handleDelete(m.id),
-    onEdit: mine && m.kind !== "rejection" ? () => handleEdit(m.id) : undefined,
+    onEdit: mine && !isCardMessage(m) ? () => handleEdit(m.id) : undefined,
     onCreateTask: canCreateTask ? () => handleCreateTask(m) : undefined,
     onToggleImportant: () => handleToggleImportant(m.id),
     important: Boolean(m.important),
@@ -401,7 +403,49 @@ export const MessageRow = memo(function MessageRow({
     swiped.current = false;
   };
 
-  if (m.noteActivity || m.clientIssue || m.noteComment || m.taskComment || m.deadlineReminder || m.proofBypass || m.kind === "proof_bypass" || m.kind === "rejection" || isProofOfWorkChatMessage(m)) {
+  const onTouchCancel = () => {
+    clearLongPress();
+    swipeXRef.current = 0;
+    lastDelta.current = { dx: 0, dy: 0 };
+    swiped.current = false;
+    setSwipeX(0);
+    touchStart.current = null;
+  };
+
+  /** Long-press, swipe-to-reply and the selection wash, shared by both rows. */
+  const touchProps = {
+    onTouchStart,
+    onTouchMove,
+    onTouchEnd,
+    onTouchCancel,
+  };
+
+  /** The quick-emoji bar that floats over a row selected on mobile. */
+  const selectionEmojiBar = selected ? (
+    <div
+      className={cn(
+        "absolute z-20 flex -translate-y-[calc(100%+6px)] items-center gap-0.5 rounded-full border border-border/60 bg-popover px-1.5 py-1 shadow-lg lg:hidden",
+        mine ? "right-0" : "left-0",
+      )}
+    >
+      {QUICK_EMOJIS.map((e) => (
+        <button
+          key={e}
+          type="button"
+          onClick={() => {
+            react(m.id, e);
+            onSelect(null);
+          }}
+          className="grid size-10 place-items-center rounded-full text-xl transition-transform active:scale-125"
+          aria-label={`React ${e}`}
+        >
+          {e}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  if (isCardMessage(m)) {
     const authorLabel = chatPostAuthorLabel(m.authorId, m.authorName);
     return (
       <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
@@ -414,9 +458,12 @@ export const MessageRow = memo(function MessageRow({
         )}
         <div
           className={cn(
-            "flex w-full gap-2 justify-start",
+            "group relative flex w-full touch-pan-y justify-start gap-2 rounded-xl transition-colors",
             newGroup && !showDay && notFirst && "mt-3",
+            selected && "bg-primary/15 ring-1 ring-inset ring-primary/25 lg:bg-transparent lg:ring-0",
           )}
+          style={swipeX ? { transform: `translateX(${swipeX}px)` } : undefined}
+          {...touchProps}
         >
           <ChatPostAvatar
             show={showAuthor}
@@ -424,9 +471,20 @@ export const MessageRow = memo(function MessageRow({
             authorName={m.authorName}
             authorImageUrl={m.authorImageUrl}
           />
-          <div className="flex min-w-0 w-full max-w-[420px] flex-col gap-1">
+          <div className="relative flex min-w-0 w-full max-w-[420px] flex-col gap-1">
+            {selectionEmojiBar}
             {showAuthor && (
               <div className="px-1 text-xs text-muted-foreground">{authorLabel}</div>
+            )}
+            {replied && (
+              <ReplyContext
+                authorLabel={
+                  replied.authorId === currentMemberId ? "You" : replied.authorName
+                }
+                body={messageQuoteText(replied)}
+                attachments={replied.attachments}
+                onClick={() => scrollToMessage(m.replyToId!)}
+              />
             )}
             {m.deadlineReminder ? (
               <DeadlineReminderCard
@@ -538,6 +596,21 @@ export const MessageRow = memo(function MessageRow({
                 ))}
               </div>
             )}
+            {m.reactions.length > 0 && (
+              <ReactionChips
+                reactions={m.reactions}
+                mine={false}
+                currentMemberId={currentMemberId}
+                memberNames={memberNames}
+                onToggle={toggleReaction}
+              />
+            )}
+          </div>
+          {/* The ⋮ sits beside the card rather than over it: a card fills its
+              own top-right corner with a type pill or a date. Desktop only, so
+              a phone gives the whole width to the card. */}
+          <div className="relative hidden w-8 shrink-0 self-start lg:block">
+            <MessageCaret mine={false} {...actionHandlers} />
           </div>
         </div>
       </div>
@@ -562,17 +635,7 @@ export const MessageRow = memo(function MessageRow({
           selected && "bg-primary/15 ring-1 ring-inset ring-primary/25 lg:bg-transparent lg:ring-0",
         )}
         style={swipeX ? { transform: `translateX(${swipeX}px)` } : undefined}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        onTouchCancel={() => {
-          clearLongPress();
-          swipeXRef.current = 0;
-          lastDelta.current = { dx: 0, dy: 0 };
-          swiped.current = false;
-          setSwipeX(0);
-          touchStart.current = null;
-        }}
+        {...touchProps}
       >
         {!mine && (
           <div className="w-8 shrink-0 self-start">
@@ -602,29 +665,7 @@ export const MessageRow = memo(function MessageRow({
           </div>
         )}
         <div className={cn("relative flex min-w-0 max-w-[70%] flex-col gap-xs", mine ? "ml-auto items-end" : "items-start")}>
-          {selected && (
-            <div
-              className={cn(
-                "absolute z-20 flex -translate-y-[calc(100%+6px)] items-center gap-0.5 rounded-full border border-border/60 bg-popover px-1.5 py-1 shadow-lg lg:hidden",
-                mine ? "right-0" : "left-0",
-              )}
-            >
-              {QUICK_EMOJIS.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => {
-                    react(m.id, e);
-                    onSelect(null);
-                  }}
-                  className="grid size-10 place-items-center rounded-full text-xl transition-transform active:scale-125"
-                  aria-label={`React ${e}`}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
-          )}
+          {selectionEmojiBar}
           {showAuthor && (
             <div className="px-1 text-xs text-muted-foreground">{m.authorName}</div>
           )}
@@ -644,7 +685,7 @@ export const MessageRow = memo(function MessageRow({
                   authorLabel={
                     replied.authorId === currentMemberId ? "You" : replied.authorName
                   }
-                  body={replied.body}
+                  body={messageQuoteText(replied)}
                   attachments={replied.attachments}
                   mine={mine}
                   onClick={() => scrollToMessage(m.replyToId!)}

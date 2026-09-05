@@ -115,7 +115,8 @@ import {
 } from "@/lib/mentions";
 import {
   fmtTaskNumber,
-  isFeedMessage,
+  isCardMessage,
+  messageQuoteText,
   renderComposerHighlight,
   sameDay,
   type ChatMessage,
@@ -1416,7 +1417,7 @@ export function ThreadChat({
             </button>
             <button
               type="button"
-              onClick={() => handleCopy(selectedMessage.body)}
+              onClick={() => handleCopy(messageQuoteText(selectedMessage))}
               aria-label="Copy"
               className="grid size-11 place-items-center rounded-full text-foreground transition-colors hover:bg-muted"
             >
@@ -1449,7 +1450,7 @@ export function ThreadChat({
                 <CheckSquare className="h-5 w-5" />
               </button>
             )}
-            {selectedMine && selectedMessage.kind !== "rejection" && (
+            {selectedMine && !isCardMessage(selectedMessage) && (
               <button
                 type="button"
                 onClick={() => handleEdit(selectedMessage.id)}
@@ -1769,8 +1770,8 @@ export function ThreadChat({
             {messages.map((m, i) => {
               const prev = messages[i - 1];
               const showDay = !prev || !sameDay(prev.createdAt, m.createdAt);
-              const isFeed = isFeedMessage(m);
-              const prevFeed = prev ? isFeedMessage(prev) : false;
+              const isFeed = isCardMessage(m);
+              const prevFeed = prev ? isCardMessage(prev) : false;
               const newGroup =
                 !prev ||
                 prev.authorId !== m.authorId ||
@@ -2000,7 +2001,7 @@ export function ThreadChat({
                 authorLabel={
                   replyingTo.authorId === currentMemberId ? "You" : replyingTo.authorName
                 }
-                body={replyingTo.body}
+                body={messageQuoteText(replyingTo)}
                 attachments={replyingTo.attachments}
                 onClick={() => jumpToMessage(replyingTo.id)}
                 onDismiss={() => setReplyTo(null)}
@@ -2359,7 +2360,7 @@ export function ThreadChat({
                   lb.close();
                   handleReply(msg.id);
                 }}
-                onCopy={() => handleCopy(msg.body)}
+                onCopy={() => handleCopy(messageQuoteText(msg))}
                 onEdit={
                   mine
                     ? () => {
