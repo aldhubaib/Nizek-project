@@ -16,7 +16,11 @@
 import { Node, mergeAttributes } from "@tiptap/core";
 import Image from "@tiptap/extension-image";
 import StarterKit from "@tiptap/starter-kit";
-import type { SprintPlanningInfo, SprintPlanningTask } from "@/lib/sprint-planning-doc";
+import type {
+  SprintPlanningInfo,
+  SprintPlanningTask,
+  SprintTaskProof,
+} from "@/lib/sprint-planning-doc";
 import { NoteAnnotation } from "@/components/tiptap/note-annotation-mark";
 import { TextDirection } from "@/components/tiptap/text-direction";
 
@@ -170,10 +174,70 @@ export const SprintInfoBlockSchema = Node.create<{
   },
 });
 
+/**
+ * The line between what a sprint promised and how it turned out.
+ *
+ * A sprint document is written in two halves: the plan, which freezes when the
+ * sprint starts, and the outcome, which keeps up with the sprint until it
+ * closes. Rebuilding the second without disturbing the first needs a mark in
+ * the document saying where one ends — and a plain div would be dropped on the
+ * next parse, so it has to be a node the schema knows about.
+ */
+export const SprintOutcomeBlockSchema = Node.create({
+  name: "sprintOutcome",
+  group: "block",
+  atom: true,
+  selectable: false,
+  draggable: false,
+  addAttributes() {
+    return {
+      /**
+       * The tasks the sprint was started with.
+       *
+       * Once the outcome exists it lists the same tasks the plan did, so the
+       * plan's list is folded away rather than printed twice — and this is
+       * where the promise goes, since a task dropped from the sprint afterwards
+       * is gone from the database's idea of the sprint and the document is the
+       * only place left that remembers it was ever in scope.
+       */
+      committed: {
+        default: null as SprintPlanningTask[] | null,
+        parseHTML: (element) => {
+          try {
+            return JSON.parse(
+              element.getAttribute("data-committed") || "null",
+            ) as SprintPlanningTask[] | null;
+          } catch {
+            return null;
+          }
+        },
+        renderHTML: (attributes) =>
+          attributes.committed
+            ? { "data-committed": JSON.stringify(attributes.committed) }
+            : {},
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-type="sprint-outcome"]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "div",
+      mergeAttributes(HTMLAttributes, {
+        "data-type": "sprint-outcome",
+        contenteditable: "false",
+      }),
+    ];
+  },
+});
+
 export const SprintTaskBlockSchema = Node.create<{
   projectId?: string;
   sprintId?: string;
   sprintTasks?: SprintPlanningTask[];
+  /** The proof behind each delivered task, by task id. */
+  sprintProof?: Record<string, SprintTaskProof>;
   hideAssignee?: boolean;
   onTasksPatched?: (taskId: string, patch: Partial<SprintPlanningTask>) => void;
 }>({
@@ -188,6 +252,7 @@ export const SprintTaskBlockSchema = Node.create<{
       projectId: "",
       sprintId: "",
       sprintTasks: [],
+      sprintProof: {},
       hideAssignee: false,
       onTasksPatched: undefined,
     };
@@ -255,6 +320,39 @@ export const SprintTaskBlockSchema = Node.create<{
           "data-incomplete-reason": attributes.incompleteReason ?? "",
         }),
       },
+      /** The sprint a removed item was handed to, as opposed to simply dropped. */
+      movedTo: {
+        default: null as string | null,
+        parseHTML: (element) => element.getAttribute("data-moved-to"),
+        renderHTML: (attributes) =>
+          attributes.movedTo ? { "data-moved-to": attributes.movedTo as string } : {},
+      },
+      /** What was actually delivered. Written on a completed item, not planned. */
+      description: {
+        default: "",
+        parseHTML: (element) => element.getAttribute("data-description") ?? "",
+        renderHTML: (attributes) => ({ "data-description": attributes.description ?? "" }),
+      },
+      /** Screenshots of the delivered work, uploaded or pasted beside the text. */
+      descriptionImages: {
+        default: [] as string[],
+        parseHTML: (element) => {
+          try {
+            const parsed = JSON.parse(
+              element.getAttribute("data-description-images") || "[]",
+            ) as unknown;
+            return Array.isArray(parsed) ? (parsed as string[]) : [];
+          } catch {
+            return [];
+          }
+        },
+        renderHTML: (attributes) => {
+          const images = (attributes.descriptionImages as string[] | null) ?? [];
+          return images.length > 0
+            ? { "data-description-images": JSON.stringify(images) }
+            : {};
+        },
+      },
     };
   },
   parseHTML() {
@@ -286,5 +384,6 @@ export const noteSchemaExtensions = [
   NoteAnnotation,
   AttendanceBlockSchema,
   SprintInfoBlockSchema,
+  SprintOutcomeBlockSchema,
   SprintTaskBlockSchema,
 ];

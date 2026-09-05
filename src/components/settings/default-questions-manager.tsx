@@ -22,7 +22,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AddButton } from "@/components/add-button";
 import { Trash2, MessageCircleQuestion, List, Type, Sparkles, Wrench, Bug, Paperclip, GripVertical, Link, UserRound, AlertCircle, Palette } from "lucide-react";
-import { addDefaultQuestion, deleteDefaultQuestion, updateDefaultQuestion, reorderDefaultQuestions } from "@/actions/default-question";
+import { addDefaultQuestion, deleteDefaultQuestion, updateDefaultQuestion, reorderDefaultQuestions, setClientIssueTypeEnabled } from "@/actions/default-question";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -48,6 +49,8 @@ interface Question {
 
 interface Props {
   questions: Question[];
+  /** Issue types clients may raise from their chat. */
+  clientIssueTypes: TaskType[];
 }
 
 const TABS: { id: TaskType; label: string; icon: typeof Sparkles; color: string; activeColor: string }[] = [
@@ -257,9 +260,11 @@ function SortableQuestionItem({
   );
 }
 
-export function DefaultQuestionsManager({ questions }: Props) {
+export function DefaultQuestionsManager({ questions, clientIssueTypes }: Props) {
   const dndId = useId();
   const [activeType, setActiveType] = useState<TaskType>("FEATURE");
+  const [reportable, setReportable] = useState<TaskType[]>(clientIssueTypes);
+  const [reportableError, setReportableError] = useState<string | null>(null);
   const [newQuestion, setNewQuestion] = useState("");
   const [newType, setNewType] = useState<"text" | "select" | "file" | "link" | "client">("text");
   const [newOptions, setNewOptions] = useState("");
@@ -276,6 +281,8 @@ export function DefaultQuestionsManager({ questions }: Props) {
     () => questions.filter((q) => q.taskType === activeType),
     [questions, activeType]
   );
+  const activeTab = TABS.find((t) => t.id === activeType);
+  const reportableOn = reportable.includes(activeType);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -364,6 +371,20 @@ export function DefaultQuestionsManager({ questions }: Props) {
     }
   }
 
+  async function handleToggleReportable(value: boolean) {
+    const previous = reportable;
+    setReportable(
+      value ? [...previous, activeType] : previous.filter((t) => t !== activeType),
+    );
+    setReportableError(null);
+    try {
+      setReportable(await setClientIssueTypeEnabled(activeType, value));
+    } catch (err) {
+      setReportable(previous);
+      setReportableError(err instanceof Error ? err.message : "Could not save");
+    }
+  }
+
   function getOptionsList(q: Question): string[] {
     if (!q.options) return [];
     try { return JSON.parse(q.options); } catch { return []; }
@@ -402,6 +423,32 @@ export function DefaultQuestionsManager({ questions }: Props) {
             </button>
           );
         })}
+      </div>
+
+      <div className="mb-5 flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-s font-medium text-foreground">
+            Open this type to clients
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {reportableOn
+              ? `Clients pick "${activeTab?.label}" in New Issue, answer the questions below, and what they file lands in the backlog.`
+              : `"${activeTab?.label}" is hidden from clients. Turn this on to let them raise it from their chat.`}
+          </p>
+          {reportableOn && filteredQuestions.length === 0 ? (
+            <p className="mt-1 text-xs text-orange">
+              No questions yet — clients will only be asked for a title.
+            </p>
+          ) : null}
+          {reportableError ? (
+            <p className="mt-1 text-xs text-destructive">{reportableError}</p>
+          ) : null}
+        </div>
+        <Switch
+          checked={reportableOn}
+          onCheckedChange={(value) => void handleToggleReportable(value)}
+          aria-label={`Let clients report ${activeTab?.label}`}
+        />
       </div>
 
       {filteredQuestions.length === 0 ? (

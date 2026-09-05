@@ -11,6 +11,7 @@ import {
   maskBody,
   maskMentionTokens,
   maskName,
+  maskNoteActivity,
   maskPlainNames,
   needsAlias,
   type AliasDb,
@@ -115,6 +116,40 @@ describe("maskBody", () => {
     expect(maskBody("@[Ali Hassan](u1) told Sara Noor to review", map)).toBe(
       "@[Yousef](u1) told Dana to review",
     );
+  });
+});
+
+describe("maskNoteActivity", () => {
+  const map = aliasMap([
+    ["u1", { name: "Yousef", realName: "Ali Hassan" }],
+    ["u2", { name: "Dana", realName: "Sara Noor" }],
+  ]);
+
+  it("masks the title and the excerpt lifted out of the document", () => {
+    expect(
+      maskNoteActivity(
+        {
+          noteTitle: "Ali Hassan's sprint 19 planning",
+          excerpt: "Sara Noor picks up the migration.",
+        },
+        map,
+      ),
+    ).toEqual({
+      noteTitle: "Yousef's sprint 19 planning",
+      excerpt: "Dana picks up the migration.",
+    });
+  });
+
+  it("leaves a card with no excerpt without one", () => {
+    expect(maskNoteActivity({ noteTitle: "Sprint 19 planning" }, map)).toEqual({
+      noteTitle: "Sprint 19 planning",
+    });
+  });
+
+  it("is a no-op for staff, who read an empty map", () => {
+    const payload = { noteTitle: "Ali Hassan", excerpt: "Sara Noor" };
+    expect(maskNoteActivity(payload, new Map())).toBe(payload);
+    expect(maskNoteActivity(null, map)).toBeNull();
   });
 });
 

@@ -199,6 +199,7 @@ model User {
 
   agreementVersions    ClientAgreementVersion[]     @relation("ClientAgreementAuthor")
   agreementAcceptances ClientAgreementAcceptance[]  @relation("ClientAgreementAcceptor")
+  agreementsAcceptedFor ClientAgreementAcceptance[] @relation("ClientAgreementAcceptedBy")
 
   @@index([systemRole])
   @@index([blocked])
@@ -436,11 +437,29 @@ model SprintTaskSnapshot {
   task             Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
   stage            Stage
   estimatedMinutes Int?
+  /// Why the task did not finish — or, on a departure snapshot, why it was
+  /// taken out of the sprint. Both answer the same question the review asks.
   incompleteReason String?
   assigneeId       String?
   assigneeName     String?
   assigneeImageUrl String?
   unplannedInSprint Boolean @default(false)
+  /// Frozen copy of Task.unplannedReason, which the task loses on its way out.
+  unplannedReason  String?
+  /// Whether this row is a task leaving a sprint that had already started.
+  ///
+  /// Recorded here because it cannot be worked out afterwards: closing a sprint
+  /// also writes a snapshot for every task in it and then empties the unfinished
+  /// ones back to the backlog, so by the next read a task that was moved during
+  /// planning, a task dragged out mid-sprint, and a task the sprint simply did
+  /// not finish all look identical — a snapshot whose task is elsewhere.
+  departedAfterStart Boolean @default(false)
+  /// The proof that carried this task through review, pinned at sprint close.
+  /// Proof belongs to the task, not the sprint, so a task pulled back out and
+  /// re-proved later would otherwise rewrite the closed document that already
+  /// reported it as delivered.
+  proofOfWorkId    String?
+  proofOfWork      ProofOfWork? @relation(fields: [proofOfWorkId], references: [id], onDelete: SetNull)
 
   @@unique([sprintId, taskId])
   @@index([sprintId])
@@ -459,6 +478,10 @@ model Task {
   estimatedMinutes  Int?
   estimateAccuracy  EstimateAccuracy?
   unplannedInSprint Boolean @default(false)
+  /// Why this was pulled into a sprint already running. Asked for at the moment
+  /// it happens, because the sprint document has to account for the scope it
+  /// gained after the team committed to it. Cleared when the task leaves.
+  unplannedReason   String?
 
   projectId   String
   project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -586,6 +609,7 @@ model ProofOfWork {
   bypassedBy   User?   @relation("ProofOfWorkBypassApprover", fields: [bypassedById], references: [id], onDelete: SetNull)
   bypassedAt   DateTime?
   videos       ProofOfWorkVideo[]
+  sprintSnapshots SprintTaskSnapshot[]
   createdAt    DateTime @default(now())
 
   @@index([taskId, createdAt])
@@ -646,8 +670,12 @@ enum NoteType {
   DECISION
   CLARIFICATION
   DEADLINE
+  /// Legacy. Kept so documents predating the merge still render; every sprint
+  /// now has one SPRINT_DOC instead of a planning and a review note.
   SPRINT_PLANNING
+  /// Legacy. See SPRINT_PLANNING.
   SPRINT_REVIEW
+  SPRINT_DOC
   FEATURE
   ENHANCEMENT
   BUG
@@ -2185,11 +2213,21 @@ model ClientAgreementAcceptance {
   userId String
   user   User   @relation("ClientAgreementAcceptor", fields: [userId], references: [id], onDelete: Cascade)
 
+  /// Set only when an admin accepted on this client's behalf while viewing as
+  /// them — normally null, meaning the client clicked it themselves.
+  ///
+  /// The row has to be able to say which of those happened. Without this column
+  /// an admin's click is indistinguishable from the client's, and the record
+  /// stops being evidence of anything.
+  acceptedById String?
+  acceptedBy   User?  @relation("ClientAgreementAcceptedBy", fields: [acceptedById], references: [id], onDelete: SetNull)
+
   acceptedAt DateTime @default(now())
 
   @@unique([versionId, userId])
   @@index([userId])
   @@index([versionId])
+  @@index([acceptedById])
 }
 
 // App-wide switches an admin can flip at runtime, as a single row.
@@ -2214,6 +2252,14 @@ model AppSettings {
   /// come back to the same person if this is switched on again, rather than
   /// being handed to somebody else.
   aliasesEnabled Boolean @default(true)
+
+  /// Which issue types a client may raise from the New Issue action in their
+  /// chat, picked per type in the admin Questions tab.
+  ///
+  /// Empty by default, and empty hides the action outright: reporting is a
+  /// write into the team's backlog, so it stays shut until somebody decides
+  /// which types are safe to open and curates the questions behind them.
+  clientIssueTypes TaskType[] @default([])
 
   updatedAt DateTime @updatedAt
 

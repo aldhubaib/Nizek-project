@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,9 +29,15 @@ interface Props {
    * were agreed for the sprint being left.
    */
   clearedFields: string[];
+  /**
+   * Set when the sprint being left has started. Taking work out of a sprint the
+   * team has committed to is reported in its document, so it has to come with
+   * an explanation; a planning move needs none.
+   */
+  requireReason?: boolean;
   pending?: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
+  onConfirm: (reason: string) => void;
 }
 
 function listFields(fields: string[]): string {
@@ -45,14 +52,18 @@ export function RemoveFromSprintDialog({
   fromSprintName,
   toLabel,
   clearedFields,
+  requireReason = false,
   pending,
   onOpenChange,
   onConfirm,
 }: Props) {
-  if (!open || !task || clearedFields.length === 0) return null;
+  const [reason, setReason] = useState("");
+
+  if (!open || !task || (clearedFields.length === 0 && !requireReason)) return null;
 
   const stage = taskStageBadge(task.stage);
   const plural = clearedFields.length > 1;
+  const ready = !requireReason || reason.trim().length > 0;
 
   return (
     <>
@@ -72,15 +83,45 @@ export function RemoveFromSprintDialog({
                   Move out of {fromSprintName}
                 </div>
                 <p className="text-s leading-relaxed break-words text-muted-foreground">
-                  Moving this task to{" "}
-                  <span className="font-medium text-foreground">{toLabel}</span> will clear its{" "}
-                  <span className="font-medium text-foreground">{listFields(clearedFields)}</span>.
-                  {plural ? " They" : " It"} cannot be recovered, and{" "}
-                  {plural ? "they" : "it"} will have to be filled in again if the task comes back.
-                  Are you sure?
+                  {clearedFields.length > 0 ? (
+                    <>
+                      Moving this task to{" "}
+                      <span className="font-medium text-foreground">{toLabel}</span> will clear its{" "}
+                      <span className="font-medium text-foreground">
+                        {listFields(clearedFields)}
+                      </span>
+                      .{plural ? " They" : " It"} cannot be recovered, and{" "}
+                      {plural ? "they" : "it"} will have to be filled in again if the task comes
+                      back.
+                    </>
+                  ) : (
+                    <>
+                      This moves the task to{" "}
+                      <span className="font-medium text-foreground">{toLabel}</span>.
+                    </>
+                  )}
+                  {requireReason
+                    ? " The sprint has started, so the sprint document will record this as a change to what the team committed to."
+                    : " Are you sure?"}
                 </p>
               </div>
             </div>
+
+            {requireReason ? (
+              <>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Reason for removing <span className="text-destructive">*</span>
+                </label>
+                <textarea
+                  autoFocus
+                  rows={3}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Why is this coming out of the sprint?"
+                  className="mb-4 w-full resize-y rounded-md border border-border bg-transparent px-3 py-2 text-s text-foreground outline-none placeholder:text-muted-foreground/40 focus:border-foreground/40"
+                />
+              </>
+            ) : null}
 
             <Link
               href={`/dashboard/projects/${projectId}/tasks/${task.id}`}
@@ -103,8 +144,13 @@ export function RemoveFromSprintDialog({
             >
               Cancel
             </Button>
-            <Button variant="destructive" size="sm" onClick={onConfirm} disabled={pending}>
-              Move and clear
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => onConfirm(reason.trim())}
+              disabled={pending || !ready}
+            >
+              {clearedFields.length > 0 ? "Move and clear" : "Move task"}
             </Button>
           </div>
         </div>

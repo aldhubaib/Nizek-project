@@ -616,9 +616,14 @@ function PersonRow({ person }: { person: AgreementPersonDTO }) {
           {(person.userName || "?").charAt(0).toUpperCase()}
         </AvatarFallback>
       </Avatar>
-      <span className="min-w-0 flex-1 truncate text-s text-foreground">
-        {person.userName}
-      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-s text-foreground">{person.userName}</p>
+        {person.acceptedByName ? (
+          <p className="truncate text-xs text-orange">
+            Accepted by {person.acceptedByName} on their behalf
+          </p>
+        ) : null}
+      </div>
       {person.acceptedAt ? (
         <span
           className="shrink-0 font-mono text-s text-muted-foreground"

@@ -379,3 +379,30 @@ export function maskBody(body: string, map: Map<string, AliasIdentity>): string 
   if (map.size === 0) return body;
   return maskPlainNames(maskMentionTokens(body, map), map);
 }
+
+/**
+ * Note-activity cards carry a title and an excerpt lifted straight out of a
+ * staff-authored document, so both go out through the same net as chat text.
+ */
+export function maskNoteActivity<
+  T extends {
+    noteTitle: string;
+    excerpt?: string;
+    scopeTask?: { code: string; title: string };
+  },
+>(payload: T | null, map: Map<string, AliasIdentity>): T | null {
+  if (!payload || map.size === 0) return payload;
+  return {
+    ...payload,
+    noteTitle: maskPlainNames(payload.noteTitle, map),
+    ...(payload.excerpt ? { excerpt: maskPlainNames(payload.excerpt, map) } : {}),
+    ...(payload.scopeTask
+      ? {
+          scopeTask: {
+            ...payload.scopeTask,
+            title: maskPlainNames(payload.scopeTask.title, map),
+          },
+        }
+      : {}),
+  };
+}

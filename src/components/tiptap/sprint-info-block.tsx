@@ -17,6 +17,7 @@ import {
   type SprintPlanningInfo,
   type SprintPlanningTask,
 } from "@/lib/sprint-planning-doc";
+import { isUnstartedSprint } from "@/lib/sprint-status";
 import { SprintInfoBlockSchema } from "@/lib/tiptap-schema";
 import { countWorkingDays, endDateForWorkingDays } from "@/lib/working-days";
 import { useChannel } from "@/components/realtime/hooks";
@@ -51,7 +52,6 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
   const [ending, setEnding] = useState(false);
   const [endReasons, setEndReasons] = useState<Record<string, string>>({});
   const [tasks, setTasks] = useState<SprintPlanningTask[]>([]);
-  const [counts, setCounts] = useState({ completed: 0, incomplete: 0, unplanned: 0 });
   const [docIncomplete, setDocIncomplete] = useState(false);
   const [missingEstimates, setMissingEstimates] = useState(false);
   const [missingAssignees, setMissingAssignees] = useState(false);
@@ -63,72 +63,55 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
   const editable = editor.isEditable;
   const sprintId = info?.sprintId ?? "";
 
-  useEffect(() => {
-    if (!sprintId) return;
-    let cancelled = false;
-    function load() {
-      const review = info?.variant === "review";
-      const request = review ? getSprintReviewTasks(sprintId) : getSprintPlanningTasks(sprintId);
-      request
-        .then((data) => {
-          if (cancelled) return;
-          setStatus(data.status);
-          setSprintName(data.sprintName);
-          if ("activeSprintName" in data) {
-            setActiveSprintName(data.activeSprintName ?? null);
-          }
-          if ("tasks" in data) {
-            setTasks(data.tasks);
-            tasksRef.current = data.tasks;
-            return;
-          }
-          const all = [...data.completed, ...data.incomplete];
-          setTasks(all);
-          tasksRef.current = all;
-          setCounts({
-            completed: data.completed.length,
-            incomplete: data.incomplete.length,
-            unplanned: all.filter((task) => task.unplanned).length,
-          });
-        })
-        .catch(() => {});
-    }
-    load();
-    window.addEventListener("focus", load);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("focus", load);
-    };
-  }, [sprintId, info?.variant]);
-
   const cent = useCentrifugo();
   const projectIdOpt = (extension.options as { projectId?: string }).projectId;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  // The sprint's own status decides which half of the document is live, and the
+  // status stored in the document can be out of date — someone else may have
+  // started or ended the sprint since it was written. So the plan payload is
+  // always fetched first, and its status decides whether the outcome is too.
   const loadRef = useRef<(() => void) | undefined>(undefined);
   loadRef.current = () => {
     if (!sprintId) return;
-    const review = info?.variant === "review";
-    const request = review ? getSprintReviewTasks(sprintId) : getSprintPlanningTasks(sprintId);
-    request
-      .then((data) => {
-        setStatus(data.status);
-        setSprintName(data.sprintName);
-        if ("activeSprintName" in data) setActiveSprintName(data.activeSprintName ?? null);
-        if ("tasks" in data) {
-          setTasks(data.tasks);
-          tasksRef.current = data.tasks;
+    void (async () => {
+      try {
+        const plan = await getSprintPlanningTasks(sprintId);
+        if (!mounted.current) return;
+        setStatus(plan.status);
+        setSprintName(plan.sprintName);
+        setActiveSprintName(plan.activeSprintName ?? null);
+        if (isUnstartedSprint(plan.status)) {
+          setTasks(plan.tasks);
+          tasksRef.current = plan.tasks;
           return;
         }
-        const all = [...data.completed, ...data.incomplete];
+        const review = await getSprintReviewTasks(sprintId);
+        if (!mounted.current) return;
+        const all = [...review.completed, ...review.incomplete];
         setTasks(all);
         tasksRef.current = all;
-        setCounts({
-          completed: data.completed.length,
-          incomplete: data.incomplete.length,
-          unplanned: all.filter((task) => task.unplanned).length,
-        });
-      })
-      .catch(() => {});
+      } catch {
+        /* A sprint deleted underneath an open document still reads fine. */
+      }
+    })();
   };
+
+  useEffect(() => {
+    if (!sprintId) return;
+    const load = () => loadRef.current?.();
+    load();
+    window.addEventListener("focus", load);
+    return () => {
+      window.removeEventListener("focus", load);
+    };
+  }, [sprintId]);
 
   useChannel(
     cent?.enabled && projectIdOpt ? projectChannel(projectIdOpt) : null,
@@ -141,15 +124,16 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
     }, []),
   );
 
+  // Everything below the plan half exists only after the sprint starts, which
+  // is also when the plan stops being editable and the reasons start mattering.
+  const showOutcome = Boolean(status) && !isUnstartedSprint(status);
+
   useEffect(() => {
     function scan() {
       let missing = false;
       let missingEst = false;
       let missingAsg = false;
-      let completed = 0;
-      let incomplete = 0;
-      let unplanned = 0;
-      const review = info?.variant === "review";
+      const review = showOutcome;
 
       // Index the document by task, then walk the sprint. Walking the document
       // instead meant a row left behind by a task that had moved on counted as
@@ -169,13 +153,9 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
         const attrs = nodeByTask.get(live.id)?.attrs;
         if (review) {
           const variant = attrs?.variant ?? (live.stage === "DONE" ? "completed" : "incomplete");
-          if (variant === "incomplete") {
-            incomplete += 1;
-            if (!String(attrs?.incompleteReason ?? "").trim()) missing = true;
-          } else if (variant === "completed") {
-            completed += 1;
+          if (variant === "incomplete" && !String(attrs?.incompleteReason ?? "").trim()) {
+            missing = true;
           }
-          if (live.unplanned) unplanned += 1;
           continue;
         }
         // Decision and Risk are SprintTaskPlan rows; the node attribute is only
@@ -190,19 +170,19 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
       setDocIncomplete(missing);
       setMissingEstimates(missingEst);
       setMissingAssignees(missingAsg);
-      if (review) setCounts({ completed, incomplete, unplanned });
     }
     scan();
     editor.on("update", scan);
     return () => {
       editor.off("update", scan);
     };
-  }, [editor, info?.variant, tasks]);
+  }, [editor, showOutcome, tasks]);
 
   if (!info) return null;
 
-  const isReview = info.variant === "review";
-  const locked = Boolean(info.locked) || !editable || isReview;
+  // The schedule is part of what was committed to, so it stops being editable
+  // at the same moment the task list does.
+  const locked = Boolean(info.locked) || !editable || showOutcome;
   const sprintOpts = extension.options as {
     isAdmin?: boolean;
     getIsAdmin?: () => boolean;
@@ -213,9 +193,10 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
   };
   const allowStart = sprintOpts.getCanStartSprint?.() ?? sprintOpts.canStartSprint ?? sprintOpts.getIsAdmin?.() ?? sprintOpts.isAdmin ?? false;
   const allowEnd = sprintOpts.getCanEndSprint?.() ?? sprintOpts.canEndSprint ?? sprintOpts.getIsAdmin?.() ?? sprintOpts.isAdmin ?? false;
-  const canStart = allowStart && !isReview && Boolean(info.sprintId) && (status === "PLANNED" || status === "NEXT");
-  const canEnd = allowEnd && isReview && Boolean(info.sprintId) && status === "ACTIVE";
+  const canStart = allowStart && Boolean(info.sprintId) && (status === "PLANNED" || status === "NEXT");
+  const canEnd = allowEnd && Boolean(info.sprintId) && status === "ACTIVE";
   const documentDateEmpty = !info.documentDateIso;
+  const reviewDateEmpty = !info.reviewDateIso;
   const startEmpty = !info.startIso;
   const endEmpty = !info.endIso;
   const workingDaysEmpty =
@@ -239,7 +220,7 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
     : null;
   const endBlockedReason = !canEnd
     ? null
-    : infoIncomplete
+    : infoIncomplete || reviewDateEmpty
       ? "Fill in every Sprint Information field."
       : docIncomplete
         ? "Add a reason for every incomplete item."
@@ -286,6 +267,16 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
         ...info,
         documentDateIso: iso,
         documentDate: iso ? formatPlanningDate(iso) : "",
+      },
+    });
+  }
+
+  function setReviewDate(iso: string) {
+    updateAttributes({
+      info: {
+        ...info,
+        reviewDateIso: iso,
+        reviewDate: iso ? formatPlanningDate(iso) : "",
       },
     });
   }
@@ -501,17 +492,32 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
       </h2>
       <div className="w-full text-s">
         <div className="grid grid-cols-2 gap-x-8 border-b border-border py-3.5">
-          {requiredLabel("Document Date")}
+          {requiredLabel("Plan Date")}
           <input
             type="date"
             required
-            disabled={!editable}
+            disabled={locked}
             value={info.documentDateIso}
             onChange={(e) => setDocumentDate(e.target.value)}
             onMouseDown={(e) => e.stopPropagation()}
             className={fieldClass(documentDateEmpty)}
           />
         </div>
+
+        {showOutcome ? (
+          <div className="grid grid-cols-2 gap-x-8 border-b border-border py-3.5">
+            {requiredLabel("Review Date")}
+            <input
+              type="date"
+              required
+              disabled={!editable || status !== "ACTIVE"}
+              value={info.reviewDateIso ?? ""}
+              onChange={(e) => setReviewDate(e.target.value)}
+              onMouseDown={(e) => e.stopPropagation()}
+              className={fieldClass(reviewDateEmpty)}
+            />
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-x-8 border-b border-border py-3.5">
           {requiredLabel("Sprint Start")}
@@ -554,24 +560,6 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
             className={fieldClass(workingDaysEmpty)}
           />
         </div>
-        {isReview ? (
-          <>
-            <div className="grid grid-cols-2 gap-x-8 border-b border-border py-3.5">
-              <span className="text-foreground">Number of completed tasks</span>
-              <span className={cellInputClass}>{counts.completed}</span>
-            </div>
-            <div className="grid grid-cols-2 gap-x-8 border-b border-border py-3.5">
-              <span className="text-foreground">Number of uncompleted tasks</span>
-              <span className={cellInputClass}>{counts.incomplete}</span>
-            </div>
-            <div className="grid grid-cols-2 gap-x-8 border-b border-border py-3.5">
-              <span className="text-foreground">Number of unplanned tasks</span>
-              <span className={cellInputClass} title="Items added after the sprint started">
-                {counts.unplanned}
-              </span>
-            </div>
-          </>
-        ) : null}
       </div>
       {error && !canStart ? (
         <p className="mt-4 text-s text-destructive">{error}</p>

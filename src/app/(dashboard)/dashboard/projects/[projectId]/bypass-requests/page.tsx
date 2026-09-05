@@ -12,25 +12,31 @@ interface Props {
 
 export default async function BypassRequestsPage({ params }: Props) {
   const { projectId } = await params;
+  // Only the loading is guarded. React renders the component after this
+  // function has returned, so a catch around the JSX would never see the
+  // errors it looks like it is catching.
+  let loaded;
   try {
-    const [{ user }, project, requests, canDecide] = await Promise.all([
+    loaded = await Promise.all([
       requireProjectMember(projectId),
       getProject(projectId),
       listProofBypassRequests(projectId),
       canCurrentUserBypassProof(projectId),
     ]);
-    if (isClientUser(user)) redirect("/dashboard/messages");
-    return (
-      <BypassRequestsClient
-        projectId={project.id}
-        projectName={project.name}
-        requests={requests}
-        canDecide={canDecide}
-        currentUserId={user.id}
-      />
-    );
   } catch (err) {
     if (isProjectAccessError(err)) notFound();
     throw err;
   }
+
+  const [{ user }, project, requests, canDecide] = loaded;
+  if (isClientUser(user)) redirect("/dashboard/messages");
+  return (
+    <BypassRequestsClient
+      projectId={project.id}
+      projectName={project.name}
+      requests={requests}
+      canDecide={canDecide}
+      currentUserId={user.id}
+    />
+  );
 }

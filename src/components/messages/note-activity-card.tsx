@@ -2,28 +2,17 @@
 
 import { useState } from "react";
 import {
-  AlertCircle,
-  Bug,
-  CalendarClock,
-  ClipboardCheck,
-  FileText,
-  Gavel,
-  IterationCcw,
-  MessageCircleQuestion,
-  Palette,
-  Sparkles,
-  Wrench,
-  type LucideIcon,
-} from "lucide-react";
-import {
+  isSprintScopeCard,
   noteActivityCategory,
   type NoteActivityPayload,
+  noteCardShowsExcerpt,
 } from "@/lib/note-activity-payload";
-import {
-  ActivityCard,
-  type ActivityCardTheme,
-} from "@/components/messages/activity-card";
+import { ACTIVITY_ACTION_CLASS, ActivityCard } from "@/components/messages/activity-card";
+import { activityTheme } from "@/components/messages/activity-themes";
 import { NoteCommentReplyDialog } from "@/components/messages/note-comment-reply-dialog";
+import { SprintDocSlideOver } from "@/components/messages/sprint-doc-slide-over";
+import { ClientNoteSlideOver } from "@/components/messages/client-note-slide-over";
+import { SprintApproveAction } from "@/components/messages/sprint-approve-action";
 import { cn } from "@/lib/utils";
 
 const FIELD_LABEL: Record<string, string> = {
@@ -36,134 +25,37 @@ const FIELD_LABEL: Record<string, string> = {
   workingDays: "efforts",
 };
 
-const PRIMARY: ActivityCardTheme = {
-  accent: "text-primary",
-  border: "border-primary/30",
-  ring: "ring-primary/15",
-  iconWrap: "bg-primary/10 text-primary",
-  button: "border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary",
-  quote: "border-primary/60",
-};
-
-const NOTE_THEME: Record<string, { icon: LucideIcon; theme: ActivityCardTheme }> = {
-  MEETING_NOTE: { icon: FileText, theme: PRIMARY },
-  DECISION: {
-    icon: Gavel,
-    theme: {
-      accent: "text-orange",
-      border: "border-orange/35",
-      ring: "ring-orange/20",
-      iconWrap: "bg-orange/10 text-orange",
-      button: "border-orange/30 bg-orange/5 hover:bg-orange/10 text-orange",
-      quote: "border-orange/60",
-    },
-  },
-  CLARIFICATION: {
-    icon: MessageCircleQuestion,
-    theme: {
-      accent: "text-sky",
-      border: "border-sky/35",
-      ring: "ring-sky/20",
-      iconWrap: "bg-sky/10 text-sky",
-      button: "border-sky/30 bg-sky/5 hover:bg-sky/10 text-sky",
-      quote: "border-sky/60",
-    },
-  },
-  DEADLINE: {
-    icon: CalendarClock,
-    theme: {
-      accent: "text-destructive",
-      border: "border-destructive/35",
-      ring: "ring-destructive/20",
-      iconWrap: "bg-destructive/10 text-destructive",
-      button: "border-destructive/30 bg-destructive/5 hover:bg-destructive/10 text-destructive",
-      quote: "border-destructive/60",
-    },
-  },
-  SPRINT_PLANNING: {
-    icon: IterationCcw,
-    theme: {
-      accent: "text-success",
-      border: "border-success/35",
-      ring: "ring-success/20",
-      iconWrap: "bg-success/10 text-success",
-      button: "border-success/30 bg-success/5 hover:bg-success/10 text-success",
-      quote: "border-success/60",
-    },
-  },
-  SPRINT_REVIEW: {
-    icon: ClipboardCheck,
-    theme: {
-      accent: "text-orange",
-      border: "border-orange/35",
-      ring: "ring-orange/20",
-      iconWrap: "bg-orange/10 text-orange",
-      button: "border-orange/30 bg-orange/5 hover:bg-orange/10 text-orange",
-      quote: "border-orange/60",
-    },
-  },
-  FEATURE: { icon: Sparkles, theme: PRIMARY },
-  ENHANCEMENT: {
-    icon: Wrench,
-    theme: {
-      accent: "text-violet",
-      border: "border-violet/35",
-      ring: "ring-violet/20",
-      iconWrap: "bg-violet/10 text-violet",
-      button: "border-violet/30 bg-violet/5 hover:bg-violet/10 text-violet",
-      quote: "border-violet/60",
-    },
-  },
-  BUG: {
-    icon: Bug,
-    theme: {
-      accent: "text-orange",
-      border: "border-orange/35",
-      ring: "ring-orange/20",
-      iconWrap: "bg-orange/10 text-orange",
-      button: "border-orange/30 bg-orange/5 hover:bg-orange/10 text-orange",
-      quote: "border-orange/60",
-    },
-  },
-  REPORTED_BUG: {
-    icon: AlertCircle,
-    theme: {
-      accent: "text-destructive",
-      border: "border-destructive/35",
-      ring: "ring-destructive/20",
-      iconWrap: "bg-destructive/10 text-destructive",
-      button: "border-destructive/30 bg-destructive/5 hover:bg-destructive/10 text-destructive",
-      quote: "border-destructive/60",
-    },
-  },
-  DESIGN: {
-    icon: Palette,
-    theme: {
-      accent: "text-cyan",
-      border: "border-cyan/35",
-      ring: "ring-cyan/20",
-      iconWrap: "bg-cyan/10 text-cyan",
-      button: "border-cyan/30 bg-cyan/5 hover:bg-cyan/10 text-cyan",
-      quote: "border-cyan/60",
-    },
-  },
-};
-
 export function NoteActivityCard({
   payload,
   createdAt,
   projectName,
+  isClientViewer = false,
 }: {
   payload: NoteActivityPayload;
   createdAt: string;
   projectName?: string;
+  /** Clients get the read-only sprint document instead of the note workspace. */
+  isClientViewer?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const visual = NOTE_THEME[payload.noteType] ?? { icon: FileText, theme: PRIMARY };
+  const visual = activityTheme(payload.noteType);
   const changed = (payload.fields ?? [])
     .map((f) => FIELD_LABEL[f] ?? f)
     .filter(Boolean);
   const category = noteActivityCategory(payload);
+  const title = payload.noteTitle.trim() || "Untitled";
+  // A sprint card opens the live sprint document — the same one the road map
+  // serves, for staff and clients alike, because the note workspace renders the
+  // saved HTML and a sprint document is mostly not in it. Anything else opens
+  // the note body on its own.
+  const opensSprintDoc = Boolean(payload.sprintId);
+  // Shipping a sprint is the client accepting the review, so the card that
+  // delivers the review is where they accept it.
+  const approvable = payload.noteType === "SPRINT_REVIEW" && payload.sprintId;
+  // Where the review card puts the approval button. A scope change has nothing
+  // to accept or decline — it has already happened — so the slot names the work
+  // that moved, which is the only thing the reader wants from the card.
+  const scopeTask = isSprintScopeCard(payload.noteType) ? payload.scopeTask : undefined;
 
   return (
     <>
@@ -171,13 +63,28 @@ export function NoteActivityCard({
         theme={visual.theme}
         icon={visual.icon}
         category={category}
-        title={payload.noteTitle.trim() || "Untitled"}
+        title={title}
         projectName={payload.projectName || projectName}
         onAction={() => setOpen(true)}
         actionLabel="Open original note"
+        footer={
+          approvable ? (
+            <SprintApproveAction sprintId={approvable} />
+          ) : scopeTask ? (
+            <div className={cn(ACTIVITY_ACTION_CLASS, visual.theme.button, "cursor-default")}>
+              <visual.icon className="size-4 shrink-0" strokeWidth={2} />
+              <span className="min-w-0 flex-1 truncate text-foreground">
+                <span className="font-mono text-xs text-muted-foreground">{scopeTask.code}</span>{" "}
+                {scopeTask.title}
+              </span>
+            </div>
+          ) : undefined
+        }
         createdAt={createdAt}
       >
-        {payload.excerpt ? (
+        {/* Also checked here, not just where cards are written, so the sprint
+            cards already sitting in the history stop quoting the boilerplate. */}
+        {payload.excerpt && noteCardShowsExcerpt(payload.noteType) ? (
           <blockquote
             className={cn(
               "border-s-2 ps-3 text-s italic text-muted-foreground",
@@ -193,13 +100,32 @@ export function NoteActivityCard({
           </p>
         ) : null}
       </ActivityCard>
-      <NoteCommentReplyDialog
-        open={open}
-        onOpenChange={setOpen}
-        noteId={payload.noteId}
-        noteTitle={payload.noteTitle.trim() || "Untitled"}
-        projectId={payload.projectId}
-      />
+      {opensSprintDoc && open && payload.sprintId ? (
+        <SprintDocSlideOver
+          projectId={payload.projectId}
+          sprintId={payload.sprintId}
+          title={title}
+          isClientViewer={isClientViewer}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
+      {isClientViewer && !opensSprintDoc && open ? (
+        <ClientNoteSlideOver
+          projectId={payload.projectId}
+          noteId={payload.noteId}
+          title={title}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
+      {isClientViewer || opensSprintDoc ? null : (
+        <NoteCommentReplyDialog
+          open={open}
+          onOpenChange={setOpen}
+          noteId={payload.noteId}
+          noteTitle={title}
+          projectId={payload.projectId}
+        />
+      )}
     </>
   );
 }

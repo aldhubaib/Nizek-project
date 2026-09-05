@@ -1,12 +1,7 @@
 import {
-  documentDateIsoFromPlanningHtml,
-  formatPlanningDate,
-  planningDateIso,
+  planningInfoFromHtml,
   sprintIdFromPlanningHtml,
-  sprintInfoNodeHtml,
-  sprintTaskNodeHtml,
   type SprintPlanningInfo,
-  type SprintPlanningTask,
 } from "@/lib/sprint-planning-doc";
 
 function unescapeAttr(value: string) {
@@ -24,21 +19,22 @@ export function sprintIdFromReviewHtml(html: string): string | null {
 }
 
 /**
- * Review document date keyed by sprint, newest note wins if several exist.
+ * When each sprint was reviewed, keyed by sprint.
  *
- * Prefers the note's sprintId column and falls back to digging it out of the
- * HTML, which is only still needed for documents predating that column.
+ * The sprint document carries two dates: when it was planned and when it was
+ * reviewed. Only the second one belongs here, so a document whose review half
+ * was never dated contributes nothing and the caller falls back to the sprint's
+ * own completedAt. Documents predating the column are still matched by digging
+ * the sprint id out of the HTML.
  */
 export function reviewDateBySprintId(
-  notes: { content: string; sprintId?: string | null; date?: Date | string | null }[],
+  notes: { content: string; sprintId?: string | null }[],
 ): Map<string, string> {
   const map = new Map<string, string>();
   for (const note of notes) {
     const sprintId = note.sprintId ?? sprintIdFromReviewHtml(note.content);
     if (!sprintId || map.has(sprintId)) continue;
-    const iso =
-      documentDateIsoFromPlanningHtml(note.content) ||
-      (note.date ? planningDateIso(note.date) : null);
+    const iso = planningInfoFromHtml(note.content)?.reviewDateIso;
     if (iso) map.set(sprintId, iso);
   }
   return map;
@@ -90,54 +86,6 @@ export function sprintReviewMissingReasons(html: string): boolean {
   });
 }
 
-export function reviewInfoFromExisting(
-  live: SprintPlanningInfo,
-  existingHtml: string,
-): SprintPlanningInfo {
-  const date = documentDateIsoFromPlanningHtml(existingHtml);
-  return {
-    ...live,
-    variant: "review",
-    locked: true,
-    documentDateIso: date || live.documentDateIso,
-    documentDate: date ? formatPlanningDate(date) : live.documentDate,
-  };
-}
-
-export function sprintReviewDocHtml(
-  info: SprintPlanningInfo,
-  completed: SprintPlanningTask[],
-  incomplete: SprintPlanningTask[],
-  reasonById: Record<string, string> = {},
-): string {
-  const completedBlocks =
-    completed.length === 0
-      ? `<p><em>No completed items in this sprint.</em></p>`
-      : completed
-          .map((task) => sprintTaskNodeHtml(task, { variant: "completed", showQuestions: true }))
-          .join("");
-  const incompleteBlocks =
-    incomplete.length === 0
-      ? `<p><em>No incomplete items in this sprint.</em></p>`
-      : incomplete
-          .map((task) =>
-            sprintTaskNodeHtml(task, {
-              variant: "incomplete",
-              showQuestions: true,
-              incompleteReason: reasonById[task.id] ?? "",
-            }),
-          )
-          .join("");
-
-  return [
-    sprintInfoNodeHtml({ ...info, variant: "review", locked: true }),
-    `<h2>Introduction</h2>`,
-    `<p>This Sprint Review summarizes the work completed during the sprint and evaluates the outcomes against the planned objectives. It provides stakeholders with a clear overview of delivered features, completed tasks, outstanding items, and any challenges encountered. The purpose of this review is to ensure transparency, capture lessons learned, and align on the next steps.</p>`,
-    `<h2>Completed Sprint Items</h2>`,
-    `<p>The following items were successfully completed, tested, and accepted during this sprint. These deliverables are ready for release or have met the agreed acceptance criteria.</p>`,
-    completedBlocks,
-    `<h2>Incomplete / Deferred Items</h2>`,
-    `<p>The following items were not completed within the sprint and have been moved to a future sprint or backlog. The reason for each deferred item should be documented to ensure visibility and proper planning.</p>`,
-    incompleteBlocks,
-  ].join("");
-}
+// The review document generator lived here. There is no review document any
+// more — see sprintOutcomeSectionsHtml in src/lib/sprint-doc.ts, which writes
+// the same sections into the second half of the sprint document.

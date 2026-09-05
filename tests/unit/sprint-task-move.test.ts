@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fieldsClearedByMove } from "@/lib/sprint-task-move";
+import { fieldsClearedByMove, moveNeedsReason } from "@/lib/sprint-task-move";
 
 const ALL_FILLED = {
   hasDecision: true,
@@ -75,5 +75,33 @@ describe("fieldsClearedByMove: what each destination clears", () => {
         { hasDecision: true, hasRisk: false, hasEstimate: false, hasAssignee: true },
       ),
     ).toEqual(["Decision", "Assignee"]);
+  });
+});
+
+describe("moveNeedsReason: which moves have to be explained", () => {
+  it("asks when work is taken out of a running sprint", () => {
+    expect(
+      moveNeedsReason({ fromSprintStatus: "ACTIVE", toSprintStatus: null }),
+    ).toBe(true);
+  });
+
+  it("asks when work is pushed into a running sprint", () => {
+    expect(
+      moveNeedsReason({ fromSprintStatus: null, toSprintStatus: "ACTIVE" }),
+    ).toBe(true);
+  });
+
+  // Nothing has been committed to yet, so there is no promise to account for
+  // and no section of the document waiting for the answer.
+  it("stays quiet while the sprint is still being planned", () => {
+    expect(
+      moveNeedsReason({ fromSprintStatus: "PLANNED", toSprintStatus: "NEXT" }),
+    ).toBe(false);
+    expect(
+      moveNeedsReason({ fromSprintStatus: null, toSprintStatus: "PLANNED" }),
+    ).toBe(false);
+    expect(
+      moveNeedsReason({ fromSprintStatus: "NEXT", toSprintStatus: null }),
+    ).toBe(false);
   });
 });

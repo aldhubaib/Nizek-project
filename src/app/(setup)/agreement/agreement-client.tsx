@@ -119,9 +119,10 @@ export function AgreementClient({
 
         <div className="mt-6 flex flex-col items-center gap-3">
           {preview ? (
-            <p className="flex items-center gap-2 text-s text-muted-foreground">
-              <Eye className="h-4 w-4 text-orange" />
-              Only {impersonatingAs ?? "they"} can accept this
+            <p className="flex items-center gap-2 text-center text-s text-muted-foreground">
+              <Eye className="h-4 w-4 shrink-0 text-orange" />
+              Accepting here is recorded as you doing it for{" "}
+              {impersonatingAs ?? "them"}, not as their own consent
             </p>
           ) : !read ? (
             <p className="flex items-center gap-2 text-s text-muted-foreground">
@@ -133,7 +134,9 @@ export function AgreementClient({
           <button
             type="button"
             onClick={() => void accept()}
-            disabled={preview || !read || accepting}
+            // An admin previewing has no reason to read to the end, and the
+            // document is the client's to read anyway.
+            disabled={(!preview && !read) || accepting}
             className={cn(
               "inline-flex h-11 w-full max-w-sm items-center justify-center rounded-xl px-4 text-s font-medium transition-opacity",
               "bg-primary text-primary-foreground hover:opacity-90",
@@ -148,7 +151,9 @@ export function AgreementClient({
             ) : (
               <>
                 <Check className="me-2 h-4 w-4" />
-                I have read and accept
+                {preview
+                  ? `Accept for ${impersonatingAs ?? "this client"}`
+                  : "I have read and accept"}
               </>
             )}
           </button>

@@ -43,7 +43,15 @@ function parseMentionIds(body: string): string[] {
   return [...ids];
 }
 
-/** Resolve @[all](__all__) and individual mention tokens to project member ids. */
+/**
+ * Resolve @[all](__all__) and individual mention tokens to project member ids.
+ *
+ * Clients are project members but every surface this feeds — internal project
+ * chat, task threads, note and highlight comments — 404s for them, so they are
+ * dropped here. Their own room does its own mention parsing against the people
+ * actually in it. Without this, @all on a sprint announcement pushes a banner
+ * to a client that dead-ends the moment they tap it.
+ */
 export async function resolveProjectMentionIds(
   body: string,
   projectId: string | null,
@@ -53,8 +61,11 @@ export async function resolveProjectMentionIds(
   const ids = raw.filter((id) => id !== ALL_MENTION_ID);
   if (!projectId) return ids;
 
-  const members = await getProjectMentionMembers(projectId);
-  const allowed = new Set(members.map((m) => m.id));
+  const members = await prisma.projectMember.findMany({
+    where: { projectId, user: { systemRole: { not: "CLIENT" } } },
+    select: { userId: true },
+  });
+  const allowed = new Set(members.map((m) => m.userId));
   const mentioned = ids.filter((id) => allowed.has(id));
   if (!expandAll) return mentioned;
   return [...new Set([...mentioned, ...allowed])];

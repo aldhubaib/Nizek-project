@@ -36,6 +36,7 @@ import {
 import { NoteCommentCard } from "@/components/messages/note-comment-card";
 import { TaskCommentCard } from "@/components/messages/task-comment-card";
 import { NoteActivityCard } from "@/components/messages/note-activity-card";
+import { ClientIssueCard } from "@/components/messages/client-issue-card";
 import { TaskRejectionCard } from "@/components/messages/task-rejection-card";
 import { TaskInboxSlideOver } from "@/components/messages/task-inbox-slide-over";
 import {
@@ -266,6 +267,7 @@ export const MessageRow = memo(function MessageRow({
   searchQuery,
   searchCurrent,
   projectName,
+  isClientViewer = false,
 }: {
   m: ChatMessage;
   mine: boolean;
@@ -300,6 +302,8 @@ export const MessageRow = memo(function MessageRow({
   searchQuery?: string;
   searchCurrent?: boolean;
   projectName?: string;
+  /** Feed cards open a client-safe view instead of the staff workspace. */
+  isClientViewer?: boolean;
 }) {
   const imageAtts = m.attachments.filter((a) => a.isImage);
   const videoAtts = m.attachments.filter((a) => isVideoAttachment(a));
@@ -397,7 +401,7 @@ export const MessageRow = memo(function MessageRow({
     swiped.current = false;
   };
 
-  if (m.noteActivity || m.noteComment || m.taskComment || m.deadlineReminder || m.proofBypass || m.kind === "proof_bypass" || m.kind === "rejection" || isProofOfWorkChatMessage(m)) {
+  if (m.noteActivity || m.clientIssue || m.noteComment || m.taskComment || m.deadlineReminder || m.proofBypass || m.kind === "proof_bypass" || m.kind === "rejection" || isProofOfWorkChatMessage(m)) {
     const authorLabel = chatPostAuthorLabel(m.authorId, m.authorName);
     return (
       <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
@@ -435,6 +439,14 @@ export const MessageRow = memo(function MessageRow({
                 payload={m.noteActivity}
                 createdAt={m.createdAt}
                 projectName={projectName}
+                isClientViewer={isClientViewer}
+              />
+            ) : m.clientIssue ? (
+              <ClientIssueCard
+                payload={m.clientIssue}
+                createdAt={m.createdAt}
+                projectName={projectName}
+                isClientViewer={isClientViewer}
               />
             ) : m.taskComment ? (
               <TaskCommentCard

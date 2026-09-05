@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { hasProjectAccess } from "@/lib/project-access";
 import { getActiveContract } from "@/lib/contract-rules";
-import { notifyAndPush, unreadCountsFor } from "@/lib/notify";
-import { broadcastInboxPreview } from "@/lib/inbox-broadcast";
+import { fanOutMessageSideEffects } from "@/lib/message-fanout";
+import { unreadCountsFor } from "@/lib/notify";
 import { resolveProjectMentionIds } from "@/lib/project-mentions";
 import {
   decodeDeadlineReminderPayload,
@@ -31,7 +31,14 @@ import {
   isNoteActivityMessage,
   noteActivityPreview,
   type NoteActivityPayload,
+  noteCardShowsExcerpt,
 } from "@/lib/note-activity-payload";
+import {
+  clientIssuePreview,
+  decodeClientIssuePayload,
+  isClientIssueMessage,
+  type ClientIssuePayload,
+} from "@/lib/client-issue-payload";
 import {
   decodeProofBypassPayload,
   isProofBypassMessage,
@@ -74,6 +81,7 @@ import {
   maskBody,
   maskImage,
   maskName,
+  maskNoteActivity,
   maskPlainNames,
   NO_MASK,
   type AliasIdentity,
@@ -207,6 +215,16 @@ function maskMessageDTO(
             : {}),
         }
       : dto.taskComment,
+    noteActivity: maskNoteActivity(dto.noteActivity ?? null, map),
+    clientIssue: dto.clientIssue
+      ? {
+          ...dto.clientIssue,
+          title: maskPlainNames(dto.clientIssue.title, map),
+          ...(dto.clientIssue.excerpt
+            ? { excerpt: maskPlainNames(dto.clientIssue.excerpt, map) }
+            : {}),
+        }
+      : dto.clientIssue,
     proofBypass: maskProofBypass(dto.proofBypass ?? null, map),
   };
 }
@@ -214,6 +232,8 @@ function maskMessageDTO(
 function inboxPreview(body: string): string {
   const activity = decodeNoteActivityPayload(body);
   if (activity) return noteActivityPreview(activity);
+  const issue = decodeClientIssuePayload(body);
+  if (issue) return clientIssuePreview(issue);
   const note = decodeNoteCommentPayload(body);
   if (note?.comment) return note.comment;
   const task = decodeTaskCommentPayload(body);
@@ -241,6 +261,9 @@ function mapDeadlineReminderMessage<T extends { kind: string; body: string; auth
   const noteActivity = isNoteActivityMessage(c.kind)
     ? decodeNoteActivityPayload(body)
     : null;
+  const clientIssue = isClientIssueMessage(c.kind)
+    ? decodeClientIssuePayload(body)
+    : null;
   const proofBypass = maskProofBypass(
     isProofBypassMessage(c.kind) ? decodeProofBypassPayload(body) : null,
     aliasMap,
@@ -261,14 +284,17 @@ function mapDeadlineReminderMessage<T extends { kind: string; body: string; auth
           ? highlight.comment
           : noteActivity
             ? noteActivityPreview(noteActivity)
-            : proofBypass
-              ? proofBypassPreview(proofBypass)
-              : toDisplayBody(body),
+            : clientIssue
+              ? clientIssuePreview(clientIssue)
+              : proofBypass
+                ? proofBypassPreview(proofBypass)
+                : toDisplayBody(body),
     mentions: isBot && payload ? [ALL_MENTION_NAME] : parseMentionNames(body),
     deadlineReminder: payload,
     noteComment,
     taskComment,
     noteActivity,
+    clientIssue,
     proofBypass,
   };
 }
@@ -329,6 +355,7 @@ export type MessageDTO = {
   noteComment?: NoteCommentPayload | null;
   taskComment?: TaskCommentPayload | null;
   noteActivity?: NoteActivityPayload | null;
+  clientIssue?: ClientIssuePayload | null;
   proofBypass?: ProofBypassPayload | null;
 };
 
@@ -460,6 +487,7 @@ export type ThreadMessage = {
   noteComment?: NoteCommentPayload | null;
   taskComment?: TaskCommentPayload | null;
   noteActivity?: NoteActivityPayload | null;
+  clientIssue?: ClientIssuePayload | null;
   proofBypass?: ProofBypassPayload | null;
   important: boolean;
 };
@@ -605,6 +633,7 @@ export async function getThreadMessages(input: {
       noteComment: mapped.noteComment,
       taskComment: mapped.taskComment,
       noteActivity: mapped.noteActivity,
+      clientIssue: mapped.clientIssue,
       proofBypass: mapped.proofBypass,
       important: importantIds.has(c.id),
     };
@@ -614,7 +643,9 @@ export async function getThreadMessages(input: {
     ...new Set(
       messages
         .map((m) => m.noteActivity)
-        .filter((a): a is NoteActivityPayload => Boolean(a && !a.excerpt))
+        .filter((a): a is NoteActivityPayload =>
+          Boolean(a && !a.excerpt && noteCardShowsExcerpt(a.noteType)),
+        )
         .map((a) => a.noteId),
     ),
   ];
@@ -623,9 +654,17 @@ export async function getThreadMessages(input: {
       where: { id: { in: missingExcerptIds } },
       select: { id: true, content: true },
     });
-    const byId = new Map(notes.map((n) => [n.id, plainTextExcerpt(n.content)]));
+    // Straight out of the document, so it misses the masking pass that the
+    // stored card body already went through on the way in.
+    const byId = new Map(
+      notes.map((n) => [n.id, maskPlainNames(plainTextExcerpt(n.content), aliasMap)]),
+    );
     for (const m of messages) {
-      if (m.noteActivity && !m.noteActivity.excerpt) {
+      if (
+        m.noteActivity &&
+        !m.noteActivity.excerpt &&
+        noteCardShowsExcerpt(m.noteActivity.noteType)
+      ) {
         const excerpt = byId.get(m.noteActivity.noteId);
         if (excerpt) m.noteActivity = { ...m.noteActivity, excerpt };
       }
@@ -939,118 +978,6 @@ export async function getProjectTaskRefs(
     statusName: t.stage ? t.stage.replace(/_/g, " ") : null,
     statusColor: null,
   }));
-}
-
-async function fanOutMessageSideEffects(input: {
-  conversationId: string | null;
-  projectId: string | null;
-  taskId: string | null;
-  userId: string;
-  isClientRoom: boolean;
-  participantIds: string[];
-  uniqueRecipients: string[];
-  notifyType: string;
-  title: string;
-  notifBody: string;
-  url: string;
-  threadId: string;
-  authorName: string;
-  preview: string;
-  notifIcon: string | undefined;
-  messageCreatedAt: Date;
-}) {
-  const {
-    conversationId,
-    projectId,
-    taskId,
-    userId,
-    isClientRoom,
-    participantIds,
-    uniqueRecipients,
-    notifyType,
-    title,
-    notifBody,
-    url,
-    threadId,
-    authorName,
-    preview,
-    notifIcon,
-    messageCreatedAt,
-  } = input;
-
-  if (uniqueRecipients.length > 0) {
-    const pushTag = `thread-${threadId}`;
-    // The title embeds the author's real name, so client recipients need their
-    // own rendered copy — notifyAndPush stores and pushes both variants.
-    await notifyAndPush(
-      {
-        recipientIds: uniqueRecipients,
-        type: notifyType,
-        title,
-        body: notifBody,
-        linkUrl: url,
-        tag: pushTag,
-        threadKey: threadId,
-        authorId: userId,
-        alias: { projectId, actorUserId: userId },
-      },
-      {
-        title,
-        body: notifBody,
-        url,
-        type: notifyType,
-        icon: notifIcon,
-      },
-    );
-  }
-
-  if (conversationId) {
-    await prisma.conversation.update({
-      where: { id: conversationId },
-      data: { updatedAt: new Date() },
-    });
-  }
-
-  let inboxTargets: string[];
-  if (conversationId) {
-    inboxTargets = participantIds;
-  } else if (projectId && !taskId) {
-    const members = await prisma.projectMember.findMany({
-      where: { projectId },
-      select: { userId: true },
-    });
-    inboxTargets = members.map((m) => m.userId);
-    if (!inboxTargets.includes(userId)) inboxTargets.push(userId);
-  } else {
-    inboxTargets = [...uniqueRecipients, userId];
-  }
-
-  const cursorTargets = [...new Set(inboxTargets)].filter((id) => id !== userId);
-  if (
-    cursorTargets.length > 0 &&
-    (conversationId || (projectId && !taskId))
-  ) {
-    await prisma.chatReadCursor.createMany({
-      data: cursorTargets.map((id) => ({
-        userId: id,
-        threadId,
-        lastReadAt: new Date(messageCreatedAt.getTime() - 1),
-      })),
-      skipDuplicates: true,
-    });
-  }
-
-  await broadcastInboxPreview(inboxTargets, {
-    threadId,
-    projectId,
-    taskId,
-    conversationId,
-    kind: isClientRoom ? "client" : conversationId ? "direct" : "project",
-    authorId: userId,
-    lastAuthor: authorName,
-    lastMessage: preview,
-    lastAt: new Date().toISOString(),
-  });
 }
 
 // ─── Send ────────────────────────────────────────────────────────────────────

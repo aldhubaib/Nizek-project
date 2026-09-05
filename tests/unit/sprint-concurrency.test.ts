@@ -153,15 +153,15 @@ suite("sprint concurrency invariants", () => {
     await pool.query(`DELETE FROM "Sprint" WHERE "projectId" = $1`, [projectId]);
   });
 
-  it("refuses a second planning document for the same sprint", async () => {
+  it("refuses a second document for the same sprint", async () => {
     const sprintId = await makeSprint("doc-race", "NEXT");
 
     const outcomes = await inParallel(async (client) =>
       client.query(
         `INSERT INTO "MeetingNote"
            (id, title, content, date, "noteType", "projectId", "authorId", "sprintId", "updatedAt")
-         VALUES (gen_random_uuid()::text, 'Sprint planning', '<p></p>', now(),
-                 'SPRINT_PLANNING', $1, $2, $3, now())`,
+         VALUES (gen_random_uuid()::text, 'Sprint 1', '<p></p>', now(),
+                 'SPRINT_DOC', $1, $2, $3, now())`,
         [projectId, userId, sprintId],
       ),
     );
@@ -170,31 +170,41 @@ suite("sprint concurrency invariants", () => {
 
     const { rows } = await pool.query(
       `SELECT count(*)::int AS n FROM "MeetingNote"
-        WHERE "sprintId" = $1 AND "noteType" = 'SPRINT_PLANNING'`,
+        WHERE "sprintId" = $1 AND "noteType" = 'SPRINT_DOC'`,
       [sprintId],
     );
     expect(rows[0].n).toBe(1);
   });
 
-  // The index is on (sprintId, noteType), so a sprint keeps both of its
-  // documents. Getting this wrong would make it impossible to end a sprint.
-  it("still allows a review document alongside the planning one", async () => {
+  // The index is on (sprintId, noteType), and a sprint has exactly one type of
+  // document now — so the same index that used to permit the planning/review
+  // pair is what holds the merge in place.
+  it("refuses a second document even under the old review type", async () => {
     const sprintId = await makeSprint("doc-both", "PLANNED");
 
-    for (const noteType of ["SPRINT_PLANNING", "SPRINT_REVIEW"]) {
-      await pool.query(
+    await pool.query(
+      `INSERT INTO "MeetingNote"
+         (id, title, content, date, "noteType", "projectId", "authorId", "sprintId", "updatedAt")
+       VALUES (gen_random_uuid()::text, 'Sprint 2', '<p></p>', now(),
+               'SPRINT_DOC', $1, $2, $3, now())`,
+      [projectId, userId, sprintId],
+    );
+
+    await expect(
+      pool.query(
         `INSERT INTO "MeetingNote"
            (id, title, content, date, "noteType", "projectId", "authorId", "sprintId", "updatedAt")
-         VALUES (gen_random_uuid()::text, $1, '<p></p>', now(), $2::"NoteType", $3, $4, $5, now())`,
-        [noteType, noteType, projectId, userId, sprintId],
-      );
-    }
+         VALUES (gen_random_uuid()::text, 'Sprint 2', '<p></p>', now(),
+                 'SPRINT_DOC', $1, $2, $3, now())`,
+        [projectId, userId, sprintId],
+      ),
+    ).rejects.toThrow();
 
     const { rows } = await pool.query(
       `SELECT count(*)::int AS n FROM "MeetingNote" WHERE "sprintId" = $1`,
       [sprintId],
     );
-    expect(rows[0].n).toBe(2);
+    expect(rows[0].n).toBe(1);
   });
 
   it("serialises two starts of the same project behind one advisory lock", async () => {

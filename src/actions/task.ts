@@ -15,10 +15,10 @@ import {
 import { publish, broadcast, broadcastTaskEvent, taskChannel, projectChannel, userChannel } from "@/lib/centrifugo";
 import { notifyAndPush } from "@/lib/notify";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
-import { isBuiltInTaskFieldQuestion, isQuestionAnswerFilled, isReadinessQuestion, isWaitingOnClientAnswer } from "@/lib/task-readiness";
+import { isQuestionAnswerFilled, isReadinessQuestion, isWaitingOnClientAnswer } from "@/lib/task-readiness";
 import { requireUserOnProject } from "@/lib/project-mentions";
+import { createTaskRecord } from "@/lib/create-task-record";
 import {
-  DEFAULT_TASK_PRIORITY,
   isTaskPriority,
   priorityLabel,
   type TaskPriorityId,
@@ -127,94 +127,20 @@ export async function createTask(data: {
     throw new Error(`Cannot create "${taskType}" tasks under a ${activeContract.contractType.replace(/_/g, " ")} contract`);
   }
 
-  const [maxOrder, maxTaskNumber] = await Promise.all([
-    prisma.task.aggregate({
-      where: { projectId: data.projectId, stage: "BACKLOG", archivedAt: null },
-      _max: { order: true },
-    }),
-    prisma.task.aggregate({
-      where: { projectId: data.projectId },
-      _max: { taskNumber: true },
-    }),
-  ]);
-  const mandatoryQuestions = (await prisma.defaultQuestion.findMany({
-    where: { taskType, mandatory: true },
-    select: { id: true, question: true },
-  })).filter((q) => !isBuiltInTaskFieldQuestion(q.question));
-
-  if (mandatoryQuestions.length > 0) {
-    const answeredMap = new Map(
-      (data.answers ?? []).map((a) => [a.questionId, a.answer])
-    );
-    const unanswered = mandatoryQuestions.filter((q) => {
-      const answer = answeredMap.get(q.id);
-      return !answer || !answer.trim();
-    });
-    if (unanswered.length > 0) {
-      throw new Error(
-        `MANDATORY_QUESTIONS:${JSON.stringify(unanswered.map((q) => q.question))}`
-      );
-    }
-  }
-
-  const priority = isTaskPriority(data.priority)
-    ? data.priority
-    : DEFAULT_TASK_PRIORITY;
-
   if (data.assigneeId) {
     await requireUserOnProject(data.projectId, data.assigneeId);
   }
 
-  const task = await prisma.$transaction(async (tx) => {
-    const created = await tx.task.create({
-      data: {
-        taskNumber: (maxTaskNumber._max.taskNumber ?? 0) + 1,
-        title: data.title,
-        description: data.description,
-        priority,
-        taskType,
-        stage: "BACKLOG",
-        order: (maxOrder._max.order ?? 0) + 1,
-        projectId: data.projectId,
-        createdById: user.id,
-        assigneeId: data.assigneeId ?? null,
-        ...(data.answers?.length && {
-          answers: {
-            create: data.answers
-              .filter((a) => a.answer.trim())
-              .map((a) => ({ questionId: a.questionId, answer: a.answer })),
-          },
-        }),
-      },
-    });
-
-    // Opens the task's history. Without this the first stage it ever sat in has
-    // no entry time, so every later duration is measured from the wrong start.
-    await applyStageChange(tx, {
-      taskId: created.id,
-      fromStage: null,
-      toStage: "BACKLOG",
-      actorId: user.id,
-      source: "TASK_CREATED",
-      assigneeId: created.assigneeId,
-      at: created.createdAt,
-    });
-
-    await tx.taskActivity.create({
-      data: {
-        taskId: created.id,
-        userId: user.id,
-        action: "created",
-        newValue: created.title,
-      },
-    });
-
-    return created;
+  return createTaskRecord({
+    projectId: data.projectId,
+    actorId: user.id,
+    title: data.title,
+    description: data.description,
+    priority: data.priority,
+    taskType,
+    assigneeId: data.assigneeId,
+    answers: data.answers,
   });
-
-  revalidatePath(`/dashboard/projects/${data.projectId}`);
-  broadcastTaskEvent(data.projectId, { type: "task-created", taskId: task.id, userId: user.id });
-  return task;
 }
 
 export async function updateTask(data: {

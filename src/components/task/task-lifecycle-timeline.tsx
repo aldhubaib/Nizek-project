@@ -124,7 +124,7 @@ export function TaskLifecycleTimeline({
 
   const FILTERS: { id: FilterMode; label: string; icon: typeof List; count: number }[] = [
     { id: "all", label: "All", icon: List, count: counts.all },
-    { id: "comments", label: "Comments", icon: MessageSquare, count: counts.comments },
+    { id: "comments", label: "Internal Comments", icon: MessageSquare, count: counts.comments },
     { id: "status", label: "Status", icon: ArrowLeftRight, count: counts.status },
   ];
 
@@ -363,7 +363,7 @@ function CommentRow({ comment }: { comment: TimelineComment }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-s font-semibold text-foreground/90">{comment.user.name ?? "Unknown"}</span>
-          <span className="text-xs text-muted-foreground/50">commented</span>
+          <span className="text-xs text-muted-foreground/50">commented internally</span>
           <span className="text-xs text-muted-foreground/50">· {timeAgo(comment.createdAt)}</span>
         </div>
         <div className="mt-1 rounded-lg border border-border/60 bg-field px-2.5 py-2">

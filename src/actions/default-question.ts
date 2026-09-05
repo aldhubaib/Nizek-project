@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { APP_SETTINGS_ID } from "@/lib/alias-mask";
+import type { TaskType } from "@/generated/prisma/client";
 
 export async function getDefaultQuestions(taskType?: "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN") {
   await requireUser();
@@ -92,4 +94,56 @@ export async function reorderDefaultQuestions(orderedIds: string[]) {
   );
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard/projects");
+}
+
+// ─── Which issue types a client may raise ────────────────────────────────────
+
+/** Read straight off the settings row; empty means clients cannot report. */
+export async function getClientIssueTypes(): Promise<TaskType[]> {
+  await requireUser();
+  const row = await prisma.appSettings.findUnique({
+    where: { id: APP_SETTINGS_ID },
+    select: { clientIssueTypes: true },
+  });
+  return row?.clientIssueTypes ?? [];
+}
+
+/**
+ * Open or close one issue type to clients.
+ *
+ * Opening a type hands clients a write into the team's backlog, so this is
+ * admin-only even though the rest of this file is not: the questions behind a
+ * type are what shape what the client is asked, and both decisions belong to
+ * whoever curates them.
+ */
+export async function setClientIssueTypeEnabled(
+  taskType: TaskType,
+  enabled: boolean,
+): Promise<TaskType[]> {
+  const user = await requireUser();
+  if (user.systemRole !== "ADMIN") {
+    throw new Error("Only an admin can change what clients may report");
+  }
+
+  const current =
+    (
+      await prisma.appSettings.findUnique({
+        where: { id: APP_SETTINGS_ID },
+        select: { clientIssueTypes: true },
+      })
+    )?.clientIssueTypes ?? [];
+
+  const next = enabled
+    ? [...new Set([...current, taskType])]
+    : current.filter((t) => t !== taskType);
+
+  await prisma.appSettings.upsert({
+    where: { id: APP_SETTINGS_ID },
+    create: { id: APP_SETTINGS_ID, clientIssueTypes: next, updatedById: user.id },
+    update: { clientIssueTypes: next, updatedById: user.id },
+  });
+
+  // The client's chat reads this to decide whether New Issue is there at all.
+  revalidatePath("/dashboard/messages", "layout");
+  return next;
 }

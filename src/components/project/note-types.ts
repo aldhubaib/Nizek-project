@@ -17,6 +17,7 @@ export type NoteType =
   | "DECISION"
   | "CLARIFICATION"
   | "DEADLINE"
+  | "SPRINT_DOC"
   | "SPRINT_PLANNING"
   | "SPRINT_REVIEW"
   | "FEATURE"
@@ -33,6 +34,7 @@ export const NOTE_TYPE_CONFIG: Record<
   DECISION: { label: "Decision", color: "text-orange", bg: "bg-background border-orange/30", icon: Gavel },
   CLARIFICATION: { label: "Clarification", color: "text-sky-400", bg: "bg-background border-sky-500/30", icon: MessageCircleQuestion },
   DEADLINE: { label: "Roadmap", color: "text-destructive", bg: "bg-background border-destructive/30", icon: CalendarClock },
+  SPRINT_DOC: { label: "Sprint Document", color: "text-success", bg: "bg-background border-success/30", icon: IterationCcw },
   SPRINT_PLANNING: { label: "Sprint Planning", color: "text-success", bg: "bg-background border-success/30", icon: IterationCcw },
   SPRINT_REVIEW: { label: "Sprint Review", color: "text-orange", bg: "bg-background border-orange/30", icon: ClipboardCheck },
   FEATURE: { label: "Business Case", color: "text-primary", bg: "bg-background border-primary/30", icon: Sparkles },
@@ -47,6 +49,7 @@ export const ALL_NOTE_TYPES: NoteType[] = [
   "DECISION",
   "CLARIFICATION",
   "DEADLINE",
+  "SPRINT_DOC",
   "SPRINT_PLANNING",
   "SPRINT_REVIEW",
   "FEATURE",
@@ -56,9 +59,10 @@ export const ALL_NOTE_TYPES: NoteType[] = [
   "DESIGN",
 ];
 
-// Sprint planning and review stay in NOTE_TYPE_CONFIG / ALL_NOTE_TYPES so
-// existing notes still render. New ones are created from the sprint header,
-// not the general Notes picker.
+// Sprint documents stay in NOTE_TYPE_CONFIG / ALL_NOTE_TYPES so they still
+// render, along with the planning and review types documents carried before
+// the two became one. New ones are created from the sprint header, not the
+// general Notes picker.
 export const NOTES_CREATE_TYPES: NoteType[] = [
   "MEETING_NOTE",
   "DECISION",

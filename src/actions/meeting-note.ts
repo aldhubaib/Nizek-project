@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireProjectMember, requireProjectRole } from "@/lib/auth";
+import { requireProjectMember, requireProjectRole, requireUser } from "@/lib/auth";
 import {
   canSprint,
   getAdminPermissions,
@@ -16,7 +16,13 @@ import type { TaskPriorityId } from "@/lib/task-label";
 import { sendMessage } from "@/actions/messages";
 import { applyStoredAnnotationMarks, plainTextExcerpt, taskMarkTag, wrapFirstPlainText } from "@/lib/html-annotate";
 import { diffNoteParagraphs, encodeContentDiff } from "@/lib/note-content-diff";
-import { encodeNoteActivityBody } from "@/lib/note-activity-payload";
+import {
+  encodeNoteActivityBody,
+  type NoteActivityPayload,
+  SPRINT_TASK_ADDED,
+  SPRINT_TASK_REMOVED,
+} from "@/lib/note-activity-payload";
+import { postNoteActivityToClientRoom } from "@/lib/chat-cards";
 import { ALL_MENTION_TOKEN } from "@/lib/mentions";
 import {
   ROADMAP_NEXT_FULL_ERROR,
@@ -26,14 +32,58 @@ import {
   type RoadmapStatus,
 } from "@/lib/roadmap-status";
 import { addWorkingDays, parseWorkingDays, startOfLocalDay, parseDateInputValue, toDateInputValue } from "@/lib/working-days";
-import { sprintDocTitle, sprintIdFromPlanningHtml } from "@/lib/sprint-planning-doc";
+import {
+  sprintIdFromPlanningHtml,
+  stripPlanningTaskAssignees,
+} from "@/lib/sprint-planning-doc";
+import { isUnstartedSprint } from "@/lib/sprint-status";
+import { isClientUser } from "@/lib/client-chat";
+
+type SprintDocPermissions = ReturnType<typeof getAdminPermissions>;
+
+/**
+ * Who may write to a sprint document, which depends on where the sprint is.
+ *
+ * The plan and the review used to be separate notes with a permission each:
+ * planning belonged to whoever plans sprints, the review to whoever ends them.
+ * One document cannot carry two rules, so the rule follows the sprint instead
+ * of the file — you may write the part that is still being written.
+ */
+function sprintDocEditError(
+  perms: SprintDocPermissions,
+  status: string | null | undefined,
+): string | null {
+  if (perms.isAdmin) return null;
+  if (!status || isUnstartedSprint(status)) {
+    return canSprint(perms, "createPlanning")
+      ? null
+      : "You do not have permission to edit sprint planning";
+  }
+  if (status === "ACTIVE") {
+    return canSprint(perms, "end")
+      ? null
+      : "You do not have permission to edit the sprint review";
+  }
+  return "This sprint document is locked once the sprint closes. Only an admin can edit it.";
+}
+
+async function assertCanWriteSprintDoc(
+  perms: SprintDocPermissions,
+  sprintId: string | null | undefined,
+) {
+  const sprint = sprintId
+    ? await prisma.sprint.findUnique({ where: { id: sprintId }, select: { status: true } })
+    : null;
+  const error = sprintDocEditError(perms, sprint?.status);
+  if (error) throw new Error(error);
+}
 
 export async function createMeetingNote(data: {
   projectId: string;
   title: string;
   content: string;
   date: string;
-  noteType?: "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "SPRINT_PLANNING" | "SPRINT_REVIEW" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
+  noteType?: "MEETING_NOTE" | "DECISION" | "CLARIFICATION" | "DEADLINE" | "SPRINT_DOC" | "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
   dueDate?: string;
   taskId?: string;
   sprintId?: string;
@@ -43,17 +93,12 @@ export async function createMeetingNote(data: {
   const { user, member } = await requireProjectMember(data.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot create notes");
 
-  if (data.noteType === "SPRINT_PLANNING" || data.noteType === "SPRINT_REVIEW") {
+  if (data.noteType === "SPRINT_DOC") {
     const perms =
       user.systemRole === "ADMIN"
         ? getAdminPermissions()
         : getPermissionsFromRole(member.projectRole);
-    if (data.noteType === "SPRINT_PLANNING" && !canSprint(perms, "createPlanning")) {
-      throw new Error("You do not have permission to create sprint planning");
-    }
-    if (data.noteType === "SPRINT_REVIEW" && !canSprint(perms, "end")) {
-      throw new Error("You do not have permission to create a sprint review");
-    }
+    await assertCanWriteSprintDoc(perms, data.sprintId);
   }
 
   const workingDays =
@@ -120,8 +165,10 @@ export async function createMeetingNote(data: {
   }
 
   revalidatePath(`/dashboard/projects/${data.projectId}`);
-  if (note.noteType !== "SPRINT_PLANNING" && note.noteType !== "SPRINT_REVIEW") {
-    await postNoteActivityToChat({
+  // Sprint documents are announced when the sprint starts or closes, not when
+  // the row is first written — see announceSprintNoteToChat.
+  if (note.noteType !== "SPRINT_DOC") {
+    const activity = await postNoteActivityToChat({
       projectId: data.projectId,
       noteId: note.id,
       noteTitle: note.title,
@@ -129,6 +176,15 @@ export async function createMeetingNote(data: {
       action: "created",
       excerpt: plainTextExcerpt(note.content),
     });
+
+    // The client gets their own copy of the card, in their own room, opening a
+    // read-only body. Never let the chat delivery take the note down with it —
+    // the note is written either way.
+    try {
+      await postNoteActivityToClientRoom({ authorId: user.id, payload: activity });
+    } catch (err) {
+      console.error("[note client chat]", err);
+    }
   }
   return note;
 }
@@ -285,34 +341,15 @@ export async function updateMeetingNote(data: {
   const { user, member } = await requireProjectMember(note.projectId);
   if (member.role === "CLIENT") throw new Error("Clients cannot edit notes");
 
-  if (note.noteType === "SPRINT_PLANNING" || note.noteType === "SPRINT_REVIEW") {
+  if (note.noteType === "SPRINT_DOC") {
     const perms =
       user.systemRole === "ADMIN"
         ? getAdminPermissions()
         : getPermissionsFromRole(member.projectRole);
-    if (note.noteType === "SPRINT_PLANNING" && !canSprint(perms, "createPlanning")) {
-      throw new Error("You do not have permission to edit sprint planning");
-    }
-    if (note.noteType === "SPRINT_REVIEW" && !canSprint(perms, "end")) {
-      throw new Error("You do not have permission to edit a sprint review");
-    }
-  }
-
-  if (note.noteType === "SPRINT_PLANNING") {
-    const sprintId = sprintIdFromPlanningHtml(data.content ?? note.content);
-    if (sprintId) {
-      const sprint = await prisma.sprint.findUnique({
-        where: { id: sprintId },
-        select: { status: true },
-      });
-      const perms =
-        user.systemRole === "ADMIN"
-          ? getAdminPermissions()
-          : getPermissionsFromRole(member.projectRole);
-      if (sprint && sprint.status !== "PLANNED" && sprint.status !== "NEXT" && !perms.isAdmin) {
-        throw new Error("Sprint planning is locked after the sprint starts. Only an admin can edit it.");
-      }
-    }
+    await assertCanWriteSprintDoc(
+      perms,
+      note.sprintId ?? sprintIdFromPlanningHtml(data.content ?? note.content),
+    );
   }
 
   const historyEntries: { field: string; oldValue: string | null; newValue: string | null; noteId: string; userId: string }[] = [];
@@ -349,17 +386,6 @@ export async function updateMeetingNote(data: {
         }),
       },
     });
-    if (
-      data.title &&
-      (note.noteType === "SPRINT_PLANNING" || note.noteType === "SPRINT_REVIEW")
-    ) {
-      await syncSprintDocPeerTitle(
-        note.projectId,
-        data.content ?? note.content,
-        note.noteType,
-        data.title,
-      );
-    }
     revalidatePath(`/dashboard/projects/${note.projectId}`);
     return updated;
   }
@@ -465,21 +491,13 @@ export async function updateMeetingNote(data: {
       : []),
   ]);
 
-  if (
-    data.title &&
-    data.title !== note.title &&
-    (note.noteType === "SPRINT_PLANNING" || note.noteType === "SPRINT_REVIEW")
-  ) {
-    await syncSprintDocPeerTitle(
-      note.projectId,
-      data.content ?? note.content,
-      note.noteType,
-      data.title,
-    );
-  }
-
   revalidatePath(`/dashboard/projects/${note.projectId}`);
-  if (historyEntries.length > 0) {
+  // A sprint document is edited all the way through the sprint — every reason
+  // typed and every autosave behind it is an update — and it announces itself
+  // at the two moments that matter, when the sprint opens and when it closes.
+  // Announcing the edits as well buried those two in a stream of identical
+  // cards saying the content changed.
+  if (historyEntries.length > 0 && note.noteType !== "SPRINT_DOC") {
     await postNoteActivityToChat({
       projectId: note.projectId,
       noteId: note.id,
@@ -610,45 +628,22 @@ export async function getMeetingNote(noteId: string) {
   return next;
 }
 
-async function getSprintTypedNote(
-  projectId: string,
-  sprintId: string,
-  noteType: "SPRINT_PLANNING" | "SPRINT_REVIEW",
-) {
-  await requireProjectMember(projectId);
+/** The sprint's one document: its plan and, once it starts, its outcome. */
+export async function getSprintDocNote(projectId: string, sprintId: string) {
+  const { user } = await requireProjectMember(projectId);
   // One indexed row, guaranteed unique by MeetingNote_one_doc_per_sprint_type.
   // This used to load every sprint note's full HTML body and substring-match it,
   // which was both slow and undefined when a sprint had two documents.
-  return prisma.meetingNote.findFirst({
-    where: { projectId, sprintId, noteType },
+  const note = await prisma.meetingNote.findFirst({
+    where: { projectId, sprintId, noteType: "SPRINT_DOC" },
     select: { id: true, title: true, content: true },
   });
-}
+  if (!note || !isClientUser(user)) return note;
 
-async function syncSprintDocPeerTitle(
-  projectId: string,
-  html: string,
-  fromType: "SPRINT_PLANNING" | "SPRINT_REVIEW",
-  title: string,
-) {
-  const sprintId = sprintIdFromPlanningHtml(html);
-  if (!sprintId) return;
-  const peerType = fromType === "SPRINT_PLANNING" ? "SPRINT_REVIEW" : "SPRINT_PLANNING";
-  const peerTitle = sprintDocTitle(title, peerType === "SPRINT_REVIEW" ? "review" : "planning");
-  const match = await prisma.meetingNote.findFirst({
-    where: { projectId, sprintId, noteType: peerType },
-    select: { id: true, title: true },
-  });
-  if (match && match.title !== peerTitle) {
-    await prisma.meetingNote.update({
-      where: { id: match.id },
-      data: { title: peerTitle },
-    });
-  }
-}
-
-export async function getSprintPlanningNote(projectId: string, sprintId: string) {
-  return getSprintTypedNote(projectId, sprintId, "SPRINT_PLANNING");
+  // The client reads this document too, and the saved copy has real staff names
+  // baked into each task node. The viewer hides the avatars, but the names would
+  // still be in the response — so they come out here, before it is sent.
+  return { ...note, content: stripPlanningTaskAssignees(note.content) };
 }
 
 /**
@@ -665,12 +660,11 @@ export async function getSprintPlanningNote(projectId: string, sprintId: string)
 export async function getOrCreateSprintDocNote(input: {
   projectId: string;
   sprintId: string;
-  noteType: "SPRINT_PLANNING" | "SPRINT_REVIEW";
   title: string;
   content: string;
   date: string;
 }): Promise<{ id: string; title: string; content: string; created: boolean }> {
-  const existing = await getSprintTypedNote(input.projectId, input.sprintId, input.noteType);
+  const existing = await getSprintDocNote(input.projectId, input.sprintId);
   if (existing) return { ...existing, created: false };
 
   try {
@@ -680,7 +674,7 @@ export async function getOrCreateSprintDocNote(input: {
       title: input.title,
       content: input.content,
       date: input.date,
-      noteType: input.noteType,
+      noteType: "SPRINT_DOC",
     });
     return {
       id: created.id,
@@ -693,14 +687,10 @@ export async function getOrCreateSprintDocNote(input: {
       typeof err === "object" && err && "code" in err ? String((err as { code: string }).code) : "";
     if (code !== "P2002") throw err;
 
-    const winner = await getSprintTypedNote(input.projectId, input.sprintId, input.noteType);
+    const winner = await getSprintDocNote(input.projectId, input.sprintId);
     if (!winner) throw err;
     return { ...winner, created: false };
   }
-}
-
-export async function getSprintReviewNote(projectId: string, sprintId: string) {
-  return getSprintTypedNote(projectId, sprintId, "SPRINT_REVIEW");
 }
 
 /** Note plus the permissions needed to open it as a full workspace from chat. */
@@ -787,7 +777,9 @@ export async function getTaskNotes(taskId: string) {
   });
 }
 
-const TASK_NOTE_EXCLUDED: Array<"SPRINT_PLANNING" | "SPRINT_REVIEW" | "DEADLINE"> = [
+const TASK_NOTE_EXCLUDED: Array<"SPRINT_DOC" | "SPRINT_PLANNING" | "SPRINT_REVIEW" | "DEADLINE"> = [
+  "SPRINT_DOC",
+  // Legacy types, on sprint documents left unlinked by the merge.
   "SPRINT_PLANNING",
   "SPRINT_REVIEW",
   "DEADLINE",
@@ -1049,13 +1041,15 @@ async function postNoteActivityToChat(payload: {
   action: "created" | "updated" | "published";
   fields?: string[];
   excerpt?: string;
+  sprintId?: string;
+  scopeTask?: { code: string; title: string };
   mentionAll?: boolean;
-}) {
+}): Promise<NoteActivityPayload> {
   const project = await prisma.project.findUnique({
     where: { id: payload.projectId },
     select: { name: true },
   });
-  const encoded = encodeNoteActivityBody({
+  const activity: NoteActivityPayload = {
     projectId: payload.projectId,
     noteId: payload.noteId,
     projectName: project?.name,
@@ -1064,7 +1058,10 @@ async function postNoteActivityToChat(payload: {
     action: payload.action,
     fields: payload.fields,
     excerpt: payload.excerpt,
-  });
+    sprintId: payload.sprintId,
+    scopeTask: payload.scopeTask,
+  };
+  const encoded = encodeNoteActivityBody(activity);
   const sent = await sendMessage({
     projectId: payload.projectId,
     body: payload.mentionAll ? `${encoded}\n${ALL_MENTION_TOKEN}` : encoded,
@@ -1073,22 +1070,76 @@ async function postNoteActivityToChat(payload: {
   if (!sent.ok) {
     console.error("[note activity chat]", sent.error);
   }
+  return activity;
 }
 
-export async function announceSprintNoteToChat(options: {
+/**
+ * Work moving in or out of a sprint that has already started.
+ *
+ * Announced for the same reason the reason is demanded at the time: the team
+ * committed to a scope, and changing it afterwards is a decision the project
+ * and the client should both witness, rather than something they find in the
+ * sprint document weeks later. The card opens that document, where the change
+ * is recorded in full.
+ */
+export async function announceSprintScopeChangeToChat(options: {
   projectId: string;
   sprintId: string;
-  noteType: "SPRINT_PLANNING" | "SPRINT_REVIEW";
+  direction: "added" | "removed";
+  task: { code: string; title: string };
+  reason: string;
 }) {
-  const note = await getSprintTypedNote(options.projectId, options.sprintId, options.noteType);
+  const note = await getSprintDocNote(options.projectId, options.sprintId);
   if (!note) return;
-  await postNoteActivityToChat({
+  const activity = await postNoteActivityToChat({
     projectId: options.projectId,
     noteId: note.id,
     noteTitle: note.title,
-    noteType: options.noteType,
+    noteType: options.direction === "added" ? SPRINT_TASK_ADDED : SPRINT_TASK_REMOVED,
     action: "published",
-    excerpt: plainTextExcerpt(note.content),
+    excerpt: options.reason,
+    sprintId: options.sprintId,
+    scopeTask: options.task,
     mentionAll: true,
   });
+
+  try {
+    const user = await requireUser();
+    await postNoteActivityToClientRoom({ authorId: user.id, payload: activity });
+  } catch (err) {
+    console.error("[sprint scope client chat]", err);
+  }
+}
+
+/**
+ * A sprint opening and a sprint closing are two moments worth announcing, even
+ * though they now share one document. `card` picks which of the two the message
+ * reads as; both link to the same note.
+ */
+export async function announceSprintNoteToChat(options: {
+  projectId: string;
+  sprintId: string;
+  card: "SPRINT_PLANNING" | "SPRINT_REVIEW";
+}) {
+  const note = await getSprintDocNote(options.projectId, options.sprintId);
+  if (!note) return;
+  const activity = await postNoteActivityToChat({
+    projectId: options.projectId,
+    noteId: note.id,
+    noteTitle: note.title,
+    noteType: options.card,
+    action: "published",
+    sprintId: options.sprintId,
+    mentionAll: true,
+  });
+
+  // A sprint opening or closing is the client's news too, and their room is a
+  // separate conversation — the card has to be written into it as well. Never
+  // let this take the sprint transition down with it.
+  try {
+    const user = await requireUser();
+    await postNoteActivityToClientRoom({ authorId: user.id, payload: activity });
+  } catch (err) {
+    console.error("[sprint note client chat]", err);
+  }
 }

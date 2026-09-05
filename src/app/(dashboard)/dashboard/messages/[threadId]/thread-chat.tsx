@@ -32,6 +32,7 @@ import {
   ChevronUp,
   ChevronDown,
   LayoutDashboard,
+  CircleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -55,6 +56,7 @@ import {
 } from "@/components/messages/thread-project-overlay";
 import { cn } from "@/lib/utils";
 import { ClientChatPeopleManager } from "@/components/messages/client-chat-people";
+import { ClientIssueSlideOver } from "@/components/messages/client-issue-slide-over";
 import {
   toggleReaction,
   deleteMessage as deleteMessageAction,
@@ -333,6 +335,7 @@ export function ThreadChat({
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [agreementOpen, setAgreementOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
+  const [issueOpen, setIssueOpen] = useState(false);
   const [importantList, setImportantList] = useState<ImportantMessageDTO[]>([]);
   const [importantLoading, setImportantLoading] = useState(false);
   const pendingFocusRef = useRef<string | null>(focusMessageId ?? null);
@@ -1676,10 +1679,16 @@ export function ThreadChat({
               </DropdownMenuItem>
             ) : null}
             {clientUser && isClientRoom && target.projectId ? (
-              <DropdownMenuItem onClick={() => openThreadPanel("project")}>
-                <LayoutDashboard className="h-4 w-4" />
-                <span className="flex-1">My project</span>
-              </DropdownMenuItem>
+              <>
+                <DropdownMenuItem onClick={() => openThreadPanel("project")}>
+                  <LayoutDashboard className="h-4 w-4" />
+                  <span className="flex-1">My project</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIssueOpen(true)}>
+                  <CircleAlert className="h-4 w-4" />
+                  <span className="flex-1">New issue</span>
+                </DropdownMenuItem>
+              </>
             ) : null}
             {threadKey ? (
               <>
@@ -1809,6 +1818,7 @@ export function ThreadChat({
                   searchQuery={sq || undefined}
                   searchCurrent={searchCursorId === m.id}
                   projectName={projectName}
+                  isClientViewer={clientUser}
                 />
                 </Fragment>
               );
@@ -2442,6 +2452,13 @@ export function ThreadChat({
             />
           </div>
         </NoteSlideOver>
+      )}
+
+      {issueOpen && clientUser && isClientRoom && target.projectId && (
+        <ClientIssueSlideOver
+          projectId={target.projectId}
+          onClose={() => setIssueOpen(false)}
+        />
       )}
 
       <CreateTaskFromMessageDialog

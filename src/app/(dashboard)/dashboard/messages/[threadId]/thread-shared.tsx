@@ -11,6 +11,7 @@ import type { DeadlineReminderPayload } from "@/lib/deadline-reminder-payload";
 import type { NoteCommentPayload } from "@/lib/note-comment-payload";
 import type { TaskCommentPayload } from "@/lib/task-comment-payload";
 import type { NoteActivityPayload } from "@/lib/note-activity-payload";
+import type { ClientIssuePayload } from "@/lib/client-issue-payload";
 import type { ProofBypassPayload } from "@/lib/proof-bypass-payload";
 
 export const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
@@ -36,6 +37,7 @@ export type ChatMessage = {
   noteComment?: NoteCommentPayload | null;
   taskComment?: TaskCommentPayload | null;
   noteActivity?: NoteActivityPayload | null;
+  clientIssue?: ClientIssuePayload | null;
   proofBypass?: ProofBypassPayload | null;
   important?: boolean;
 };

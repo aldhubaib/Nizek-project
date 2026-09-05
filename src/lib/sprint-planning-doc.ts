@@ -4,12 +4,22 @@ export type SprintPlanningInfo = {
   status?: string;
   documentDate: string;
   documentDateIso: string;
+  /**
+   * When the sprint was reviewed, as opposed to when it was planned.
+   *
+   * The plan and the review used to be separate documents with a date each.
+   * They are one document now, so it carries both dates rather than losing the
+   * one it was not opened with.
+   */
+  reviewDate?: string;
+  reviewDateIso?: string;
   startDate: string;
   endDate: string;
   startIso: string;
   endIso: string;
   workingDays: number | string;
   locked?: boolean;
+  /** Legacy, on documents written before the plan and review became one. */
   variant?: "planning" | "review";
 };
 
@@ -27,15 +37,12 @@ export function sprintPlanningIsLocked(status: string | undefined, isAdmin: bool
   return Boolean(status) && status !== "PLANNED" && status !== "NEXT" && !isAdmin;
 }
 
-/** Shared stem of a sprint planning/review document title. */
+/**
+ * A sprint document's name without the kind it used to be suffixed with, back
+ * when a sprint had a planning document and a review document to tell apart.
+ */
 export function stripSprintDocKind(title: string): string {
   return title.replace(/\s+(planning|review)\s*$/i, "").trim();
-}
-
-/** Planning title with the kind swapped, e.g. "Sprint 16 planning" → "Sprint 16 review". */
-export function sprintDocTitle(name: string, kind: "planning" | "review"): string {
-  const stem = stripSprintDocKind(name) || name.trim();
-  return stem ? `${stem} ${kind}` : kind;
 }
 
 export function planningDateIso(value: Date | string): string {
@@ -64,12 +71,16 @@ export function normalizeSprintPlanningInfo(
   const endIso = raw.endIso || parsePlanningDateInput(String(raw.endDate ?? ""));
   const documentDateIso =
     raw.documentDateIso || parsePlanningDateInput(String(raw.documentDate ?? ""));
+  const reviewDateIso =
+    raw.reviewDateIso || parsePlanningDateInput(String(raw.reviewDate ?? ""));
   return {
     sprintId: raw.sprintId ?? "",
     sprintName: raw.sprintName ?? "",
     status: raw.status ?? "",
     documentDate: raw.documentDate ?? "",
     documentDateIso,
+    reviewDate: raw.reviewDate ?? "",
+    reviewDateIso,
     startDate: raw.startDate ?? "",
     endDate: raw.endDate ?? "",
     startIso,
@@ -80,7 +91,7 @@ export function normalizeSprintPlanningInfo(
   };
 }
 
-function planningInfoFromHtml(html: string): SprintPlanningInfo | null {
+export function planningInfoFromHtml(html: string): SprintPlanningInfo | null {
   const match = html.match(/data-info="([^"]*)"/);
   if (!match) return null;
   try {
@@ -93,6 +104,20 @@ function planningInfoFromHtml(html: string): SprintPlanningInfo | null {
   } catch {
     return null;
   }
+}
+
+/** Rewrite the sprint information node's data, leaving the rest of the document. */
+export function withPlanningInfo(
+  html: string,
+  patch: Partial<SprintPlanningInfo>,
+): string {
+  const current = planningInfoFromHtml(html);
+  if (!current) return html;
+  const next = { ...current, ...patch };
+  return html.replace(
+    /\sdata-info="[^"]*"/i,
+    ` data-info="${escapeHtml(JSON.stringify(next))}"`,
+  );
 }
 
 export function documentDateIsoFromPlanningHtml(html: string): string | null {
@@ -108,6 +133,35 @@ export type SprintPlanningQa = {
   answer: string;
 };
 
+/**
+ * The proof that carried a task through internal review, shown on its card in
+ * the sprint document.
+ *
+ * The team already records this the moment work is submitted, so the document
+ * reports it rather than asking anybody to describe the same work twice. Dates
+ * are ISO strings because this crosses into the editor's node options, which
+ * are serialised.
+ */
+export type SprintTaskProof = {
+  id: string;
+  capturedAtIso: string;
+  /** Dated with the proof, not the upload: they are the same submission. */
+  videos: {
+    id: string;
+    filename: string;
+    url: string;
+    fileSize: number | null;
+    createdAt: string;
+  }[];
+  /**
+   * Set when the proof requirement was waived instead of met, which leaves a
+   * proof with no videos in it. A card that showed nothing here would read as
+   * though no proof was ever asked for.
+   */
+  bypassedByName?: string | null;
+  bypassedAtIso?: string | null;
+};
+
 export type SprintPlanningTask = {
   id: string;
   code: string;
@@ -120,6 +174,8 @@ export type SprintPlanningTask = {
   assignee: { id?: string; name: string | null; imageUrl: string | null } | null;
   questions: SprintPlanningQa[];
   unplanned?: boolean;
+  /** Why it was pulled into a sprint already running. Only set when unplanned. */
+  unplannedReason?: string | null;
   /** From SprintTaskPlan, not the document. The server is the authority on both. */
   decision?: string;
   risk?: string;
@@ -167,12 +223,22 @@ export function summarizeSprintTasks(
   };
 }
 
-function escapeHtml(value: string) {
+export function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** The inverse of escapeHtml, for reading a value back out of an attribute. */
+export function unescapeHtml(value: string) {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }
 
 export function formatPlanningAnswer(raw: string) {
@@ -240,6 +306,38 @@ export function overlayPlanningTaskAssignees(
   });
 }
 
+/**
+ * Null the assignee on every sprint-task node, leaving the rest of the document
+ * alone.
+ *
+ * A saved sprint document carries whoever was on each task at the time, baked
+ * into the node's JSON. Clients are not allowed to see real staff names — that
+ * is the whole point of the alias mechanism — and hiding the avatar in the UI
+ * does nothing about the name sitting in the HTML the browser was sent. This
+ * runs before the document leaves the server.
+ *
+ * Deliberately not `overlayPlanningTaskAssignees(html, [])`: that treats an
+ * absent task as departed and wipes its estimate too, and the client is
+ * supposed to see estimates.
+ */
+export function stripPlanningTaskAssignees(html: string): string {
+  return html.replace(SPRINT_TASK_TAG_RE, (tag) => {
+    const taskMatch = tag.match(/\sdata-task="([^"]*)"/i);
+    if (!taskMatch) return tag;
+    try {
+      const task = JSON.parse(unescapeAttr(taskMatch[1])) as SprintPlanningTask;
+      if (!task.assignee) return tag;
+      const next = { ...task, assignee: null };
+      return tag.replace(
+        /\sdata-task="[^"]*"/i,
+        ` data-task="${escapeHtml(JSON.stringify(next))}"`,
+      );
+    } catch {
+      return tag;
+    }
+  });
+}
+
 const EMPTY_SPRINT_TASKS_HTML = `<p><em>No tasks in this sprint yet.</em></p>`;
 const SPRINT_TASK_BLOCK_RE = /<div\b[^>]*data-type="sprint-task"[^>]*>[\s\S]*?<\/div>/gi;
 /** Opening tag only. Safe as `[^>]*` because every attribute value is escaped. */
@@ -266,6 +364,47 @@ export function planningTaskIdsFromHtml(html: string): string[] {
     if (id) ids.push(id);
   }
   return ids;
+}
+
+/**
+ * The tasks a planning document committed to, read back out of its own nodes.
+ *
+ * A task dropped from the sprint after it started is gone from the database's
+ * idea of the sprint, so the document is the only place left that remembers it
+ * was ever promised. That is what makes this worth parsing rather than querying.
+ */
+export function planningTasksFromHtml(html: string): SprintPlanningTask[] {
+  const byId = new Map<string, SprintPlanningTask>();
+  for (const tag of html.match(SPRINT_TASK_TAG_RE) ?? []) {
+    const taskMatch = tag.match(/\sdata-task="([^"]*)"/i);
+    if (!taskMatch) continue;
+    try {
+      const task = JSON.parse(unescapeAttr(taskMatch[1])) as SprintPlanningTask;
+      // A duplicated block is one promise, not two.
+      if (task?.id && !byId.has(task.id)) byId.set(task.id, task);
+    } catch {
+      /* Unreadable node: skip it rather than report a phantom change. */
+    }
+  }
+  return [...byId.values()];
+}
+
+/**
+ * Remove the whole "List of Sprint Items" section: heading, blurb and rows.
+ *
+ * Used when the sprint starts and the outcome takes over listing the tasks.
+ * Anything else somebody typed into the plan is left where it is.
+ */
+export function stripSprintItemList(html: string): string {
+  return html
+    .replace(
+      // Attributes allowed: the heading has been through the editor, which does
+      // not always hand back the tag exactly as it was written.
+      /<h2[^>]*>\s*List of Sprint Items\s*<\/h2>\s*(?:<p[^>]*>[\s\S]*?<\/p>)?/i,
+      "",
+    )
+    .replace(SPRINT_TASK_BLOCK_RE, "")
+    .replace(EMPTY_SPRINT_TASKS_HTML, "");
 }
 
 /** Drop the blocks in `html` whose task is no longer in the sprint. */
@@ -339,14 +478,19 @@ export function syncPlanningDocTasks(html: string, tasks: SprintPlanningTask[]):
 export function sprintTaskNodeHtml(
   task: SprintPlanningTask,
   options?: {
-    variant?: "planning" | "completed" | "incomplete";
+    variant?: "planning" | "completed" | "incomplete" | "removed";
     showQuestions?: boolean;
     incompleteReason?: string;
+    description?: string;
+    descriptionImages?: string[];
+    movedTo?: string | null;
   },
 ): string {
   const variant = options?.variant ?? "planning";
   const showQuestions = options?.showQuestions ?? true;
   const reason = options?.incompleteReason ?? "";
+  const description = options?.description ?? "";
+  const images = options?.descriptionImages ?? [];
   // Decision and Risk ride in their own attributes, so they are dropped from the
   // embedded task JSON rather than stored twice in the same node.
   const embedded = { ...task };
@@ -358,7 +502,18 @@ export function sprintTaskNodeHtml(
     `data-task="${escapeHtml(JSON.stringify(embedded))}"`,
     showQuestions ? `data-show-questions="true"` : "",
     variant !== "planning" ? `data-variant="${variant}"` : "",
-    variant === "incomplete" ? `data-incomplete-reason="${escapeHtml(reason)}"` : "",
+    variant === "incomplete" || variant === "removed"
+      ? `data-incomplete-reason="${escapeHtml(reason)}"`
+      : "",
+    variant === "removed" && options?.movedTo
+      ? `data-moved-to="${escapeHtml(options.movedTo)}"`
+      : "",
+    variant === "completed" && description
+      ? `data-description="${escapeHtml(description)}"`
+      : "",
+    variant === "completed" && images.length > 0
+      ? `data-description-images="${escapeHtml(JSON.stringify(images))}"`
+      : "",
     `data-decision="${escapeHtml(task.decision ?? "")}"`,
     `data-risk="${escapeHtml(task.risk ?? "")}"`,
   ]
@@ -368,14 +523,7 @@ export function sprintTaskNodeHtml(
   return `<div ${attrs}><br></div>`;
 }
 
-function unescapeAttr(value: string) {
-  return value
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
-}
+const unescapeAttr = unescapeHtml;
 
 function attrMissing(tag: string, name: string): boolean {
   const match = tag.match(new RegExp(`\\sdata-${name}="([^"]*)"`, "i"));

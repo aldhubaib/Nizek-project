@@ -6,6 +6,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
 import type { HocuspocusProvider } from "@hocuspocus/provider";
+import type { Node as PMNode } from "@tiptap/pm/model";
 import type * as Y from "yjs";
 import {
   useState,
@@ -49,18 +50,101 @@ import { getProjectMembersForMention } from "@/actions/comment";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { SprintInfoBlock } from "@/components/tiptap/sprint-info-block";
+import { SprintOutcomeBlock } from "@/components/tiptap/sprint-outcome-block";
 import { SprintTaskBlock } from "@/components/tiptap/sprint-task-block";
-import { type SprintPlanningTask } from "@/lib/sprint-planning-doc";
-import { isUnstartedSprint } from "@/lib/sprint-status";
+import {
+  type SprintPlanningTask,
+  type SprintTaskProof,
+} from "@/lib/sprint-planning-doc";
+import { isClosedSprint, isUnstartedSprint } from "@/lib/sprint-status";
+import {
+  ADDED_BLURB,
+  ADDED_HEADING,
+  COMMITTED_BLURB,
+  COMMITTED_HEADING,
+  COMPLETED_SUBHEADING,
+  INCOMPLETE_SUBHEADING,
+  OUTCOME_HEADINGS,
+  OUTCOME_PROSE_PREFIXES,
+  REMOVED_HEADING,
+  isAddedTask,
+} from "@/lib/sprint-doc";
 
-function planningDocIsReview(editor: Editor): boolean {
-  let review = false;
+/**
+ * Whether the document has grown its outcome half, which only happens once the
+ * sprint has started — and once it has, the task list above is a record rather
+ * than a mirror.
+ */
+function sprintDocHasOutcome(editor: Editor): boolean {
+  let found = false;
   editor.state.doc.descendants((node) => {
-    if (node.type.name !== "sprintInfo") return;
-    const variant = (node.attrs.info as { variant?: string } | null)?.variant;
-    if (variant === "review") review = true;
+    if (node.type.name === "sprintOutcome") found = true;
   });
-  return review;
+  return found;
+}
+
+/**
+ * Take the plan's item list away once the outcome lists the same tasks.
+ *
+ * The HTML the editor is handed is only a seed for a collaborative document, so
+ * folding the saved copy is not enough — the open document has to be folded
+ * too, and it is where documents written before the two halves were merged get
+ * fixed. What the sprint committed to moves onto the outcome node, because a
+ * task dropped from the sprint afterwards is gone from the sprint and those
+ * rows were the last record that it had ever been promised.
+ */
+function foldSprintItemListIntoOutcome(editor: Editor) {
+  const blocks: { node: PMNode; from: number; to: number }[] = [];
+  let pos = 0;
+  editor.state.doc.forEach((node) => {
+    blocks.push({ node, from: pos, to: pos + node.nodeSize });
+    pos += node.nodeSize;
+  });
+
+  const outcomeAt = blocks.findIndex((b) => b.node.type.name === "sprintOutcome");
+  if (outcomeAt < 0) return;
+  const outcome = blocks[outcomeAt];
+
+  const committed: SprintPlanningTask[] = [];
+  const doomed = new Map<number, { from: number; to: number }>();
+  blocks.slice(0, outcomeAt).forEach((block, i, plan) => {
+    const name = block.node.type.name;
+    if (name === "sprintTask") {
+      const task = block.node.attrs.task as SprintPlanningTask | null;
+      if (task?.id && !committed.some((t) => t.id === task.id)) {
+        committed.push({
+          ...task,
+          decision: String(block.node.attrs.decision ?? ""),
+          risk: String(block.node.attrs.risk ?? ""),
+        });
+      }
+      doomed.set(block.from, block);
+      return;
+    }
+    if (name === "heading" && block.node.textContent.trim() === "List of Sprint Items") {
+      doomed.set(block.from, block);
+      // The blurb under the heading, which has nothing left to introduce.
+      const next = plan[i + 1];
+      if (next?.node.type.name === "paragraph") doomed.set(next.from, next);
+      return;
+    }
+    if (name === "paragraph" && block.node.textContent.includes("No tasks in this sprint yet.")) {
+      doomed.set(block.from, block);
+    }
+  });
+
+  const needsCommitted = !outcome.node.attrs.committed && committed.length > 0;
+  if (doomed.size === 0 && !needsCommitted) return;
+
+  let tr = editor.state.tr;
+  if (needsCommitted) {
+    tr = tr.setNodeMarkup(outcome.from, undefined, { ...outcome.node.attrs, committed });
+  }
+  // Back to front, so each deletion leaves the earlier positions untouched.
+  for (const range of [...doomed.values()].sort((a, b) => b.from - a.from)) {
+    tr = tr.delete(range.from, range.to);
+  }
+  if (tr.docChanged) editor.view.dispatch(tr);
 }
 
 /**
@@ -72,7 +156,7 @@ function planningDocIsReview(editor: Editor): boolean {
  * with a complaint about work the sprint no longer contained.
  */
 function syncSprintTasksIntoEditor(editor: Editor, tasks: SprintPlanningTask[]) {
-  if (planningDocIsReview(editor)) return;
+  if (sprintDocHasOutcome(editor)) return;
   const type = editor.schema.nodes.sprintTask;
   if (!type) return;
 
@@ -147,6 +231,166 @@ function syncSprintTasksIntoEditor(editor: Editor, tasks: SprintPlanningTask[]) 
   if (tr.docChanged) editor.view.dispatch(tr);
 }
 
+type OutcomeItem =
+  | { kind: "h2" | "h3"; text: string }
+  | { kind: "p"; text: string }
+  | { kind: "card"; task: SprintPlanningTask; done: boolean };
+
+/** The card ids and heading texts, in order — enough to tell two shapes apart. */
+function outcomeShape(items: OutcomeItem[]): string {
+  return items
+    .map((item) => (item.kind === "card" ? `card:${item.task.id}` : `${item.kind}:${item.text}`))
+    .join("|");
+}
+
+/**
+ * The outcome the sprint says it should have: work grouped by whether it was
+ * promised, then by whether it landed, with empty groups left out entirely.
+ */
+function desiredOutcome(
+  tasks: SprintPlanningTask[],
+  committed: SprintPlanningTask[] | null,
+): OutcomeItem[] {
+  const committedIds = new Set((committed ?? []).map((task) => task.id));
+  const items: OutcomeItem[] = [];
+
+  const group = (heading: string, blurb: string, added: boolean) => {
+    const mine = tasks.filter((task) => isAddedTask(task, committedIds) === added);
+    const done = mine.filter((task) => task.stage === "DONE");
+    const open = mine.filter((task) => task.stage !== "DONE");
+    if (done.length === 0 && open.length === 0) return;
+    items.push({ kind: "h2", text: heading }, { kind: "p", text: blurb });
+    if (done.length > 0) {
+      items.push({ kind: "h3", text: COMPLETED_SUBHEADING });
+      for (const task of done) items.push({ kind: "card", task, done: true });
+    }
+    if (open.length > 0) {
+      items.push({ kind: "h3", text: INCOMPLETE_SUBHEADING });
+      for (const task of open) items.push({ kind: "card", task, done: false });
+    }
+  };
+
+  group(COMMITTED_HEADING, COMMITTED_BLURB, false);
+  group(ADDED_HEADING, ADDED_BLURB, true);
+  return items;
+}
+
+function isOwnedOutcomeBlock(node: PMNode): boolean {
+  if (node.type.name === "sprintTask") return true;
+  const text = node.textContent.trim();
+  if (node.type.name === "heading") return OUTCOME_HEADINGS.includes(text);
+  if (node.type.name !== "paragraph") return false;
+  if (text === "") return true;
+  return OUTCOME_PROSE_PREFIXES.some((prefix) => text.startsWith(prefix));
+}
+
+/**
+ * Keep the outcome in step with the sprint after it has started.
+ *
+ * The plan half freezes at start because it is the promise, but the outcome is
+ * the report, and it has to answer for the sprint as it actually ran. Work
+ * pulled in late belongs in it: left out, an unfinished arrival ends the sprint
+ * without anybody being asked why, because the End gate reads the cards in this
+ * document and a task with no card is a task with no question. Work dragged out
+ * has to go, for the same reason in reverse — ending the sprint discards a
+ * reason typed against a task it no longer holds, so keeping the card only
+ * blocks the button.
+ *
+ * Rebuilt rather than patched, and only when the shape has actually drifted.
+ * The groups appear and disappear with their contents, so a card changing hands
+ * can mean a heading arriving or leaving, and expressing that as a series of
+ * splices was where the bugs lived. Everything typed into a card is carried
+ * across, and anything written into the outcome that this function did not
+ * generate is pushed below the rebuilt sections rather than dropped.
+ */
+function syncSprintOutcomeTasks(editor: Editor, tasks: SprintPlanningTask[]) {
+  const type = editor.schema.nodes.sprintTask;
+  // Nothing to reconcile against. Bailing also keeps a document from being
+  // emptied by a task list that has not arrived yet.
+  if (!type || tasks.length === 0) return;
+
+  const blocks: { node: PMNode; from: number; to: number }[] = [];
+  let pos = 0;
+  editor.state.doc.forEach((node) => {
+    blocks.push({ node, from: pos, to: pos + node.nodeSize });
+    pos += node.nodeSize;
+  });
+
+  const outcomeAt = blocks.findIndex((b) => b.node.type.name === "sprintOutcome");
+  if (outcomeAt < 0) return;
+  const outcome = blocks[outcomeAt];
+  const committed = (outcome.node.attrs.committed as SprintPlanningTask[] | null) ?? null;
+  const below = blocks.slice(outcomeAt + 1);
+
+  // The record of what left is written when the sprint closes, and this stops
+  // running then — but a document reopened in between must not lose it.
+  if (
+    below.some(
+      (block) =>
+        block.node.type.name === "heading" &&
+        block.node.textContent.trim() === REMOVED_HEADING,
+    )
+  ) {
+    return;
+  }
+
+  const attrsByTask = new Map<string, Record<string, unknown>>();
+  const actual: OutcomeItem[] = [];
+  for (const block of below) {
+    if (!isOwnedOutcomeBlock(block.node)) continue;
+    if (block.node.type.name === "sprintTask") {
+      const task = block.node.attrs.task as SprintPlanningTask | null;
+      const id = (block.node.attrs.id as string | null) ?? task?.id ?? null;
+      if (!id) continue;
+      attrsByTask.set(id, block.node.attrs);
+      actual.push({
+        kind: "card",
+        task: task ?? ({ id } as SprintPlanningTask),
+        done: block.node.attrs.variant === "completed",
+      });
+      continue;
+    }
+    const text = block.node.textContent.trim();
+    if (text === "") continue;
+    actual.push({
+      kind: block.node.type.name === "heading" ? (block.node.attrs.level === 3 ? "h3" : "h2") : "p",
+      text,
+    });
+  }
+
+  const desired = desiredOutcome(tasks, committed);
+  if (outcomeShape(actual) === outcomeShape(desired)) return;
+
+  const heading = editor.schema.nodes.heading;
+  const paragraph = editor.schema.nodes.paragraph;
+  if (!heading || !paragraph) return;
+
+  const built: PMNode[] = desired.map((item) => {
+    if (item.kind === "card") {
+      const carried = attrsByTask.get(item.task.id);
+      return type.create({
+        ...carried,
+        id: item.task.id,
+        task: item.task,
+        showQuestions: true,
+        decision: String(carried?.decision ?? item.task.decision ?? ""),
+        risk: String(carried?.risk ?? item.task.risk ?? ""),
+        variant: item.done ? "completed" : "incomplete",
+      });
+    }
+    if (item.kind === "p") return paragraph.create(null, editor.schema.text(item.text));
+    return heading.create({ level: item.kind === "h3" ? 3 : 2 }, editor.schema.text(item.text));
+  });
+
+  let tr = editor.state.tr;
+  // Back to front, so each deletion leaves the earlier positions untouched.
+  for (const block of [...below].reverse()) {
+    if (isOwnedOutcomeBlock(block.node)) tr = tr.delete(block.from, block.to);
+  }
+  if (built.length > 0) tr = tr.insert(tr.mapping.map(outcome.to), built);
+  if (tr.docChanged) editor.view.dispatch(tr);
+}
+
 const CURSOR_COLORS = [
   "#f87171", "#fb923c", "#facc15", "#4ade80", "#22d3ee",
   "#818cf8", "#c084fc", "#f472b6", "#a78bfa", "#34d399",
@@ -182,6 +426,7 @@ export interface RichTextEditorProps {
   canStartSprint?: boolean;
   canEndSprint?: boolean;
   sprintTasks?: SprintPlanningTask[];
+  sprintProof?: Record<string, SprintTaskProof>;
   hideAssignees?: boolean;
   onSprintTaskPatch?: (taskId: string, patch: Partial<SprintPlanningTask>) => void;
   onSprintStatusChange?: (status: string) => void;
@@ -205,6 +450,7 @@ export function RichTextEditor({
   canStartSprint = false,
   canEndSprint = false,
   sprintTasks = [],
+  sprintProof = {},
   hideAssignees = false,
   onSprintTaskPatch,
   onSprintStatusChange,
@@ -260,10 +506,12 @@ export function RichTextEditor({
         getCanEndSprint: () => canEndSprintRef.current,
         onSprintStatusChange: (status) => onSprintStatusChangeRef.current?.(status),
       }),
+      SprintOutcomeBlock,
       SprintTaskBlock.configure({
         projectId,
         sprintId,
         sprintTasks,
+        sprintProof,
         hideAssignee: hideAssignees,
         onTasksPatched: (taskId, patch) => onSprintTaskPatchRef.current?.(taskId, patch),
       }),
@@ -584,11 +832,12 @@ export function RichTextEditor({
     const ext = editor.extensionManager.extensions.find((item) => item.name === "sprintTask");
     if (!ext) return;
     ext.options.sprintTasks = sprintTasks;
+    ext.options.sprintProof = sprintProof;
     ext.options.hideAssignee = hideAssignees;
     ext.options.onTasksPatched = (taskId: string, patch: Partial<SprintPlanningTask>) =>
       onSprintTaskPatchRef.current?.(taskId, patch);
     editor.view.dispatch(editor.state.tr.setMeta("sprintTasks", sprintTasks.length));
-  }, [editor, sprintTasks, hideAssignees]);
+  }, [editor, sprintTasks, sprintProof, hideAssignees]);
 
   // Mirroring stops the moment the sprint starts. From then on the document is
   // the record of what was committed to, so it must not follow later changes —
@@ -599,6 +848,25 @@ export function RichTextEditor({
     if (!editor || !mirrorsSprint) return;
     syncSprintTasksIntoEditor(editor, sprintTasks);
   }, [editor, sprintTasks, collabSynced, mirrorsSprint]);
+
+  // Left to whoever can write: the fold is a change to a shared document, and a
+  // read-only viewer has no business making one. Every started sprint is opened
+  // by somebody who can, and after that everyone sees the folded document.
+  useEffect(() => {
+    if (!editor || !editable || mirrorsSprint) return;
+    foldSprintItemListIntoOutcome(editor);
+  }, [editor, editable, collabSynced, mirrorsSprint]);
+
+  // A closed sprint's outcome is signed off, reasons and all, so it stops
+  // following the sprint the way the plan stopped following it at the start.
+  const sprintDocClosed = sprintStatus !== undefined && isClosedSprint(sprintStatus);
+
+  // After the fold, which is what moves the plan's rows into the outcome — this
+  // would otherwise read a half-built document and add every task twice.
+  useEffect(() => {
+    if (!editor || !editable || mirrorsSprint || sprintDocClosed) return;
+    syncSprintOutcomeTasks(editor, sprintTasks);
+  }, [editor, editable, sprintTasks, collabSynced, mirrorsSprint, sprintDocClosed]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

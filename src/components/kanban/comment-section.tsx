@@ -258,7 +258,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
         attachments: attachments.length > 0 ? attachments : undefined,
       });
       if (!result.success) {
-        alert(`Failed to post comment: ${result.error}`);
+        alert(`Failed to post internal comment: ${result.error}`);
         return;
       }
       setComments((prev) => [...prev, result.comment as unknown as Comment]);
@@ -267,7 +267,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
       setPendingFiles([]);
     } catch (err) {
       console.error("createComment failed:", err);
-      alert(`Failed to post comment: ${(err as Error).message || err}`);
+      alert(`Failed to post internal comment: ${(err as Error).message || err}`);
     } finally {
       setSubmitting(false);
       setUploading(false);
@@ -346,12 +346,12 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
     <div className="space-y-4">
       {loadError && (
         <p className="text-xs text-destructive text-center py-4">
-          Failed to load comments: {loadError}
+          Failed to load internal comments: {loadError}
         </p>
       )}
       {!loadError && comments.length === 0 && (
         <p className="text-xs text-muted-foreground/60 text-center py-4">
-          No comments yet. Be the first to comment.
+          No internal comments yet. Be the first to comment.
         </p>
       )}
 
@@ -516,7 +516,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Write a comment... Use @ to mention"
+            placeholder="Write an internal comment... Use @ to mention"
             rows={1}
             className="min-h-6 max-h-40 w-full min-w-0 flex-1 resize-none overflow-y-auto bg-transparent py-1 text-s leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/50"
           />

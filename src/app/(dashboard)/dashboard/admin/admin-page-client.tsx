@@ -46,6 +46,7 @@ import type { BrandingAssetDTO } from "@/actions/branding";
 import type { LoginPhotoDTO } from "@/actions/login-photos";
 import type { NotificationSoundDTO } from "@/actions/notification-sound-settings";
 import type { BrandingSlotId } from "@/lib/branding-slots";
+import type { TaskType } from "@/generated/prisma/client";
 import { PageHeader, PageBackButton, PageName } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
 import { cn } from "@/lib/utils";
@@ -199,6 +200,7 @@ interface Props {
   roles: any;
   prefixes: any;
   questions: any;
+  clientIssueTypes: TaskType[];
   aliases: AliasDTO[];
   aliasUsage: AliasUsageDTO[];
   aliasStats: AliasStatsDTO;
@@ -220,6 +222,7 @@ export function AdminPageClient({
   roles,
   prefixes,
   questions,
+  clientIssueTypes,
   aliases,
   aliasUsage,
   aliasStats,
@@ -349,7 +352,10 @@ export function AdminPageClient({
           />
         )}
         {active.id === "questions" && (
-          <DefaultQuestionsManager questions={questions} />
+          <DefaultQuestionsManager
+            questions={questions}
+            clientIssueTypes={clientIssueTypes}
+          />
         )}
         {active.id === "app-logo" && <AppLogoClient assets={branding} />}
         {active.id === "login" && (

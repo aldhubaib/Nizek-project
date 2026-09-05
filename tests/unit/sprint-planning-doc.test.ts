@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   overlayPlanningTaskAssignees,
   planningTaskIdsFromHtml,
-  sprintDocTitle,
   sprintPlanningDocHtml,
   sprintTaskNodeHtml,
+  stripPlanningTaskAssignees,
+  stripSprintDocKind,
   summarizeSprintTasks,
   syncPlanningDocTasks,
   type SprintPlanningInfo,
@@ -187,10 +188,10 @@ describe("summarizeSprintTasks", () => {
     ).toMatchObject({ completed: 2, uncompleted: 1, taskCount: 3 });
   });
 
-  it("builds a review title from the planning name", () => {
-    expect(sprintDocTitle("Sprint 16 planning", "review")).toBe("Sprint 16 review");
-    expect(sprintDocTitle("Q3 Launch", "review")).toBe("Q3 Launch review");
-    expect(sprintDocTitle("Sprint 16 review", "planning")).toBe("Sprint 16 planning");
+  it("strips the suffix the planning and review documents were told apart by", () => {
+    expect(stripSprintDocKind("Sprint 16 planning")).toBe("Sprint 16");
+    expect(stripSprintDocKind("Sprint 16 review")).toBe("Sprint 16");
+    expect(stripSprintDocKind("Q3 Launch")).toBe("Q3 Launch");
   });
 
   it("returns zeros for an empty sprint", () => {
@@ -204,5 +205,42 @@ describe("summarizeSprintTasks", () => {
       completed: 0,
       uncompleted: 0,
     });
+  });
+});
+
+// A client reading a sprint document must not be able to find a real employee
+// name in it. Hiding the avatar is a display choice; these are about the bytes.
+describe("stripping assignees for a client viewer", () => {
+  const assigned = task("a", "One", {
+    estimatedMinutes: 90,
+    assignee: { id: "u1", name: "Ada Lovelace", imageUrl: "https://example.test/ada.png" },
+    questions: [{ question: "Scope?", answer: "Checkout only" }],
+  });
+
+  it("removes the name and photo from the saved document", () => {
+    const html = sprintPlanningDocHtml([assigned], info);
+    expect(html).toContain("Ada Lovelace");
+
+    const stripped = stripPlanningTaskAssignees(html);
+    expect(stripped).not.toContain("Ada Lovelace");
+    expect(stripped).not.toContain("ada.png");
+  });
+
+  it("keeps everything the client is meant to read", () => {
+    const stripped = stripPlanningTaskAssignees(sprintPlanningDocHtml([assigned], info));
+    expect(planningTaskIdsFromHtml(stripped)).toEqual(["a"]);
+    expect(stripped).toContain("One");
+    expect(stripped).toContain("90");
+    expect(stripped).toContain("Checkout only");
+  });
+
+  it("leaves a document with no assignees untouched", () => {
+    const html = sprintPlanningDocHtml([task("a", "One"), task("b", "Two")], info);
+    expect(stripPlanningTaskAssignees(html)).toBe(html);
+  });
+
+  it("is safe to run twice", () => {
+    const once = stripPlanningTaskAssignees(sprintPlanningDocHtml([assigned], info));
+    expect(stripPlanningTaskAssignees(once)).toBe(once);
   });
 });

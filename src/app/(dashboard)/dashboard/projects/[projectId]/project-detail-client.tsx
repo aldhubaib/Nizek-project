@@ -691,6 +691,7 @@ export function ProjectDetailClient({
                 canStartSprint={userPermissions.isAdmin || userPermissions.canStartSprint}
                 canEndSprint={userPermissions.isAdmin || userPermissions.canEndSprint}
                 canCreateSprintPlanning={userPermissions.isAdmin || userPermissions.canCreateSprintPlanning}
+                isAdmin={userPermissions.isAdmin}
                 isProjectActive={isActive}
                 currentUserId={currentUserId}
               />

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getImpersonation, requireUser } from "@/lib/auth";
+import { getImpersonation, getRealUser, requireUser } from "@/lib/auth";
 import { clientRoster, latestPublishedAgreement } from "@/lib/client-agreement";
 import { htmlToParagraphs } from "@/lib/note-content-diff";
 
@@ -31,6 +31,8 @@ export type AgreementPersonDTO = {
   userImageUrl: string | null;
   /** Null in the "has not agreed yet" list. */
   acceptedAt: string | null;
+  /** Set when an admin accepted for them; their own click leaves it null. */
+  acceptedByName: string | null;
 };
 
 export type AgreementAdminView = {
@@ -138,6 +140,7 @@ export async function getAgreementAcceptances(
         userId: true,
         acceptedAt: true,
         user: { select: { name: true, email: true, imageUrl: true } },
+        acceptedBy: { select: { name: true, email: true } },
       },
     }),
     clientRoster(),
@@ -153,6 +156,7 @@ export async function getAgreementAcceptances(
     userName: personName(a.user),
     userImageUrl: a.user.imageUrl,
     acceptedAt: a.acceptedAt.toISOString(),
+    acceptedByName: a.acceptedBy ? personName(a.acceptedBy) : null,
   }));
 
   // Only the version in force has anyone outstanding. A superseded document is
@@ -170,6 +174,7 @@ export async function getAgreementAcceptances(
           userName: personName(u),
           userImageUrl: u.imageUrl,
           acceptedAt: null,
+          acceptedByName: null,
         }))
     : [];
 
@@ -269,11 +274,19 @@ export async function discardAgreementDraft(): Promise<void> {
 export async function acceptClientAgreement(versionId: string): Promise<void> {
   const user = await requireUser();
 
-  // `requireUser` resolves to the impersonated client, so without this an admin
-  // viewing as them would write a row saying the client consented. The button
-  // is already disabled in preview; this is the half that cannot be bypassed.
-  if (await getImpersonation()) {
-    throw new Error("You are viewing as someone else — only they can accept this");
+  // `requireUser` resolves to the impersonated client, so an admin viewing as
+  // them would otherwise write a row indistinguishable from the client's own
+  // click. Accepting on their behalf is allowed — an admin often walks a client
+  // through onboarding, and testing the client's chat needs a way past this —
+  // but it is recorded as what it was, and only an admin may do it.
+  const impersonation = await getImpersonation();
+  let acceptedById: string | null = null;
+  if (impersonation) {
+    const real = await getRealUser();
+    if (real?.systemRole !== "ADMIN") {
+      throw new Error("You are viewing as someone else — only they can accept this");
+    }
+    acceptedById = real.id;
   }
 
   const latest = await latestPublishedAgreement();
@@ -284,7 +297,7 @@ export async function acceptClientAgreement(versionId: string): Promise<void> {
 
   await prisma.clientAgreementAcceptance.upsert({
     where: { versionId_userId: { versionId, userId: user.id } },
-    create: { versionId, userId: user.id },
+    create: { versionId, userId: user.id, acceptedById },
     update: {},
   });
 

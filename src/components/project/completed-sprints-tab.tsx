@@ -8,6 +8,7 @@ import {
   PointerSensor,
   closestCorners,
   pointerWithin,
+  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
@@ -22,7 +23,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlertCircle, ClipboardCheck, MoreHorizontal, Play } from "lucide-react";
+import { AlertCircle, MoreHorizontal, Pause, Play } from "lucide-react";
 import { RoadmapTaskRow, SprintTaskRow } from "@/components/project/sprint-task-row";
 import {
   deleteSprint,
@@ -40,7 +41,7 @@ import {
 import { moveTask as moveTaskAction } from "@/actions/task";
 import { isMissingDataTask } from "@/lib/task-readiness";
 import { promoteToBacklogBottom } from "@/lib/backlog-placement";
-import { fieldsClearedByMove } from "@/lib/sprint-task-move";
+import { fieldsClearedByMove, moveNeedsReason } from "@/lib/sprint-task-move";
 import { AddToActiveSprintDialog } from "@/components/project/add-to-active-sprint-dialog";
 import { RemoveFromSprintDialog } from "@/components/project/remove-from-sprint-dialog";
 import { CollapsibleSection } from "@/components/project/collapsible-section";
@@ -51,6 +52,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ConfirmDeleteDialog } from "@/components/equity/confirm-delete-dialog";
+import { ConfirmShipSprintDialog } from "@/components/project/confirm-ship-sprint-dialog";
 import {
   SPRINT_BOARD_COLUMNS,
   compareClosedSprints,
@@ -67,7 +69,6 @@ import { NoteSlideOver } from "@/components/project/note-slide-over";
 import { NoteFullScreenCreate } from "@/components/project/note-full-screen-create";
 import { ClientSprintCard } from "@/components/project/client-sprint-card";
 import { TaskInboxSlideOver } from "@/components/messages/task-inbox-slide-over";
-import { Button } from "@/components/ui/button";
 
 const COLUMN_IDS = new Set<string>(SPRINT_BOARD_COLUMNS.map((c) => c.id));
 const BACKLOG_ZONE = "backlog";
@@ -119,6 +120,8 @@ interface Props {
   canStartSprint?: boolean;
   canEndSprint?: boolean;
   canCreateSprintPlanning?: boolean;
+  /** Admins alone may edit a sprint document after the sprint has closed. */
+  isAdmin?: boolean;
   isProjectActive: boolean;
   hideAssignees?: boolean;
   /** Board is as wide as its columns; a parent scroller moves sideways. */
@@ -148,6 +151,7 @@ export function CompletedSprintsTab({
   canStartSprint = false,
   canEndSprint = false,
   canCreateSprintPlanning = false,
+  isAdmin = false,
   isProjectActive,
   hideAssignees = false,
   embedInScrollParent = false,
@@ -181,10 +185,14 @@ export function CompletedSprintsTab({
     fromSprintName: string;
     toLabel: string;
     clearedFields: string[];
+    requireReason: boolean;
+    /** Already collected by the add dialog, when that is what led here. */
+    reason?: string;
   } | null>(null);
-  const [reviewSprint, setReviewSprint] = useState<SprintDTO | null>(null);
-  const [planningSprint, setPlanningSprint] = useState<SprintDTO | null>(null);
-  const [docsSprint, setDocsSprint] = useState<SprintDTO | null>(null);
+  // One document per sprint, so one panel: planning it, reviewing it and
+  // reading it back afterwards are the same document at different ages.
+  const [docSprint, setDocSprint] = useState<SprintDTO | null>(null);
+  const [shipConfirm, setShipConfirm] = useState<SprintDTO | null>(null);
   const [openTask, setOpenTask] = useState<{ id: string; title: string } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -242,18 +250,8 @@ export function CompletedSprintsTab({
     onSprintEvent: reloadSprints,
   });
 
-  const closeReview = useCallback(() => {
-    setReviewSprint(null);
-    router.refresh();
-  }, [router]);
-
-  const closePlanning = useCallback(() => {
-    setPlanningSprint(null);
-    router.refresh();
-  }, [router]);
-
-  const closeDocs = useCallback(() => {
-    setDocsSprint(null);
+  const closeDoc = useCallback(() => {
+    setDocSprint(null);
     router.refresh();
   }, [router]);
 
@@ -404,7 +402,12 @@ export function CompletedSprintsTab({
     );
   }
 
-  function assignTaskToSprint(task: KanbanTask, nextSprintId: string | null, estimatedMinutes?: number | null) {
+  function assignTaskToSprint(
+    task: KanbanTask,
+    nextSprintId: string | null,
+    estimatedMinutes?: number | null,
+    reason?: string,
+  ) {
     if (nextSprintId && isClosedSprint(sprints.find((s) => s.id === nextSprintId)?.status ?? "")) {
       return;
     }
@@ -421,24 +424,40 @@ export function CompletedSprintsTab({
         hasAssignee: Boolean(task.assignee),
       },
     );
-    if (clearedFields.length > 0) {
+    // Leaving a running sprint always stops to ask, even when there is nothing
+    // to discard: the sprint document reports the departure and needs a reason
+    // to print beside it.
+    const fromSprint = prevSprintId ? sprints.find((s) => s.id === prevSprintId) : null;
+    const requireReason = moveNeedsReason({
+      fromSprintStatus: fromSprint?.status ?? null,
+      // A move *into* a running sprint was explained by the add dialog already,
+      // so this one only asks about the sprint being left.
+      toSprintStatus: null,
+    });
+    if (clearedFields.length > 0 || requireReason) {
       const target = nextSprintId ? sprints.find((s) => s.id === nextSprintId) : null;
       setConfirmMove({
         task,
         nextSprintId,
         estimatedMinutes,
-        fromSprintName:
-          sprints.find((s) => s.id === prevSprintId)?.name ?? task.sprintName ?? "the sprint",
+        fromSprintName: fromSprint?.name ?? task.sprintName ?? "the sprint",
         toLabel: target?.name ?? "Backlog",
         clearedFields,
+        requireReason,
+        reason,
       });
       return;
     }
 
-    performAssignTaskToSprint(task, nextSprintId, estimatedMinutes);
+    performAssignTaskToSprint(task, nextSprintId, estimatedMinutes, reason);
   }
 
-  function performAssignTaskToSprint(task: KanbanTask, nextSprintId: string | null, estimatedMinutes?: number | null) {
+  function performAssignTaskToSprint(
+    task: KanbanTask,
+    nextSprintId: string | null,
+    estimatedMinutes?: number | null,
+    reason?: string,
+  ) {
     const prevSprintId = task.sprintId ?? null;
     const sprintName = nextSprintId
       ? (sprints.find((s) => s.id === nextSprintId)?.name ?? null)
@@ -459,7 +478,7 @@ export function CompletedSprintsTab({
     bumpSprintCount(nextSprintId, 1);
     startTransition(async () => {
       try {
-        await setTaskSprint(task.id, nextSprintId, estimatedMinutes);
+        await setTaskSprint(task.id, nextSprintId, estimatedMinutes, reason);
         // The departing task's Decision and Risk are gone now, so the warning
         // must stop offering to protect them.
         reloadPlanFlags();
@@ -723,25 +742,39 @@ export function CompletedSprintsTab({
       }
 
       if (sprint.status === "ACTIVE") {
-        setReviewSprint(sprint);
+        setDocSprint(sprint);
         return;
       }
 
-      const optimisticStatus =
-        column === "COMPLETED"
-          ? (sprint.incompleteReason ? "PARTIALLY_COMPLETED" : "COMPLETED")
-          : column;
-      applySprint({ ...sprint, status: optimisticStatus });
-      startTransition(async () => {
-        try {
-          applySprint(await setSprintBoardStatus(sprint.id, column));
-          router.refresh();
-        } catch (err) {
-          applySprint(previous);
-          setError(err instanceof Error ? err.message : "Could not move sprint");
-        }
-      });
+      // Shipping is the client accepting the sprint, so it is confirmed rather
+      // than done on the drop. Every other move is immediate. Narrowed to the
+      // move the server actually allows, so an invalid drag still fails on its
+      // own rather than asking anyone to take responsibility first.
+      if (column === "SHIPPED" && fromColumn === "COMPLETED") {
+        setShipConfirm(sprint);
+        return;
+      }
+
+      moveSprintToColumn(sprint, column);
     }, 0);
+  }
+
+  function moveSprintToColumn(sprint: SprintDTO, column: SprintBoardColumn) {
+    const previous = sprint;
+    const optimisticStatus =
+      column === "COMPLETED"
+        ? (sprint.incompleteReason ? "PARTIALLY_COMPLETED" : "COMPLETED")
+        : column;
+    applySprint({ ...sprint, status: optimisticStatus });
+    startTransition(async () => {
+      try {
+        applySprint(await setSprintBoardStatus(sprint.id, column));
+        router.refresh();
+      } catch (err) {
+        applySprint(previous);
+        setError(err instanceof Error ? err.message : "Could not move sprint");
+      }
+    });
   }
 
   async function confirmDelete(typed: string) {
@@ -874,7 +907,7 @@ export function CompletedSprintsTab({
                       setError("Add at least one task to Next, then start the sprint.");
                       return;
                     }
-                    setPlanningSprint(nextSprint);
+                    setDocSprint(nextSprint);
                   }}
                   aria-label="Start sprint"
                   title="Start sprint"
@@ -911,11 +944,7 @@ export function CompletedSprintsTab({
                     key={sprint.id}
                     sprint={sprint}
                     taskCount={items.length}
-                    onOpen={() =>
-                      isClosedSprint(sprint.status)
-                        ? setDocsSprint(sprint)
-                        : setPlanningSprint(sprint)
-                    }
+                    onOpen={() => setDocSprint(sprint)}
                   />
                 );
               }
@@ -931,13 +960,14 @@ export function CompletedSprintsTab({
                   onToggle={() =>
                     setCollapsed((c) => ({ ...c, [sprint.id]: !isCollapsed }))
                   }
-                  onPlan={() => setPlanningSprint(sprint)}
-                  onReview={() => setReviewSprint(sprint)}
-                  onDocs={() => setDocsSprint(sprint)}
+                  onOpenDoc={() => setDocSprint(sprint)}
                   onDelete={() => setDeletingSprint(sprint)}
                   onOpenTask={(task) =>
                     setOpenTask({ id: task.taskId, title: task.title })
                   }
+                  // Work leaves a running sprint the same way it joined one:
+                  // dragged back to Next, Planned or the backlog.
+                  canDragTaskOut={canDragTasks && !isClosedSprint(sprint.status)}
                 />
               );
             });
@@ -957,13 +987,13 @@ export function CompletedSprintsTab({
                         setError("Start a sprint before opening the review.");
                         return;
                       }
-                      setReviewSprint(active);
+                      setDocSprint(active);
                     }}
                     aria-label="Sprint review"
                     title="Sprint review"
                     className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   >
-                    <ClipboardCheck className="size-4" />
+                    <Pause className="size-4" />
                   </button>
                 ) : null
               }
@@ -1000,11 +1030,11 @@ export function CompletedSprintsTab({
       onOpenChange={(open) => {
         if (!open) setAddToActive(null);
       }}
-      onConfirm={() => {
+      onConfirm={(reason) => {
         if (!addToActive) return;
         const pendingAdd = addToActive;
         setAddToActive(null);
-        assignTaskToSprint(pendingAdd.task, pendingAdd.sprint.id);
+        assignTaskToSprint(pendingAdd.task, pendingAdd.sprint.id, undefined, reason);
       }}
     />
     <RemoveFromSprintDialog
@@ -1015,10 +1045,11 @@ export function CompletedSprintsTab({
       fromSprintName={confirmMove?.fromSprintName ?? ""}
       toLabel={confirmMove?.toLabel ?? ""}
       clearedFields={confirmMove?.clearedFields ?? []}
+      requireReason={confirmMove?.requireReason ?? false}
       onOpenChange={(open) => {
         if (!open) setConfirmMove(null);
       }}
-      onConfirm={() => {
+      onConfirm={(reason) => {
         if (!confirmMove) return;
         const pendingMove = confirmMove;
         setConfirmMove(null);
@@ -1026,6 +1057,10 @@ export function CompletedSprintsTab({
           pendingMove.task,
           pendingMove.nextSprintId,
           pendingMove.estimatedMinutes,
+          // This dialog only asks when the sprint being left has started. On a
+          // move into a running sprint the add dialog asked instead, and that
+          // is the answer the server wants.
+          reason || pendingMove.reason,
         );
       }}
     />
@@ -1043,6 +1078,19 @@ export function CompletedSprintsTab({
         onConfirm={confirmDelete}
       />
     ) : null}
+    <ConfirmShipSprintDialog
+      open={shipConfirm !== null}
+      sprintName={shipConfirm?.name ?? ""}
+      onOpenChange={(open) => {
+        if (!open) setShipConfirm(null);
+      }}
+      onConfirm={() => {
+        const sprint = shipConfirm;
+        setShipConfirm(null);
+        if (sprint) moveSprintToColumn(sprint, "SHIPPED");
+      }}
+    />
+
     {openTask ? (
       <TaskInboxSlideOver
         taskId={openTask.id}
@@ -1050,120 +1098,28 @@ export function CompletedSprintsTab({
         onClose={() => setOpenTask(null)}
       />
     ) : null}
-    {reviewSprint ? (
-      <NoteSlideOver
-        title={`${reviewSprint.name} review`}
-        onClose={closeReview}
-      >
+    {docSprint ? (
+      <NoteSlideOver title={docSprint.name} onClose={closeDoc}>
         <NoteFullScreenCreate
+          key={docSprint.id}
           projectId={projectId}
-          createTypes={["SPRINT_REVIEW"]}
-          initialTitle={`${reviewSprint.name} review`}
-          sprintId={reviewSprint.id}
-          canEndSprint={canEndSprint}
-          canEditSprintDoc={canEndSprint}
-          hideAssignees={hideAssignees}
-          onCancel={closeReview}
-          saveInHeader={false}
-          onCreated={() => {}}
-        />
-      </NoteSlideOver>
-    ) : null}
-    {docsSprint ? (
-      <ClosedSprintDocs
-        projectId={projectId}
-        sprint={docsSprint}
-        hideAssignees={hideAssignees}
-        onClose={closeDocs}
-      />
-    ) : null}
-    {planningSprint ? (
-      <NoteSlideOver
-        title={`${planningSprint.name} planning`}
-        onClose={closePlanning}
-      >
-        <NoteFullScreenCreate
-          projectId={projectId}
-          createTypes={["SPRINT_PLANNING"]}
-          initialTitle={`${planningSprint.name} planning`}
-          sprintId={planningSprint.id}
-          sprintStatus={planningSprint.status}
+          createTypes={["SPRINT_DOC"]}
+          initialTitle={docSprint.name}
+          sprintId={docSprint.id}
+          sprintStatus={docSprint.status}
+          isAdmin={isAdmin}
           canStartSprint={canStartSprint}
-          canEditSprintDoc={canCreateSprintPlanning}
+          canEndSprint={canEndSprint}
+          canCreateSprintPlanning={canCreateSprintPlanning}
           hideAssignees={hideAssignees}
-          onCancel={closePlanning}
+          onCancel={closeDoc}
+          autoFocusTitle={false}
           saveInHeader={false}
           onCreated={() => {}}
         />
       </NoteSlideOver>
     ) : null}
     </div>
-  );
-}
-
-type SprintDocKind = "planning" | "review";
-
-/**
- * A finished sprint's planning and review share one panel. The header button
- * switches to the other document.
- */
-function ClosedSprintDocs({
-  projectId,
-  sprint,
-  hideAssignees = false,
-  onClose,
-}: {
-  projectId: string;
-  sprint: SprintDTO;
-  hideAssignees?: boolean;
-  onClose: () => void;
-}) {
-  const [kind, setKind] = useState<SprintDocKind>("planning");
-
-  return (
-    <NoteSlideOver
-      title="Sprint documents"
-      onClose={onClose}
-      headerRight={
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => setKind(kind === "planning" ? "review" : "planning")}
-        >
-          {kind === "planning" ? "Sprint Review" : "Sprint Planning"}
-        </Button>
-      }
-    >
-      {kind === "planning" ? (
-        <NoteFullScreenCreate
-          key={`${sprint.id}-planning`}
-          projectId={projectId}
-          createTypes={["SPRINT_PLANNING"]}
-          initialTitle={`${sprint.name} planning`}
-          sprintId={sprint.id}
-          sprintStatus={sprint.status}
-          hideAssignees={hideAssignees}
-          canEditSprintDoc={!hideAssignees}
-          autoFocusTitle={false}
-          saveInHeader={false}
-          onCreated={() => {}}
-        />
-      ) : (
-        <NoteFullScreenCreate
-          key={`${sprint.id}-review`}
-          projectId={projectId}
-          createTypes={["SPRINT_REVIEW"]}
-          initialTitle={`${sprint.name} review`}
-          sprintId={sprint.id}
-          sprintStatus={sprint.status}
-          hideAssignees={hideAssignees}
-          canEditSprintDoc={!hideAssignees}
-          autoFocusTitle={false}
-          saveInHeader={false}
-          onCreated={() => {}}
-        />
-      )}
-    </NoteSlideOver>
   );
 }
 
@@ -1207,6 +1163,64 @@ function TaskPoolColumn({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * A task inside a sprint card, draggable back out of it.
+ *
+ * The columns to the left hold loose tasks; a started sprint holds them inside
+ * its own card, which is why these rows had no way out. Dragging one to Next,
+ * Planned or the backlog is the same move the loose rows already make, so it
+ * lands in the same handler and gets the same warning about what it discards.
+ */
+function SprintCardTaskRow({
+  task,
+  disabled,
+  incomplete,
+  onOpen,
+}: {
+  task: SprintSnapshotTask;
+  disabled: boolean;
+  incomplete: boolean;
+  onOpen: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: task.taskId,
+    disabled,
+  });
+  const wasDragged = useRef(false);
+  useEffect(() => {
+    if (isDragging) wasDragged.current = true;
+  }, [isDragging]);
+
+  return (
+    <RoadmapTaskRow
+      ref={setNodeRef}
+      task={task}
+      missingData={false}
+      incomplete={incomplete}
+      incompleteReason={task.incompleteReason}
+      {...attributes}
+      {...listeners}
+      // The sprint card around this row is itself a drag handle, so without
+      // this the one press would pick up the sprint as well as the task.
+      onPointerDown={(e) => {
+        listeners?.onPointerDown?.(e);
+        e.stopPropagation();
+      }}
+      onClick={() => {
+        if (wasDragged.current) {
+          wasDragged.current = false;
+          return;
+        }
+        onOpen();
+      }}
+      className={cn(
+        isDragging && "opacity-50",
+        disabled ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
+      )}
+    />
   );
 }
 
@@ -1331,10 +1345,9 @@ function SprintBoardCard({
   canDrag,
   canManage,
   isProjectActive,
+  canDragTaskOut,
   onToggle,
-  onPlan,
-  onReview,
-  onDocs,
+  onOpenDoc,
   onDelete,
   onOpenTask,
 }: {
@@ -1344,10 +1357,10 @@ function SprintBoardCard({
   canDrag: boolean;
   canManage: boolean;
   isProjectActive: boolean;
+  /** Off while the sprint is closed, or for anyone who cannot move tasks. */
+  canDragTaskOut: boolean;
   onToggle: () => void;
-  onPlan: () => void;
-  onReview: () => void;
-  onDocs: () => void;
+  onOpenDoc: () => void;
   onDelete: () => void;
   onOpenTask: (task: SprintSnapshotTask) => void;
 }) {
@@ -1388,22 +1401,9 @@ function SprintBoardCard({
               <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              {/* A finished sprint is read as a pair — the plan and how it
-                  actually went — so both open together. */}
-              {isClosedSprint(sprint.status) ? (
-                <DropdownMenuItem onClick={onDocs}>
-                  Sprint documents
-                </DropdownMenuItem>
-              ) : (
-                <>
-                  <DropdownMenuItem onClick={onPlan}>
-                    Sprint planning
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={onReview}>
-                    Sprint review
-                  </DropdownMenuItem>
-                </>
-              )}
+              <DropdownMenuItem onClick={onOpenDoc}>
+                Sprint document
+              </DropdownMenuItem>
               {canManage && isProjectActive ? (
                 <DropdownMenuItem
                   variant="destructive"
@@ -1423,16 +1423,15 @@ function SprintBoardCard({
         ) : (
           <div className="space-y-2">
             {items.map((task) => (
-              <RoadmapTaskRow
+              <SprintCardTaskRow
                 key={task.id}
                 task={task}
-                missingData={false}
+                disabled={!canDragTaskOut}
                 incomplete={
                   Boolean(task.incompleteReason) ||
                   (isClosedSprint(sprint.status) && task.stage !== "DONE")
                 }
-                incompleteReason={task.incompleteReason}
-                onClick={() => onOpenTask(task)}
+                onOpen={() => onOpenTask(task)}
               />
             ))}
           </div>

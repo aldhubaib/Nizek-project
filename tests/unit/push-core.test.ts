@@ -114,13 +114,13 @@ describe("sendWithRetry", () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 
-  it("gives up after the second transient failure", async () => {
+  it("gives up after the third transient failure", async () => {
     const send = vi.fn().mockRejectedValue(pushError(429));
     const res = await sendWithRetry(send, { backoffMs: 1 });
     expect(res.ok).toBe(false);
     expect(res.statusCode).toBe(429);
-    expect(res.attempts).toBe(2);
-    expect(send).toHaveBeenCalledTimes(2);
+    expect(res.attempts).toBe(3);
+    expect(send).toHaveBeenCalledTimes(3);
   });
 
   it("captures network errors without a status code", async () => {
@@ -129,7 +129,7 @@ describe("sendWithRetry", () => {
     expect(res.ok).toBe(false);
     expect(res.statusCode).toBeUndefined();
     expect(res.error).toBe("socket hang up");
-    expect(res.attempts).toBe(2);
+    expect(res.attempts).toBe(3);
   });
 
   it("never throws", async () => {

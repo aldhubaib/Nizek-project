@@ -29,14 +29,13 @@ import type { KanbanTask } from "@/store/kanban";
 export type ClientSprintDocRef = {
   id: string;
   title: string;
-  kind: "SPRINT_PLANNING" | "SPRINT_REVIEW";
   date: string;
   /** Plain-text opening of the body, for the card. The HTML stays server-side. */
   preview: string;
 };
 
 /**
- * A sprint with its documents attached. Shaped per sprint rather than as a flat
+ * A sprint with its document attached. Shaped per sprint rather than as a flat
  * document list because the client browses by sprint — landing on the one in
  * progress and stepping across to planned and completed ones.
  */
@@ -48,7 +47,8 @@ export type ClientSprintEntry = {
   endDate: string;
   goal: string | null;
   taskCount: number;
-  docs: ClientSprintDocRef[];
+  /** One document per sprint: the plan, and the outcome once it has one. */
+  doc: ClientSprintDocRef | null;
 };
 
 export type ClientBacklogTask = {
@@ -188,16 +188,12 @@ export async function getClientProjectOverview(
       },
     }),
     prisma.meetingNote.findMany({
-      where: {
-        projectId,
-        noteType: { in: ["SPRINT_PLANNING", "SPRINT_REVIEW"] },
-      },
+      where: { projectId, noteType: "SPRINT_DOC" },
       select: {
         id: true,
         title: true,
-        noteType: true,
+        sprintId: true,
         content: true,
-        date: true,
         createdAt: true,
       },
       orderBy: { date: "desc" },
@@ -215,21 +211,18 @@ export async function getClientProjectOverview(
     }),
   ]);
 
-  // Which sprint a document belongs to is encoded in its HTML rather than a
-  // column, so the markup is unwrapped here and never sent to the browser.
-  const docsBySprint = new Map<string, ClientSprintDocRef[]>();
+  // Older documents record their sprint in the HTML rather than the column, so
+  // the markup is unwrapped here and never sent to the browser.
+  const docBySprint = new Map<string, ClientSprintDocRef>();
   for (const note of notes) {
-    const sprintId = sprintIdFromPlanningHtml(note.content);
-    if (!sprintId) continue;
-    const list = docsBySprint.get(sprintId) ?? [];
-    list.push({
+    const sprintId = note.sprintId ?? sprintIdFromPlanningHtml(note.content);
+    if (!sprintId || docBySprint.has(sprintId)) continue;
+    docBySprint.set(sprintId, {
       id: note.id,
       title: note.title,
-      kind: note.noteType as "SPRINT_PLANNING" | "SPRINT_REVIEW",
       date: note.createdAt.toISOString(),
       preview: plainTextPreview(note.content),
     });
-    docsBySprint.set(sprintId, list);
   }
 
   const taskCounts = new Map<string, number>();
@@ -288,11 +281,7 @@ export async function getClientProjectOverview(
       isReadyForTransition: t.isReadyForTransition,
     }));
 
-  const reviewDates = reviewDateBySprintId(
-    notes
-      .filter((n) => n.noteType === "SPRINT_REVIEW")
-      .map((n) => ({ content: n.content, date: n.date })),
-  );
+  const reviewDates = reviewDateBySprintId(notes);
 
   const sprintTasks = (active ? activeTasks : tasks.filter((t) => IN_PROGRESS_STAGES.has(t.stage)))
     .filter((t) => t.stage !== "DONE")
@@ -363,7 +352,7 @@ export async function getClientProjectOverview(
         endDate: s.endDate.toISOString(),
         goal: s.goal,
         taskCount: taskCounts.get(s.id) ?? 0,
-        docs: docsBySprint.get(s.id) ?? [],
+        doc: docBySprint.get(s.id) ?? null,
       })),
     backlog: backlog.map((t) => ({
       id: t.id,
@@ -395,7 +384,7 @@ export async function getClientSprintDoc(
     },
   });
   if (!note) throw new Error("Document not found");
-  if (note.noteType !== "SPRINT_PLANNING" && note.noteType !== "SPRINT_REVIEW") {
+  if (note.noteType !== "SPRINT_DOC") {
     throw new Error("Document not found");
   }
   const { user } = await requireProjectMember(note.projectId);

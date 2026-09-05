@@ -19,6 +19,10 @@ export type ActivityCardTheme = {
   quote?: string;
 };
 
+/** Shared shape of the buttons stacked at the foot of an activity card. */
+export const ACTIVITY_ACTION_CLASS =
+  "flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-start text-s font-medium transition-colors";
+
 export function ActivityCard({
   theme,
   icon: Icon,
@@ -49,10 +53,7 @@ export function ActivityCard({
   createdAt: string;
 }) {
   const Leading = ActionIcon ?? Icon;
-  const actionClass = cn(
-    "flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-start text-s font-medium transition-colors",
-    theme.button,
-  );
+  const actionClass = cn(ACTIVITY_ACTION_CLASS, theme.button);
   const actionInner = (
     <>
       <Leading className="size-4 shrink-0" strokeWidth={2} />

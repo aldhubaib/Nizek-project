@@ -1,10 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createMeetingNote, getMeetingNote, getOrCreateSprintDocNote, getSprintPlanningNote, getSprintReviewNote, updateMeetingNote } from "@/actions/meeting-note";
-import { getSprintPlanningTasks, getSprintReviewTasks } from "@/actions/sprint";
+import { createMeetingNote, getMeetingNote, getOrCreateSprintDocNote, getSprintDocNote } from "@/actions/meeting-note";
+import {
+  getSprintPlanningTasks,
+  getSprintProofOfWork,
+  getSprintReviewTasks,
+} from "@/actions/sprint";
+import { loadSprintDocTasks } from "@/lib/sprint-doc-tasks";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { PageHeaderActions } from "@/components/page-header-actions";
 import { useNoteAutosave } from "@/components/project/use-note-autosave";
@@ -15,18 +20,23 @@ import {
   blankPlanningSchedule,
   documentDateIsoFromPlanningHtml,
   overlayPlanningTaskAssignees,
-  sprintDocTitle,
-  sprintPlanningDocHtml,
-  sprintPlanningIsLocked,
   syncPlanningDocTasks,
   type SprintPlanningTask,
+  type SprintTaskProof,
 } from "@/lib/sprint-planning-doc";
 import {
-  incompleteReasonsFromReviewHtml,
-  reviewInfoFromExisting,
-  sprintReviewDocHtml,
-} from "@/lib/sprint-review-doc";
+  foldSprintItemList,
+  sprintCardCarryFromHtml,
+  sprintDocHtml,
+  sprintDocName,
+  sprintScopeChanges,
+  syncSprintDocOutcome,
+  withSprintReviewDate,
+  type SprintRemovedTask,
+} from "@/lib/sprint-doc";
+import { SprintRemovedPanel } from "@/components/project/sprint-scope-changes";
 import { isClosedSprint, isUnstartedSprint } from "@/lib/sprint-status";
+import { canEditSprintDoc as canEditSprintDocFor } from "@/lib/sprint-doc-access";
 import { useCollaboration } from "@/components/realtime/use-collaboration";
 import { useChannel } from "@/components/realtime/hooks";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
@@ -45,6 +55,7 @@ export function NoteFullScreenCreate({
   isAdmin = false,
   canStartSprint = false,
   canEndSprint = false,
+  canCreateSprintPlanning = false,
   canEditSprintDoc,
   hideAssignees = false,
   onCancel,
@@ -64,6 +75,8 @@ export function NoteFullScreenCreate({
   isAdmin?: boolean;
   canStartSprint?: boolean;
   canEndSprint?: boolean;
+  canCreateSprintPlanning?: boolean;
+  /** Only for callers that already know the answer; otherwise it is derived. */
   canEditSprintDoc?: boolean;
   /** Hide assignees in planning/review task rows (client view). */
   hideAssignees?: boolean;
@@ -77,6 +90,10 @@ export function NoteFullScreenCreate({
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState("");
   const [sprintTasks, setSprintTasks] = useState<SprintPlanningTask[]>([]);
+  // Why each departed task left. Not on the tasks themselves: a departed task
+  // is read out of the frozen plan, which predates it leaving.
+  const [removed, setRemoved] = useState<SprintRemovedTask[]>([]);
+  const [sprintProof, setSprintProof] = useState<Record<string, SprintTaskProof>>({});
   const [sprintReady, setSprintReady] = useState(!sprintId);
   const [noteId, setNoteId] = useState<string | null>(null);
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
@@ -93,13 +110,30 @@ export function NoteFullScreenCreate({
   }, [initialSprintStatus]);
 
   const isDeadline = noteType === "DEADLINE";
-  const isSprintPlanning = noteType === "SPRINT_PLANNING";
-  const isSprintReview = noteType === "SPRINT_REVIEW";
-  const isSprintDoc = isSprintPlanning || isSprintReview;
-  const readOnly = hideAssignees || canEditSprintDoc === false;
-  const planningLocked =
-    (sprintPlanningIsLocked(sprintStatus, isAdmin) && isSprintPlanning) ||
-    readOnly;
+  const isSprintDoc = noteType === "SPRINT_DOC";
+  // Before the sprint starts the plan is being written; after it closes there
+  // is nothing left to write. In between, the outcome half is what moves, and
+  // the plan half locks itself through the editor's own task blocks.
+  const sprintClosed = isSprintDoc && isClosedSprint(sprintStatus);
+  // Derived from the live status rather than taken from the caller, so the
+  // document grants the same rights wherever it is opened. Ordinary notes are
+  // written by whoever opened the form, which is the only reason this asks
+  // whether it is a sprint document at all.
+  const docWritable =
+    !isSprintDoc ||
+    (canEditSprintDoc ??
+      canEditSprintDocFor(
+        {
+          isAdmin,
+          canCreateSprintPlanning,
+          canStartSprint,
+          canEndSprint,
+          isClient: hideAssignees,
+        },
+        sprintStatus,
+      ));
+  const readOnly = hideAssignees || !docWritable;
+  const planningLocked = (sprintClosed && !isAdmin) || readOnly;
 
   const { ydoc, provider: collabProvider, synced: collabSynced, enabled: collabEnabled } =
     // Read-only viewers join too. They cannot type, so they push nothing, but
@@ -116,68 +150,50 @@ export function NoteFullScreenCreate({
   });
   const planningError = saveError ?? autoSaveError;
 
+  // One document per sprint, loaded once. Which half of it is live depends on
+  // the sprint: before it starts there is only the plan, and the plan follows
+  // the sprint's task list; after it starts the plan is a record and the
+  // outcome half is the part that moves.
   useEffect(() => {
     if (!sprintId || !isSprintDoc) return;
     let cancelled = false;
     (async () => {
       try {
-        if (isSprintReview) {
-          const [existing, review, planning] = await Promise.all([
-            getSprintReviewNote(projectId, sprintId),
-            getSprintReviewTasks(sprintId),
-            getSprintPlanningNote(projectId, sprintId),
-          ]);
-          if (cancelled) return;
-          const allTasks = [...review.completed, ...review.incomplete];
-          setSprintTasks(allTasks);
-          const reviewTitle = sprintDocTitle(
-            planning?.title || initialTitle || review.sprintName,
-            "review",
-          );
+        const [existing, planning] = await Promise.all([
+          getSprintDocNote(projectId, sprintId),
+          getSprintPlanningTasks(sprintId),
+        ]);
+        if (cancelled) return;
+        setSprintStatus(planning.status);
+        const docTitle = sprintDocName(
+          existing?.title || initialTitle || planning.sprintName,
+        );
 
-          if (existing && isClosedSprint(review.status)) {
-            setNoteId(existing.id);
-            setTitle(existing.title);
-            setContent(overlayPlanningTaskAssignees(existing.content, allTasks));
-            return;
-          }
-
-          const reasons = existing ? incompleteReasonsFromReviewHtml(existing.content) : {};
-          const info = existing
-            ? reviewInfoFromExisting(review.info, existing.content)
-            : { ...review.info, variant: "review" as const, locked: true };
-          const html = overlayPlanningTaskAssignees(
-            sprintReviewDocHtml(info, review.completed, review.incomplete, reasons),
-            allTasks,
-          );
-
+        if (isUnstartedSprint(planning.status)) {
+          setSprintTasks(planning.tasks);
           if (existing) {
             setNoteId(existing.id);
-            setTitle(reviewTitle);
-            setContent(html);
-            if (!readOnly && existing.title !== reviewTitle) {
-              void updateMeetingNote({ noteId: existing.id, title: reviewTitle });
-            }
+            setTitle(existing.title);
+            setContent(syncPlanningDocTasks(existing.content, planning.tasks));
             return;
           }
-
+          const html = sprintDocHtml(planning.tasks, blankPlanningSchedule(planning.info));
           setContent(html);
-          setTitle(reviewTitle);
+          setTitle(docTitle);
           if (readOnly) return;
           const doc = await getOrCreateSprintDocNote({
             projectId,
             sprintId,
-            noteType: "SPRINT_REVIEW",
-            title: reviewTitle,
+            title: docTitle,
             content: html,
-            date: info.documentDateIso,
+            date: new Date().toISOString().slice(0, 10),
           });
           if (cancelled) return;
           setNoteId(doc.id);
           // Someone else created it first; theirs is the one being edited.
           if (!doc.created) {
             setTitle(doc.title);
-            setContent(overlayPlanningTaskAssignees(doc.content, allTasks));
+            setContent(syncPlanningDocTasks(doc.content, planning.tasks));
             return;
           }
           const full = await getMeetingNote(doc.id);
@@ -185,49 +201,66 @@ export function NoteFullScreenCreate({
           return;
         }
 
-        const [existing, planning] = await Promise.all([
-          getSprintPlanningNote(projectId, sprintId),
-          getSprintPlanningTasks(sprintId),
+        const [review, proof] = await Promise.all([
+          getSprintReviewTasks(sprintId),
+          getSprintProofOfWork(sprintId),
         ]);
         if (cancelled) return;
-        setSprintStatus(planning.status);
-        setSprintTasks(planning.tasks);
+        const allTasks = [...review.completed, ...review.incomplete];
+        setSprintTasks(allTasks);
+        setRemoved(review.removed);
+        setSprintProof(proof);
+
         if (existing) {
           setNoteId(existing.id);
           setTitle(existing.title);
-          // Once started, the document is the record of what was committed to,
-          // so it stops following the sprint's task list.
+          // Closed: the outcome is signed off, so it is read back rather than
+          // rebuilt. Assignees are overlaid because the saved copy carries none
+          // for a client and the staff copy can be stale. The fold is safe on a
+          // record because the tasks it removes are the ones printed below it.
+          if (isClosedSprint(review.status)) {
+            setContent(
+              overlayPlanningTaskAssignees(foldSprintItemList(existing.content), allTasks),
+            );
+            return;
+          }
+          const carry = sprintCardCarryFromHtml(existing.content);
+          const dated = withSprintReviewDate(existing.content, review.info.documentDateIso);
           setContent(
-            isUnstartedSprint(planning.status)
-              ? syncPlanningDocTasks(existing.content, planning.tasks)
-              : overlayPlanningTaskAssignees(existing.content, planning.tasks),
+            overlayPlanningTaskAssignees(
+              syncSprintDocOutcome(dated, review.completed, review.incomplete, carry),
+              allTasks,
+            ),
           );
           return;
         }
-        const info = blankPlanningSchedule(planning.info);
-        const html = sprintPlanningDocHtml(planning.tasks, info);
-        const planningTitle = (initialTitle || `${planning.sprintName} planning`).trim();
+
+        // A sprint running without a document — nobody opened it while it was
+        // being planned. Both halves are written from where the sprint is now.
+        const plan = sprintDocHtml(allTasks, { ...review.info, locked: true });
+        const html = overlayPlanningTaskAssignees(
+          syncSprintDocOutcome(
+            withSprintReviewDate(plan, review.info.documentDateIso),
+            review.completed,
+            review.incomplete,
+          ),
+          allTasks,
+        );
         setContent(html);
-        setTitle(planningTitle);
+        setTitle(docTitle);
         if (readOnly) return;
         const doc = await getOrCreateSprintDocNote({
           projectId,
           sprintId,
-          noteType: "SPRINT_PLANNING",
-          title: planningTitle,
+          title: docTitle,
           content: html,
-          date: new Date().toISOString().slice(0, 10),
+          date: review.info.documentDateIso,
         });
         if (cancelled) return;
         setNoteId(doc.id);
-        // Someone else created it first; theirs is the one being edited.
         if (!doc.created) {
           setTitle(doc.title);
-          setContent(
-            isUnstartedSprint(planning.status)
-              ? syncPlanningDocTasks(doc.content, planning.tasks)
-              : overlayPlanningTaskAssignees(doc.content, planning.tasks),
-          );
+          setContent(overlayPlanningTaskAssignees(doc.content, allTasks));
           return;
         }
         const full = await getMeetingNote(doc.id);
@@ -243,18 +276,25 @@ export function NoteFullScreenCreate({
     return () => {
       cancelled = true;
     };
-  }, [sprintId, projectId, initialTitle, isSprintDoc, isSprintReview, readOnly]);
+  }, [sprintId, projectId, initialTitle, isSprintDoc, readOnly]);
+
+  // A closed sprint is served from its snapshots, and the live task list no
+  // longer describes it — half those tasks have been sent back to the backlog.
+  // So the document only keeps following the sprint while it is still open.
+  const sprintDocLive = isSprintDoc && !sprintClosed;
 
   useEffect(() => {
-    if (!sprintId || !isSprintPlanning) return;
+    if (!sprintId || !sprintDocLive) return;
     const id = sprintId;
     let cancelled = false;
     function refresh() {
-      getSprintPlanningTasks(id)
+      loadSprintDocTasks(id)
         .then((data) => {
           if (cancelled) return;
           setSprintStatus(data.status);
           setSprintTasks(data.tasks);
+          setRemoved(data.removed);
+          setSprintProof(data.proof);
         })
         .catch(() => {});
     }
@@ -263,21 +303,23 @@ export function NoteFullScreenCreate({
       cancelled = true;
       window.removeEventListener("focus", refresh);
     };
-  }, [sprintId, isSprintPlanning]);
+  }, [sprintId, sprintDocLive]);
 
   const sprintTasksLoadRef = useRef<(() => void) | undefined>(undefined);
   sprintTasksLoadRef.current = () => {
-    if (!sprintId || !isSprintPlanning) return;
-    getSprintPlanningTasks(sprintId)
+    if (!sprintId || !sprintDocLive) return;
+    loadSprintDocTasks(sprintId)
       .then((data) => {
         setSprintStatus(data.status);
         setSprintTasks(data.tasks);
+        setRemoved(data.removed);
+        setSprintProof(data.proof);
       })
       .catch(() => {});
   };
   const cent = useCentrifugo();
   useChannel(
-    cent?.enabled && isSprintPlanning ? projectChannel(projectId) : null,
+    cent?.enabled && sprintDocLive ? projectChannel(projectId) : null,
     useCallback((data: unknown) => {
       const ev = data as { type?: string } | null;
       if (!ev?.type) return;
@@ -287,8 +329,22 @@ export function NoteFullScreenCreate({
     }, []),
   );
 
+  // The document stops following the sprint at start, so from then on the two
+  // can disagree — and that disagreement is what the outcome reports.
+  const showScopeChanges =
+    isSprintDoc && Boolean(sprintId) && sprintReady && !isUnstartedSprint(sprintStatus);
+  // Once the sprint closes the departures are written into the document, so the
+  // panel would be printing the section that is already on the page above it.
+  const showRemovedPanel = showScopeChanges && !sprintClosed;
+  const addedCount = useMemo(
+    () => (showScopeChanges ? sprintScopeChanges(content, sprintTasks).added.length : 0),
+    [showScopeChanges, content, sprintTasks],
+  );
+
   async function handleSave() {
     if (!noteType) { setTypeError(true); return; }
+    // Documents predating the merge still carry these; nothing creates them.
+    if (noteType === "SPRINT_PLANNING" || noteType === "SPRINT_REVIEW") return;
     if (!title.trim()) return;
     setTypeError(false);
     setSaveError(null);
@@ -298,7 +354,7 @@ export function NoteFullScreenCreate({
         projectId,
         title: title.trim(),
         content,
-        date: (isSprintPlanning && documentDateIsoFromPlanningHtml(content)) || date,
+        date: (isSprintDoc && documentDateIsoFromPlanningHtml(content)) || date,
         noteType,
         ...(taskId ? { taskId } : {}),
         ...(isDeadline ? { roadmapStatus: "PLANNED" } : {}),
@@ -317,8 +373,7 @@ export function NoteFullScreenCreate({
     CLARIFICATION: "What needs clarifying?",
     DEADLINE: "Title...",
     MEETING_NOTE: "Meeting title...",
-    SPRINT_PLANNING: "Sprint planning title...",
-    SPRINT_REVIEW: "Sprint review title...",
+    SPRINT_DOC: "Sprint document title...",
   };
 
   const editorPlaceholders: Record<string, string> = {
@@ -326,8 +381,7 @@ export function NoteFullScreenCreate({
     CLARIFICATION: "Capture the questions, missing details, and what was clarified... (type / for commands)",
     DEADLINE: "Notes about this item... (type / for commands)",
     MEETING_NOTE: "Write your meeting notes here... (type / for commands)",
-    SPRINT_PLANNING: "Type / to insert a sprint task...",
-    SPRINT_REVIEW: "Write the sprint review... (type / for commands)",
+    SPRINT_DOC: "Type / to insert a sprint task...",
   };
 
   const saveButton = (
@@ -385,19 +439,26 @@ export function NoteFullScreenCreate({
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            readOnly={planningLocked && !isSprintReview}
+            readOnly={planningLocked}
             placeholder={placeholders[noteType ?? "MEETING_NOTE"] ?? "Title..."}
             className={cn(
               "w-full bg-transparent border-none outline-none placeholder:text-muted-foreground/30",
               isSprintDoc
                 ? "mb-10 text-center text-4xl font-bold leading-tight"
                 : "mb-4 text-m font-bold",
-              planningLocked && !isSprintReview && "pointer-events-none",
+              planningLocked && "pointer-events-none",
             )}
-            autoFocus={autoFocusTitle && !(planningLocked && !isSprintReview)}
+            autoFocus={autoFocusTitle && !planningLocked}
           />
 
-          {isSprintDoc ? <SprintDocDashboard tasks={sprintTasks} review={isSprintReview} /> : null}
+          {isSprintDoc ? (
+            <SprintDocDashboard
+              tasks={sprintTasks}
+              review={showScopeChanges}
+              added={addedCount}
+              removed={removed.length}
+            />
+          ) : null}
 
           {isDeadline ? (
             <div className="flex items-center gap-3 mb-8 pb-6 border-b border-border/50">
@@ -414,7 +475,7 @@ export function NoteFullScreenCreate({
               <p className="mb-8 text-xs text-destructive">{planningError}</p>
             ) : planningLocked && !hideAssignees ? (
               <p className="mb-8 text-center text-xs text-muted-foreground">
-                This planning document is locked. Only an admin can edit it after the sprint starts.
+                This sprint document is locked. Only an admin can edit it once the sprint closes.
               </p>
             ) : null
           ) : null}
@@ -438,6 +499,7 @@ export function NoteFullScreenCreate({
               sprintId={sprintId}
               sprintStatus={sprintStatus}
               sprintTasks={sprintTasks}
+              sprintProof={sprintProof}
               onSprintStatusChange={setSprintStatus}
               ydoc={ydoc}
               collabProvider={collabProvider}
@@ -450,6 +512,10 @@ export function NoteFullScreenCreate({
               }}
             />
           )}
+
+          {showRemovedPanel ? (
+            <SprintRemovedPanel removed={removed} hideAssignees={hideAssignees} />
+          ) : null}
       </div>
     </div>
   );

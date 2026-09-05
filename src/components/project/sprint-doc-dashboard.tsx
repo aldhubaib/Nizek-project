@@ -1,6 +1,16 @@
 "use client";
 
-import { Bug, CheckCircle2, Circle, Clock, Palette, Sparkles, Wrench } from "lucide-react";
+import {
+  Bug,
+  CheckCircle2,
+  Circle,
+  Clock,
+  MinusCircle,
+  Palette,
+  PlusCircle,
+  Sparkles,
+  Wrench,
+} from "lucide-react";
 import { formatMinutes } from "@/components/project/sprint-task-row";
 import { summarizeSprintTasks } from "@/lib/sprint-planning-doc";
 import { cn } from "@/lib/utils";
@@ -53,9 +63,14 @@ function TileRow({
 export function SprintDocDashboard({
   tasks,
   review = false,
+  added = 0,
+  removed = 0,
 }: {
   tasks: DashTask[];
   review?: boolean;
+  /** How far the sprint has drifted from what the document committed to. */
+  added?: number;
+  removed?: number;
 }) {
   const stats = summarizeSprintTasks(tasks);
   const typeTiles = [
@@ -120,8 +135,24 @@ export function SprintDocDashboard({
                 label: "Uncompleted tasks",
                 color: "text-orange",
               },
+              // The same counts the sections at the foot of the document list
+              // out in full, said up here where the sprint is summarised.
+              {
+                key: "added",
+                icon: PlusCircle,
+                value: String(added),
+                label: "Added to sprint",
+                color: "text-success",
+              },
+              {
+                key: "removed",
+                icon: MinusCircle,
+                value: String(removed),
+                label: "Removed from sprint",
+                color: "text-destructive",
+              },
             ]}
-            columns={2}
+            columns={4}
           />
         </div>
       ) : null}

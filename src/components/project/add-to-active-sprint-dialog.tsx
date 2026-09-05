@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,8 @@ interface Props {
   task: TaskPreview | null;
   pending?: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
+  /** The reason is required: the sprint document reports this as a scope change. */
+  onConfirm: (reason: string) => void;
 }
 
 export function AddToActiveSprintDialog({
@@ -33,9 +35,12 @@ export function AddToActiveSprintDialog({
   onOpenChange,
   onConfirm,
 }: Props) {
+  const [reason, setReason] = useState("");
+
   if (!open || !task) return null;
 
   const stage = taskStageBadge(task.stage);
+  const ready = reason.trim().length > 0;
 
   return (
     <>
@@ -57,10 +62,23 @@ export function AddToActiveSprintDialog({
                 <p className="text-s leading-relaxed break-words text-muted-foreground">
                   You are trying to add a task to{" "}
                   <span className="font-medium text-foreground">{sprintName}</span>, which is
-                  already active. Are you sure?
+                  already active. This changes what the team committed to, so the
+                  sprint document will record it.
                 </p>
               </div>
             </div>
+
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Reason for adding <span className="text-destructive">*</span>
+            </label>
+            <textarea
+              autoFocus
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Why does this have to go in now rather than next sprint?"
+              className="mb-4 w-full resize-y rounded-md border border-border bg-transparent px-3 py-2 text-s text-foreground outline-none placeholder:text-muted-foreground/40 focus:border-foreground/40"
+            />
 
             <Link
               href={`/dashboard/projects/${projectId}/tasks/${task.id}`}
@@ -83,7 +101,11 @@ export function AddToActiveSprintDialog({
             >
               Cancel
             </Button>
-            <Button size="sm" onClick={onConfirm} disabled={pending}>
+            <Button
+              size="sm"
+              onClick={() => onConfirm(reason.trim())}
+              disabled={pending || !ready}
+            >
               Add to sprint
             </Button>
           </div>

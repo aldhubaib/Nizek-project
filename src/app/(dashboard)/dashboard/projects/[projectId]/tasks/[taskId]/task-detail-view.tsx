@@ -925,11 +925,11 @@ export function TaskDetailPage({
 
         <ProofVideosSection taskId={initialTask.id} taskStage={taskStage} />
 
-        {/* Comments */}
+        {/* Internal comments — the team's own thread, never shown to a client. */}
         <div className="rounded-lg border border-border/50 bg-card px-3 pb-3">
           <div className="flex items-center gap-2 px-1 py-4">
             <MessageSquare className="w-4 h-4 text-muted-foreground" strokeWidth={1.5} />
-            <h3 className="text-s font-semibold">Comments</h3>
+            <h3 className="text-s font-semibold">Internal Comments</h3>
           </div>
           <CommentSection key={`comments-${initialTask.id}-${commentKey}`} taskId={initialTask.id} projectId={projectId} />
         </div>

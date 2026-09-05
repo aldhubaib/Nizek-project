@@ -12,9 +12,16 @@ import { SprintDocDashboard } from "@/components/project/sprint-doc-dashboard";
 import { ALL_NOTE_TYPES, NOTE_TYPE_CONFIG, NOTES_CREATE_TYPES, type NoteType } from "@/components/project/note-types";
 import { OverflowTabBar } from "@/components/overflow-tab-bar";
 import { updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete, getMeetingNote } from "@/actions/meeting-note";
-import { getSprintPlanningTasks, getSprintReviewTasks } from "@/actions/sprint";
+import { loadSprintDocTasks } from "@/lib/sprint-doc-tasks";
 import { useNoteAutosave } from "@/components/project/use-note-autosave";
-import { documentDateIsoFromPlanningHtml, sprintIdFromPlanningHtml, sprintPlanningIsLocked, type SprintPlanningTask } from "@/lib/sprint-planning-doc";
+import { documentDateIsoFromPlanningHtml, sprintIdFromPlanningHtml, sprintPlanningIsLocked, type SprintPlanningTask, type SprintTaskProof } from "@/lib/sprint-planning-doc";
+import {
+  foldSprintItemList,
+  sprintScopeChanges,
+  type SprintRemovedTask,
+} from "@/lib/sprint-doc";
+import { isClosedSprint, isUnstartedSprint } from "@/lib/sprint-status";
+import { SprintRemovedPanel } from "@/components/project/sprint-scope-changes";
 import { getNoteCommentThreads } from "@/actions/note-comment";
 import { testDeadlineReminder } from "@/actions/deadline-reminder";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
@@ -628,6 +635,10 @@ export function NoteFullScreenDetail({
   const [content, setContent] = useState(note.content);
   const [sprintTasks, setSprintTasks] = useState<SprintPlanningTask[]>([]);
   const [sprintStatus, setSprintStatus] = useState("");
+  // The work that left the sprint. Read from its departure records rather than
+  // from the document, which was written before anybody knew it would leave.
+  const [removed, setRemoved] = useState<SprintRemovedTask[]>([]);
+  const [sprintProof, setSprintProof] = useState<Record<string, SprintTaskProof>>({});
   const [dueDate, setDueDate] = useState(
     note.dueDate ? toDateInputValue(note.dueDate) : "",
   );
@@ -709,7 +720,10 @@ export function NoteFullScreenDetail({
 
   useEffect(() => {
     setTitle(note.title);
-    setContent(note.content);
+    // Once a sprint has started its outcome lists the same tasks the plan did,
+    // so the plan's list is folded away rather than shown twice. A no-op on
+    // anything without an outcome, which is every other kind of note.
+    setContent(foldSprintItemList(note.content));
     setCompletedAt(note.completedAt ?? null);
     setDueDate(note.dueDate ? toDateInputValue(note.dueDate) : "");
     setStartedAt(note.startedAt ? toDateInputValue(note.startedAt) : "");
@@ -719,13 +733,31 @@ export function NoteFullScreenDetail({
   const config = NOTE_TYPE_CONFIG[(note.noteType as NoteType)] ?? NOTE_TYPE_CONFIG.MEETING_NOTE;
   const Icon = config?.icon ?? FileText;
   const isDeadline = note.noteType === "DEADLINE";
-  const isSprintPlanning = note.noteType === "SPRINT_PLANNING";
-  const isSprintReview = note.noteType === "SPRINT_REVIEW";
-  const isSprintDoc = isSprintPlanning || isSprintReview;
-  const planningLocked = sprintPlanningIsLocked(sprintStatus, isAdmin) && isSprintPlanning;
+  // The legacy pair still opens here, on sprints whose documents predate the
+  // merge and were never touched by it.
+  const isSprintDoc =
+    note.noteType === "SPRINT_DOC" ||
+    note.noteType === "SPRINT_PLANNING" ||
+    note.noteType === "SPRINT_REVIEW";
+  const sprintStarted = Boolean(sprintStatus) && !isUnstartedSprint(sprintStatus);
+  const planningLocked =
+    isSprintDoc && sprintPlanningIsLocked(sprintStatus, isAdmin) && isClosedSprint(sprintStatus);
+  // The document stops following the sprint at start, so from then on the two
+  // can disagree — and that disagreement is what the outcome reports.
+  const showScopeChanges = isSprintDoc && sprintStarted;
+  // Once the sprint closes the departures are written into the document, so the
+  // panel would be printing the section that is already on the page above it.
+  const showRemovedPanel = showScopeChanges && !isClosedSprint(sprintStatus);
+  const addedCount = useMemo(
+    () => (showScopeChanges ? sprintScopeChanges(content, sprintTasks).added.length : 0),
+    [showScopeChanges, content, sprintTasks],
+  );
+  // Whoever owns the phase the document is in writes it: the plan before the
+  // sprint starts, the outcome while it runs, nobody once it closes.
   const liveEdit =
-    (isSprintPlanning && !planningLocked && canCreateSprintPlanning) ||
-    (isSprintReview && canEndSprint);
+    isSprintDoc &&
+    !planningLocked &&
+    (sprintStarted ? canEndSprint : canCreateSprintPlanning);
   const { ydoc, provider: collabProvider, synced: collabSynced, enabled: collabEnabled } =
     // Viewers join as well as editors: they push nothing, and it is the
     // difference between seeing the document change and seeing a snapshot.
@@ -745,20 +777,13 @@ export function NoteFullScreenDetail({
     const sprintId: string = planningSprintId;
     let cancelled = false;
     function load() {
-      const request = isSprintReview
-        ? getSprintReviewTasks(sprintId).then((data) => ({
-            tasks: [...data.completed, ...data.incomplete],
-            status: data.status,
-          }))
-        : getSprintPlanningTasks(sprintId).then((data) => ({
-            tasks: data.tasks,
-            status: data.status,
-          }));
-      request
+      loadSprintDocTasks(sprintId)
         .then((data) => {
           if (cancelled) return;
           setSprintTasks(data.tasks);
           setSprintStatus(data.status);
+          setRemoved(data.removed);
+          setSprintProof(data.proof);
         })
         .catch(() => {});
     }
@@ -768,26 +793,19 @@ export function NoteFullScreenDetail({
       cancelled = true;
       window.removeEventListener("focus", load);
     };
-  }, [isSprintDoc, isSprintReview, note.content]);
+  }, [isSprintDoc, note.content]);
 
   const sprintTasksLoadRef = useRef<(() => void) | undefined>(undefined);
   sprintTasksLoadRef.current = () => {
     if (!isSprintDoc) return;
     const sprintId = sprintIdFromPlanningHtml(note.content);
     if (!sprintId) return;
-    const request = isSprintReview
-      ? getSprintReviewTasks(sprintId).then((data) => ({
-          tasks: [...data.completed, ...data.incomplete],
-          status: data.status,
-        }))
-      : getSprintPlanningTasks(sprintId).then((data) => ({
-          tasks: data.tasks,
-          status: data.status,
-        }));
-    request
+    loadSprintDocTasks(sprintId)
       .then((data) => {
         setSprintTasks(data.tasks);
         setSprintStatus(data.status);
+        setRemoved(data.removed);
+        setSprintProof(data.proof);
       })
       .catch(() => {});
   };
@@ -1311,12 +1329,19 @@ export function NoteFullScreenDetail({
                 {note.title}
               </h1>
             )}
-            {isSprintDoc ? <SprintDocDashboard tasks={sprintTasks} review={isSprintReview} /> : null}
+            {isSprintDoc ? (
+              <SprintDocDashboard
+                tasks={sprintTasks}
+                review={sprintStarted}
+                added={addedCount}
+                removed={removed.length}
+              />
+            ) : null}
             {isSprintDoc && (workingDaysError || autoSaveError) ? (
               <p className="mb-4 text-s text-destructive">{workingDaysError ?? autoSaveError}</p>
             ) : planningLocked ? (
               <p className="mb-4 text-center text-xs text-muted-foreground">
-                This planning document is locked. Only an admin can edit it after the sprint starts.
+                This sprint document is locked. Only an admin can edit it once the sprint closes.
               </p>
             ) : null}
 
@@ -1334,6 +1359,7 @@ export function NoteFullScreenDetail({
                 sprintId={sprintIdFromPlanningHtml(note.content) ?? undefined}
                 sprintStatus={sprintStatus}
                 sprintTasks={sprintTasks}
+                sprintProof={sprintProof}
                 onSprintStatusChange={setSprintStatus}
                 ydoc={ydoc}
                 collabProvider={collabProvider}
@@ -1364,6 +1390,8 @@ export function NoteFullScreenDetail({
                 }}
               />
             )}
+
+            {showRemovedPanel ? <SprintRemovedPanel removed={removed} /> : null}
       </div>
   );
 
