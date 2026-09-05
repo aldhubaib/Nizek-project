@@ -1460,7 +1460,7 @@ export function ThreadChat({
                 <Pencil className="h-5 w-5" />
               </button>
             )}
-            {selectedMine && (
+            {selectedMine && !isCardMessage(selectedMessage) && (
               <button
                 type="button"
                 onClick={() => handleDelete(selectedMessage.id)}

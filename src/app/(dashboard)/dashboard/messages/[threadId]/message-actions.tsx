@@ -23,7 +23,8 @@ export type MessageActionHandlers = {
   onReact: (emoji: string) => void;
   onReply: () => void;
   onCopy: () => void;
-  onDelete: () => void;
+  /** Absent on the cards the app raises itself — those are a record. */
+  onDelete?: () => void;
   onEdit?: () => void;
   onCreateTask?: () => void;
   onToggleImportant?: () => void;
@@ -89,11 +90,15 @@ export function ActionsMenuContent({
           <span className="flex-1">Create task</span>
         </DropdownMenuItem>
       )}
-      <DropdownMenuSeparator />
-      <DropdownMenuItem onClick={onDelete} variant="destructive" className="min-h-10 gap-3 text-s">
-        <Trash2 className="h-4 w-4" />
-        <span className="flex-1">Delete</span>
-      </DropdownMenuItem>
+      {onDelete && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={onDelete} variant="destructive" className="min-h-10 gap-3 text-s">
+            <Trash2 className="h-4 w-4" />
+            <span className="flex-1">Delete</span>
+          </DropdownMenuItem>
+        </>
+      )}
     </DropdownMenuContent>
   );
 }

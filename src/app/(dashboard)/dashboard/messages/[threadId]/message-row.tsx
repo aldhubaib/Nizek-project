@@ -334,12 +334,17 @@ export const MessageRow = memo(function MessageRow({
     [react, m.id],
   );
 
+  // A card is the app's own record of something that happened, not a remark
+  // someone made, so it can be quoted and reacted to but neither edited away
+  // nor deleted.
+  const isCard = isCardMessage(m);
+
   const actionHandlers: MessageActionHandlers = {
     onReact: (emoji) => react(m.id, emoji),
     onReply: () => handleReply(m.id),
     onCopy: () => handleCopy(messageQuoteText(m)),
-    onDelete: () => handleDelete(m.id),
-    onEdit: mine && !isCardMessage(m) ? () => handleEdit(m.id) : undefined,
+    onDelete: isCard ? undefined : () => handleDelete(m.id),
+    onEdit: mine && !isCard ? () => handleEdit(m.id) : undefined,
     onCreateTask: canCreateTask ? () => handleCreateTask(m) : undefined,
     onToggleImportant: () => handleToggleImportant(m.id),
     important: Boolean(m.important),
@@ -445,7 +450,7 @@ export const MessageRow = memo(function MessageRow({
     </div>
   ) : null;
 
-  if (isCardMessage(m)) {
+  if (isCard) {
     const authorLabel = chatPostAuthorLabel(m.authorId, m.authorName);
     return (
       <div id={`msg-${m.id}`} className={cn(dimmed && "opacity-30")}>
@@ -486,73 +491,78 @@ export const MessageRow = memo(function MessageRow({
                 onClick={() => scrollToMessage(m.replyToId!)}
               />
             )}
-            {m.deadlineReminder ? (
-              <DeadlineReminderCard
-                payload={m.deadlineReminder}
-                createdAt={m.createdAt}
-                projectName={projectName}
-              />
-            ) : m.noteActivity ? (
-              <NoteActivityCard
-                payload={m.noteActivity}
-                createdAt={m.createdAt}
-                projectName={projectName}
-                isClientViewer={isClientViewer}
-              />
-            ) : m.clientIssue ? (
-              <ClientIssueCard
-                payload={m.clientIssue}
-                createdAt={m.createdAt}
-                projectName={projectName}
-                isClientViewer={isClientViewer}
-              />
-            ) : m.taskComment ? (
-              <TaskCommentCard
-                payload={m.taskComment}
-                createdAt={m.createdAt}
-                projectName={projectName}
-              />
-            ) : m.kind === "rejection" ? (
-              <TaskRejectionCard
-                title={m.task?.title ?? "Task"}
-                taskNumber={m.task?.number}
-                projectId={m.task?.projectId}
-                projectName={projectName}
-                taskId={m.task?.id}
-                body={m.body}
-                mentions={m.mentions}
-                attachments={m.attachments}
-                createdAt={m.createdAt}
-                onOpenImage={openImage}
-              />
-            ) : m.kind === "proof_bypass" || m.proofBypass ? (
-              m.proofBypass ? (
-                <ProofBypassCard
-                  payload={m.proofBypass}
+            {/* The ⋮ hangs in the card's own top-right corner, so it needs a
+                positioned box around whichever card this turns out to be. */}
+            <div className="relative">
+              {m.deadlineReminder ? (
+                <DeadlineReminderCard
+                  payload={m.deadlineReminder}
                   createdAt={m.createdAt}
-                  currentUserId={currentMemberId}
+                  projectName={projectName}
+                />
+              ) : m.noteActivity ? (
+                <NoteActivityCard
+                  payload={m.noteActivity}
+                  createdAt={m.createdAt}
+                  projectName={projectName}
+                  isClientViewer={isClientViewer}
+                />
+              ) : m.clientIssue ? (
+                <ClientIssueCard
+                  payload={m.clientIssue}
+                  createdAt={m.createdAt}
+                  projectName={projectName}
+                  isClientViewer={isClientViewer}
+                />
+              ) : m.taskComment ? (
+                <TaskCommentCard
+                  payload={m.taskComment}
+                  createdAt={m.createdAt}
+                  projectName={projectName}
+                />
+              ) : m.kind === "rejection" ? (
+                <TaskRejectionCard
+                  title={m.task?.title ?? "Task"}
+                  taskNumber={m.task?.number}
+                  projectId={m.task?.projectId}
+                  projectName={projectName}
+                  taskId={m.task?.id}
+                  body={m.body}
+                  mentions={m.mentions}
+                  attachments={m.attachments}
+                  createdAt={m.createdAt}
+                  onOpenImage={openImage}
+                />
+              ) : m.kind === "proof_bypass" || m.proofBypass ? (
+                m.proofBypass ? (
+                  <ProofBypassCard
+                    payload={m.proofBypass}
+                    createdAt={m.createdAt}
+                    currentUserId={currentMemberId}
+                  />
+                ) : (
+                  <p className="text-s text-muted-foreground">Video bypass request</p>
+                )
+              ) : isProofOfWorkChatMessage(m) && m.task ? (
+                <ProofOfWorkCard
+                  taskId={m.task.id}
+                  projectId={m.task.projectId}
+                  projectName={projectName}
+                  taskNumber={m.task.number}
+                  taskTitle={m.task.title}
+                  body={m.body}
+                  videos={videoAtts}
+                  createdAt={m.createdAt}
                 />
               ) : (
-                <p className="text-s text-muted-foreground">Video bypass request</p>
-              )
-            ) : isProofOfWorkChatMessage(m) && m.task ? (
-              <ProofOfWorkCard
-                taskId={m.task.id}
-                projectId={m.task.projectId}
-                projectName={projectName}
-                taskNumber={m.task.number}
-                taskTitle={m.task.title}
-                body={m.body}
-                videos={videoAtts}
-                createdAt={m.createdAt}
-              />
-            ) : (
-              <NoteCommentCard
-                payload={m.noteComment!}
-                createdAt={m.createdAt}
-                projectName={projectName}
-              />
-            )}
+                <NoteCommentCard
+                  payload={m.noteComment!}
+                  createdAt={m.createdAt}
+                  projectName={projectName}
+                />
+              )}
+              <MessageCaret mine={false} {...actionHandlers} />
+            </div>
             {imageAtts.length > 0 && m.kind !== "rejection" && (
               <div className="flex max-w-full flex-wrap gap-xs justify-start">
                 {imageAtts.map((a) => (
@@ -605,12 +615,6 @@ export const MessageRow = memo(function MessageRow({
                 onToggle={toggleReaction}
               />
             )}
-          </div>
-          {/* The ⋮ sits beside the card rather than over it: a card fills its
-              own top-right corner with a type pill or a date. Desktop only, so
-              a phone gives the whole width to the card. */}
-          <div className="relative hidden w-8 shrink-0 self-start lg:block">
-            <MessageCaret mine={false} {...actionHandlers} />
           </div>
         </div>
       </div>
