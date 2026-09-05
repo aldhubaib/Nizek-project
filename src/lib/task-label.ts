@@ -54,9 +54,9 @@ interface TypePalette {
  * Every task type colour in the product, and the only place any of them is set
  * — the same arrangement the statuses above have.
  *
- * Seven files used to answer this question separately and two of them had
- * drifted, so a bug was orange in chat and red on the task it linked to. The
- * classes are spelled out for the reason STATUS_COLOR spells its own out:
+ * Seven files used to answer this question separately and had drifted apart,
+ * so a bug came out one colour in chat and another on the task it linked to.
+ * The classes are spelled out for the reason STATUS_COLOR spells its own out:
  * Tailwind only emits what it can read as literal text.
  */
 export const TASK_TYPE_COLOR: Record<string, TypePalette> = {
@@ -88,18 +88,21 @@ export const TASK_TYPE_COLOR: Record<string, TypePalette> = {
       quote: "border-violet/60",
     },
   },
+  // Both kinds of bug are red. They are told apart by their mark — a bug for
+  // one the team found, a warning for one a client hit — not by hue, because a
+  // bug is a bug to whoever is reading the board.
   BUG: {
-    text: "text-orange",
-    border: "border-orange/30",
-    active: "bg-orange/15 border-orange/40 text-orange",
+    text: "text-destructive",
+    border: "border-destructive/30",
+    active: "bg-destructive/15 border-destructive/40 text-destructive",
     activity: {
-      accent: "text-orange",
-      border: "border-orange/35",
-      ring: "ring-orange/20",
-      iconWrap: "bg-orange/10 text-orange",
-      button: "border-orange/30 bg-orange/5 hover:bg-orange/10 text-orange",
-      pill: "border-orange/30 text-orange",
-      quote: "border-orange/60",
+      accent: "text-destructive",
+      border: "border-destructive/35",
+      ring: "ring-destructive/20",
+      iconWrap: "bg-destructive/10 text-destructive",
+      button: "border-destructive/30 bg-destructive/5 hover:bg-destructive/10 text-destructive",
+      pill: "border-destructive/30 text-destructive",
+      quote: "border-destructive/60",
     },
   },
   REPORTED_BUG: {
