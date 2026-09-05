@@ -1,14 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  Sparkles,
-  Wrench,
-  Bug,
-  Palette,
-  Loader2,
-  CheckSquare,
-} from "lucide-react";
+import { Loader2, CheckSquare } from "lucide-react";
+import { taskTypeStyle } from "@/lib/task-type-style";
 import { createTaskFromNoteHighlight } from "@/actions/meeting-note";
 import { getTaskQuestions } from "@/actions/task-question";
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
@@ -27,37 +21,11 @@ import { cn } from "@/lib/utils";
 type TaskType = "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
 type QuestionWithType = TaskQuestion & { taskType: string };
 
-const TASK_TYPES: {
-  id: TaskType;
-  label: string;
-  icon: typeof Sparkles;
-  activeColor: string;
-}[] = [
-  {
-    id: "FEATURE",
-    label: "Business Case",
-    icon: Sparkles,
-    activeColor: "bg-primary/15 border-primary/40 text-primary",
-  },
-  {
-    id: "ENHANCEMENT",
-    label: "Enhancement",
-    icon: Wrench,
-    activeColor: "bg-violet/15 border-violet/40 text-violet",
-  },
-  {
-    id: "BUG",
-    label: "Internal Bug",
-    icon: Bug,
-    activeColor: "bg-orange/15 border-orange/40 text-orange",
-  },
-  {
-    id: "DESIGN",
-    label: "Design",
-    icon: Palette,
-    activeColor: "bg-cyan/15 border-cyan/40 text-cyan",
-  },
-];
+// A client's own reported bug is not on offer here; the team is raising this.
+const TASK_TYPES = (["FEATURE", "ENHANCEMENT", "BUG", "DESIGN"] as const).map((id) => {
+  const style = taskTypeStyle(id);
+  return { id, label: style.label, icon: style.icon, activeColor: style.active };
+});
 
 export function CreateTaskFromNoteDialog({
   open,

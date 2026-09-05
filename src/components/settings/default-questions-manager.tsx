@@ -21,7 +21,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AddButton } from "@/components/add-button";
-import { Trash2, MessageCircleQuestion, List, Type, Sparkles, Wrench, Bug, Paperclip, GripVertical, Link, UserRound, AlertCircle, Palette } from "lucide-react";
+import { Trash2, MessageCircleQuestion, List, Type, Paperclip, GripVertical, Link, UserRound } from "lucide-react";
+import { TASK_TYPES, taskTypeStyle } from "@/lib/task-type-style";
 import { addDefaultQuestion, deleteDefaultQuestion, updateDefaultQuestion, reorderDefaultQuestions, setClientIssueTypeEnabled } from "@/actions/default-question";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -53,13 +54,16 @@ interface Props {
   clientIssueTypes: TaskType[];
 }
 
-const TABS: { id: TaskType; label: string; icon: typeof Sparkles; color: string; activeColor: string }[] = [
-  { id: "FEATURE", label: "Business Case", icon: Sparkles, color: "text-muted-foreground", activeColor: "bg-primary/15 border-primary/40 text-primary" },
-  { id: "ENHANCEMENT", label: "Enhancement", icon: Wrench, color: "text-muted-foreground", activeColor: "bg-violet/15 border-violet/40 text-violet" },
-  { id: "BUG", label: "Internal Bug", icon: Bug, color: "text-muted-foreground", activeColor: "bg-orange/15 border-orange/40 text-orange" },
-  { id: "REPORTED_BUG", label: "Reported Bug", icon: AlertCircle, color: "text-muted-foreground", activeColor: "bg-destructive/15 border-destructive/40 text-destructive" },
-  { id: "DESIGN", label: "Design", icon: Palette, color: "text-muted-foreground", activeColor: "bg-cyan/15 border-cyan/40 text-cyan" },
-];
+const TABS = TASK_TYPES.map((id) => {
+  const style = taskTypeStyle(id);
+  return {
+    id: id as TaskType,
+    label: style.label,
+    icon: style.icon,
+    color: "text-muted-foreground",
+    activeColor: style.active,
+  };
+});
 
 function SelectModeToggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (

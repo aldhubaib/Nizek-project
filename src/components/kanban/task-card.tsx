@@ -2,11 +2,12 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Sparkles, Wrench, Bug, Undo2, AlertCircle, Palette, Gauge, Hourglass, X } from "lucide-react";
+import { Undo2, Gauge, Hourglass, X } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { KanbanTask, TaskType, EstimateAccuracy } from "@/store/kanban";
+import type { KanbanTask, EstimateAccuracy } from "@/store/kanban";
 import { outlineBadge, taskDetailHref } from "@/lib/task-label";
+import { taskTypeStyle } from "@/lib/task-type-style";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -17,14 +18,6 @@ const ACCURACY_CONFIG: Record<EstimateAccuracy, { label: string; color: string; 
   ON_TRACK:  outlineBadge("On Track", "text-success", "border-success/30"),
   UNDER:     outlineBadge("Under", "text-primary", "border-primary/30"),
   WAY_UNDER: outlineBadge("Way Under", "text-violet", "border-violet/30"),
-};
-
-const TYPE_CONFIG: Record<TaskType, { icon: typeof Sparkles; color: string; bg: string; tooltip: string }> = {
-  FEATURE: { icon: Sparkles, color: "text-primary", bg: "bg-background border-primary/30", tooltip: "Business Case" },
-  ENHANCEMENT: { icon: Wrench, color: "text-violet", bg: "bg-background border-violet/30", tooltip: "Enhancement" },
-  BUG: { icon: Bug, color: "text-orange", bg: "bg-background border-orange/30", tooltip: "Internal Bug" },
-  REPORTED_BUG: { icon: AlertCircle, color: "text-destructive", bg: "bg-background border-destructive/30", tooltip: "Reported Bug (Client)" },
-  DESIGN: { icon: Palette, color: "text-cyan", bg: "bg-background border-cyan/30", tooltip: "Design" },
 };
 
 function formatEstimate(minutes: number): string {
@@ -156,8 +149,8 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
     transition: isDragging ? undefined : transition,
   };
 
-  const typeConfig = TYPE_CONFIG[task.taskType] ?? TYPE_CONFIG.FEATURE;
-  const TypeIcon = typeConfig.icon;
+  const typeStyle = taskTypeStyle(task.taskType);
+  const TypeIcon = typeStyle.icon;
 
   const estimateTime =
     task.estimatedMinutes != null && task.estimatedMinutes > 0
@@ -235,11 +228,11 @@ export const TaskCard = memo(function TaskCard({ task, isOverlay, disabled, lock
           )}
           <span
             className={cn(
-              "inline-flex size-5 shrink-0 items-center justify-center rounded-full border",
-              typeConfig.bg,
-              typeConfig.color
+              "inline-flex size-5 shrink-0 items-center justify-center rounded-full border bg-background",
+              typeStyle.border,
+              typeStyle.text
             )}
-            title={typeConfig.tooltip}
+            title={typeStyle.label}
           >
             <TypeIcon className="size-3" strokeWidth={1.5} />
           </span>

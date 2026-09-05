@@ -1,17 +1,15 @@
 "use client";
 
 import {
-  Bug,
   CheckCircle2,
   Circle,
   Clock,
   MinusCircle,
-  Palette,
   PlusCircle,
   Sparkles,
-  Wrench,
 } from "lucide-react";
 import { formatMinutes } from "@/components/project/sprint-task-row";
+import { taskTypeStyle } from "@/lib/task-type-style";
 import { summarizeSprintTasks } from "@/lib/sprint-planning-doc";
 import { cn } from "@/lib/utils";
 
@@ -76,31 +74,31 @@ export function SprintDocDashboard({
   const typeTiles = [
     {
       key: "bc",
-      icon: Sparkles,
+      icon: taskTypeStyle("FEATURE").icon,
       value: String(stats.businessCases),
       label: "Business cases",
-      color: "text-primary",
+      color: taskTypeStyle("FEATURE").text,
     },
     {
       key: "en",
-      icon: Wrench,
+      icon: taskTypeStyle("ENHANCEMENT").icon,
       value: String(stats.enhancements),
       label: "Enhancements",
-      color: "text-violet",
+      color: taskTypeStyle("ENHANCEMENT").text,
     },
     {
       key: "bug",
-      icon: Bug,
+      icon: taskTypeStyle("BUG").icon,
       value: String(stats.bugs),
       label: "Bugs",
-      color: "text-destructive",
+      color: taskTypeStyle("BUG").text,
     },
     {
       key: "des",
-      icon: Palette,
+      icon: taskTypeStyle("DESIGN").icon,
       value: String(stats.design),
       label: "Design",
-      color: "text-cyan",
+      color: taskTypeStyle("DESIGN").text,
     },
     {
       key: "time",

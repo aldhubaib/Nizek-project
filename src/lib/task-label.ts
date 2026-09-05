@@ -29,12 +29,142 @@ export function outlineBadge(label: string, color: string, border: string) {
   return { label, color, bg: `bg-background ${border}` };
 }
 
+/** The chat activity cards tint their whole surface, not just an icon. */
+interface ActivityPalette {
+  accent: string;
+  border: string;
+  ring: string;
+  iconWrap: string;
+  button: string;
+  pill: string;
+  quote: string;
+}
+
+interface TypePalette {
+  /** The icon, and the type's name beside it. */
+  text: string;
+  /** Hairline on a badge or card carrying the type. */
+  border: string;
+  /** A type picker's chosen option. */
+  active: string;
+  activity: ActivityPalette;
+}
+
+/**
+ * Every task type colour in the product, and the only place any of them is set
+ * — the same arrangement the statuses above have.
+ *
+ * Seven files used to answer this question separately and two of them had
+ * drifted, so a bug was orange in chat and red on the task it linked to. The
+ * classes are spelled out for the reason STATUS_COLOR spells its own out:
+ * Tailwind only emits what it can read as literal text.
+ */
+export const TASK_TYPE_COLOR: Record<string, TypePalette> = {
+  FEATURE: {
+    text: "text-primary",
+    border: "border-primary/30",
+    active: "bg-primary/15 border-primary/40 text-primary",
+    activity: {
+      accent: "text-primary",
+      border: "border-primary/30",
+      ring: "ring-primary/15",
+      iconWrap: "bg-primary/10 text-primary",
+      button: "border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary",
+      pill: "border-primary/30 text-primary",
+      quote: "border-primary/60",
+    },
+  },
+  ENHANCEMENT: {
+    text: "text-violet",
+    border: "border-violet/30",
+    active: "bg-violet/15 border-violet/40 text-violet",
+    activity: {
+      accent: "text-violet",
+      border: "border-violet/35",
+      ring: "ring-violet/20",
+      iconWrap: "bg-violet/10 text-violet",
+      button: "border-violet/30 bg-violet/5 hover:bg-violet/10 text-violet",
+      pill: "border-violet/30 text-violet",
+      quote: "border-violet/60",
+    },
+  },
+  BUG: {
+    text: "text-orange",
+    border: "border-orange/30",
+    active: "bg-orange/15 border-orange/40 text-orange",
+    activity: {
+      accent: "text-orange",
+      border: "border-orange/35",
+      ring: "ring-orange/20",
+      iconWrap: "bg-orange/10 text-orange",
+      button: "border-orange/30 bg-orange/5 hover:bg-orange/10 text-orange",
+      pill: "border-orange/30 text-orange",
+      quote: "border-orange/60",
+    },
+  },
+  REPORTED_BUG: {
+    text: "text-destructive",
+    border: "border-destructive/30",
+    active: "bg-destructive/15 border-destructive/40 text-destructive",
+    activity: {
+      accent: "text-destructive",
+      border: "border-destructive/35",
+      ring: "ring-destructive/20",
+      iconWrap: "bg-destructive/10 text-destructive",
+      button: "border-destructive/30 bg-destructive/5 hover:bg-destructive/10 text-destructive",
+      pill: "border-destructive/30 text-destructive",
+      quote: "border-destructive/60",
+    },
+  },
+  DESIGN: {
+    text: "text-cyan",
+    border: "border-cyan/30",
+    active: "bg-cyan/15 border-cyan/40 text-cyan",
+    activity: {
+      accent: "text-cyan",
+      border: "border-cyan/35",
+      ring: "ring-cyan/20",
+      iconWrap: "bg-cyan/10 text-cyan",
+      button: "border-cyan/30 bg-cyan/5 hover:bg-cyan/10 text-cyan",
+      pill: "border-cyan/30 text-cyan",
+      quote: "border-cyan/60",
+    },
+  },
+};
+
+/** Unknown types read as a business case, the type everything else defaults to. */
+export function taskTypeColor(taskType: string): TypePalette {
+  return TASK_TYPE_COLOR[taskType] ?? TASK_TYPE_COLOR.FEATURE;
+}
+
+/**
+ * Internal wording. "Internal Bug" is the team's name for a bug they found
+ * themselves, against the one a client reported; clients see plainer names,
+ * set in note-activity-payload.
+ */
+export const TASK_TYPE_LABEL: Record<string, string> = {
+  FEATURE: "Business Case",
+  ENHANCEMENT: "Enhancement",
+  BUG: "Internal Bug",
+  REPORTED_BUG: "Reported Bug",
+  DESIGN: "Design",
+};
+
+export function taskTypeLabel(taskType: string): string {
+  return TASK_TYPE_LABEL[taskType] ?? taskType;
+}
+
+function typeBadge(taskType: string, label: string) {
+  const palette = taskTypeColor(taskType);
+  return outlineBadge(label, palette.text, palette.border);
+}
+
 export const TASK_TYPE_BADGE: Record<string, { label: string; color: string; bg: string }> = {
-  FEATURE: outlineBadge("Business Case", "text-primary", "border-primary/30"),
-  ENHANCEMENT: outlineBadge("Enhancement", "text-violet", "border-violet/30"),
-  BUG: outlineBadge("Bug", "text-orange", "border-orange/30"),
-  REPORTED_BUG: outlineBadge("Reported Bug", "text-destructive", "border-destructive/30"),
-  DESIGN: outlineBadge("Design", "text-cyan", "border-cyan/30"),
+  FEATURE: typeBadge("FEATURE", "Business Case"),
+  ENHANCEMENT: typeBadge("ENHANCEMENT", "Enhancement"),
+  BUG: typeBadge("BUG", "Bug"),
+  REPORTED_BUG: typeBadge("REPORTED_BUG", "Reported Bug"),
+  DESIGN: typeBadge("DESIGN", "Design"),
 };
 
 interface StatusPalette {

@@ -1,25 +1,16 @@
 "use client";
 
 import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
-import { AlertCircle, Bug, CircleAlert, Clock, Palette, Sparkles, UserRound, Wrench } from "lucide-react";
+import { CircleAlert, Clock, UserRound } from "lucide-react";
 import { PriorityIconBadge } from "@/components/task/priority-icon";
 import { isMissingDataTask } from "@/lib/task-readiness";
 import { taskCode, type TaskPriorityId } from "@/lib/task-label";
+import { taskTypeStyle } from "@/lib/task-type-style";
 import { cn } from "@/lib/utils";
 
 export function getTypeIcon(taskType: string) {
-  switch (taskType) {
-    case "ENHANCEMENT":
-      return { icon: Wrench, color: "text-violet" };
-    case "BUG":
-      return { icon: Bug, color: "text-destructive" };
-    case "REPORTED_BUG":
-      return { icon: AlertCircle, color: "text-destructive" };
-    case "DESIGN":
-      return { icon: Palette, color: "text-cyan" };
-    default:
-      return { icon: Sparkles, color: "text-primary" };
-  }
+  const style = taskTypeStyle(taskType);
+  return { icon: style.icon, color: style.text };
 }
 
 export function formatMinutes(mins: number): string {

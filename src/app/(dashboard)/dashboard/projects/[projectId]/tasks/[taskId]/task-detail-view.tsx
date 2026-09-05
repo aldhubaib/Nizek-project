@@ -37,11 +37,13 @@ import {
   isTaskPriority,
   projectHrefForTaskReturn,
   sprintTabForStatus,
+  taskCode,
   taskStageBadge,
   TASK_PRIORITIES,
   TASK_PRIORITY_BADGE,
   type TaskPriorityId,
 } from "@/lib/task-label";
+import { taskTypeStyle } from "@/lib/task-type-style";
 import { EstimateBadge, TaskTypeBadge } from "@/components/project/sprint-task-row";
 import { SprintStatusControl } from "@/components/project/sprint-status-control";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -63,14 +65,6 @@ import { threadPushTag } from "@/lib/notification-read";
 import { updateAppBadge } from "@/lib/app-badge";
 import { computeIsReadyForTransition } from "@/lib/task-readiness";
 import { syncTaskReadiness } from "@/lib/backlog-placement";
-
-const TASK_TYPE_META: Record<string, { prefix: string; label: string; color: string }> = {
-  FEATURE: { prefix: "F", label: "Business Case", color: "text-primary" },
-  ENHANCEMENT: { prefix: "E", label: "Enhancement", color: "text-violet" },
-  BUG: { prefix: "B", label: "Internal Bug", color: "text-orange" },
-  REPORTED_BUG: { prefix: "RB", label: "Reported Bug", color: "text-destructive" },
-  DESIGN: { prefix: "D", label: "Design", color: "text-cyan" },
-};
 
 // This page used to keep its own stage list, which had drifted from the board's
 // — it still offered Client Review after the board had dropped it. Both now read
@@ -186,7 +180,7 @@ export function TaskDetailPage({
 }: Props) {
   const router = useRouter();
   const questions = allQuestions.filter((q) => q.taskType === initialTask.taskType);
-  const taskTypeMeta = TASK_TYPE_META[initialTask.taskType] ?? TASK_TYPE_META.FEATURE;
+  const typeStyle = taskTypeStyle(initialTask.taskType);
   const projectBackHref = backToNoteId
     ? projectNoteUrl(projectId, backToNoteId)
     : projectHrefForTaskReturn(
@@ -653,8 +647,8 @@ export function TaskDetailPage({
                 : undefined,
             },
             {
-              label: `${taskTypeMeta.prefix}-${String(initialTask.taskNumber).padStart(3, "0")}`,
-              className: taskTypeMeta.color,
+              label: taskCode(initialTask.taskType, initialTask.taskNumber),
+              className: typeStyle.text,
               onClick: noteEditorOpen ? () => closeNoteEditor() : undefined,
             },
             ...(noteEditorOpen ? [{ label: "Note" }] : []),
@@ -722,7 +716,7 @@ export function TaskDetailPage({
           <div className="space-y-1">
             <div className="flex items-center justify-between rounded-md border border-border bg-field px-3 py-3">
               <span className="text-s text-muted-foreground">Type</span>
-              <span title={taskTypeMeta.label}>
+              <span title={typeStyle.label}>
                 <TaskTypeBadge taskType={initialTask.taskType} />
               </span>
             </div>

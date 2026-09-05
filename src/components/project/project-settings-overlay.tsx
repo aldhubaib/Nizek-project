@@ -18,7 +18,7 @@ import { EditContractDialog } from "@/components/project/edit-contract-dialog";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
-import { stageLabel, outlineBadge, priorityLabel } from "@/lib/task-label";
+import { stageLabel, outlineBadge, priorityLabel, taskCode, taskTypeColor } from "@/lib/task-label";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { ClientChatPeopleManager } from "@/components/messages/client-chat-people";
@@ -743,14 +743,6 @@ function WorkTrackingSection({
 
 /* ─── Archive Tab ─── */
 
-const TASK_TYPE_META: Record<string, { prefix: string; color: string }> = {
-  FEATURE: { prefix: "F", color: "text-primary" },
-  ENHANCEMENT: { prefix: "E", color: "text-violet" },
-  BUG: { prefix: "B", color: "text-orange" },
-  REPORTED_BUG: { prefix: "RB", color: "text-destructive" },
-  DESIGN: { prefix: "D", color: "text-cyan" },
-};
-
 interface ArchivedTask {
   id: string;
   taskNumber: number;
@@ -831,14 +823,18 @@ function ArchiveTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolea
       ) : (
         <div className="space-y-2">
           {tasks.map((task) => {
-            const meta = TASK_TYPE_META[task.taskType] ?? { prefix: "?", color: "text-muted-foreground" };
             return (
               <div
                 key={task.id}
                 className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 group"
               >
-                <span className={cn("text-s font-mono font-bold shrink-0", meta.color)}>
-                  {meta.prefix}-{String(task.taskNumber).padStart(3, "0")}
+                <span
+                  className={cn(
+                    "text-s font-mono font-bold shrink-0",
+                    taskTypeColor(task.taskType).text,
+                  )}
+                >
+                  {taskCode(task.taskType, task.taskNumber)}
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="text-s font-medium truncate">{task.title}</p>

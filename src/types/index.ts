@@ -74,21 +74,9 @@ export const STAGE_LABELS: Record<Stage, string> = {
   SHIPPED: "Shipped",
 };
 
-export const TASK_TYPE_LABELS: Record<TaskType, string> = {
-  FEATURE: "Business Case",
-  ENHANCEMENT: "Enhancement",
-  BUG: "Bug",
-  REPORTED_BUG: "Reported Bug",
-  DESIGN: "Design",
-};
-
-export const TASK_TYPE_CONFIG: Record<TaskType, { label: string; color: string; bg: string }> = {
-  FEATURE: { label: "Business Case", color: "text-primary", bg: "bg-background border-primary/30" },
-  ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bg: "bg-background border-violet-500/30" },
-  BUG: { label: "Bug", color: "text-destructive", bg: "bg-background border-destructive/30" },
-  REPORTED_BUG: { label: "Reported Bug", color: "text-amber-400", bg: "bg-background border-amber-500/30" },
-  DESIGN: { label: "Design", color: "text-cyan-400", bg: "bg-background border-cyan-500/30" },
-};
+// Task type labels and colours live in task-label and task-type-style. Two
+// unused maps sat here holding a third opinion, red for a bug where the rest of
+// the product had orange, and were removed rather than corrected.
 
 export const ROLE_LABELS: Record<Role, string> = {
   ADMIN: "Admin",

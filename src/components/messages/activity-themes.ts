@@ -1,6 +1,4 @@
 import {
-  AlertCircle,
-  Bug,
   CalendarClock,
   ClipboardCheck,
   FileText,
@@ -8,13 +6,11 @@ import {
   IterationCcw,
   MessageCircleQuestion,
   MinusCircle,
-  Palette,
   PlusCircle,
-  Sparkles,
-  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import type { ActivityCardTheme } from "@/components/messages/activity-card";
+import { TASK_TYPES, taskTypeStyle } from "@/lib/task-type-style";
 
 export const PRIMARY_ACTIVITY_THEME: ActivityCardTheme = {
   accent: "text-primary",
@@ -122,55 +118,14 @@ export const ACTIVITY_THEME: Record<
       quote: "border-destructive/60",
     },
   },
-  FEATURE: { icon: Sparkles, theme: PRIMARY_ACTIVITY_THEME },
-  ENHANCEMENT: {
-    icon: Wrench,
-    theme: {
-      accent: "text-violet",
-      border: "border-violet/35",
-      ring: "ring-violet/20",
-      iconWrap: "bg-violet/10 text-violet",
-      button: "border-violet/30 bg-violet/5 hover:bg-violet/10 text-violet",
-      pill: "border-violet/30 text-violet",
-      quote: "border-violet/60",
-    },
-  },
-  BUG: {
-    icon: Bug,
-    theme: {
-      accent: "text-orange",
-      border: "border-orange/35",
-      ring: "ring-orange/20",
-      iconWrap: "bg-orange/10 text-orange",
-      button: "border-orange/30 bg-orange/5 hover:bg-orange/10 text-orange",
-      pill: "border-orange/30 text-orange",
-      quote: "border-orange/60",
-    },
-  },
-  REPORTED_BUG: {
-    icon: AlertCircle,
-    theme: {
-      accent: "text-destructive",
-      border: "border-destructive/35",
-      ring: "ring-destructive/20",
-      iconWrap: "bg-destructive/10 text-destructive",
-      button: "border-destructive/30 bg-destructive/5 hover:bg-destructive/10 text-destructive",
-      pill: "border-destructive/30 text-destructive",
-      quote: "border-destructive/60",
-    },
-  },
-  DESIGN: {
-    icon: Palette,
-    theme: {
-      accent: "text-cyan",
-      border: "border-cyan/35",
-      ring: "ring-cyan/20",
-      iconWrap: "bg-cyan/10 text-cyan",
-      button: "border-cyan/30 bg-cyan/5 hover:bg-cyan/10 text-cyan",
-      pill: "border-cyan/30 text-cyan",
-      quote: "border-cyan/60",
-    },
-  },
+  // The task types come from the one registry rather than being restated here,
+  // so a bug in chat is the colour of the bug it links to.
+  ...Object.fromEntries(
+    TASK_TYPES.map((type) => {
+      const style = taskTypeStyle(type);
+      return [type, { icon: style.icon, theme: style.activity }];
+    }),
+  ),
 };
 
 export function activityTheme(key: string) {

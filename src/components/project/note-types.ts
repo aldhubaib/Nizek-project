@@ -1,16 +1,12 @@
 import {
-  AlertCircle,
-  Bug,
   CalendarClock,
   ClipboardCheck,
   FileText,
   Gavel,
   IterationCcw,
   MessageCircleQuestion,
-  Palette,
-  Sparkles,
-  Wrench,
 } from "lucide-react";
+import { taskTypeStyle } from "@/lib/task-type-style";
 
 export type NoteType =
   | "MEETING_NOTE"
@@ -26,6 +22,16 @@ export type NoteType =
   | "REPORTED_BUG"
   | "DESIGN";
 
+function taskTypeEntry(taskType: string, label: string) {
+  const style = taskTypeStyle(taskType);
+  return {
+    label,
+    color: style.text,
+    bg: `bg-background ${style.border}`,
+    icon: style.icon,
+  };
+}
+
 export const NOTE_TYPE_CONFIG: Record<
   NoteType,
   { label: string; color: string; bg: string; icon: typeof FileText }
@@ -37,11 +43,12 @@ export const NOTE_TYPE_CONFIG: Record<
   SPRINT_DOC: { label: "Sprint Document", color: "text-success", bg: "bg-background border-success/30", icon: IterationCcw },
   SPRINT_PLANNING: { label: "Sprint Planning", color: "text-success", bg: "bg-background border-success/30", icon: IterationCcw },
   SPRINT_REVIEW: { label: "Sprint Review", color: "text-orange", bg: "bg-background border-orange/30", icon: ClipboardCheck },
-  FEATURE: { label: "Business Case", color: "text-primary", bg: "bg-background border-primary/30", icon: Sparkles },
-  ENHANCEMENT: { label: "Enhancement", color: "text-violet-400", bg: "bg-background border-violet-500/30", icon: Wrench },
-  BUG: { label: "Bug", color: "text-orange", bg: "bg-background border-orange/30", icon: Bug },
-  REPORTED_BUG: { label: "Reported Bug", color: "text-destructive", bg: "bg-background border-destructive/30", icon: AlertCircle },
-  DESIGN: { label: "Design", color: "text-cyan-400", bg: "bg-background border-cyan-500/30", icon: Palette },
+  // A note about a task wears that task's colour, from the one registry.
+  FEATURE: taskTypeEntry("FEATURE", "Business Case"),
+  ENHANCEMENT: taskTypeEntry("ENHANCEMENT", "Enhancement"),
+  BUG: taskTypeEntry("BUG", "Bug"),
+  REPORTED_BUG: taskTypeEntry("REPORTED_BUG", "Reported Bug"),
+  DESIGN: taskTypeEntry("DESIGN", "Design"),
 };
 
 export const ALL_NOTE_TYPES: NoteType[] = [

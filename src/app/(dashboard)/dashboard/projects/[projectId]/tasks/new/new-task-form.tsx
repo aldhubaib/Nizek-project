@@ -4,7 +4,8 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Wrench, Bug, AlertCircle, Palette, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { taskTypeStyle } from "@/lib/task-type-style";
 import { createTask } from "@/actions/task";
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
 import { PriorityPicker } from "@/components/task/priority-picker";
@@ -19,12 +20,17 @@ interface QuestionWithType extends TaskQuestion {
   taskType: string;
 }
 
-const TASK_TYPES: { id: TaskType; label: string; icon: typeof Sparkles; color: string; activeColor: string }[] = [
-  { id: "FEATURE", label: "Business Case", icon: Sparkles, color: "text-muted-foreground", activeColor: "bg-primary/15 border-primary/40 text-primary" },
-  { id: "ENHANCEMENT", label: "Enhancement", icon: Wrench, color: "text-muted-foreground", activeColor: "bg-violet/15 border-violet/40 text-violet" },
-  { id: "BUG", label: "Internal Bug", icon: Bug, color: "text-muted-foreground", activeColor: "bg-orange/15 border-orange/40 text-orange" },
-  { id: "DESIGN", label: "Design", icon: Palette, color: "text-muted-foreground", activeColor: "bg-cyan/15 border-cyan/40 text-cyan" },
-];
+// A client's own reported bug is not on offer here; the team is raising this.
+const TASK_TYPES = (["FEATURE", "ENHANCEMENT", "BUG", "DESIGN"] as const).map((id) => {
+  const style = taskTypeStyle(id);
+  return {
+    id,
+    label: style.label,
+    icon: style.icon,
+    color: "text-muted-foreground",
+    activeColor: style.active,
+  };
+});
 
 interface Props {
   projectId: string;

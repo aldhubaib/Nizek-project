@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowUpRight, CheckSquare, Loader2, X } from "lucide-react";
 import { getTaskPreview, type TaskPreview } from "@/actions/task";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { taskCode, taskStageBadge, stageLabel, TASK_STAGE_DOT } from "@/lib/task-label";
+import { taskCode, taskStageBadge, stageLabel, taskTypeLabel, TASK_STAGE_DOT } from "@/lib/task-label";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 export type TaskPreviewSeed = {
@@ -14,14 +14,6 @@ export type TaskPreviewSeed = {
   taskNumber: number;
   taskType: string;
   stage?: string;
-};
-
-const TYPE_LABEL: Record<string, string> = {
-  FEATURE: "Business Case",
-  ENHANCEMENT: "Enhancement",
-  BUG: "Internal Bug",
-  REPORTED_BUG: "Reported Bug",
-  DESIGN: "Design",
 };
 
 export function TaskPreviewPopover({
@@ -87,7 +79,7 @@ export function TaskPreviewPopover({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {taskCode(type, number)} · {TYPE_LABEL[type] ?? type}
+            {taskCode(type, number)} · {taskTypeLabel(type)}
           </p>
           <h3 className="mt-0.5 text-s font-semibold leading-snug text-foreground">
             {title}
