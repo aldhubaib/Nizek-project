@@ -64,7 +64,6 @@ import { updateAppBadge } from "@/lib/app-badge";
 import { computeIsReadyForTransition } from "@/lib/task-readiness";
 import { syncTaskReadiness } from "@/lib/backlog-placement";
 
-
 const TASK_TYPE_META: Record<string, { prefix: string; label: string; color: string }> = {
   FEATURE: { prefix: "F", label: "Business Case", color: "text-primary" },
   ENHANCEMENT: { prefix: "E", label: "Enhancement", color: "text-violet" },
@@ -742,6 +741,19 @@ export function TaskDetailPage({
                   Unassigned
                 </button>
               )}
+            </div>
+
+            {/* Who raised the task. Not a control: unlike the assignee, this
+                does not change once the task exists. */}
+            <div className="flex items-center justify-between rounded-md border border-border bg-field px-3 py-3">
+              <span className="text-s text-muted-foreground">Reported by</span>
+              <Avatar size="sm" title={initialTask.createdBy.name ?? "Unknown"}>
+                <AvatarImage
+                  src={initialTask.createdBy.imageUrl ?? undefined}
+                  alt={initialTask.createdBy.name ?? ""}
+                />
+                <AvatarFallback>{(initialTask.createdBy.name ?? "?")[0]}</AvatarFallback>
+              </Avatar>
             </div>
 
             <div className="flex items-center justify-between rounded-md border border-border bg-field px-3 py-3">
