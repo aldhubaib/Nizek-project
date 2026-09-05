@@ -8,6 +8,7 @@ import { sprintIdFromPlanningHtml } from "@/lib/sprint-planning-doc";
 import { reviewDateBySprintId } from "@/lib/sprint-review-doc";
 import { isMissingDataTask } from "@/lib/task-readiness";
 import { isWorkStage, WORK_STAGES } from "@/lib/task-stage";
+import { isDoneStage } from "@/lib/project-attention";
 import {
   compareClosedSprints,
   comparePlannedSprints,
@@ -299,7 +300,9 @@ export async function getClientProjectOverview(
   return {
     projectName: project.name,
     totalTasks: tasks.length,
-    doneTasks: tasks.filter((t) => t.stage === "DONE").length,
+    // Delivered work, which has usually moved past Done to Completed or
+    // Shipped with its sprint.
+    doneTasks: tasks.filter((t) => isDoneStage(t.stage)).length,
     inProgressTasks: tasks.filter((t) => IN_PROGRESS_STAGES.has(t.stage)).length,
     inDevelopmentCount: tasks.filter((t) => t.stage === "IN_DEVELOPMENT").length,
     backlogCount: backlog.length,

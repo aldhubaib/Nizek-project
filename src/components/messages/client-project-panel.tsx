@@ -5,6 +5,7 @@ import { FileText, Hourglass, Loader2 } from "lucide-react";
 import { getTypeIcon } from "@/components/project/sprint-task-row";
 import { cn } from "@/lib/utils";
 import { isAwaitingApproval } from "@/lib/sprint-status";
+import { isDoneStage } from "@/lib/project-attention";
 import { ACTIVITY_ACTION_CLASS } from "@/components/messages/activity-card";
 import { SprintApproveAction } from "@/components/messages/sprint-approve-action";
 import { SprintDocSlideOver } from "@/components/messages/sprint-doc-slide-over";
@@ -343,7 +344,10 @@ function DashboardTab({
     return {
       ...slice,
       tasks,
-      done: tasks.filter((t) => t.stage === "DONE").length,
+      // Delivered, not merely at the Done column: work leaves Done for
+      // Completed and then Shipped as its sprint closes, and counting only
+      // Done meant every finished sprint dropped back out of this number.
+      done: tasks.filter((t) => isDoneStage(t.stage)).length,
     };
   });
 
