@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Plugin } from "@tiptap/pm/state";
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from "@tiptap/react";
-import { CheckCircle2, Play } from "lucide-react";
+import { CheckCircle2, MoreVertical, Pencil, Play } from "lucide-react";
 import { completeSprint, getSprintPlanningTasks, getSprintReviewTasks, startSprint, updateSprint } from "@/actions/sprint";
 import { Button } from "@/components/ui/button";
 import { SprintDocHeaderLeft } from "@/components/project/note-slide-over";
@@ -17,7 +17,13 @@ import {
   type SprintPlanningInfo,
   type SprintPlanningTask,
 } from "@/lib/sprint-planning-doc";
-import { isUnstartedSprint } from "@/lib/sprint-status";
+import { isClosedSprint, isUnstartedSprint } from "@/lib/sprint-status";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { SprintInfoBlockSchema } from "@/lib/tiptap-schema";
 import { countWorkingDays, endDateForWorkingDays } from "@/lib/working-days";
 import { useChannel } from "@/components/realtime/hooks";
@@ -48,6 +54,8 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
   const [sprintName, setSprintName] = useState(info?.sprintName ?? "");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmEndOpen, setConfirmEndOpen] = useState(false);
+  /** An admin has reopened the schedule on a sprint already under way. */
+  const [editingDates, setEditingDates] = useState(false);
   const [starting, setStarting] = useState(false);
   const [ending, setEnding] = useState(false);
   const [endReasons, setEndReasons] = useState<Record<string, string>>({});
@@ -180,9 +188,6 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
 
   if (!info) return null;
 
-  // The schedule is part of what was committed to, so it stops being editable
-  // at the same moment the task list does.
-  const locked = Boolean(info.locked) || !editable || showOutcome;
   const sprintOpts = extension.options as {
     isAdmin?: boolean;
     getIsAdmin?: () => boolean;
@@ -191,6 +196,20 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
     canEndSprint?: boolean;
     getCanEndSprint?: () => boolean;
   };
+  const isAdmin = sprintOpts.getIsAdmin?.() ?? sprintOpts.isAdmin ?? false;
+
+  // The schedule is part of what was committed to, so it stops being editable
+  // at the same moment the task list does — unless an admin has deliberately
+  // reopened it. A date typed wrong on the first day would otherwise stand for
+  // the life of the sprint, and updateSprint has always allowed an admin to fix
+  // one; there was simply no way to ask.
+  const scheduleClosed = Boolean(info.locked) || showOutcome;
+  const locked = (scheduleClosed || !editable) && !editingDates;
+  // Offered only where it changes something: while the sprint is still being
+  // planned these fields are open to anyone who may plan it, and once the
+  // sprint is closed the server refuses the edit outright.
+  const canEditDates =
+    isAdmin && Boolean(info.sprintId) && scheduleClosed && !isClosedSprint(status);
   const allowStart = sprintOpts.getCanStartSprint?.() ?? sprintOpts.canStartSprint ?? sprintOpts.getIsAdmin?.() ?? sprintOpts.isAdmin ?? false;
   const allowEnd = sprintOpts.getCanEndSprint?.() ?? sprintOpts.canEndSprint ?? sprintOpts.getIsAdmin?.() ?? sprintOpts.isAdmin ?? false;
   const canStart = allowStart && Boolean(info.sprintId) && (status === "PLANNED" || status === "NEXT");
@@ -228,7 +247,8 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
   const endBlocked = Boolean(endBlockedReason);
 
   function persistDates(startIso: string, endIso: string) {
-    if (!info?.sprintId || info.locked) return;
+    if (!info?.sprintId) return;
+    if (info.locked && !editingDates) return;
     if (startIso && endIso && endIso < startIso) {
       if (persistTimer.current) window.clearTimeout(persistTimer.current);
       return;
@@ -487,9 +507,39 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
           </Button>
         </SprintDocHeaderLeft>
       ) : null}
-      <h2 className="mb-6 text-2xl font-semibold leading-snug text-foreground">
-        Sprint Information
-      </h2>
+      {canEditDates ? (
+        <SprintDocHeaderLeft>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="Sprint document actions"
+              className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <MoreVertical className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-52">
+              <DropdownMenuItem
+                onClick={() => setEditingDates((v) => !v)}
+                className="min-h-10 gap-3 text-s"
+              >
+                <Pencil className="size-4" />
+                <span className="flex-1">
+                  {editingDates ? "Finish editing dates" : "Edit sprint dates"}
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </SprintDocHeaderLeft>
+      ) : null}
+      <div className="mb-6 flex items-center gap-3">
+        <h2 className="text-2xl font-semibold leading-snug text-foreground">
+          Sprint Information
+        </h2>
+        {editingDates ? (
+          <span className="rounded-full border border-orange/30 px-2 py-0.5 text-xs font-medium text-orange">
+            Editing dates
+          </span>
+        ) : null}
+      </div>
       <div className="w-full text-s">
         <div className="grid grid-cols-2 gap-x-8 border-b border-border py-3.5">
           {requiredLabel("Plan Date")}
@@ -510,7 +560,7 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
             <input
               type="date"
               required
-              disabled={!editable || status !== "ACTIVE"}
+              disabled={!editable || (status !== "ACTIVE" && !editingDates)}
               value={info.reviewDateIso ?? ""}
               onChange={(e) => setReviewDate(e.target.value)}
               onMouseDown={(e) => e.stopPropagation()}

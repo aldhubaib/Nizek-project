@@ -111,7 +111,7 @@ export function NoteSlideOver({
                 title
               )}
             </div>
-            <div data-sprint-doc-header-left className="flex shrink-0 items-center" />
+            <div data-sprint-doc-header-left className="flex shrink-0 items-center gap-2" />
             {headerRight ? <div className="flex shrink-0 items-center">{headerRight}</div> : null}
           </div>
         </header>
