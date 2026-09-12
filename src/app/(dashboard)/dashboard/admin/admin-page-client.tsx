@@ -18,6 +18,7 @@ import {
   PieChart,
   Coins,
   KeyRound,
+  Contact,
   UserRoundSearch,
   ScrollText,
 } from "lucide-react";
@@ -38,6 +39,7 @@ import {
 } from "@/components/settings/client-agreement-manager";
 import { AuditAccessManager } from "@/components/settings/audit-access-manager";
 import { EquityAccessManager } from "@/components/settings/equity-access-manager";
+import { ContactsAccessManager } from "@/components/settings/contacts-access-manager";
 import { CurrencyRateManager } from "@/components/settings/currency-rate-manager";
 import { VaultAccessManager } from "@/components/settings/vault-access-manager";
 import type { AliasDTO, AliasStatsDTO, AliasSwitchDTO, AliasUsageDTO } from "@/actions/alias";
@@ -67,7 +69,8 @@ type TabId =
   | "audit-access"
   | "equity-access"
   | "exchange-rates"
-  | "vault-access";
+  | "vault-access"
+  | "contacts-access";
 
 type SettingsItem = {
   id: TabId;
@@ -184,6 +187,12 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         label: "Vault Access",
         icon: KeyRound,
         desc: "Choose who can open each project's password vault.",
+      },
+      {
+        id: "contacts-access",
+        label: "Contacts Access",
+        icon: Contact,
+        desc: "Choose who can open the Contacts and Companies directory.",
       },
     ],
   },
@@ -373,6 +382,7 @@ export function AdminPageClient({
         {active.id === "equity-access" && <EquityAccessManager />}
         {active.id === "exchange-rates" && <CurrencyRateManager />}
         {active.id === "vault-access" && <VaultAccessManager />}
+        {active.id === "contacts-access" && <ContactsAccessManager />}
       </div>
     </div>
   );

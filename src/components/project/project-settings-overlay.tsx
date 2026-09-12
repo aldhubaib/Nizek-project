@@ -672,8 +672,8 @@ function WorkTrackingSection({
           <p className="text-s font-medium">Sprints</p>
           <p className="text-xs text-muted-foreground mt-0.5">
             {sprintsEnabled
-              ? "Road map and Active sprint are shown."
-              : "Hidden. Existing sprints and tasks are untouched and come back if you switch this on."}
+              ? "Road map, Active sprint and Notes are shown."
+              : "Hidden, along with Notes. Existing sprints, tasks and notes are untouched and come back if you switch this on."}
           </p>
           {isLastOne("sprints") && (
             <p className="text-xs text-muted-foreground/70 mt-0.5">

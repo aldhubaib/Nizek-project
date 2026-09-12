@@ -50,10 +50,20 @@ export interface BoardCardTypeDTO {
   fields: BoardFieldDTO[];
 }
 
+export interface BoardLabelDTO {
+  id: string;
+  /** May be empty: a colour on its own is a label. */
+  name: string;
+  color: string;
+  position: number;
+}
+
 export interface BoardCardDTO {
   id: string;
   cardNumber: number;
   title: string;
+  /** Not drawn on the card front; carried so a keyword search can read it. */
+  description: string | null;
   columnId: string;
   cardTypeId: string;
   position: number;
@@ -61,6 +71,13 @@ export interface BoardCardDTO {
   commentCount: number;
   /** Precomputed so a card can be flagged without loading its answers. */
   isComplete: boolean;
+  startDate: Date | null;
+  dueDate: Date | null;
+  dueDone: boolean;
+  /** Ids only; the board carries the labels themselves once. */
+  labelIds: string[];
+  /** What "active in the last week" is measured against. */
+  updatedAt: Date;
 }
 
 export interface BoardDTO {
@@ -69,6 +86,7 @@ export interface BoardDTO {
   name: string;
   columns: BoardColumnDTO[];
   cardTypes: BoardCardTypeDTO[];
+  labels: BoardLabelDTO[];
   cards: BoardCardDTO[];
   /** Who a card may be assigned to: the project's roster, minus clients. */
   members: { id: string; name: string | null; imageUrl: string | null }[];
@@ -211,7 +229,7 @@ export async function getBoard(projectId: string): Promise<BoardDTO | null> {
     return null;
   }
 
-  const [columns, cardTypes, cards, projectMembers] = await Promise.all([
+  const [columns, cardTypes, labels, cards, projectMembers] = await Promise.all([
     prisma.boardColumn.findMany({
       where: { boardId: board.id },
       orderBy: { position: "asc" },
@@ -221,12 +239,17 @@ export async function getBoard(projectId: string): Promise<BoardDTO | null> {
       orderBy: { position: "asc" },
       include: { fields: { orderBy: { position: "asc" } } },
     }),
+    prisma.boardLabel.findMany({
+      where: { boardId: board.id },
+      orderBy: { position: "asc" },
+    }),
     prisma.boardCard.findMany({
       where: { boardId: board.id, archivedAt: null },
       orderBy: { position: "asc" },
       include: {
         assignee: { select: { id: true, name: true, imageUrl: true } },
         fieldValues: { select: { fieldId: true, value: true } },
+        labels: { select: { labelId: true } },
         _count: { select: { comments: true } },
       },
     }),
@@ -246,6 +269,7 @@ export async function getBoard(projectId: string): Promise<BoardDTO | null> {
     name: context.board.name,
     columns,
     cardTypes,
+    labels,
     cards: cards.map((card) => {
       const values = Object.fromEntries(
         card.fieldValues.map((value) => [value.fieldId, value.value]),
@@ -254,12 +278,18 @@ export async function getBoard(projectId: string): Promise<BoardDTO | null> {
         id: card.id,
         cardNumber: card.cardNumber,
         title: card.title,
+        description: card.description,
         columnId: card.columnId,
         cardTypeId: card.cardTypeId,
         position: card.position,
         assignee: card.assignee,
         commentCount: card._count.comments,
         isComplete: isCardComplete(fieldsByType.get(card.cardTypeId) ?? [], values),
+        startDate: card.startDate,
+        dueDate: card.dueDate,
+        dueDone: card.dueDone,
+        labelIds: card.labels.map((row) => row.labelId),
+        updatedAt: card.updatedAt,
       };
     }),
     members: projectMembers
@@ -268,6 +298,85 @@ export async function getBoard(projectId: string): Promise<BoardDTO | null> {
     permissions: context.permissions,
     viewerId: context.userId,
   };
+}
+
+// ─── Labels ──────────────────────────────────────────────────────────────────
+//
+// Managed under `manageTypes`: a label is board taxonomy in the same sense a
+// card type is, and splitting it into a ninth permission would mean every
+// existing role silently lacking it.
+
+/** Deleting a label takes it off every card, which is what the cascade is for. */
+export async function deleteBoardLabel(labelId: string): Promise<BoardResult<null>> {
+  return runBoardAction(async () => {
+    const label = await prisma.boardLabel.findUnique({
+      where: { id: labelId },
+      select: { boardId: true },
+    });
+    if (!label) throw new BoardAccessError("That label no longer exists.");
+
+    const context = await requireBoardAction(label.boardId, "manageTypes");
+    await prisma.boardLabel.delete({ where: { id: labelId } });
+
+    revalidatePath(`/dashboard/projects/${context.board.projectId}`);
+    return null;
+  });
+}
+
+export async function createBoardLabel(input: {
+  boardId: string;
+  name?: string;
+  color?: string;
+}): Promise<BoardResult<BoardLabelDTO>> {
+  return runBoardAction(async () => {
+    const context = await requireBoardAction(input.boardId, "manageTypes");
+
+    const last = await prisma.boardLabel.findFirst({
+      where: { boardId: input.boardId },
+      orderBy: { position: "desc" },
+      select: { position: true },
+    });
+
+    const label = await prisma.boardLabel.create({
+      data: {
+        boardId: input.boardId,
+        // Unnamed is allowed here, unlike a column: the colour carries it.
+        name: input.name?.trim() ?? "",
+        color: input.color && isBoardColor(input.color) ? input.color : DEFAULT_BOARD_COLOR,
+        position: (last?.position ?? 0) + POSITION_STEP,
+      },
+    });
+
+    revalidatePath(`/dashboard/projects/${context.board.projectId}`);
+    return label;
+  });
+}
+
+export async function updateBoardLabel(input: {
+  labelId: string;
+  name?: string;
+  color?: string;
+}): Promise<BoardResult<BoardLabelDTO>> {
+  return runBoardAction(async () => {
+    const existing = await prisma.boardLabel.findUnique({
+      where: { id: input.labelId },
+      select: { boardId: true },
+    });
+    if (!existing) throw new BoardAccessError("That label no longer exists.");
+
+    const context = await requireBoardAction(existing.boardId, "manageTypes");
+
+    const label = await prisma.boardLabel.update({
+      where: { id: input.labelId },
+      data: {
+        ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+        ...(input.color && isBoardColor(input.color) ? { color: input.color } : {}),
+      },
+    });
+
+    revalidatePath(`/dashboard/projects/${context.board.projectId}`);
+    return label;
+  });
 }
 
 // ─── Columns ─────────────────────────────────────────────────────────────────

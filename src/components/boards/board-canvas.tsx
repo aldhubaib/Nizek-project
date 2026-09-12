@@ -15,9 +15,15 @@ import {
 } from "@dnd-kit/core";
 import { positionForIndex } from "@/lib/board-order";
 import { createBoardCard, moveBoardCard } from "@/actions/board-card";
+import { cardMatchesFilter, isFilterActive, type BoardFilter } from "@/lib/board-filter";
 import { BoardColumn } from "./board-column";
 import { BoardCard } from "./board-card";
-import type { BoardCardDTO, BoardCardTypeDTO, BoardColumnDTO } from "@/actions/board";
+import type {
+  BoardCardDTO,
+  BoardCardTypeDTO,
+  BoardColumnDTO,
+  BoardLabelDTO,
+} from "@/actions/board";
 import type { BoardPermissions } from "@/lib/board-permissions";
 
 const BOARD_ROW =
@@ -27,8 +33,10 @@ interface Props {
   boardId: string;
   columns: BoardColumnDTO[];
   cardTypes: BoardCardTypeDTO[];
+  labels: BoardLabelDTO[];
   cards: BoardCardDTO[];
   permissions: BoardPermissions;
+  filter: BoardFilter;
   onOpenCard: (cardId: string) => void;
   onError: (message: string) => void;
   /** Pulls the board again after a change the client cannot compute itself. */
@@ -39,8 +47,10 @@ export function BoardCanvas({
   boardId,
   columns,
   cardTypes,
+  labels,
   cards: initialCards,
   permissions,
+  filter,
   onOpenCard,
   onError,
   onReload,
@@ -78,6 +88,10 @@ export function BoardCanvas({
     [columnIds],
   );
 
+  // Two maps, deliberately. Every card in a column decides where a drop lands,
+  // because the server orders against the whole column and an index counted
+  // among only the visible cards would file a card in the wrong place. The
+  // filtered map is for drawing and nothing else.
   const cardsByColumn = useMemo(() => {
     const map = new Map<string, BoardCardDTO[]>();
     for (const column of columns) map.set(column.id, []);
@@ -89,11 +103,40 @@ export function BoardCanvas({
     return map;
   }, [cards, columns]);
 
+  const filtering = isFilterActive(filter);
+
+  const visibleByColumn = useMemo(() => {
+    if (!filtering) return cardsByColumn;
+    const now = Date.now();
+    const map = new Map<string, BoardCardDTO[]>();
+    for (const [columnId, list] of cardsByColumn) {
+      map.set(
+        columnId,
+        list.filter((card) => cardMatchesFilter(card, filter, now)),
+      );
+    }
+    return map;
+  }, [cardsByColumn, filter, filtering]);
+
   const activeCard = activeId ? cards.find((card) => card.id === activeId) : null;
 
   const typeById = useMemo(
     () => new Map(cardTypes.map((type) => [type.id, type])),
     [cardTypes],
+  );
+
+  // Cards carry label ids only, so the board's one copy of each label is
+  // resolved here rather than repeated on every card that wears it.
+  const labelById = useMemo(
+    () => new Map(labels.map((label) => [label.id, label])),
+    [labels],
+  );
+  const labelsFor = useCallback(
+    (card: BoardCardDTO) =>
+      card.labelIds
+        .map((id) => labelById.get(id))
+        .filter((label): label is BoardLabelDTO => Boolean(label)),
+    [labelById],
   );
 
   function handleDragStart(event: DragStartEvent) {
@@ -169,6 +212,13 @@ export function BoardCanvas({
     [boardId, onError, onReload],
   );
 
+  // Collapsing is only offered as a way to clear the view while filtering, so
+  // an unfiltered board never hides an empty column.
+  const visibleColumns =
+    filtering && filter.collapseEmpty
+      ? columns.filter((column) => (visibleByColumn.get(column.id) ?? []).length > 0)
+      : columns;
+
   if (columns.length === 0) {
     return (
       <div className="grid flex-1 place-items-center py-16">
@@ -191,12 +241,15 @@ export function BoardCanvas({
       }}
     >
       <div className={BOARD_ROW}>
-        {columns.map((column) => (
+        {visibleColumns.map((column) => (
           <BoardColumn
             key={column.id}
             column={column}
-            cards={cardsByColumn.get(column.id) ?? []}
+            cards={visibleByColumn.get(column.id) ?? []}
+            totalCards={(cardsByColumn.get(column.id) ?? []).length}
+            filtering={filtering}
             cardTypes={cardTypes}
+            labelsFor={labelsFor}
             canCreateCard={permissions.canCreateCard && cardTypes.length > 0}
             canMoveCard={permissions.canMoveCard}
             onOpenCard={onOpenCard}
@@ -204,6 +257,13 @@ export function BoardCanvas({
             isDragActive={activeId !== null}
           />
         ))}
+        {visibleColumns.length === 0 && (
+          <div className="grid flex-1 place-items-center py-16">
+            <p className="text-s text-muted-foreground">
+              No cards match this filter.
+            </p>
+          </div>
+        )}
       </div>
 
       <DragOverlay dropAnimation={null}>
@@ -211,6 +271,7 @@ export function BoardCanvas({
           <BoardCard
             card={activeCard}
             cardType={typeById.get(activeCard.cardTypeId)}
+            labels={labelsFor(activeCard)}
             isOverlay
             draggable={false}
           />

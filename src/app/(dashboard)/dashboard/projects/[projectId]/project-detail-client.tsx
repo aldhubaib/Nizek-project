@@ -259,18 +259,22 @@ export function ProjectDetailClient({
   // Which tabs this project actually offers. Sprints and the board are both
   // optional now, so a `?tab=` from a bookmark or a task's back link can name
   // one that is no longer there.
-  const availableTabs = new Set<string>(["notes", "assets"]);
+  const availableTabs = new Set<string>(["assets"]);
   if (sprintsEnabled) {
     availableTabs.add("roadmap");
     availableTabs.add("sprints");
+    // Notes go with the sprints. Every note here is written against a sprint —
+    // the sprint documents most of all — so a board-only project has nothing to
+    // put in them.
+    availableTabs.add("notes");
   }
   if (hasBoard) availableTabs.add("boards");
   if (canManageTeam) availableTabs.add("team");
   if (canAccessVault) availableTabs.add("vault");
 
-  // Falls back rather than rendering an empty page. Notes is the last resort
+  // Falls back rather than rendering an empty page. Assets is the last resort
   // for the case the server guard is meant to prevent: neither system enabled.
-  const defaultTab = sprintsEnabled ? "roadmap" : hasBoard ? "boards" : "notes";
+  const defaultTab = sprintsEnabled ? "roadmap" : hasBoard ? "boards" : "assets";
   const activeTab = availableTabs.has(requestedTab) ? requestedTab : defaultTab;
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -356,15 +360,18 @@ export function ProjectDetailClient({
   }, []);
 
   useEffect(() => {
+    // A ?noteId= from an older link survives the tab being switched off, so it
+    // is only worth following while the project still shows notes.
     const wantsNotes =
-      activeTab === "notes" || Boolean(searchParams.get("noteId"));
+      activeTab === "notes" ||
+      (sprintsEnabled && Boolean(searchParams.get("noteId")));
     if (wantsNotes && notes === null) {
       startNotesTransition(async () => {
         const data = await getMeetingNotes(project.id);
         setNotes(data as unknown as MeetingNote[]);
       });
     }
-  }, [activeTab, notes, project.id, searchParams]);
+  }, [activeTab, notes, project.id, searchParams, sprintsEnabled]);
 
   useEffect(() => {
     if (
@@ -467,7 +474,7 @@ export function ProjectDetailClient({
     // as a legacy alias for the road map, so that id would never survive a
     // page load.
     ...(hasBoard ? [{ id: "boards", label: "Board" }] : []),
-    { id: "notes", label: "Notes", count: notesCount },
+    ...(sprintsEnabled ? [{ id: "notes", label: "Notes", count: notesCount }] : []),
     { id: "assets", label: "Assets", count: assetsCount },
   ];
 
@@ -540,7 +547,15 @@ export function ProjectDetailClient({
             onChanged={reloadTeam}
           />
         </PageHeaderActions>
-      ) : canCreateTask && isActive && sprintsEnabled && !noteFullscreen && activeTab !== "notes" ? (
+      ) : canCreateTask &&
+        isActive &&
+        sprintsEnabled &&
+        !noteFullscreen &&
+        // Both tabs run their own system: notes make their own, and the board
+        // makes cards from each column. This button files a sprint task, which
+        // is the wrong thing to offer from either.
+        activeTab !== "notes" &&
+        activeTab !== "boards" ? (
         <PageHeaderActions>
           <AddButton
             label="New task"
@@ -623,7 +638,7 @@ export function ProjectDetailClient({
             {sprintsEnabled && <TabsTrigger value="roadmap" className={PROJECT_TAB_CLASS} />}
             {sprintsEnabled && <TabsTrigger value="sprints" className={PROJECT_TAB_CLASS} />}
             {hasBoard && <TabsTrigger value="boards" className={PROJECT_TAB_CLASS} />}
-            <TabsTrigger value="notes" className={PROJECT_TAB_CLASS} />
+            {sprintsEnabled && <TabsTrigger value="notes" className={PROJECT_TAB_CLASS} />}
             <TabsTrigger value="assets" className={PROJECT_TAB_CLASS} />
             {canManageTeam && <TabsTrigger value="team" className={PROJECT_TAB_CLASS} />}
             {canAccessVault && <TabsTrigger value="vault" className={PROJECT_TAB_CLASS} />}

@@ -54,6 +54,71 @@ export function endpointHost(endpoint: string): string | null {
   }
 }
 
+/**
+ * A queued job left unprocessed for longer than this means the worker process
+ * isn't consuming the queue, not that it is merely busy.
+ */
+const QUEUE_STALL_MS = 5 * 60 * 1000;
+
+/** A backlog this deep is worth flagging even while the worker is draining it. */
+const QUEUE_BACKLOG_WARN = 25;
+
+export type PushQueueState = "ok" | "warn" | "fail";
+
+export interface PushQueueAssessment {
+  state: PushQueueState;
+  label: string;
+  detail?: string;
+}
+
+/**
+ * Turn queue counters into a verdict on push delivery. Every real notification
+ * is enqueued rather than sent inline, so a stalled queue silently drops every
+ * notification while all the per-device checks still pass.
+ */
+export function assessPushQueue(input: {
+  reachable: boolean;
+  waiting: number;
+  active: number;
+  lastCompletedAt: Date | null;
+  now?: Date;
+}): PushQueueAssessment {
+  if (!input.reachable) {
+    return {
+      state: "fail",
+      label: "Delivery service unreachable",
+      detail:
+        "The notification queue can't be reached, so no notifications are being sent. Contact an admin.",
+    };
+  }
+
+  const now = input.now ?? new Date();
+  const pending = input.waiting + input.active;
+  const sinceCompleted = input.lastCompletedAt
+    ? now.getTime() - input.lastCompletedAt.getTime()
+    : null;
+  const stalled =
+    pending > 0 && (sinceCompleted === null || sinceCompleted > QUEUE_STALL_MS);
+
+  if (stalled) {
+    return {
+      state: "fail",
+      label: "Delivery service not running",
+      detail: `${pending} notification${pending === 1 ? "" : "s"} queued but nothing has been delivered recently — the push worker is likely down. Contact an admin.`,
+    };
+  }
+
+  if (input.waiting >= QUEUE_BACKLOG_WARN) {
+    return {
+      state: "warn",
+      label: "Delivery service is behind",
+      detail: `${input.waiting} notifications are waiting to be sent, so banners may arrive late.`,
+    };
+  }
+
+  return { state: "ok", label: "Delivery service running" };
+}
+
 const MAX_ATTEMPTS = 3;
 const BACKOFF_SCHEDULE = [500, 2000];
 

@@ -3,12 +3,16 @@
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { isCentrifugoConfigured } from "@/lib/centrifugo";
-import { isPushConfigured, sendPush } from "@/lib/push";
+import { isPushConfigured } from "@/lib/push";
+import { assessPushQueue, type PushQueueAssessment } from "@/lib/push-core";
+import { enqueuePushBounded, getPushQueueHealth } from "@/lib/push-queue";
 import { createAndPublishNotifications } from "@/lib/notify";
 
 export type PushDiagnosticsDTO = {
   vapidConfigured: boolean;
   centrifugoConfigured: boolean;
+  /** Verdict on the queue every real notification passes through. */
+  queue: PushQueueAssessment;
   subscriptionCount: number;
   devices: {
     id: string;
@@ -30,7 +34,7 @@ export type PushDiagnosticsDTO = {
 export async function getPushDiagnostics(): Promise<PushDiagnosticsDTO> {
   const user = await requireUser();
 
-  const [devices, recentDeliveries] = await Promise.all([
+  const [devices, recentDeliveries, queueHealth] = await Promise.all([
     prisma.pushSubscription.findMany({
       where: { memberId: user.id },
       select: { id: true, deviceId: true, userAgent: true, createdAt: true },
@@ -49,11 +53,13 @@ export async function getPushDiagnostics(): Promise<PushDiagnosticsDTO> {
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
+    getPushQueueHealth(),
   ]);
 
   return {
     vapidConfigured: isPushConfigured(),
     centrifugoConfigured: isCentrifugoConfigured(),
+    queue: assessPushQueue(queueHealth),
     subscriptionCount: devices.length,
     devices,
     recentDeliveries,
@@ -62,12 +68,18 @@ export async function getPushDiagnostics(): Promise<PushDiagnosticsDTO> {
 
 /**
  * Sends a real end-to-end test notification to the calling user: a Notification
- * row + bell event + web push to every registered device. Exercises the exact
- * production pipeline, so a silent failure here shows up in the delivery log.
+ * row + bell event + web push to every registered device.
+ *
+ * This deliberately goes through the same queue as real notifications instead
+ * of sending inline. Sending inline made the test pass while a stopped worker
+ * silently swallowed every genuine notification — the exact scenario users
+ * open this panel to diagnose.
  */
 export async function sendTestNotification(): Promise<{
-  pushed: boolean;
+  queued: boolean;
   deviceCount: number;
+  /** Set when the job could not even be enqueued (queue unreachable). */
+  queueError: string | null;
 }> {
   const user = await requireUser();
   const title = "Test notification";
@@ -86,15 +98,23 @@ export async function sendTestNotification(): Promise<{
   const deviceCount = await prisma.pushSubscription.count({
     where: { memberId: user.id },
   });
-  // Await (rather than fire-and-forget) so the delivery log is written before
-  // the diagnostics panel refreshes.
-  await sendPush([user.id], {
-    title,
-    body,
-    url: "/dashboard/account",
-    tag,
-    type: "test",
-  });
 
-  return { pushed: isPushConfigured() && deviceCount > 0, deviceCount };
+  let queueError: string | null = null;
+  try {
+    await enqueuePushBounded([user.id], {
+      title,
+      body,
+      url: "/dashboard/account",
+      tag,
+      type: "test",
+    });
+  } catch (err) {
+    queueError = err instanceof Error ? err.message : "Failed to queue the push.";
+  }
+
+  return {
+    queued: queueError === null && isPushConfigured() && deviceCount > 0,
+    deviceCount,
+    queueError,
+  };
 }

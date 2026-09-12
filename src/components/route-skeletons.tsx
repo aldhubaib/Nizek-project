@@ -260,6 +260,82 @@ export function VaultSkeleton() {
   );
 }
 
+/** Contacts and Companies are the same shape: a search box over a row list. */
+function DirectorySkeleton({
+  current,
+  glyphClassName,
+}: {
+  current: string;
+  glyphClassName: string;
+}) {
+  return (
+    <div>
+      <PageHeader>
+        <TitleCrumbs current={current} />
+      </PageHeader>
+      <div className="px-app py-l">
+        <Skeleton className="mb-l h-9 w-64 rounded-md bg-muted/40" />
+        <div className="space-y-2">
+          {Array.from({ length: 6 }, (_, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3"
+            >
+              <Skeleton className={glyphClassName} />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Skeleton className="h-3.5 w-40" />
+                <Skeleton className="h-2.5 w-28 bg-muted/40" />
+              </div>
+              <Skeleton className="h-3 w-24 bg-muted/40" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ContactsSkeleton() {
+  return (
+    <div>
+      <PageHeader>
+        <TitleCrumbs current="Contacts" />
+      </PageHeader>
+      <div className="px-app py-4">
+        <Skeleton className="mb-3 h-9 w-64 rounded-md bg-muted/40" />
+        <div className="flex gap-3 overflow-hidden">
+          {Array.from({ length: 4 }, (_, col) => (
+            <div
+              key={col}
+              className="w-[280px] shrink-0 rounded-lg border border-border/50 bg-muted/30"
+            >
+              <div className="border-b border-border/50 px-3 py-2.5">
+                <Skeleton className="h-3.5 w-24" />
+              </div>
+              <div className="space-y-2 p-2">
+                {Array.from({ length: 3 - (col % 2) }, (_, card) => (
+                  <div
+                    key={card}
+                    className="space-y-1.5 rounded-md border border-border bg-field px-3 py-2.5"
+                  >
+                    <Skeleton className="h-3.5 w-32" />
+                    <Skeleton className="h-2.5 w-20 bg-muted/40" />
+                    <Skeleton className="h-2.5 w-24 bg-muted/40" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function CompaniesSkeleton() {
+  return <DirectorySkeleton current="Companies" glyphClassName="size-9 rounded-lg" />;
+}
+
 export function SettingsSkeleton() {
   return (
     <div>

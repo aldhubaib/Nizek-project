@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Bell, X } from "lucide-react";
-import { pushSupported, syncPushSubscription } from "@/lib/push-client";
+import { enablePush, pushSupported, syncPushSubscription } from "@/lib/push-client";
 
 const PUSH_DISMISSED_KEY = "nizek-push-dismissed-at";
 const PUSH_DISMISS_DAYS = 14;
@@ -17,17 +17,24 @@ export function PushNotifier() {
   const [registration, setRegistration] =
     useState<ServiceWorkerRegistration | null>(null);
 
-  // The permission request MUST run inside this click handler: iOS ignores
+  // enablePush() must be called straight from this click handler: iOS ignores
   // Notification.requestPermission() outside a user gesture (silently returns
   // "denied"), and Android demotes it to a quiet prompt nobody sees.
   const handleEnablePush = useCallback(() => {
     setShowEnablePush(false);
-    if (!registration) return;
-    void Notification.requestPermission().then((permission) => {
-      if (permission === "granted") void syncPushSubscription(registration);
-      else localStorage.setItem(PUSH_DISMISSED_KEY, String(Date.now()));
+    void enablePush().then((result) => {
+      // Back off on refusal only. A failure we can recover from (service worker
+      // not ready, server rejected) shouldn't cost the user 14 days of silence
+      // — the Account page surfaces the real reason and a retry.
+      if (
+        !result.ok &&
+        (result.reason === "permission-denied" ||
+          result.reason === "permission-dismissed")
+      ) {
+        localStorage.setItem(PUSH_DISMISSED_KEY, String(Date.now()));
+      }
     });
-  }, [registration]);
+  }, []);
 
   const handleDismissPush = useCallback(() => {
     setShowEnablePush(false);
@@ -67,20 +74,14 @@ export function PushNotifier() {
       .catch(() => {});
   }, []);
 
-  // Re-sync the push subscription when the app returns to foreground after
-  // being hidden for >1 hour. iOS rotates endpoints when the PWA is suspended,
-  // so the server may hold a stale subscription otherwise.
+  // Re-sync on every return to the foreground. iOS rotates endpoints whenever
+  // it suspends the PWA, so the server can hold a stale subscription after a
+  // short absence too. POST /api/push is an idempotent upsert, so the only
+  // cost is one small request per foreground.
   useEffect(() => {
     if (!registration || !pushSupported()) return;
-    let hiddenSince = 0;
     function onVisibility() {
-      if (document.hidden) {
-        hiddenSince = Date.now();
-      } else if (
-        hiddenSince > 0 &&
-        Date.now() - hiddenSince > 60 * 60 * 1000 &&
-        Notification.permission === "granted"
-      ) {
+      if (!document.hidden && Notification.permission === "granted") {
         void syncPushSubscription(registration!);
       }
     }

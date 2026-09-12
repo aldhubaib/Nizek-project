@@ -8,12 +8,21 @@ import { cn } from "@/lib/utils";
 import { boardColor } from "@/lib/board-palette";
 import { BoardCard } from "./board-card";
 import { BoardIcon } from "./board-icon";
-import type { BoardCardDTO, BoardCardTypeDTO, BoardColumnDTO } from "@/actions/board";
+import type {
+  BoardCardDTO,
+  BoardCardTypeDTO,
+  BoardColumnDTO,
+  BoardLabelDTO,
+} from "@/actions/board";
 
 interface Props {
   column: BoardColumnDTO;
+  /** What the filter left, which is everything when there is no filter. */
   cards: BoardCardDTO[];
+  totalCards: number;
+  filtering: boolean;
   cardTypes: BoardCardTypeDTO[];
+  labelsFor: (card: BoardCardDTO) => BoardLabelDTO[];
   canCreateCard: boolean;
   canMoveCard: boolean;
   onOpenCard: (cardId: string) => void;
@@ -25,7 +34,10 @@ interface Props {
 export const BoardColumn = memo(function BoardColumn({
   column,
   cards,
+  totalCards,
+  filtering,
   cardTypes,
+  labelsFor,
   canCreateCard,
   canMoveCard,
   onOpenCard,
@@ -78,7 +90,11 @@ export const BoardColumn = memo(function BoardColumn({
         <div className="flex min-w-0 items-center gap-2">
           <div className={cn("size-2.5 shrink-0 rounded-full", palette.dot)} />
           <h3 className="truncate text-s font-medium">{column.name}</h3>
-          <span className="shrink-0 text-s text-muted-foreground">{cards.length}</span>
+          {/* While filtering, the count says what is hidden as well as what is
+              shown, so a short column does not read as an empty one. */}
+          <span className="shrink-0 text-s text-muted-foreground">
+            {filtering ? `${cards.length} of ${totalCards}` : cards.length}
+          </span>
         </div>
         {canCreateCard && !composing && (
           <button
@@ -159,6 +175,7 @@ export const BoardColumn = memo(function BoardColumn({
                 key={card.id}
                 card={card}
                 cardType={typeById.get(card.cardTypeId)}
+                labels={labelsFor(card)}
                 onOpen={onOpenCard}
                 draggable={canMoveCard}
               />
@@ -168,7 +185,9 @@ export const BoardColumn = memo(function BoardColumn({
 
         {cards.length === 0 && !composing && (
           <div className="flex flex-1 items-center justify-center py-8">
-            <p className="text-s text-muted-foreground/60">No cards</p>
+            <p className="text-s text-muted-foreground/60">
+              {filtering && totalCards > 0 ? "No matching cards" : "No cards"}
+            </p>
           </div>
         )}
       </div>

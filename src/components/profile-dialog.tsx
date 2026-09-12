@@ -2,16 +2,10 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Camera, Loader2, LogOut } from "lucide-react";
+import { Camera, Loader2, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import {
-  pushSupported,
-  isPushEnabled,
-  enablePush,
-  disablePush,
-} from "@/lib/push-client";
+import { NotificationSetup } from "@/components/notification-setup";
 import {
   Dialog,
   DialogContent,
@@ -62,48 +56,13 @@ export function ProfileDialog({
   const [saving, startSave] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Push is per-device, so it is read from the browser rather than the user.
-  const [pushAvailable, setPushAvailable] = useState(false);
-  const [pushOn, setPushOn] = useState(false);
-  const [pushBusy, setPushBusy] = useState(false);
-
   // Reopening shows what is stored, not an abandoned edit from last time.
   useEffect(() => {
     if (!open) return;
     setName(savedName);
     setImageUrl(me?.imageUrl ?? null);
     setError(null);
-    if (!pushSupported()) {
-      setPushAvailable(false);
-      return;
-    }
-    setPushAvailable(true);
-    void isPushEnabled().then(setPushOn);
   }, [open, savedName, me?.imageUrl]);
-
-  const togglePush = async (next: boolean) => {
-    if (pushBusy) return;
-    setPushBusy(true);
-    setError(null);
-    try {
-      if (next) {
-        // The permission prompt has to run inside this gesture, or iOS
-        // silently denies it and Android downgrades it to a quiet prompt.
-        const enabled = await enablePush();
-        setPushOn(enabled);
-        if (!enabled) {
-          setError(
-            "Notifications are blocked for this site. Allow them in your browser settings, then try again.",
-          );
-        }
-      } else {
-        await disablePush();
-        setPushOn(false);
-      }
-    } finally {
-      setPushBusy(false);
-    }
-  };
 
   const pickAvatar = async (file: File | null) => {
     if (!file) return;
@@ -233,25 +192,7 @@ export function ProfileDialog({
           />
         </div>
 
-        <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-card p-3">
-          <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted/40 text-foreground">
-            <Bell className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-s font-medium">Notifications</div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
-              {pushAvailable
-                ? "Get alerts for new messages on this device."
-                : "Not supported in this browser. On iPhone, add the app to your home screen first."}
-            </div>
-          </div>
-          <Switch
-            checked={pushOn}
-            onCheckedChange={(v) => void togglePush(v)}
-            disabled={!pushAvailable || pushBusy}
-            aria-label="Toggle notifications"
-          />
-        </div>
+        <NotificationSetup compact />
 
         {onSignOut && (
           <button

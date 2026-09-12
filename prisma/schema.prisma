@@ -196,10 +196,15 @@ model User {
   boardCardsAssigned   BoardCard[]                @relation("BoardCardAssignee")
   boardCardsCreated    BoardCard[]                @relation("BoardCardCreator")
   boardCardComments    BoardCardComment[]         @relation("BoardCardCommentAuthor")
+  boardCardAttachments BoardCardAttachment[]      @relation("BoardCardAttachmentUploader")
 
   agreementVersions    ClientAgreementVersion[]     @relation("ClientAgreementAuthor")
   agreementAcceptances ClientAgreementAcceptance[]  @relation("ClientAgreementAcceptor")
   agreementsAcceptedFor ClientAgreementAcceptance[] @relation("ClientAgreementAcceptedBy")
+
+  contactsPermission ContactsPermission? @relation("UserContactsPermission")
+  companiesCreated   Company[]           @relation("CompanyAuthor")
+  contactsCreated    Contact[]           @relation("ContactAuthor")
 
   @@index([systemRole])
   @@index([blocked])
@@ -2515,8 +2520,51 @@ model Board {
   columns   BoardColumn[]
   cardTypes BoardCardType[]
   cards     BoardCard[]
+  labels    BoardLabel[]
   roles     BoardRole[]
   members   BoardMember[]
+}
+
+/// A tag a card can carry, and carry several of.
+///
+/// Not the same thing as a BoardCardType, which is why both exist. A card has
+/// exactly one type, and the type decides which fields it is asked for; a card
+/// has any number of labels, and a label asks nothing. "Bug" is a type, and
+/// "needs design" or "Q3" is a label.
+///
+/// The name may be empty. A colour on its own is a perfectly good label on a
+/// board of this kind — the team learns what green means — and Trello has
+/// worked that way long enough that people expect it.
+model BoardLabel {
+  id      String @id @default(cuid())
+  boardId String
+  board   Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  name String @default("")
+  /// A key into the palette in src/lib/board-palette.ts, never a raw class.
+  color String @default("slate")
+
+  position Float
+
+  cards BoardCardLabel[]
+
+  @@index([boardId, position])
+}
+
+/// Which labels are on which card.
+model BoardCardLabel {
+  cardId String
+  card   BoardCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  labelId String
+  label   BoardLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  /// The pair is the identity: a label is either on a card or it is not, and
+  /// twice would mean nothing more than once.
+  @@id([cardId, labelId])
+  @@index([labelId])
 }
 
 /// A column on the board. Nothing is derived from its name or its place in the
@@ -2608,6 +2656,24 @@ model BoardCard {
   title       String
   description String?
 
+  /// When the work is meant to begin, and when it is owed.
+  ///
+  /// Both are full timestamps rather than dates, because a due date on a board
+  /// usually carries a time of day with it ("Friday 5pm"), and a column storing
+  /// only the day could not tell that from "some time on Friday".
+  ///
+  /// Nothing is derived from either. Unlike a sprint's dates, these do not gate
+  /// a transition or feed a burndown — they are a note to whoever holds the
+  /// card, which is all a date on a board of this kind ever is.
+  startDate DateTime?
+  dueDate   DateTime?
+
+  /// Ticked off by hand, and only meaningful next to a due date: it is the
+  /// difference between "overdue" and "was due, and done". Kept apart from the
+  /// column, since which column counts as finished is the board's business and
+  /// changes from board to board.
+  dueDone Boolean @default(false)
+
   assigneeId String?
   assignee   User?   @relation("BoardCardAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
 
@@ -2622,10 +2688,13 @@ model BoardCard {
 
   fieldValues BoardFieldValue[]
   comments    BoardCardComment[]
+  attachments BoardCardAttachment[]
+  labels      BoardCardLabel[]
 
   @@unique([boardId, cardNumber])
   @@index([boardId, columnId, position])
   @@index([boardId, archivedAt])
+  @@index([boardId, dueDate])
   @@index([columnId])
   @@index([cardTypeId])
   @@index([assigneeId])
@@ -2735,4 +2804,143 @@ model BoardCardComment {
   updatedAt DateTime @updatedAt
 
   @@index([cardId, createdAt])
+}
+
+/// A file on a card.
+///
+/// Its own table rather than a BoardField of type `file`, because attaching
+/// something is not a question a card type asks — every card can take a file
+/// whether or not an admin thought to add the field, the same way every card
+/// has a description. The custom `file` field still exists for the case where
+/// a board wants a *named, required* upload ("Signed quote"), and that one
+/// stays where the other answers are.
+///
+/// Bytes live in R2 and only the URL is kept here, which is what every other
+/// upload in the product does.
+model BoardCardAttachment {
+  id     String    @id @default(cuid())
+  cardId String
+  card   BoardCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  filename String
+  url      String
+  fileSize Int
+  mimeType String?
+
+  uploadedById String
+  uploadedBy   User   @relation("BoardCardAttachmentUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([cardId, createdAt])
+  @@index([uploadedById])
+}
+
+// ─── Contacts ───────────────────────────────────────────
+
+/// Who can open the Contacts and Companies modules.
+///
+/// Modelled on EquityPermission rather than on project membership: the
+/// directory is one list for the whole company, not something a project owns,
+/// so there is nothing to scope a grant to. Admins are not implicit — an admin
+/// who needs it grants it to themselves from Admin → Contacts Access, which
+/// leaves a row saying who did it.
+model ContactsPermission {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation("UserContactsPermission", fields: [userId], references: [id], onDelete: Cascade)
+  grantedById String?
+  createdAt   DateTime @default(now())
+}
+
+/// An organisation a contact belongs to.
+///
+/// Deliberately thin. It exists so two contacts at the same place point at one
+/// record instead of repeating a typed-in company name, which is what makes
+/// "everyone at X" answerable. Names are unique so that stays true.
+model Company {
+  id      String  @id @default(cuid())
+  name    String  @unique
+  website String?
+  notes   String?
+
+  createdById String
+  createdBy   User   @relation("CompanyAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  contacts Contact[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdById])
+}
+
+/// A column on the contacts board — one stage of whatever pipeline the team
+/// runs, named by them rather than by us.
+///
+/// Global like the rest of the directory, since there is no project to hang it
+/// on. Ordering is a float handled by `src/lib/board-order.ts`, the same helper
+/// the project boards use: a column dropped between two others takes the
+/// midpoint, so a drag writes one row instead of renumbering the rest.
+model ContactStage {
+  id   String @id @default(cuid())
+  name String @unique
+
+  /// A key into the fixed palette in `src/lib/board-palette.ts`, never a raw
+  /// class or hex — Tailwind only emits classes it can find written out.
+  color String @default("slate")
+
+  position Float
+
+  contacts Contact[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([position])
+}
+
+/// A person in the directory. First name, last name and a phone number are the
+/// whole requirement; everything else is optional.
+model Contact {
+  id        String @id @default(cuid())
+  firstName String
+  lastName  String
+
+  /// ISO 3166-1 alpha-2 country of the dialling code, e.g. "KW". Stored beside
+  /// the number rather than folded into it so the picker reopens on the country
+  /// that was chosen, instead of guessing it back from leading digits — which is
+  /// ambiguous across the +1 countries.
+  phoneCountry String
+  /// National digits only, no dialling code and no separators.
+  phoneNumber  String
+
+  email String?
+  /// Job title, free text — "CTO", "Head of Marketing".
+  role  String?
+
+  /// Cleared rather than cascaded when a company is deleted: losing the
+  /// organisation should not lose the person.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  /// Which board column the contact sits in.
+  ///
+  /// Nullable, and cleared rather than cascaded when a stage is deleted. That
+  /// gives a deleted column and a never-placed contact the same shape, so the
+  /// board has one "Unassigned" bucket to show instead of two cases — and
+  /// deleting a column never deletes people.
+  stageId String?
+  stage   ContactStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
+
+  createdById String
+  createdBy   User   @relation("ContactAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([stageId])
+  @@index([lastName, firstName])
+  @@index([createdById])
 }

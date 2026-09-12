@@ -41,6 +41,7 @@ export function DashboardShell({
   canAudit = false,
   canEquity = false,
   canVault = false,
+  canContacts = false,
   isClient = false,
   currentUserId,
   notificationSoundUrl,
@@ -51,6 +52,7 @@ export function DashboardShell({
   canAudit?: boolean;
   canEquity?: boolean;
   canVault?: boolean;
+  canContacts?: boolean;
   isClient?: boolean;
   currentUserId?: string;
   notificationSoundUrl?: string | null;
@@ -105,8 +107,9 @@ export function DashboardShell({
     router.prefetch("/dashboard/projects");
     if (canVault) router.prefetch("/dashboard/vault");
     if (canEquity) router.prefetch("/dashboard/equity");
+    if (canContacts) router.prefetch("/dashboard/contacts");
     router.prefetch("/dashboard/settings");
-  }, [router, canVault, canEquity]);
+  }, [router, canVault, canEquity, canContacts]);
 
   const expanded = pinned || hovered;
 
@@ -137,6 +140,7 @@ export function DashboardShell({
             canAudit={canAudit}
             canEquity={canEquity}
             canVault={canVault}
+            canContacts={canContacts}
             isClient={isClient}
             logoUrl={logoUrl}
           />
@@ -172,6 +176,7 @@ export function DashboardShell({
             canAudit={canAudit}
             canEquity={canEquity}
             canVault={canVault}
+            canContacts={canContacts}
             isClient={isClient}
             logoUrl={logoUrl}
             onNavigate={() => setDrawerOpen(false)}
@@ -203,6 +208,7 @@ export function DashboardShell({
           canAudit={canAudit}
           canEquity={canEquity}
           canVault={canVault}
+          canContacts={canContacts}
           isClient={isClient}
           hidden={!bottomNavVisible}
           onOpenMenu={() => setDrawerOpen(true)}

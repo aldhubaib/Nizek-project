@@ -7,6 +7,7 @@ import { headers } from "next/headers";
 import { getCurrentUser, getImpersonation, needsProfilePhoto, getSession } from "@/lib/auth";
 import { canAccessEquity } from "@/lib/equity-access";
 import { canAccessAnyVault } from "@/lib/vault-access";
+import { canAccessContacts } from "@/lib/contacts-access";
 import { getNotificationSoundUrl, getBrandingMap, brandingUrlWithBust } from "@/lib/branding";
 import { isClientUser } from "@/lib/client-chat";
 import { isClientAllowedPath } from "@/lib/client-routes";
@@ -45,19 +46,27 @@ export default async function DashboardLayout({
     redirect("/dashboard/messages");
   }
 
-  const [notificationSoundUrl, impersonation, branding, canAudit, canEquity, canVault] =
-    await Promise.all([
-      getNotificationSoundUrl(),
-      getImpersonation(),
-      getBrandingMap(),
-      isClient || isAdmin
-        ? Promise.resolve(isAdmin)
-        : user
-          ? prisma.auditPermission.count({ where: { userId: user.id } }).then((n) => n > 0)
-          : false,
-      isClient ? Promise.resolve(false) : canAccessEquity(user?.id),
-      isClient ? Promise.resolve(false) : canAccessAnyVault(user?.id),
-    ]);
+  const [
+    notificationSoundUrl,
+    impersonation,
+    branding,
+    canAudit,
+    canEquity,
+    canVault,
+    canContacts,
+  ] = await Promise.all([
+    getNotificationSoundUrl(),
+    getImpersonation(),
+    getBrandingMap(),
+    isClient || isAdmin
+      ? Promise.resolve(isAdmin)
+      : user
+        ? prisma.auditPermission.count({ where: { userId: user.id } }).then((n) => n > 0)
+        : false,
+    isClient ? Promise.resolve(false) : canAccessEquity(user?.id),
+    isClient ? Promise.resolve(false) : canAccessAnyVault(user?.id),
+    isClient ? Promise.resolve(false) : canAccessContacts(user?.id),
+  ]);
   const logoUrl = branding.webLogo
     ? brandingUrlWithBust(branding, "webLogo")
     : null;
@@ -94,6 +103,7 @@ export default async function DashboardLayout({
           canAudit={canAudit}
           canEquity={canEquity}
           canVault={canVault}
+          canContacts={canContacts}
           currentUserId={user?.id}
           notificationSoundUrl={notificationSoundUrl}
           logoUrl={logoUrl}

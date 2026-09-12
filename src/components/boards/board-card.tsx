@@ -3,39 +3,45 @@
 import { memo } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CircleAlert, MessageSquare, UserRound } from "lucide-react";
+import { CircleAlert, Clock, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { boardColor } from "@/lib/board-palette";
+import { dueState, formatDue, type DueState } from "@/lib/board-dates";
 import { BoardIcon } from "./board-icon";
-import type { BoardCardDTO, BoardCardTypeDTO } from "@/actions/board";
+import { LabelChip } from "./card-labels";
+import { MemberAvatar } from "./member-avatar";
+import type { BoardCardDTO, BoardCardTypeDTO, BoardLabelDTO } from "@/actions/board";
+
+/** Only overdue and nearly-due earn a colour; the rest stay quiet. */
+const DUE_TONE: Record<DueState, string> = {
+  done: "bg-success/10 text-success",
+  overdue: "bg-destructive/15 text-destructive",
+  soon: "bg-orange/15 text-orange",
+  later: "text-muted-foreground",
+};
 
 interface Props {
   card: BoardCardDTO;
   cardType: BoardCardTypeDTO | undefined;
+  /** Only the ones on this card, resolved by the canvas. */
+  labels?: BoardLabelDTO[];
   onOpen?: (cardId: string) => void;
   /** Off for a read-only viewer, and for the drag overlay copy. */
   draggable?: boolean;
   isOverlay?: boolean;
 }
 
-function initialsOf(name: string | null): string {
-  if (!name) return "?";
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("");
-}
-
 export const BoardCard = memo(function BoardCard({
   card,
   cardType,
+  labels,
   onOpen,
   draggable = true,
   isOverlay = false,
 }: Props) {
   const sortable = useSortable({ id: card.id, disabled: !draggable });
   const palette = boardColor(cardType?.color);
+  const due = dueState(card);
 
   const style = isOverlay
     ? undefined
@@ -78,6 +84,14 @@ export const BoardCard = memo(function BoardCard({
         )}
       </div>
 
+      {labels && labels.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {labels.map((label) => (
+            <LabelChip key={label.id} label={label} />
+          ))}
+        </div>
+      )}
+
       <p className="mt-1.5 line-clamp-3 text-s font-medium leading-snug text-foreground">
         {card.title}
       </p>
@@ -95,6 +109,19 @@ export const BoardCard = memo(function BoardCard({
           </span>
         )}
 
+        {due && (
+          <span
+            title={card.dueDone ? "Due date, done" : "Due"}
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium",
+              DUE_TONE[due],
+            )}
+          >
+            <Clock className="size-3" />
+            {formatDue(card.dueDate!)}
+          </span>
+        )}
+
         <span className="ms-auto flex shrink-0 items-center gap-2">
           {card.commentCount > 0 && (
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -102,32 +129,9 @@ export const BoardCard = memo(function BoardCard({
               {card.commentCount}
             </span>
           )}
-          {card.assignee ? (
-            card.assignee.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={card.assignee.imageUrl}
-                alt={card.assignee.name ?? ""}
-                title={card.assignee.name ?? undefined}
-                className="block size-5 rounded-full object-cover"
-              />
-            ) : (
-              <span
-                title={card.assignee.name ?? undefined}
-                className="grid size-5 place-items-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground"
-              >
-                {initialsOf(card.assignee.name)}
-              </span>
-            )
-          ) : (
-            <span
-              title="Unassigned"
-              aria-label="Unassigned"
-              className="grid size-5 place-items-center rounded-full border border-muted-foreground/70 text-muted-foreground"
-            >
-              <UserRound className="size-3" />
-            </span>
-          )}
+          <span title={card.assignee?.name ?? "Unassigned"}>
+            <MemberAvatar person={card.assignee} />
+          </span>
         </span>
       </div>
     </div>

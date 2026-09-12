@@ -3,6 +3,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import {
+  assessPushQueue,
   buildPushBody,
   endpointHost,
   isGoneStatus,
@@ -137,5 +138,108 @@ describe("sendWithRetry", () => {
     await expect(sendWithRetry(send, { backoffMs: 1 })).resolves.toMatchObject({
       ok: false,
     });
+  });
+});
+
+// Every real notification is enqueued rather than sent inline, so a stopped
+// worker delivers nothing while every per-device check still passes. This is
+// the blind spot that made "I turned it on and got nothing" undiagnosable.
+describe("assessPushQueue", () => {
+  const NOW = new Date("2026-09-12T12:00:00Z");
+  const secondsAgo = (s: number) => new Date(NOW.getTime() - s * 1000);
+
+  it("passes an idle queue that has delivered before", () => {
+    expect(
+      assessPushQueue({
+        reachable: true,
+        waiting: 0,
+        active: 0,
+        lastCompletedAt: secondsAgo(30),
+        now: NOW,
+      }),
+    ).toMatchObject({ state: "ok" });
+  });
+
+  it("passes a brand new queue that has nothing to do yet", () => {
+    expect(
+      assessPushQueue({
+        reachable: true,
+        waiting: 0,
+        active: 0,
+        lastCompletedAt: null,
+        now: NOW,
+      }),
+    ).toMatchObject({ state: "ok" });
+  });
+
+  it("fails when the queue cannot be reached", () => {
+    const result = assessPushQueue({
+      reachable: false,
+      waiting: 0,
+      active: 0,
+      lastCompletedAt: null,
+      now: NOW,
+    });
+    expect(result.state).toBe("fail");
+    expect(result.detail).toMatch(/can't be reached/i);
+  });
+
+  it("fails when jobs are queued but nothing has ever been delivered", () => {
+    const result = assessPushQueue({
+      reachable: true,
+      waiting: 3,
+      active: 0,
+      lastCompletedAt: null,
+      now: NOW,
+    });
+    expect(result.state).toBe("fail");
+    expect(result.label).toMatch(/not running/i);
+  });
+
+  it("fails when jobs are queued and the last delivery is stale", () => {
+    expect(
+      assessPushQueue({
+        reachable: true,
+        waiting: 2,
+        active: 0,
+        lastCompletedAt: secondsAgo(10 * 60),
+        now: NOW,
+      }),
+    ).toMatchObject({ state: "fail" });
+  });
+
+  it("tolerates a queue that is actively being drained", () => {
+    expect(
+      assessPushQueue({
+        reachable: true,
+        waiting: 2,
+        active: 1,
+        lastCompletedAt: secondsAgo(10),
+        now: NOW,
+      }),
+    ).toMatchObject({ state: "ok" });
+  });
+
+  it("warns about a deep backlog even while the worker keeps up", () => {
+    const result = assessPushQueue({
+      reachable: true,
+      waiting: 40,
+      active: 1,
+      lastCompletedAt: secondsAgo(5),
+      now: NOW,
+    });
+    expect(result.state).toBe("warn");
+    expect(result.detail).toContain("40");
+  });
+
+  it("counts a single queued notification in singular", () => {
+    const result = assessPushQueue({
+      reachable: true,
+      waiting: 1,
+      active: 0,
+      lastCompletedAt: null,
+      now: NOW,
+    });
+    expect(result.detail).toContain("1 notification ");
   });
 });

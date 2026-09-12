@@ -1,13 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Loader2, Settings2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Loader2, Settings2, SlidersHorizontal, X } from "lucide-react";
 import { getBoard, type BoardDTO } from "@/actions/board";
 import { BoardCanvas } from "./board-canvas";
 import { CardDetailPanel } from "./card-detail-panel";
+import { BoardFilterPanel } from "./board-filter-panel";
 import { BoardSettingsOverlay } from "./board-settings/board-settings-overlay";
 import { PageOverflowItems } from "@/components/page-overflow-menu";
+import { PageHeaderActions } from "@/components/page-header-actions";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import {
+  EMPTY_FILTER,
+  activeFilterCount,
+  cardMatchesFilter,
+  isFilterActive,
+  type BoardFilter,
+} from "@/lib/board-filter";
 
 /**
  * The board, loaded when its tab is opened.
@@ -23,6 +34,7 @@ export function BoardTab({ projectId }: { projectId: string }) {
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<BoardFilter>(EMPTY_FILTER);
 
   const reload = useCallback(async () => {
     const data = await getBoard(projectId);
@@ -33,6 +45,15 @@ export function BoardTab({ projectId }: { projectId: string }) {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // Counted here rather than in the canvas so the panel can report the effect
+  // of a choice at the moment it is made.
+  const matchCount = useMemo(() => {
+    if (!board) return 0;
+    if (!isFilterActive(filter)) return board.cards.length;
+    const now = Date.now();
+    return board.cards.filter((card) => cardMatchesFilter(card, filter, now)).length;
+  }, [board, filter]);
 
   if (loading) {
     return (
@@ -51,6 +72,8 @@ export function BoardTab({ projectId }: { projectId: string }) {
       </div>
     );
   }
+
+  const filterCount = activeFilterCount(filter);
 
   const canConfigure =
     board.permissions.isAdmin ||
@@ -87,13 +110,51 @@ export function BoardTab({ projectId }: { projectId: string }) {
         </PageOverflowItems>
       )}
 
+      {/* Into the shell's own top-right corner, beside the ⋮, rather than a
+          strip of its own above the columns — the board is already short of
+          vertical room and every column would lose that height. */}
+      <PageHeaderActions>
+        <Popover>
+          <PopoverTrigger
+            className={cn(
+              "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-s font-medium transition-colors",
+              filterCount > 0
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+            )}
+          >
+            <SlidersHorizontal className="size-3.5" />
+            Filter
+            {filterCount > 0 && (
+              <span className="rounded-full bg-primary/20 px-1.5 text-xs">
+                {filterCount}
+              </span>
+            )}
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-80">
+            <BoardFilterPanel
+              filter={filter}
+              onChange={setFilter}
+              cardTypes={board.cardTypes}
+              labels={board.labels}
+              members={board.members}
+              viewerId={board.viewerId}
+              matchCount={matchCount}
+              totalCount={board.cards.length}
+            />
+          </PopoverContent>
+        </Popover>
+      </PageHeaderActions>
+
       <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
         <BoardCanvas
           boardId={board.id}
           columns={board.columns}
           cardTypes={board.cardTypes}
+          labels={board.labels}
           cards={board.cards}
           permissions={board.permissions}
+          filter={filter}
           onOpenCard={setOpenCardId}
           onError={setError}
           onReload={() => void reload()}
@@ -103,7 +164,9 @@ export function BoardTab({ projectId }: { projectId: string }) {
       {openCardId && (
         <CardDetailPanel
           cardId={openCardId}
+          boardId={board.id}
           cardTypes={board.cardTypes}
+          labels={board.labels}
           members={board.members}
           permissions={board.permissions}
           currentUserId={board.viewerId}

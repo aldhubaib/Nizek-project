@@ -105,9 +105,11 @@ export function NotificationDiagnostics() {
     try {
       const res = await sendTestNotification();
       setTestResult(
-        res.deviceCount === 0
-          ? "Sent to the bell only — no devices are registered for push."
-          : `Sent to your bell and ${res.deviceCount} device${res.deviceCount === 1 ? "" : "s"}. Check the delivery log below.`,
+        res.queueError
+          ? `Couldn't queue the notification — ${res.queueError}`
+          : res.deviceCount === 0
+            ? "Sent to the bell only — no devices are registered for push."
+            : `Queued for your bell and ${res.deviceCount} device${res.deviceCount === 1 ? "" : "s"}. Delivery happens in the background — refresh the log below in a moment.`,
       );
       // Also demo the in-app chime path.
       playNotificationSound(true);
@@ -195,6 +197,13 @@ export function NotificationDiagnostics() {
                     : "VAPID keys are missing on the server — no push can be sent to anyone. Contact an admin."
                 }
               />
+              {/* Every real notification is queued, so a stopped worker means
+                  nothing is delivered even when this device is set up fine. */}
+              <CheckRow
+                state={server.queue.state}
+                label={server.queue.label}
+                detail={server.queue.detail}
+              />
               <CheckRow
                 state={server.centrifugoConfigured ? "ok" : "warn"}
                 label="Realtime service configured"
@@ -271,16 +280,27 @@ export function NotificationDiagnostics() {
               </div>
               <div className="divide-y divide-border/50 rounded-lg border border-border/60">
                 {server.recentDeliveries.map((d) => (
-                  <div key={d.id} className="flex items-center gap-2 px-2.5 py-1.5">
-                    <StatusIcon state={d.ok ? "ok" : "fail"} />
-                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                      {d.endpointHost ?? "unknown endpoint"}
-                      {!d.ok && d.statusCode ? ` — HTTP ${d.statusCode}` : ""}
-                      {!d.ok && d.error ? ` — ${d.error}` : ""}
-                    </span>
-                    <span className="shrink-0 text-xs text-muted-foreground/60">
-                      {formatDistanceToNow(new Date(d.createdAt), { addSuffix: true })}
-                    </span>
+                  <div key={d.id} className="px-2.5 py-1.5">
+                    <div className="flex items-center gap-2">
+                      <StatusIcon state={d.ok ? "ok" : "fail"} />
+                      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                        {d.endpointHost ?? "unknown endpoint"}
+                        {!d.ok && d.statusCode ? ` — HTTP ${d.statusCode}` : ""}
+                        {!d.ok && d.error ? ` — ${d.error}` : ""}
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground/60">
+                        {formatDistanceToNow(new Date(d.createdAt), { addSuffix: true })}
+                      </span>
+                    </div>
+                    {/* 401/403 means the push service rejected our signature —
+                        usually a subscription made under an older VAPID key,
+                        which no amount of retrying fixes on its own. */}
+                    {!d.ok && (d.statusCode === 403 || d.statusCode === 401) && (
+                      <p className="ms-5.5 mt-0.5 text-xs text-orange">
+                        This device is subscribed with an outdated key. Turn the
+                        Notifications toggle off and on again to re-subscribe it.
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>

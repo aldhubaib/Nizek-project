@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Play, X } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { outlineBadge } from "@/lib/task-label";
+import { formatFileSize } from "@/lib/file-size";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { format } from "date-fns";
 
@@ -27,13 +28,6 @@ export type ProofVideoView = {
 
 const APPROVED_TAG = outlineBadge("Approved", "text-success", "border-success/30");
 const REJECTED_TAG = outlineBadge("Rejected", "text-destructive", "border-destructive/30");
-
-export function formatProofFileSize(bytes: number | null): string {
-  if (!bytes) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 export function ProofVideoPlayer({
   videos,
@@ -85,7 +79,7 @@ export function ProofVideoPlayer({
           <div className="truncate text-s font-medium">{current.filename}</div>
           <div className="text-s text-white/60">
             {videos.length > 1 ? `${index + 1} of ${videos.length}` : label}
-            {current.fileSize ? ` · ${formatProofFileSize(current.fileSize)}` : ""}
+            {current.fileSize ? ` · ${formatFileSize(current.fileSize)}` : ""}
           </div>
         </div>
         <button
@@ -145,7 +139,7 @@ export function ProofVideoRow({
   onPlay: () => void;
 }) {
   const meta = [
-    video.fileSize ? formatProofFileSize(video.fileSize) : null,
+    video.fileSize ? formatFileSize(video.fileSize) : null,
     format(new Date(video.createdAt), "MMM d, yyyy"),
   ]
     .filter(Boolean)

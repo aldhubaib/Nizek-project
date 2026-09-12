@@ -32,6 +32,16 @@ export interface BoardCardCommentDTO {
   user: { id: string; name: string | null; imageUrl: string | null };
 }
 
+export interface BoardCardAttachmentDTO {
+  id: string;
+  filename: string;
+  url: string;
+  fileSize: number;
+  mimeType: string | null;
+  createdAt: Date;
+  uploadedBy: { id: string; name: string | null; imageUrl: string | null };
+}
+
 export interface BoardCardDetailDTO {
   id: string;
   boardId: string;
@@ -44,10 +54,15 @@ export interface BoardCardDetailDTO {
   assignee: { id: string; name: string | null; imageUrl: string | null } | null;
   createdBy: { id: string; name: string | null; imageUrl: string | null };
   createdAt: Date;
+  startDate: Date | null;
+  dueDate: Date | null;
+  dueDone: boolean;
+  labelIds: string[];
   fields: BoardFieldDTO[];
   values: Record<string, string>;
   missingRequired: string[];
   comments: BoardCardCommentDTO[];
+  attachments: BoardCardAttachmentDTO[];
 }
 
 export async function getBoardCard(cardId: string): Promise<BoardCardDetailDTO | null> {
@@ -62,6 +77,11 @@ export async function getBoardCard(cardId: string): Promise<BoardCardDetailDTO |
         orderBy: { createdAt: "asc" },
         include: { user: { select: { id: true, name: true, imageUrl: true } } },
       },
+      attachments: {
+        orderBy: { createdAt: "desc" },
+        include: { uploadedBy: { select: { id: true, name: true, imageUrl: true } } },
+      },
+      labels: { select: { labelId: true } },
     },
   });
   if (!card) return null;
@@ -89,10 +109,15 @@ export async function getBoardCard(cardId: string): Promise<BoardCardDetailDTO |
     assignee: card.assignee,
     createdBy: card.createdBy,
     createdAt: card.createdAt,
+    startDate: card.startDate,
+    dueDate: card.dueDate,
+    dueDone: card.dueDone,
+    labelIds: card.labels.map((row) => row.labelId),
     fields: card.cardType.fields,
     values,
     missingRequired: missingRequiredFields(card.cardType.fields, values).map((f) => f.id),
     comments: card.comments,
+    attachments: card.attachments,
   };
 }
 
@@ -167,6 +192,9 @@ export async function updateBoardCard(input: {
   description?: string | null;
   assigneeId?: string | null;
   cardTypeId?: string;
+  startDate?: Date | null;
+  dueDate?: Date | null;
+  dueDone?: boolean;
 }): Promise<BoardResult<null>> {
   return runBoardAction(async () => {
     const { context, boardId } = await requireBoardActionForCard(input.cardId, "editCard");
@@ -196,6 +224,20 @@ export async function updateBoardCard(input: {
       if (!cardType) throw new BoardAccessError("That card type is not on this board.");
     }
 
+    // Checked against whichever of the two the caller did not send, so setting
+    // one date cannot quietly invert a pair that was fine before.
+    if (input.startDate !== undefined || input.dueDate !== undefined) {
+      const current = await prisma.boardCard.findUnique({
+        where: { id: input.cardId },
+        select: { startDate: true, dueDate: true },
+      });
+      const start = input.startDate !== undefined ? input.startDate : current?.startDate;
+      const due = input.dueDate !== undefined ? input.dueDate : current?.dueDate;
+      if (start && due && start > due) {
+        throw new BoardAccessError("A card cannot be due before it starts.");
+      }
+    }
+
     await prisma.boardCard.update({
       where: { id: input.cardId },
       data: {
@@ -206,6 +248,13 @@ export async function updateBoardCard(input: {
         // to the old type's fields are left where they are rather than deleted:
         // a type switched back should not have lost what was already written.
         ...(input.cardTypeId ? { cardTypeId: input.cardTypeId } : {}),
+        ...(input.startDate !== undefined ? { startDate: input.startDate } : {}),
+        // Clearing the due date clears the tick with it: "done" with nothing to
+        // be done by is a state the UI has no way to show or undo.
+        ...(input.dueDate !== undefined
+          ? { dueDate: input.dueDate, ...(input.dueDate ? {} : { dueDone: false }) }
+          : {}),
+        ...(input.dueDone !== undefined ? { dueDone: input.dueDone } : {}),
       },
     });
 
@@ -393,6 +442,122 @@ export async function deleteBoardCardComment(commentId: string): Promise<BoardRe
     }
 
     await prisma.boardCardComment.delete({ where: { id: commentId } });
+    revalidatePath(`/dashboard/projects/${context.board.projectId}`);
+    return null;
+  });
+}
+
+// ─── Labels on a card ────────────────────────────────────────────────────────
+
+/**
+ * Put a label on a card, or take it off.
+ *
+ * Applying is `editCard`, not `manageTypes`: anyone who may edit a card may tag
+ * it, while only the board's keepers may invent or recolour a label.
+ */
+export async function toggleBoardCardLabel(input: {
+  cardId: string;
+  labelId: string;
+  on: boolean;
+}): Promise<BoardResult<null>> {
+  return runBoardAction(async () => {
+    const { context, boardId } = await requireBoardActionForCard(input.cardId, "editCard");
+
+    // Checked against this board, so a caller cannot borrow another board's
+    // label to tag a card here with.
+    const label = await prisma.boardLabel.findFirst({
+      where: { id: input.labelId, boardId },
+      select: { id: true },
+    });
+    if (!label) throw new BoardAccessError("That label is not on this board.");
+
+    if (input.on) {
+      // Idempotent: ticking a box that is already ticked is not an error.
+      await prisma.boardCardLabel.upsert({
+        where: { cardId_labelId: { cardId: input.cardId, labelId: input.labelId } },
+        create: { cardId: input.cardId, labelId: input.labelId },
+        update: {},
+      });
+    } else {
+      await prisma.boardCardLabel.deleteMany({
+        where: { cardId: input.cardId, labelId: input.labelId },
+      });
+    }
+
+    await prisma.boardCard.update({
+      where: { id: input.cardId },
+      data: { updatedAt: new Date() },
+    });
+
+    revalidatePath(`/dashboard/projects/${context.board.projectId}`);
+    return null;
+  });
+}
+
+// ─── Attachments ─────────────────────────────────────────────────────────────
+
+/**
+ * Record a file already in R2 against a card.
+ *
+ * The bytes went straight from the browser to storage, so this only writes the
+ * row that says where they landed — the same split every other upload in the
+ * product uses.
+ */
+export async function addBoardCardAttachment(input: {
+  cardId: string;
+  filename: string;
+  url: string;
+  fileSize: number;
+  mimeType: string | null;
+}): Promise<BoardResult<BoardCardAttachmentDTO>> {
+  return runBoardAction(async () => {
+    const { context } = await requireBoardActionForCard(input.cardId, "editCard");
+
+    const filename = input.filename.trim();
+    if (!filename || !input.url) throw new BoardAccessError("That file did not upload.");
+
+    const attachment = await prisma.boardCardAttachment.create({
+      data: {
+        cardId: input.cardId,
+        filename,
+        url: input.url,
+        fileSize: input.fileSize,
+        mimeType: input.mimeType,
+        uploadedById: context.userId,
+      },
+      include: { uploadedBy: { select: { id: true, name: true, imageUrl: true } } },
+    });
+
+    revalidatePath(`/dashboard/projects/${context.board.projectId}`);
+    return attachment;
+  });
+}
+
+/**
+ * Your own upload, or anybody's if you administer the board — the rule
+ * comments already follow.
+ *
+ * The object is left in R2. Nothing else here deletes stored bytes on the way
+ * out either, and a detached file is cheaper than one deleted out from under a
+ * link somebody pasted elsewhere.
+ */
+export async function deleteBoardCardAttachment(
+  attachmentId: string,
+): Promise<BoardResult<null>> {
+  return runBoardAction(async () => {
+    const attachment = await prisma.boardCardAttachment.findUnique({
+      where: { id: attachmentId },
+      select: { uploadedById: true, card: { select: { boardId: true } } },
+    });
+    if (!attachment) throw new BoardAccessError("That file is already gone.");
+
+    const context = await boardContextForBoard(attachment.card.boardId);
+    const isUploader = attachment.uploadedById === context.userId;
+    if (!isUploader && !canBoard(context.permissions, "manageMembers")) {
+      throw new BoardAccessError("You can only remove files you attached.");
+    }
+
+    await prisma.boardCardAttachment.delete({ where: { id: attachmentId } });
     revalidatePath(`/dashboard/projects/${context.board.projectId}`);
     return null;
   });

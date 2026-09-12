@@ -85,6 +85,42 @@ test("push is SUPPRESSED while the app tab is focused and visible", async ({
   expect(shown).toEqual([]);
 });
 
+// The banner showLocalTestBanner() sends the moment a user turns notifications
+// on. It has to appear even though the app is necessarily focused at that point
+// — the same condition the test above proves suppresses ordinary pushes — or
+// enabling notifications gives no visible proof that it worked.
+test("the setup confirmation banner shows even while the app is focused", async ({
+  page,
+  context,
+}) => {
+  await grantOrSkip(context);
+  await setup(page);
+  await page.bringToFront();
+
+  const focused = await page.evaluate(
+    () => document.hasFocus() && document.visibilityState === "visible",
+  );
+  test.skip(!focused, "harness page not focused in this environment");
+
+  const shown = await simulate(
+    page,
+    {
+      title: "Notifications are on",
+      body: "This is what a new message will look like.",
+      url: "/dashboard",
+      tag: "push-setup-confirmation",
+    },
+    true, // forceShow: bypasses the focused-client suppression
+  );
+  expect(shown).toEqual([
+    {
+      title: "Notifications are on",
+      body: "This is what a new message will look like.",
+      tag: "push-setup-confirmation",
+    },
+  ]);
+});
+
 test("successive pushes for the same thread replace the banner (WhatsApp style)", async ({
   page,
   context,

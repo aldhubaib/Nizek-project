@@ -11,6 +11,8 @@ import {
   Settings,
   PieChart,
   KeyRound,
+  Contact,
+  Building2,
   Pin,
   PinOff,
   Trash,
@@ -26,16 +28,20 @@ import { useUnreadStore } from "@/store/unread";
 import { formatUnreadBadge } from "@/lib/chat-unread";
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
-  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
-  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
-  { name: "Vault", href: "/dashboard/vault", icon: KeyRound, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: true, trashOnly: false },
-  { name: "Equity", href: "/dashboard/equity", icon: PieChart, adminOnly: false, auditOnly: false, equityOnly: true, vaultOnly: false, trashOnly: false },
-  { name: "Audit", href: "/dashboard/audit", icon: ClipboardCheck, adminOnly: false, auditOnly: true, equityOnly: false, vaultOnly: false, trashOnly: false },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: false },
+  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: false },
+  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: false },
+  { name: "Vault", href: "/dashboard/vault", icon: KeyRound, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: true, trashOnly: false, contactsOnly: false },
+  { name: "Equity", href: "/dashboard/equity", icon: PieChart, adminOnly: false, auditOnly: false, equityOnly: true, vaultOnly: false, trashOnly: false, contactsOnly: false },
+  // Contacts and Companies are one module behind one grant, listed as two
+  // entries because each is a list you go to directly.
+  { name: "Contacts", href: "/dashboard/contacts", icon: Contact, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: true },
+  { name: "Companies", href: "/dashboard/companies", icon: Building2, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: true },
+  { name: "Audit", href: "/dashboard/audit", icon: ClipboardCheck, adminOnly: false, auditOnly: true, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: false },
   // Trash holds equity + vault soft-deletes. Equity people see equity items;
   // vault items are admin-only. Show the nav when either audience applies.
-  { name: "Trash", href: "/dashboard/trash", icon: Trash, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: true },
-  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
+  { name: "Trash", href: "/dashboard/trash", icon: Trash, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: true, contactsOnly: false },
+  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: false },
 ];
 
 interface SidebarProps {
@@ -46,6 +52,7 @@ interface SidebarProps {
   canAudit?: boolean;
   canEquity?: boolean;
   canVault?: boolean;
+  canContacts?: boolean;
   isClient?: boolean;
   logoUrl?: string | null;
   onNavigate?: () => void;
@@ -59,6 +66,7 @@ export function Sidebar({
   canAudit = false,
   canEquity = false,
   canVault = false,
+  canContacts = false,
   isClient = false,
   logoUrl = null,
   onNavigate,
@@ -134,7 +142,8 @@ export function Sidebar({
               (!item.auditOnly || canAudit) &&
               (!item.equityOnly || canEquity) &&
               (!item.vaultOnly || canVault) &&
-              (!item.trashOnly || canSeeTrash)
+              (!item.trashOnly || canSeeTrash) &&
+              (!item.contactsOnly || canContacts)
             );
           })
           .map((item) => {

@@ -1,16 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Bell, Camera, Loader2, Volume2 } from "lucide-react";
+import { Camera, Loader2, Volume2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { updateMyAvatar, updateMyName } from "@/actions/account";
 import { useCurrentUser } from "@/components/current-user-provider";
-import {
-  pushSupported,
-  isPushEnabled,
-  enablePush,
-  disablePush,
-} from "@/lib/push-client";
+import { NotificationSetup } from "@/components/notification-setup";
 import { PageHeader, PageBackButton, PageName } from "@/components/page-header";
 import {
   isNotificationSoundEnabled,
@@ -45,20 +40,9 @@ export function AccountClient({
   const [, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Notifications toggle state for THIS device.
-  const [pushAvailable, setPushAvailable] = useState(false);
-  const [pushOn, setPushOn] = useState(false);
-  const [pushBusy, setPushBusy] = useState(false);
-
   // In-app notification sound. Server-stored (follows the user across
   // devices); localStorage mirrors it as the synchronous fast-path.
   const [soundOn, setSoundOn] = useState(true);
-
-  useEffect(() => {
-    if (!pushSupported()) return;
-    setPushAvailable(true);
-    void isPushEnabled().then(setPushOn);
-  }, []);
 
   useEffect(() => {
     setSoundOn(isNotificationSoundEnabled());
@@ -126,27 +110,6 @@ export function AccountClient({
       setError("Upload failed. Please try a smaller photo or try again.");
     } finally {
       setUploading(false);
-    }
-  };
-
-  const togglePush = async (next: boolean) => {
-    if (pushBusy) return;
-    setPushBusy(true);
-    try {
-      if (next) {
-        const enabled = await enablePush();
-        setPushOn(enabled);
-        if (!enabled) {
-          setError(
-            "Notifications are blocked for this site. Allow them in your browser settings, then try again.",
-          );
-        }
-      } else {
-        await disablePush();
-        setPushOn(false);
-      }
-    } finally {
-      setPushBusy(false);
     }
   };
 
@@ -239,26 +202,8 @@ export function AccountClient({
         </div>
       </section>
 
-      {/* Notifications */}
-      <section className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card p-4">
-        <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted/40 text-foreground">
-          <Bell className="h-4.5 w-4.5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-s font-semibold">Notifications</div>
-          <div className="mt-0.5 text-s text-muted-foreground">
-            {pushAvailable
-              ? "Get alerts for new messages, mentions, and updates."
-              : "Not supported in this browser. On iPhone, install the app to your home screen first."}
-          </div>
-        </div>
-        <Switch
-          checked={pushOn}
-          onCheckedChange={(v) => void togglePush(v)}
-          disabled={!pushAvailable || pushBusy}
-          aria-label="Toggle notifications"
-        />
-      </section>
+      {/* Notifications (toggle + per-platform recovery steps) */}
+      <NotificationSetup />
 
       {/* Notification sound */}
       <section className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card p-4">
