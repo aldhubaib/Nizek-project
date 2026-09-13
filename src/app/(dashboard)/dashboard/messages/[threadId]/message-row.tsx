@@ -98,7 +98,7 @@ function ReactionChips({
   mine: boolean;
   currentMemberId: string;
   memberNames: Record<string, string>;
-  onToggle: (emoji: string) => void;
+  onToggle?: (emoji: string) => void;
 }) {
   return (
     <div className={cn("flex flex-wrap gap-1", mine ? "justify-end" : "justify-start")}>
@@ -168,13 +168,15 @@ function ReactionChips({
                   );
                 })}
               </ul>
-              <button
-                type="button"
-                onClick={() => onToggle(r.emoji)}
-                className="mt-0.5 w-full rounded-md px-2 py-2 text-left text-s text-muted-foreground hover:bg-surface hover:text-foreground"
-              >
-                {mineReacted ? "Remove your reaction" : `React with ${r.emoji}`}
-              </button>
+              {onToggle ? (
+                <button
+                  type="button"
+                  onClick={() => onToggle(r.emoji)}
+                  className="mt-0.5 w-full rounded-md px-2 py-2 text-left text-s text-muted-foreground hover:bg-surface hover:text-foreground"
+                >
+                  {mineReacted ? "Remove your reaction" : `React with ${r.emoji}`}
+                </button>
+              ) : null}
             </PopoverContent>
           </Popover>
         );
@@ -270,6 +272,7 @@ export const MessageRow = memo(function MessageRow({
   searchCurrent,
   projectName,
   isClientViewer = false,
+  readOnly = false,
 }: {
   m: ChatMessage;
   mine: boolean;
@@ -306,6 +309,8 @@ export const MessageRow = memo(function MessageRow({
   projectName?: string;
   /** Feed cards open a client-safe view instead of the staff workspace. */
   isClientViewer?: boolean;
+  /** Hide reply / react / edit — used for view-only client chat. */
+  readOnly?: boolean;
 }) {
   const imageAtts = m.attachments.filter((a) => a.isImage);
   const videoAtts = m.attachments.filter((a) => isVideoAttachment(a));
@@ -340,12 +345,13 @@ export const MessageRow = memo(function MessageRow({
   const isCard = isCardMessage(m);
 
   const actionHandlers: MessageActionHandlers = {
-    onReact: (emoji) => react(m.id, emoji),
-    onReply: () => handleReply(m.id),
+    onReact: readOnly ? undefined : (emoji) => react(m.id, emoji),
+    onReply: readOnly ? undefined : () => handleReply(m.id),
     onCopy: () => handleCopy(messageQuoteText(m)),
-    onDelete: isCard ? undefined : () => handleDelete(m.id),
-    onEdit: mine && !isCard ? () => handleEdit(m.id) : undefined,
-    onCreateTask: canCreateTask ? () => handleCreateTask(m) : undefined,
+    onDelete: readOnly || isCard ? undefined : () => handleDelete(m.id),
+    onEdit: !readOnly && mine && !isCard ? () => handleEdit(m.id) : undefined,
+    onCreateTask:
+      !readOnly && canCreateTask ? () => handleCreateTask(m) : undefined,
     onToggleImportant: () => handleToggleImportant(m.id),
     important: Boolean(m.important),
   };
@@ -389,6 +395,7 @@ export const MessageRow = memo(function MessageRow({
       }
       return;
     }
+    if (readOnly) return;
     if (dx > 0) {
       swiped.current = true;
       const next = Math.min(80, dx);
@@ -404,7 +411,9 @@ export const MessageRow = memo(function MessageRow({
     lastDelta.current = { dx: 0, dy: 0 };
     setSwipeX(0);
     touchStart.current = null;
-    if (swiped.current && shouldCommitSwipeReply(dx, dy)) handleReply(m.id);
+    if (!readOnly && swiped.current && shouldCommitSwipeReply(dx, dy)) {
+      handleReply(m.id);
+    }
     swiped.current = false;
   };
 
@@ -426,7 +435,7 @@ export const MessageRow = memo(function MessageRow({
   };
 
   /** The quick-emoji bar that floats over a row selected on mobile. */
-  const selectionEmojiBar = selected ? (
+  const selectionEmojiBar = selected && !readOnly ? (
     <div
       className={cn(
         "absolute z-20 flex -translate-y-[calc(100%+6px)] items-center gap-0.5 rounded-full border border-border/60 bg-popover px-1.5 py-1 shadow-lg lg:hidden",
@@ -612,7 +621,7 @@ export const MessageRow = memo(function MessageRow({
                 mine={false}
                 currentMemberId={currentMemberId}
                 memberNames={memberNames}
-                onToggle={toggleReaction}
+                onToggle={readOnly ? undefined : toggleReaction}
               />
             )}
           </div>
@@ -983,7 +992,7 @@ export const MessageRow = memo(function MessageRow({
               mine={mine}
               currentMemberId={currentMemberId}
               memberNames={memberNames}
-              onToggle={toggleReaction}
+              onToggle={readOnly ? undefined : toggleReaction}
             />
           )}
         </div>

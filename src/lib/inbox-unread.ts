@@ -12,7 +12,9 @@ function toCount(n: number | bigint): number {
  * Unread inbox counts from messages after each user's ChatReadCursor.
  * Missing cursor → 0 for project/DM threads (do not treat history as unread).
  * Client rooms are the exception: never-opened client chats count every
- * message from someone else, so staff see a bubble without opening them first.
+ * message from someone else, so assigned staff see a bubble without opening
+ * them first. Project members who only have view-only access do not — they
+ * get the normal missing-cursor = 0 treatment until they open the thread.
  */
 export async function countInboxMessageUnreads(
   userId: string,
@@ -41,7 +43,16 @@ export async function countInboxMessageUnreads(
         AND m."authorId" <> ${userId}
         AND (
           (c."lastReadAt" IS NOT NULL AND m."createdAt" > c."lastReadAt")
-          OR (c."lastReadAt" IS NULL AND conv.kind = 'client')
+          OR (
+            c."lastReadAt" IS NULL
+            AND conv.kind = 'client'
+            AND EXISTS (
+              SELECT 1
+              FROM "ConversationParticipant" p
+              WHERE p."conversationId" = conv.id
+                AND p."memberId" = ${userId}
+            )
+          )
         )
       GROUP BY m."conversationId"
     `,

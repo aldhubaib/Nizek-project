@@ -20,8 +20,8 @@ import { cn } from "@/lib/utils";
 import { QUICK_EMOJIS } from "./thread-shared";
 
 export type MessageActionHandlers = {
-  onReact: (emoji: string) => void;
-  onReply: () => void;
+  onReact?: (emoji: string) => void;
+  onReply?: () => void;
   onCopy: () => void;
   /** Absent on the cards the app raises itself — those are a record. */
   onDelete?: () => void;
@@ -43,24 +43,28 @@ export function ActionsMenuContent({
 }: MessageActionHandlers) {
   return (
     <DropdownMenuContent align="end" className="min-w-56 p-1.5" sideOffset={6}>
-      <div className="flex items-center gap-0.5 px-1 py-1.5">
-        {QUICK_EMOJIS.map((e) => (
-          <button
-            key={e}
-            type="button"
-            onClick={() => onReact(e)}
-            className="grid size-9 place-items-center rounded-full text-lg transition-transform hover:scale-125 hover:bg-surface"
-            aria-label={`React ${e}`}
-          >
-            {e}
-          </button>
-        ))}
-      </div>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem onClick={onReply} className="min-h-10 gap-3 text-s">
-        <Reply className="h-4 w-4" />
-        <span className="flex-1">Reply</span>
-      </DropdownMenuItem>
+      {onReact ? (
+        <div className="flex items-center gap-0.5 px-1 py-1.5">
+          {QUICK_EMOJIS.map((e) => (
+            <button
+              key={e}
+              type="button"
+              onClick={() => onReact(e)}
+              className="grid size-9 place-items-center rounded-full text-lg transition-transform hover:scale-125 hover:bg-surface"
+              aria-label={`React ${e}`}
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {onReact || onReply ? <DropdownMenuSeparator /> : null}
+      {onReply ? (
+        <DropdownMenuItem onClick={onReply} className="min-h-10 gap-3 text-s">
+          <Reply className="h-4 w-4" />
+          <span className="flex-1">Reply</span>
+        </DropdownMenuItem>
+      ) : null}
       <DropdownMenuItem onClick={onCopy} className="min-h-10 gap-3 text-s">
         <Copy className="h-4 w-4" />
         <span className="flex-1">Copy</span>

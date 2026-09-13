@@ -70,6 +70,7 @@ import {
   sumInboxMessageUnreads,
 } from "@/lib/inbox-unread";
 import {
+  assertCanPostClientConversation,
   canAccessClientConversation,
   CLIENT_CONVERSATION_KIND,
   ensureClientInbox,
@@ -1048,14 +1049,7 @@ export async function sendMessage(
         taskId = null;
         projectId = null;
       } else if (convoMeta.kind === CLIENT_CONVERSATION_KIND) {
-        const access = await canAccessClientConversation(conversationId, user);
-        if (!access.ok || !access.canPost) {
-          throw new Error(
-            access.ok
-              ? "Client chat is disabled for this project"
-              : "Conversation not found",
-          );
-        }
+        const access = await assertCanPostClientConversation(conversationId, user);
         isClientRoom = true;
         participantIds = convoMeta.participants.map((p) => p.memberId);
         // Ensure the sender is in the notify set even for admins without a row.
@@ -1670,6 +1664,15 @@ export async function editMessage(
     const ageMs = Date.now() - message.createdAt.getTime();
     if (ageMs > 24 * 60 * 60 * 1000)
       throw new Error("Messages can only be edited within 24 hours");
+    if (message.conversationId) {
+      const convo = await prisma.conversation.findUnique({
+        where: { id: message.conversationId },
+        select: { kind: true },
+      });
+      if (convo?.kind === CLIENT_CONVERSATION_KIND) {
+        await assertCanPostClientConversation(message.conversationId, user);
+      }
+    }
 
     const updated = await prisma.message.update({
       where: { id: message.id },
@@ -1740,14 +1743,23 @@ export async function toggleReaction(
       // No participant rows here — membership is every non-client user.
       if (!canReadAnnouncements(user)) throw new Error("Permission denied");
     } else if (message.conversationId) {
-      const convo = await prisma.conversation.findFirst({
-        where: {
-          id: message.conversationId,
-          participants: { some: { memberId: user.id } },
-        },
-        select: { id: true },
+      const convo = await prisma.conversation.findUnique({
+        where: { id: message.conversationId },
+        select: { kind: true },
       });
       if (!convo) throw new Error("Permission denied");
+      if (convo.kind === CLIENT_CONVERSATION_KIND) {
+        await assertCanPostClientConversation(message.conversationId, user);
+      } else {
+        const part = await prisma.conversationParticipant.findFirst({
+          where: {
+            conversationId: message.conversationId,
+            memberId: user.id,
+          },
+          select: { id: true },
+        });
+        if (!part) throw new Error("Permission denied");
+      }
     } else if (message.projectId) {
       if (!(await hasProjectAccess(message.projectId)))
         throw new Error("Permission denied");
@@ -1814,6 +1826,15 @@ export async function deleteMessage(
     if (!message) throw new Error("Message not found");
     if (message.authorId !== user.id)
       throw new Error("You can only delete your own messages");
+    if (message.conversationId) {
+      const convo = await prisma.conversation.findUnique({
+        where: { id: message.conversationId },
+        select: { kind: true },
+      });
+      if (convo?.kind === CLIENT_CONVERSATION_KIND) {
+        await assertCanPostClientConversation(message.conversationId, user);
+      }
+    }
 
     await prisma.message.delete({ where: { id: message.id } });
 
@@ -1845,6 +1866,8 @@ export type InboxThread = {
   avatar: string;
   initials: string;
   inactive: boolean;
+  /** Client rooms: true when the viewer can open the thread but not post. */
+  readOnly?: boolean;
 };
 
 export async function getInboxThreads(): Promise<InboxThread[]> {
@@ -1946,6 +1969,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         kind: CLIENT_CONVERSATION_KIND,
         OR: [
           { participants: { some: { memberId: user.id } } },
+          { project: { members: { some: { userId: user.id } } } },
           ...(isAdmin ? [{ projectId: { not: null } }] : []),
         ],
       },
@@ -1963,6 +1987,10 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
               ? { where: { userId: user.id }, select: { id: true } }
               : false,
           },
+        },
+        participants: {
+          where: { memberId: user.id },
+          select: { id: true },
         },
         messages: {
           orderBy: { createdAt: "desc" },
@@ -2073,11 +2101,16 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       const last = c.messages[0];
       const name = c.project!.name;
       const enabled = c.project!.clientChatEnabled;
+      const inRoom = c.participants.length > 0;
       return {
         id: `conv-${c.id}`,
         kind: "client" as const,
         name,
-        subtitle: enabled ? "Client chat" : "Client chat (disabled)",
+        subtitle: enabled
+          ? inRoom
+            ? "Client chat"
+            : "Client chat · View only"
+          : "Client chat (disabled)",
         projectId: c.project!.id,
         conversationId: c.id,
         logoUrl: c.project!.logoUrl ?? null,
@@ -2090,6 +2123,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         avatar: generateColor(name),
         initials: name.charAt(0).toUpperCase(),
         inactive: !enabled || !getActiveContract(c.project!.contracts),
+        readOnly: enabled && !inRoom,
       };
     });
 

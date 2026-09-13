@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember, requireUser } from "@/lib/auth";
 import {
+  canAccessClientConversation,
   CLIENT_CONVERSATION_KIND,
   ensureClientChatParticipant,
   getClientConversation,
@@ -81,21 +82,15 @@ export async function getClientChatRoster(projectId: string): Promise<{
     };
   }
 
-  // Non-managers must be participants (or system admin) to see the roster.
-  if (!canManage && user.systemRole !== "ADMIN") {
-    const part = await prisma.conversationParticipant.findUnique({
-      where: {
-        conversationId_memberId: {
-          conversationId: convo.id,
-          memberId: user.id,
-        },
-      },
-      select: { id: true },
-    });
-    if (!part) {
-      throw new Error("Permission denied");
-    }
+  const access = await canAccessClientConversation(convo.id, user);
+  if (!canManage && !access.ok) {
+    throw new Error("Permission denied");
   }
+
+  const clientViewer = isClientUser(user);
+  // Clients never manage the roster — they must not see view-only staff
+  // sitting in the "add" list either.
+  if (clientViewer) canManage = false;
 
   const participants = await prisma.conversationParticipant.findMany({
     where: { conversationId: convo.id },
@@ -115,18 +110,35 @@ export async function getClientChatRoster(projectId: string): Promise<{
 
   // A client viewing the roster must see aliases, and never a work email —
   // that gives away the real name just as directly.
-  const aliasMap = isClientUser(user) ? await getAliasMap(projectId) : NO_MASK;
-  const people: ClientChatPerson[] = participants.map((p) => {
-    const alias = aliasMap.get(p.member.id);
+  const aliasMap = clientViewer ? await getAliasMap(projectId) : NO_MASK;
+  // Talkers only: curated staff + project clients. View-only project
+  // members are not participants, so they never go on this list.
+  const people: ClientChatPerson[] = participants
+    .filter((p) => {
+      if (p.member.id === user.id && !access.canPost) return false;
+      return true;
+    })
+    .map((p) => {
+      const alias = aliasMap.get(p.member.id);
+      return {
+        id: p.member.id,
+        name: alias ? alias.name : p.member.name,
+        email: alias ? "" : p.member.email,
+        imageUrl: alias ? alias.imageUrl : p.member.imageUrl,
+        systemRole: p.member.systemRole,
+        kind: isClientUser(p.member) ? "client" : "staff",
+      };
+    });
+
+  if (clientViewer) {
     return {
-      id: p.member.id,
-      name: alias ? alias.name : p.member.name,
-      email: alias ? "" : p.member.email,
-      imageUrl: alias ? alias.imageUrl : p.member.imageUrl,
-      systemRole: p.member.systemRole,
-      kind: isClientUser(p.member) ? "client" : "staff",
+      enabled: project.clientChatEnabled,
+      conversationId: convo.id,
+      people,
+      addableStaff: [],
+      canManage: false,
     };
-  });
+  }
 
   const inRoom = new Set(people.map((p) => p.id));
 

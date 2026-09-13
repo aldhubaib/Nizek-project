@@ -188,9 +188,11 @@ export default async function ThreadPage({
       title = access.project.name;
       subtitle = client
         ? "Chatting with Nizek"
-        : access.project.clientChatEnabled
-          ? "Client chat"
-          : "Client chat (disabled)";
+        : !access.project.clientChatEnabled
+          ? "Client chat (disabled)"
+          : access.canPost
+            ? "Client chat"
+            : "Client chat · View only";
       projectName = access.project.name;
       readOnly = !access.canPost;
       inactive =

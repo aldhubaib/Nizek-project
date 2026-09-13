@@ -385,7 +385,8 @@ export function ProjectSettingsOverlay({
                 </Label>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Opens a separate chat room for clients — isolated from internal project chat.
-                  Clients on the project join automatically; add staff from your side below.
+                  Everyone on the project can view it. Only the people you add below can reply.
+                  Clients on the project join automatically.
                 </p>
               </div>
               <button

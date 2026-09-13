@@ -181,7 +181,7 @@ export function snapshotFromInboxThread(
     peerMemberIds: thread.peerMemberIds,
     mentionables: [],
     inactive: thread.inactive,
-    readOnly: false,
+    readOnly: Boolean(thread.readOnly),
     canCreateTask: false,
     allowedTaskTypes: [],
     activeContractType: null,

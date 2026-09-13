@@ -187,10 +187,28 @@ export async function disableClientChat(projectId: string): Promise<void> {
   });
 }
 
+function clientConversationResult(
+  conversation: { id: string; projectId: string | null; kind: string },
+  project: { id: string; name: string; clientChatEnabled: boolean; logoUrl: string | null },
+  canPost: boolean,
+) {
+  return {
+    ok: true as const,
+    conversation: {
+      id: conversation.id,
+      projectId: conversation.projectId,
+      kind: conversation.kind,
+    },
+    project,
+    canPost,
+  };
+}
+
 /**
- * Staff (or enabled client participant) may access a client conversation.
- * When disabled, only non-client users who are participants (or system admins
- * with project access) may still read history.
+ * Staff on the project (or a curated participant / system admin) may read a
+ * client conversation. Posting stays limited to people who were added to the
+ * room — everyone else on the project is view-only.
+ * When disabled, non-client viewers may still read history.
  */
 export async function canAccessClientConversation(
   conversationId: string,
@@ -238,46 +256,50 @@ export async function canAccessClientConversation(
     if (!project.clientChatEnabled || !isParticipant) {
       return { ok: false, conversation: null, project: null, canPost: false };
     }
-    return {
-      ok: true,
-      conversation: {
-        id: conversation.id,
-        projectId: conversation.projectId,
-        kind: conversation.kind,
-      },
+    return clientConversationResult(conversation, project, true);
+  }
+
+  // Assigned staff keep the same write access they already had.
+  if (isParticipant) {
+    return clientConversationResult(
+      conversation,
       project,
-      canPost: true,
-    };
+      project.clientChatEnabled,
+    );
   }
 
-  // Staff: must be a curated participant, or system admin (read/manage).
-  if (!isParticipant && !isAdmin) {
-    return { ok: false, conversation: null, project: null, canPost: false };
-  }
-
-  if (!isParticipant && isAdmin) {
-    return {
-      ok: true,
-      conversation: {
-        id: conversation.id,
-        projectId: conversation.projectId,
-        kind: conversation.kind,
+  // Everyone else on the project (and system admins) may only read.
+  if (!isAdmin) {
+    const membership = await prisma.projectMember.findUnique({
+      where: {
+        userId_projectId: { userId: user.id, projectId: project.id },
       },
-      project,
-      canPost: project.clientChatEnabled,
-    };
+      select: { id: true },
+    });
+    if (!membership) {
+      return { ok: false, conversation: null, project: null, canPost: false };
+    }
   }
 
-  return {
-    ok: true,
-    conversation: {
-      id: conversation.id,
-      projectId: conversation.projectId,
-      kind: conversation.kind,
-    },
-    project,
-    canPost: project.clientChatEnabled,
-  };
+  return clientConversationResult(conversation, project, false);
+}
+
+export async function assertCanPostClientConversation(
+  conversationId: string,
+  user: { id: string; systemRole: string },
+) {
+  const result = await canAccessClientConversation(conversationId, user);
+  if (!result.ok || !result.conversation) {
+    throw new Error("Conversation not found");
+  }
+  if (!result.canPost) {
+    throw new Error(
+      result.project?.clientChatEnabled
+        ? "You have view-only access to this client chat"
+        : "Client chat is disabled for this project",
+    );
+  }
+  return result;
 }
 
 /**

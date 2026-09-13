@@ -265,6 +265,7 @@ export function ThreadChat({
   usePasteFiles((files) => pickFilesRef.current(files), {
     ref: frameRef,
     capture: true,
+    enabled: !readOnly && !inactive,
   });
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
     restoreFromCache
@@ -980,12 +981,14 @@ export function ThreadChat({
     Array.from(e.dataTransfer?.types ?? []).includes("Files");
 
   const onDragEnter = (e: React.DragEvent) => {
+    if (readOnly || inactive) return;
     if (!hasFiles(e)) return;
     e.preventDefault();
     dragDepth.current += 1;
     setDragging(true);
   };
   const onDragOver = (e: React.DragEvent) => {
+    if (readOnly || inactive) return;
     if (!hasFiles(e)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
@@ -999,6 +1002,7 @@ export function ThreadChat({
     }
   };
   const onDrop = (e: React.DragEvent) => {
+    if (readOnly || inactive) return;
     if (!hasFiles(e)) return;
     e.preventDefault();
     dragDepth.current = 0;
@@ -1007,6 +1011,7 @@ export function ThreadChat({
   };
 
   const send = () => {
+    if (readOnly || inactive) return;
     let text = draft.trim();
     if (!text && pending.length === 0) return;
     if (!threadKey) return;
@@ -1084,6 +1089,7 @@ export function ThreadChat({
 
   const react = useCallback(
     (messageId: string, emoji: string) => {
+      if (readOnly) return;
       setMessages((prev) =>
         prev.map((m) => {
           if (m.id !== messageId) return m;
@@ -1107,7 +1113,7 @@ export function ThreadChat({
         await toggleReaction(messageId, emoji);
       });
     },
-    [currentMemberId],
+    [currentMemberId, readOnly],
   );
 
   const clearSelection = useCallback(() => setSelectedId(null), []);
@@ -1122,10 +1128,11 @@ export function ThreadChat({
   }, [selectedId]);
 
   const handleReply = useCallback((id: string) => {
+    if (readOnly) return;
     setSelectedId(null);
     setReplyTo(id);
     setTimeout(() => composerRef.current?.focus(), 0);
-  }, []);
+  }, [readOnly]);
 
   const handleCopy = useCallback((text: string) => {
     navigator.clipboard.writeText(text);
@@ -1133,22 +1140,24 @@ export function ThreadChat({
   }, []);
 
   const handleDelete = useCallback((id: string) => {
+    if (readOnly) return;
     setSelectedId(null);
     setMessages((prev) => prev.filter((m) => m.id !== id));
     startTransition(async () => {
       await deleteMessageAction(id);
     });
-  }, []);
+  }, [readOnly]);
 
   // Reads through a ref so the callback identity stays stable — depending on
   // `messages` here re-renders every memoized MessageRow on each new message.
   const handleEdit = useCallback((id: string) => {
+    if (readOnly) return;
     const msg = messagesRef.current.find((m) => m.id === id);
       if (!msg) return;
       setSelectedId(null);
       setEditingId(id);
       setEditDraft(msg.body);
-  }, []);
+  }, [readOnly]);
 
   const onSaveEdit = useCallback(() => {
     if (!editingId) return;
@@ -1407,6 +1416,7 @@ export function ThreadChat({
             1
           </span>
           <div className="ml-auto flex items-center">
+            {!readOnly && (
             <button
               type="button"
               onClick={() => handleReply(selectedMessage.id)}
@@ -1415,6 +1425,7 @@ export function ThreadChat({
             >
               <Reply className="h-5 w-5" />
             </button>
+            )}
             <button
               type="button"
               onClick={() => handleCopy(messageQuoteText(selectedMessage))}
@@ -1440,7 +1451,7 @@ export function ThreadChat({
                 )}
               />
             </button>
-            {canCreateTask && target.projectId && !inactive && (
+            {!readOnly && canCreateTask && target.projectId && !inactive && (
               <button
                 type="button"
                 onClick={() => handleCreateTask(selectedMessage)}
@@ -1450,7 +1461,7 @@ export function ThreadChat({
                 <CheckSquare className="h-5 w-5" />
               </button>
             )}
-            {selectedMine && !isCardMessage(selectedMessage) && (
+            {!readOnly && selectedMine && !isCardMessage(selectedMessage) && (
               <button
                 type="button"
                 onClick={() => handleEdit(selectedMessage.id)}
@@ -1460,7 +1471,7 @@ export function ThreadChat({
                 <Pencil className="h-5 w-5" />
               </button>
             )}
-            {selectedMine && !isCardMessage(selectedMessage) && (
+            {!readOnly && selectedMine && !isCardMessage(selectedMessage) && (
               <button
                 type="button"
                 onClick={() => handleDelete(selectedMessage.id)}
@@ -1673,7 +1684,7 @@ export function ThreadChat({
               <Star className="h-4 w-4" />
               <span className="flex-1">Important</span>
             </DropdownMenuItem>
-            {isClientRoom && target.projectId ? (
+            {isClientRoom && target.projectId && !readOnly ? (
               <DropdownMenuItem onClick={() => openThreadPanel("people")}>
                 <Users className="h-4 w-4" />
                 <span className="flex-1">People</span>
@@ -1820,6 +1831,7 @@ export function ThreadChat({
                   searchCurrent={searchCursorId === m.id}
                   projectName={projectName}
                   isClientViewer={clientUser}
+                  readOnly={readOnly}
                 />
                 </Fragment>
               );
@@ -1839,9 +1851,11 @@ export function ThreadChat({
                 <div className="text-s font-medium text-foreground">
                   No messages yet
                 </div>
-                <p className="text-s text-muted-foreground">
-                  Send a message to start the conversation.
-                </p>
+                {!inactive && !readOnly ? (
+                  <p className="text-s text-muted-foreground">
+                    Send a message to start the conversation.
+                  </p>
+                ) : null}
               </div>
             )}
             {typingLabel && (
@@ -1883,7 +1897,7 @@ export function ThreadChat({
               {inactive
                 ? "This project is not active. The channel is read-only."
                 : readOnly
-                  ? "You have read-only access to this chat."
+                  ? "This channel is read-only."
                   : "Only admins post here — react, or reply to an announcement."}
             </div>
           ) : (
@@ -2355,14 +2369,20 @@ export function ThreadChat({
             const mine = msg.authorId === currentMemberId;
             return (
               <ImageActionsMenu
-                onReact={(emoji) => react(msg.id, emoji)}
-                onReply={() => {
-                  lb.close();
-                  handleReply(msg.id);
-                }}
+                onReact={
+                  readOnly ? undefined : (emoji) => react(msg.id, emoji)
+                }
+                onReply={
+                  readOnly
+                    ? undefined
+                    : () => {
+                        lb.close();
+                        handleReply(msg.id);
+                      }
+                }
                 onCopy={() => handleCopy(messageQuoteText(msg))}
                 onEdit={
-                  mine
+                  !readOnly && mine
                     ? () => {
                         lb.close();
                         handleEdit(msg.id);
@@ -2370,7 +2390,7 @@ export function ThreadChat({
                     : undefined
                 }
                 onCreateTask={
-                  canCreateTask && target.projectId && !inactive
+                  !readOnly && canCreateTask && target.projectId && !inactive
                     ? () => {
                         lb.close();
                         handleCreateTask(msg);
@@ -2382,10 +2402,14 @@ export function ThreadChat({
                   handleToggleImportant(msg.id);
                 }}
                 important={Boolean(msg.important)}
-                onDelete={() => {
-                  lb.close();
-                  handleDelete(msg.id);
-                }}
+                onDelete={
+                  readOnly
+                    ? undefined
+                    : () => {
+                        lb.close();
+                        handleDelete(msg.id);
+                      }
+                }
               />
             );
           }}
@@ -2441,7 +2465,7 @@ export function ThreadChat({
         </NoteSlideOver>
       )}
 
-      {peopleOpen && isClientRoom && target.projectId && (
+      {peopleOpen && isClientRoom && target.projectId && !readOnly && (
         <NoteSlideOver title="People" onClose={closeThreadPanels}>
           <div className="px-3 py-2">
             <ClientChatPeopleManager
