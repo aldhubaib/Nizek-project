@@ -116,7 +116,7 @@ export function ClientChatPeopleManager({
     ? `${projectName?.trim() || "Project"} team`
     : `Clients (${clients.length})`;
 
-  const addButton = canManage ? (
+  const addButton = canManage && !clientView ? (
     <AddButton
       label="Add staff"
       disabled={pending}
@@ -140,8 +140,8 @@ export function ClientChatPeopleManager({
             </div>
             {!compact && (
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Clients on the project are added automatically. Add staff from your
-                side who should talk to the client.
+                Everyone on the project can view this chat. Clients join
+                automatically. Add staff who should be able to reply.
               </p>
             )}
           </div>
@@ -217,7 +217,9 @@ export function ClientChatPeopleManager({
           )}
           {people.length === 0 && (
             <p className="py-3 text-s text-muted-foreground">
-              No one in this chat yet. Add staff and invite clients to the project.
+              {clientView
+                ? "No one to chat with yet."
+                : "Only assigned people appear here. Everyone else on the project can view the chat but is not listed."}
             </p>
           )}
         </div>

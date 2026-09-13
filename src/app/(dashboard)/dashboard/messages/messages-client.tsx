@@ -547,7 +547,9 @@ export function ThreadSidebar({
                   ? "Waiting for your project team to enable client chat."
                   : tab === "direct"
                     ? "Tap the compose button to start a conversation."
-                    : "Project chats open from each project — one group chat per project."}
+                    : tab === "client"
+                      ? "Client chats appear here once a project enables them. Everyone on the project can view; only assigned people can reply."
+                      : "Project chats open from each project — one group chat per project."}
               </p>
             </div>
           </li>

@@ -145,8 +145,8 @@ async function canSubscribe(
         select: { kind: true },
       });
       if (!convo) return false;
-      // Client rooms: anyone who can open the thread (participant, curated
-      // staff, or admin) must be on the realtime channel for typing/presence.
+      // Client rooms: anyone who can open the thread (assigned people, other
+      // project members as viewers, or admin) must be on the realtime channel.
       if (convo.kind === CLIENT_CONVERSATION_KIND) {
         const access = await canAccessClientConversation(conversationId, user);
         return access.ok;

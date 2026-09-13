@@ -54,9 +54,9 @@ export const ThreadRow = memo(function ThreadRow({
         // WhatsApp-like row: tall touch target (~72–80px), large avatar, roomy padding.
         "flex min-h-[76px] items-center gap-m border-b border-border/30 px-app py-3.5 transition-colors active:bg-surface/70 hover:bg-surface/60 max-lg:min-h-[80px] max-lg:gap-4 max-lg:py-4 lg:min-h-[68px] lg:py-3",
         active && "bg-surface/80",
-        !thread.inactive && thread.unread > 0 && !active && "bg-primary/[0.05]",
-        thread.inactive && "opacity-70 hover:opacity-100",
-        thread.inactive && active && "opacity-100",
+        !thread.inactive && !thread.readOnly && thread.unread > 0 && !active && "bg-primary/[0.05]",
+        (thread.inactive || thread.readOnly) && "opacity-70 hover:opacity-100",
+        (thread.inactive || thread.readOnly) && active && "opacity-100",
       )}
     >
       <div className="relative shrink-0">
@@ -91,13 +91,20 @@ export const ThreadRow = memo(function ThreadRow({
             className={cn(
               "truncate text-s font-medium leading-tight",
               thread.unread > 0 && !active && "font-semibold text-foreground",
-              thread.inactive && "text-muted-foreground",
+              (thread.inactive || thread.readOnly) && "text-muted-foreground",
             )}
           >
             {thread.name}
           </span>
           {thread.kind === "client" && !thread.inactive && (
-            <StatusBadge config={outlineBadge("Client", "text-orange", "border-orange/30")} className="uppercase tracking-wide" />
+            <StatusBadge
+              config={outlineBadge(
+                thread.readOnly ? "View only" : "Client",
+                thread.readOnly ? "text-muted-foreground" : "text-orange",
+                thread.readOnly ? "border-border" : "border-orange/30",
+              )}
+              className="uppercase tracking-wide"
+            />
           )}
           {thread.inactive && (
             <StatusBadge config={outlineBadge("Inactive", "text-muted-foreground", "border-border")} className="uppercase tracking-wide" />
