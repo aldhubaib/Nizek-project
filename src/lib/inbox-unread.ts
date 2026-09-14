@@ -30,6 +30,11 @@ export async function countInboxMessageUnreads(
         AND m."conversationId" IS NULL
         AND m."authorId" <> ${userId}
         AND m."createdAt" > c."lastReadAt"
+        AND EXISTS (
+          SELECT 1 FROM "ProjectMember" pm
+          WHERE pm."projectId" = m."projectId"
+            AND pm."userId" = ${userId}
+        )
       GROUP BY m."projectId"
     `,
     prisma.$queryRaw<UnreadRow[]>`
@@ -41,6 +46,22 @@ export async function countInboxMessageUnreads(
        AND c."threadId" = ('conv-' || m."conversationId")
       WHERE m."conversationId" IS NOT NULL
         AND m."authorId" <> ${userId}
+        AND (
+          EXISTS (
+            SELECT 1
+            FROM "ConversationParticipant" p
+            WHERE p."conversationId" = conv.id
+              AND p."memberId" = ${userId}
+          )
+          OR (
+            conv."projectId" IS NOT NULL
+            AND EXISTS (
+              SELECT 1 FROM "ProjectMember" pm
+              WHERE pm."projectId" = conv."projectId"
+                AND pm."userId" = ${userId}
+            )
+          )
+        )
         AND (
           (c."lastReadAt" IS NOT NULL AND m."createdAt" > c."lastReadAt")
           OR (

@@ -1872,7 +1872,6 @@ export type InboxThread = {
 
 export async function getInboxThreads(): Promise<InboxThread[]> {
   const user = await requireUser();
-  const isAdmin = user.systemRole === "ADMIN";
   const client = isClientUser(user);
 
   const unreadMap = await countInboxMessageUnreads(user.id);
@@ -1944,13 +1943,11 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
     });
   }
 
-  const projectWhere = isAdmin
-    ? {}
-    : { members: { some: { userId: user.id } } };
-
   const [projects, clientConversations, noteCommentConversations, dmConversations] = await Promise.all([
     prisma.project.findMany({
-      where: projectWhere,
+      // Membership only — system admins still manage every project from
+      // /projects, but chat is the rooms they actually belong to.
+      where: { members: { some: { userId: user.id } } },
       select: {
         id: true,
         name: true,
@@ -1970,7 +1967,6 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         OR: [
           { participants: { some: { memberId: user.id } } },
           { project: { members: { some: { userId: user.id } } } },
-          ...(isAdmin ? [{ projectId: { not: null } }] : []),
         ],
       },
       orderBy: { updatedAt: "desc" },
@@ -1983,9 +1979,6 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
             logoUrl: true,
             clientChatEnabled: true,
             contracts: { select: CONTRACT_SELECT },
-            members: isAdmin
-              ? { where: { userId: user.id }, select: { id: true } }
-              : false,
           },
         },
         participants: {
