@@ -52,6 +52,7 @@ import { PerformanceSection } from "@/components/equity/performance-section";
 import { TeamSection } from "@/components/equity/team-section";
 import { PageHeader, PageBackButton } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { PageBody } from "@/components/page-body";
 import { AddButton } from "@/components/add-button";
 import { uploadFileToR2 } from "@/lib/upload";
 import {
@@ -209,7 +210,7 @@ export function EquityPortfolioClient({
         />
       </PageHeader>
 
-      <div className="px-app py-6 max-w-5xl mx-auto">
+      <PageBody className="py-6 max-w-5xl mx-auto">
         {/* Computed summary — derived from the tables below, nothing stored */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <div className="app-card rounded-xl border border-border bg-card px-3.5 py-3">
@@ -343,7 +344,7 @@ export function EquityPortfolioClient({
             currency={portfolio.valuationCurrency}
           />
         )}
-      </div>
+      </PageBody>
     </div>
   );
 }

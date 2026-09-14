@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { PageHeader, PageName, PageBackButton } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { PageBody } from "@/components/page-body";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function TitleCrumbs({
@@ -37,7 +38,7 @@ export function DashboardHomeSkeleton() {
       <PageHeader>
         <PageName>Dashboard</PageName>
       </PageHeader>
-      <div className="px-app py-6 pb-16">
+      <PageBody className="py-6 pb-16">
         <div className="mb-8 space-y-2">
           <Skeleton className="h-6 w-48" />
           <Skeleton className="h-3.5 w-64 bg-muted/40" />
@@ -85,7 +86,7 @@ export function DashboardHomeSkeleton() {
             ))}
           </div>
         </CardShell>
-      </div>
+      </PageBody>
     </div>
   );
 }
@@ -99,7 +100,7 @@ export function ProjectsListSkeleton() {
         </div>
         <Skeleton className="h-8 w-28 rounded-lg" />
       </PageHeader>
-      <div className="px-app py-l">
+      <PageBody className="py-l">
         <div className="grid grid-cols-1 gap-card sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => (
             <div
@@ -117,7 +118,7 @@ export function ProjectsListSkeleton() {
             </div>
           ))}
         </div>
-      </div>
+      </PageBody>
     </div>
   );
 }
@@ -140,7 +141,7 @@ export function ProjectDetailSkeleton() {
           <Skeleton key={i} className="h-7 w-20 rounded-full bg-muted/40" />
         ))}
       </div>
-      <div className="px-app py-l">
+      <PageBody className="py-l">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {Array.from({ length: 3 }, (_, i) => (
             <div
@@ -156,7 +157,7 @@ export function ProjectDetailSkeleton() {
             </div>
           ))}
         </div>
-      </div>
+      </PageBody>
     </div>
   );
 }
@@ -207,7 +208,7 @@ export function EquitySkeleton() {
       <PageHeader hasMenu>
         <TitleCrumbs current="Equity" />
       </PageHeader>
-      <div className="px-app py-l">
+      <PageBody className="py-l">
         <div className="mb-l flex gap-s">
           {Array.from({ length: 3 }, (_, i) => (
             <Skeleton key={i} className="h-8 w-24 rounded-full bg-muted/40" />
@@ -228,7 +229,7 @@ export function EquitySkeleton() {
             </div>
           ))}
         </div>
-      </div>
+      </PageBody>
     </div>
   );
 }
@@ -239,7 +240,7 @@ export function VaultSkeleton() {
       <PageHeader>
         <TitleCrumbs current="Vault" />
       </PageHeader>
-      <div className="px-app py-l">
+      <PageBody className="py-l">
         <Skeleton className="mb-l h-10 w-full rounded-xl bg-muted/40" />
         <div className="space-y-2">
           {Array.from({ length: 6 }, (_, i) => (
@@ -255,7 +256,7 @@ export function VaultSkeleton() {
             </div>
           ))}
         </div>
-      </div>
+      </PageBody>
     </div>
   );
 }
@@ -273,7 +274,7 @@ function DirectorySkeleton({
       <PageHeader>
         <TitleCrumbs current={current} />
       </PageHeader>
-      <div className="px-app py-l">
+      <PageBody className="py-l">
         <Skeleton className="mb-l h-9 w-64 rounded-md bg-muted/40" />
         <div className="space-y-2">
           {Array.from({ length: 6 }, (_, i) => (
@@ -290,18 +291,18 @@ function DirectorySkeleton({
             </div>
           ))}
         </div>
-      </div>
+      </PageBody>
     </div>
   );
 }
 
-export function ContactsSkeleton() {
+function KanbanSkeleton({ current }: { current: string }) {
   return (
     <div>
       <PageHeader>
-        <TitleCrumbs current="Contacts" />
+        <TitleCrumbs current={current} />
       </PageHeader>
-      <div className="px-app py-4">
+      <PageBody className="py-4">
         <Skeleton className="mb-3 h-9 w-64 rounded-md bg-muted/40" />
         <div className="flex gap-3 overflow-hidden">
           {Array.from({ length: 4 }, (_, col) => (
@@ -327,13 +328,21 @@ export function ContactsSkeleton() {
             </div>
           ))}
         </div>
-      </div>
+      </PageBody>
     </div>
   );
 }
 
+export function ContactsSkeleton() {
+  return <KanbanSkeleton current="Contacts" />;
+}
+
 export function CompaniesSkeleton() {
-  return <DirectorySkeleton current="Companies" glyphClassName="size-9 rounded-lg" />;
+  return <KanbanSkeleton current="Companies" />;
+}
+
+export function DealsSkeleton() {
+  return <KanbanSkeleton current="Deals" />;
 }
 
 export function SettingsSkeleton() {
@@ -342,7 +351,7 @@ export function SettingsSkeleton() {
       <PageHeader>
         <TitleCrumbs current="Settings" />
       </PageHeader>
-      <div className="px-app py-l space-y-3">
+      <PageBody className="py-l space-y-3">
         {Array.from({ length: 5 }, (_, i) => (
           <div
             key={i}
@@ -355,7 +364,7 @@ export function SettingsSkeleton() {
             </div>
           </div>
         ))}
-      </div>
+      </PageBody>
     </div>
   );
 }

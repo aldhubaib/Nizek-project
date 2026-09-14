@@ -15,6 +15,7 @@ import type {
 } from "@/actions/vault";
 import { PageHeader, PageBackButton, PageName } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { PageBody } from "@/components/page-body";
 
 function credentialMatches(c: VaultCredentialDTO, q: string) {
   return (
@@ -89,7 +90,7 @@ export function VaultPageClient({
           </>
         )}
       </PageHeader>
-      <div className="mx-auto max-w-3xl space-y-6 px-app py-8">
+      <PageBody className="mx-auto max-w-3xl space-y-6 py-8">
       <p className="text-s text-muted-foreground">
         {openFolder
           ? `Credentials for ${openFolder.name}. Search within this project below.`
@@ -200,7 +201,7 @@ export function VaultPageClient({
           )}
         </div>
       )}
-      </div>
+      </PageBody>
     </div>
   );
 }

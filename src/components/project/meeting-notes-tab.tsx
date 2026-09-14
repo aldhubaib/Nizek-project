@@ -30,6 +30,7 @@ import { type NoteCommentThreadView } from "@/components/project/note-comment-pa
 import { AttachToTaskDialog } from "@/components/project/attach-to-task-dialog";
 import { CreateTaskFromNoteDialog } from "@/components/project/create-task-from-note";
 import { PageHeaderActions } from "@/components/page-header-actions";
+import { PageBody } from "@/components/page-body";
 import { AddButton } from "@/components/add-button";
 import { PageOverflowItems } from "@/components/page-overflow-menu";
 import { taskCode, outlineBadge } from "@/lib/task-label";
@@ -1067,7 +1068,7 @@ export function NoteFullScreenDetail({
   );
 
   const body = (
-      <div className="max-w-4xl mx-auto w-full px-app py-6 sm:py-10 lg:px-16">
+      <PageBody className="max-w-4xl mx-auto w-full py-6 sm:py-10">
             {/* Type badge + meta */}
             <div className="flex flex-wrap items-center gap-3 mb-2">
               {config && !isSprintDoc && (
@@ -1392,7 +1393,7 @@ export function NoteFullScreenDetail({
             )}
 
             {showRemovedPanel ? <SprintRemovedPanel removed={removed} /> : null}
-      </div>
+      </PageBody>
   );
 
   const dialogs = (

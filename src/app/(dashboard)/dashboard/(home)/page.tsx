@@ -3,6 +3,7 @@ import { isClientUser } from "@/lib/client-chat";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageHeader, PageName } from "@/components/page-header";
+import { PageBody } from "@/components/page-body";
 import { getAuditAccess } from "@/actions/audit";
 import { getManagerOverview } from "@/actions/overview";
 import { DeliverySection } from "../overview/overview-client";
@@ -157,7 +158,7 @@ export default async function DashboardPage({
         <PageName>Dashboard</PageName>
       </PageHeader>
 
-      <div className="px-app flex flex-col gap-6 py-6 pb-16">
+      <PageBody className="flex flex-col gap-6 py-6 pb-16">
         <DashboardClient
           userName={user.name || "there"}
           unreadCount={unreadCount}
@@ -186,7 +187,7 @@ export default async function DashboardPage({
         />
 
         {overview && <DeliverySection overview={overview} />}
-      </div>
+      </PageBody>
     </div>
   );
 }

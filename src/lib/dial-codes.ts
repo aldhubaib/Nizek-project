@@ -102,6 +102,52 @@ export function normalizePhoneNumber(country: string, raw: string): string {
   return digits.replace(/^0+/, "");
 }
 
+export type PhoneValue = {
+  country: string;
+  number: string;
+};
+
+export function parsePhoneValue(raw: string | null | undefined): PhoneValue {
+  if (!raw?.trim()) return { country: DEFAULT_DIAL_COUNTRY, number: "" };
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const obj = parsed as { country?: unknown; number?: unknown };
+      const country =
+        typeof obj.country === "string" && isDialCountry(obj.country)
+          ? obj.country.toUpperCase()
+          : DEFAULT_DIAL_COUNTRY;
+      const number = typeof obj.number === "string" ? obj.number : "";
+      return { country, number };
+    }
+  } catch {
+    /* plain text from before the country picker */
+  }
+  return {
+    country: DEFAULT_DIAL_COUNTRY,
+    number: normalizePhoneNumber(DEFAULT_DIAL_COUNTRY, raw),
+  };
+}
+
+export function stringifyPhoneValue(value: PhoneValue): string {
+  const country = isDialCountry(value.country)
+    ? value.country.toUpperCase()
+    : DEFAULT_DIAL_COUNTRY;
+  const number = normalizePhoneNumber(country, value.number);
+  if (!number) return JSON.stringify({ country, number: "" });
+  return JSON.stringify({ country, number });
+}
+
+export function formatPhoneValue(raw: string | null | undefined): string {
+  const { country, number } = parsePhoneValue(raw);
+  if (!number) return "";
+  return formatPhone(country, number);
+}
+
+export function phoneValueIsFilled(raw: string | null | undefined): boolean {
+  return parsePhoneValue(raw).number.length > 0;
+}
+
 /** Codes sorted by country name, for the dropdown to list. */
 export function dialOptions(): {
   code: CountryCode;

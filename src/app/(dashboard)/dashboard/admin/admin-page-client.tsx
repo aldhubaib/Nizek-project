@@ -51,6 +51,7 @@ import type { BrandingSlotId } from "@/lib/branding-slots";
 import type { TaskType } from "@/generated/prisma/client";
 import { PageHeader, PageBackButton, PageName } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { PageBody } from "@/components/page-body";
 import { cn } from "@/lib/utils";
 
 type TabId =
@@ -192,7 +193,7 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         id: "contacts-access",
         label: "Contacts Access",
         icon: Contact,
-        desc: "Choose who can open the Contacts and Companies directory.",
+        desc: "Choose who can open Contacts, Companies and Deals.",
       },
     ],
   },
@@ -259,7 +260,7 @@ export function AdminPageClient({
         <PageHeader>
           <PageName>Settings</PageName>
         </PageHeader>
-        <div className="mx-auto max-w-2xl space-y-8 px-app py-8">
+        <PageBody className="mx-auto max-w-2xl space-y-8 py-8">
         {SECTIONS.map((section) => (
           <section key={section.group} className="space-y-3">
             <div className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -272,7 +273,7 @@ export function AdminPageClient({
             </div>
           </section>
         ))}
-        </div>
+        </PageBody>
       </div>
     );
   }
@@ -314,7 +315,9 @@ export function AdminPageClient({
         )}
       </PageHeader>
 
-      {/* An open version brings its own centred column and padding. */}
+      {/* An open version brings its own centred column and padding, so this is
+          not a PageBody: the gutter has to come and go with the branch, and
+          PageBody applies it unconditionally. */}
       <div
         className={cn(
           "min-w-0",

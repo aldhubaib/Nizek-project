@@ -16,6 +16,7 @@ import { ContractBadge } from "@/components/project/contract-badge";
 import { AddContractDialog } from "@/components/project/add-contract-dialog";
 import { EditContractDialog } from "@/components/project/edit-contract-dialog";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { PageBody } from "@/components/page-body";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
 import { stageLabel, outlineBadge, priorityLabel, taskCode, taskTypeColor } from "@/lib/task-label";
@@ -252,7 +253,7 @@ export function ProjectSettingsOverlay({
         {activeTab === "archive" ? (
           <ArchiveTab projectId={project.id} isAdmin={isAdmin} />
         ) : (
-        <div className="max-w-2xl mx-auto py-10 px-app space-y-10">
+        <PageBody className="max-w-2xl mx-auto py-10 space-y-10">
 
           {/* Name */}
           <div className="space-y-2">
@@ -503,7 +504,7 @@ export function ProjectSettingsOverlay({
             )}
           </div>
 
-        </div>
+        </PageBody>
         )}
       </div>
     </div>
@@ -805,7 +806,7 @@ function ArchiveTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolea
   }
 
   return (
-    <div className="max-w-3xl mx-auto py-10 px-app">
+    <PageBody className="max-w-3xl mx-auto py-10">
       <div className="mb-6">
         <h2 className="text-s font-semibold flex items-center gap-2">
           <Archive className="w-4 h-4 text-muted-foreground" />
@@ -905,6 +906,6 @@ function ArchiveTab({ projectId, isAdmin }: { projectId: string; isAdmin: boolea
           })}
         </div>
       )}
-    </div>
+    </PageBody>
   );
 }

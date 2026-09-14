@@ -159,7 +159,7 @@ function TabButton({
 function ImportDialog({ existingNames }: { existingNames: string[] }) {
   return (
     <Dialog>
-      <DialogTrigger render={<Button size="sm" className="me-app shrink-0" />}>
+      <DialogTrigger render={<Button size="sm" className="shrink-0" />}>
         <Upload className="h-3.5 w-3.5" />
         Bulk upload
       </DialogTrigger>

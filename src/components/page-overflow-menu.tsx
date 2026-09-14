@@ -115,6 +115,18 @@ export function PageOverflowItems({
   return null;
 }
 
+/**
+ * Whether the shell is currently showing its ⋮.
+ *
+ * The menu is an overlay pinned to the top-right chrome, so a page header has to
+ * keep its own controls out from under it. Asking each page to declare that with
+ * a prop meant every new page could forget — and pages did — so `PageHeader`
+ * reads it from here instead.
+ */
+export function usePageOverflowPresence() {
+  return useContext(OverflowEntriesContext).length > 0;
+}
+
 export function PageOverflowMenu() {
   const entries = useContext(OverflowEntriesContext);
   const [openTick, setOpenTick] = useState(0);

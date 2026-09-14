@@ -12,6 +12,7 @@ import {
 import { loadSprintDocTasks } from "@/lib/sprint-doc-tasks";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { PageHeaderActions } from "@/components/page-header-actions";
+import { PageBody } from "@/components/page-body";
 import { useNoteAutosave } from "@/components/project/use-note-autosave";
 import { cn } from "@/lib/utils";
 import { SprintDocDashboard } from "@/components/project/sprint-doc-dashboard";
@@ -403,7 +404,7 @@ export function NoteFullScreenCreate({
         <div className="flex justify-end px-app pt-4">{saveButton}</div>
       ))}
 
-      <div className="max-w-4xl mx-auto w-full px-app py-6 sm:py-10 lg:px-16">
+      <PageBody className="max-w-4xl mx-auto w-full py-6 sm:py-10">
           {createTypes.length === 1 && noteType && !isSprintDoc ? (
             <LockedNoteTypeBadge noteType={noteType} />
           ) : null}
@@ -516,7 +517,7 @@ export function NoteFullScreenCreate({
           {showRemovedPanel ? (
             <SprintRemovedPanel removed={removed} hideAssignees={hideAssignees} />
           ) : null}
-      </div>
+      </PageBody>
     </div>
   );
 }

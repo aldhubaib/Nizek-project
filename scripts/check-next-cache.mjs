@@ -8,13 +8,16 @@
 // That cost this repo a day on 2026-08-01/02, so it is checked automatically
 // rather than relied on being remembered.
 //
-// Two independent checks, because either alone has a blind spot:
+// Three independent checks, because each alone has a blind spot:
 //   1. A stamp recording the root that built the cache, which catches a changed
 //      turbopack.root or a moved/renamed checkout before any symlink exists.
 //   2. A traversal check on every symlink, which catches a cache that predates
 //      the stamp.
+//   3. A hash of prisma/schema.prisma, which catches a generate that added
+//      models while Turbopack is still serving the previous Prisma client.
 //
 // Runs from `predev` and `prebuild`. Run: node scripts/check-next-cache.mjs
+import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -33,6 +36,14 @@ const realOrSelf = async (p) => {
 const root = await realOrSelf(resolve(dirname(fileURLToPath(import.meta.url)), ".."));
 const nextDir = join(root, ".next");
 const stampFile = join(nextDir, ".workspace-root");
+const schemaFile = join(root, "prisma", "schema.prisma");
+const schemaStampFile = join(nextDir, ".prisma-schema");
+
+async function schemaHash() {
+  return createHash("sha256")
+    .update(await readFile(schemaFile))
+    .digest("hex");
+}
 
 // Whether following `target` from `linkPath` ever rises above the root. What
 // matters is the traversal, not the final destination: the symlink that broke
@@ -99,6 +110,17 @@ async function findReason() {
     return `it was built under a different workspace root (${stamped})`;
   }
 
+  let stampedSchema;
+  try {
+    stampedSchema = (await readFile(schemaStampFile, "utf8")).trim();
+  } catch {
+    stampedSchema = null;
+  }
+  const currentSchema = await schemaHash();
+  if (stampedSchema && stampedSchema !== currentSchema) {
+    return "Prisma schema changed since this .next cache was built";
+  }
+
   for (const dir of await nodeModulesDirs()) {
     for await (const link of symlinks(dir)) {
       const target = await readlink(link);
@@ -121,7 +143,15 @@ if (cacheExists) {
   const reason = await findReason();
   if (reason) {
     console.log(`Purging .next: ${reason}.`);
-    console.log("Left in place it sends Turbopack into a worker respawn loop that exhausts memory.");
+    if (reason.includes("Prisma schema")) {
+      console.log(
+        "Turbopack otherwise keeps the previous generated Prisma client in memory (missing new models).",
+      );
+    } else {
+      console.log(
+        "Left in place it sends Turbopack into a worker respawn loop that exhausts memory.",
+      );
+    }
     await rm(nextDir, { recursive: true, force: true });
   }
 }
@@ -130,3 +160,4 @@ if (cacheExists) {
 // first run after a purge or on a fresh checkout.
 await mkdir(nextDir, { recursive: true });
 await writeFile(stampFile, root + "\n");
+await writeFile(schemaStampFile, (await schemaHash()) + "\n");

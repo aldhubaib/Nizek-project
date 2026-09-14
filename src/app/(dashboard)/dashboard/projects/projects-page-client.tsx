@@ -7,6 +7,7 @@ import { ProjectCard } from "@/components/project/project-card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { PageHeader, PageName } from "@/components/page-header";
+import { PageBody } from "@/components/page-body";
 
 interface Team {
   id: string;
@@ -137,7 +138,7 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
       </PageHeader>
 
       {projects.length > 0 && (
-        <div className="px-app pt-l pb-xs flex items-center gap-m flex-wrap">
+        <PageBody className="pt-l pb-xs flex items-center gap-m flex-wrap">
           <div className="relative min-w-[12rem] flex-1 max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -225,7 +226,7 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
               Clear
             </button>
           )}
-        </div>
+        </PageBody>
       )}
 
       {projects.length === 0 ? (
@@ -252,7 +253,7 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
           </button>
         </div>
       ) : (
-        <div className="px-app py-l">
+        <PageBody className="py-l">
           {activeProjects.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-card">
               {activeProjects.map((project) => (
@@ -285,7 +286,7 @@ export function ProjectsPageClient({ projects, teams, contractPrefixes }: Props)
               </div>
             </div>
           )}
-        </div>
+        </PageBody>
       )}
     </div>
   );

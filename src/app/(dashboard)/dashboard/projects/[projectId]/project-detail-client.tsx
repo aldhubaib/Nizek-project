@@ -647,6 +647,9 @@ export function ProjectDetailClient({
         <div aria-hidden className="hidden min-w-0 lg:block" />
       </PageHeader>
 
+      {/* Not a PageBody: a fullscreen note runs edge to edge, and PageBody
+          applies the gutter unconditionally — `px-0` could not cancel it,
+          because `.px-app` is unlayered and beats Tailwind's utilities. */}
       <div
         className={cn(
           "min-w-0",

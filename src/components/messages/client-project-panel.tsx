@@ -10,6 +10,7 @@ import { isDoneStage } from "@/lib/project-attention";
 import { ACTIVITY_ACTION_CLASS } from "@/components/messages/activity-card";
 import { SprintApproveAction } from "@/components/messages/sprint-approve-action";
 import { SprintDocSlideOver } from "@/components/messages/sprint-doc-slide-over";
+import { PageBody } from "@/components/page-body";
 import {
   getClientProjectOverview,
   type ClientProjectOverview,
@@ -173,9 +174,9 @@ export function ClientProjectPanel({
 
   if (tab === "roadmap") {
     return (
-      <div className="flex min-h-full w-full flex-col px-app py-4 lg:h-full lg:w-max lg:min-w-full">
+      <PageBody className="flex min-h-full w-full flex-col py-4 lg:h-full lg:w-max lg:min-w-full">
         <ClientRoadmapBoard projectId={projectId} />
-      </div>
+      </PageBody>
     );
   }
 
@@ -193,9 +194,9 @@ export function ClientProjectPanel({
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto w-full max-w-5xl px-app py-4">
+      <PageBody className="mx-auto w-full max-w-5xl py-4">
         <DashboardTab data={data} projectId={projectId} />
-      </div>
+      </PageBody>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { canAccessEquity } from "@/lib/equity-access";
 import { getEquityPortfolios } from "@/actions/equity";
 import { PageHeader, PageBackButton } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { PageBody } from "@/components/page-body";
 import { EquityMenu } from "@/components/equity/equity-menu";
 import {
   AllProjectsTable,
@@ -39,7 +40,7 @@ export default async function EquityPreviewPage() {
         <EquityMenu />
       </PageHeader>
 
-      <div className="px-app py-6 max-w-5xl mx-auto">
+      <PageBody className="py-6 max-w-5xl mx-auto">
         {/* The report is designed on its own dark sheet, so the preview keeps
             that ground rather than borrowing the dashboard's — otherwise the
             colours are checked against a background they'll never print on. */}
@@ -68,7 +69,7 @@ export default async function EquityPreviewPage() {
             </>
           )}
         </div>
-      </div>
+      </PageBody>
     </div>
   );
 }

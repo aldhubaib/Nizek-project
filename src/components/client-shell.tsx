@@ -94,7 +94,7 @@ export function ClientShell({
         <ImpersonationBanner variant="bar" targetName={impersonatingAs} />
       )}
       {!onInbox && (
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-app py-3">
           <div className="flex min-w-0 items-center gap-2">
             <BrandMark logoUrl={mark} className="h-8 w-8" />
             <span className="truncate text-s font-semibold text-foreground">

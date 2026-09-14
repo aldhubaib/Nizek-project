@@ -259,11 +259,14 @@ html[data-scroll-locked] body {
   padding-right: calc(var(--app-gutter) + env(safe-area-inset-right, 0px));
 }
 
-/* The top-right chrome is flush so the bare ⋮ can sit in the corner — its glyph
-   is already optically inset. A labelled button parked there needs the gutter
-   back to line up with the page body. */
-.me-app {
-  margin-inline-end: calc(var(--app-gutter) + env(safe-area-inset-right, 0px));
+/* The top-right chrome carries the page gutter, so a button parked there lines
+   up with the page body underneath it. This used to be flush, on the grounds
+   that the bare ⋮ glyph is optically inset already, with an opt-in `.me-app`
+   for labelled buttons — but the opt-in was applied in one place out of a
+   dozen, and everywhere else the button sat against the screen edge. One rule
+   that cannot be forgotten beats a fix that has to be remembered. */
+.app-shell-chrome {
+  padding-right: calc(var(--app-gutter) + env(safe-area-inset-right, 0px));
 }
 
 /* Bottom tab bar. Unlayered — Tailwind `pb-[env()]` loses to preflight and
@@ -324,11 +327,12 @@ header.app-top-bar,
 header.app-top-bar {
   padding-right: calc(var(--app-gutter) + env(safe-area-inset-right, 0px));
 }
+/* Room for the ⋮ overlay, measured from the gutter it now sits on rather than
+   from the screen edge: the 32px control plus a gap. A flat 6rem was enough
+   while the overlay was flush, but not once it moved inward by a gutter that
+   reaches 80px on a wide screen — the title would have run under it. */
 header.app-top-bar.app-top-bar-menu {
-  padding-right: calc(6rem + env(safe-area-inset-right, 0px));
-}
-.app-shell-chrome.app-top-bar {
-  padding-right: env(safe-area-inset-right, 0px);
+  padding-right: calc(var(--app-gutter) + 3rem + env(safe-area-inset-right, 0px));
 }
 
 .app-status-frost,

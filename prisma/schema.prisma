@@ -195,6 +195,7 @@ model User {
   boardMemberships     BoardMember[]              @relation("BoardMemberUser")
   boardCardsAssigned   BoardCard[]                @relation("BoardCardAssignee")
   boardCardsCreated    BoardCard[]                @relation("BoardCardCreator")
+  boardRecordsCreated  BoardRecord[]              @relation("BoardRecordCreator")
   boardCardComments    BoardCardComment[]         @relation("BoardCardCommentAuthor")
   boardCardAttachments BoardCardAttachment[]      @relation("BoardCardAttachmentUploader")
 
@@ -205,6 +206,8 @@ model User {
   contactsPermission ContactsPermission? @relation("UserContactsPermission")
   companiesCreated   Company[]           @relation("CompanyAuthor")
   contactsCreated    Contact[]           @relation("ContactAuthor")
+  dealsCreated       Deal[]              @relation("DealAuthor")
+  recordHistoryEdits RecordHistory[]     @relation("RecordHistoryActor")
 
   @@index([systemRole])
   @@index([blocked])
@@ -290,6 +293,7 @@ model Project {
   /// Back-relation only — the foreign key lives on Board, so the Project table
   /// itself gains no column and a project without a board is unchanged.
   board            Board?
+  boardRecords     BoardRecord[]
   @@index([teamId])
 }
 
@@ -2838,7 +2842,7 @@ model BoardCardAttachment {
 
 // ─── Contacts ───────────────────────────────────────────
 
-/// Who can open the Contacts and Companies modules.
+/// Who can open the Contacts, Companies and Deals modules.
 ///
 /// Modelled on EquityPermission rather than on project membership: the
 /// directory is one list for the whole company, not something a project owns,
@@ -2855,65 +2859,71 @@ model ContactsPermission {
 
 /// An organisation a contact belongs to.
 ///
-/// Deliberately thin. It exists so two contacts at the same place point at one
-/// record instead of repeating a typed-in company name, which is what makes
-/// "everyone at X" answerable. Names are unique so that stays true.
+/// It exists so two contacts at the same place point at one record instead of
+/// repeating a typed-in company name, which is what makes "everyone at X"
+/// answerable. Both names are unique so that stays true.
 model Company {
-  id      String  @id @default(cuid())
-  name    String  @unique
+  id String @id @default(cuid())
+
+  /// Both names are required: the directory is read in English and in Arabic,
+  /// and a record carrying only one of them is unusable in half the places it
+  /// appears. Unique on each, so neither becomes a second spelling of a company
+  /// already in the list.
+  nameEn String @unique
+  nameAr String @default("")
+
+  /// A key into the fixed list in `src/lib/industries.ts`, never typed text —
+  /// the field exists to be queried, and three spellings of "fintech" would be
+  /// three industries.
+  industry String @default("")
+
+  /// ISO 3166-1 alpha-2 codes of the countries the company operates in.
+  ///
+  /// A Postgres array rather than a join table: the codes are a closed set that
+  /// nothing else hangs off, so a table would only add a join. Required in the
+  /// sense that the actions refuse an empty list — SQL cannot say "non-empty
+  /// array" without a check constraint.
+  countries String[]
+
   website String?
   notes   String?
 
   createdById String
   createdBy   User   @relation("CompanyAuthor", fields: [createdById], references: [id], onDelete: Cascade)
 
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Restrict)
+
+  statusId String?
+  status   WorkflowStatus? @relation(fields: [statusId], references: [id], onDelete: SetNull)
+
   contacts Contact[]
+  deals    DealCompany[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([industry])
   @@index([createdById])
+  @@index([workflowId, statusId])
 }
 
-/// A column on the contacts board — one stage of whatever pipeline the team
-/// runs, named by them rather than by us.
-///
-/// Global like the rest of the directory, since there is no project to hang it
-/// on. Ordering is a float handled by `src/lib/board-order.ts`, the same helper
-/// the project boards use: a column dropped between two others takes the
-/// midpoint, so a drag writes one row instead of renumbering the rest.
-model ContactStage {
-  id   String @id @default(cuid())
-  name String @unique
-
-  /// A key into the fixed palette in `src/lib/board-palette.ts`, never a raw
-  /// class or hex — Tailwind only emits classes it can find written out.
-  color String @default("slate")
-
-  position Float
-
-  contacts Contact[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([position])
-}
-
-/// A person in the directory. First name, last name and a phone number are the
-/// whole requirement; everything else is optional.
+/// A person in the directory. Title is the only locked field; everything else
+/// comes from the layout catalog, same engine as deals.
 model Contact {
-  id        String @id @default(cuid())
-  firstName String
-  lastName  String
+  id    String @id @default(cuid())
+  title String
+
+  firstName String @default("")
+  lastName  String @default("")
 
   /// ISO 3166-1 alpha-2 country of the dialling code, e.g. "KW". Stored beside
   /// the number rather than folded into it so the picker reopens on the country
   /// that was chosen, instead of guessing it back from leading digits — which is
   /// ambiguous across the +1 countries.
-  phoneCountry String
+  phoneCountry String @default("")
   /// National digits only, no dialling code and no separators.
-  phoneNumber  String
+  phoneNumber  String @default("")
 
   email String?
   /// Job title, free text — "CTO", "Head of Marketing".
@@ -2924,23 +2934,350 @@ model Contact {
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
-  /// Which board column the contact sits in.
-  ///
-  /// Nullable, and cleared rather than cascaded when a stage is deleted. That
-  /// gives a deleted column and a never-placed contact the same shape, so the
-  /// board has one "Unassigned" bucket to show instead of two cases — and
-  /// deleting a column never deletes people.
-  stageId String?
-  stage   ContactStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Restrict)
+
+  statusId String?
+  status   WorkflowStatus? @relation(fields: [statusId], references: [id], onDelete: SetNull)
 
   createdById String
   createdBy   User   @relation("ContactAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  deals DealContact[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([companyId])
-  @@index([stageId])
+  @@index([workflowId, statusId])
   @@index([lastName, firstName])
+  @@index([createdById])
+}
+
+/// A process graph for one entity type ("deal" first; contacts later).
+///
+/// "Enterprise" and "Inbound" are not the same columns and not the same
+/// allowed moves, so they are two workflows, not two rows on one board.
+model Workflow {
+  id         String @id @default(cuid())
+  entityType String
+  name       String
+  /// Empty for module-global flows (deals). Project id for a project board.
+  projectId  String @default("")
+
+  position Float
+
+  layoutId String?
+  layout   FormLayout? @relation(fields: [layoutId], references: [id], onDelete: SetNull)
+
+  /// Off leaves the canvas in place but the board is open: any move is
+  /// allowed and transition actions do not run.
+  blueprintEnabled Boolean @default(true)
+
+  statuses     WorkflowStatus[]
+  transitions  WorkflowTransition[]
+  deals        Deal[]
+  boardRecords BoardRecord[]
+  contacts     Contact[]
+  companies    Company[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([entityType, projectId, name])
+  @@index([entityType, projectId, position])
+}
+
+/// A status on a workflow — a kanban column and a canvas node.
+model WorkflowStatus {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  name String
+
+  /// A key into `src/lib/board-palette.ts`, never a raw class or hex.
+  color String @default("slate")
+
+  /// open | won | lost — display/analytics only; the engine does not treat
+  /// them differently.
+  kind String @default("open")
+
+  /// Kanban column order.
+  position Float
+
+  /// Canvas coordinates. Null until the node has been placed.
+  canvasX Float?
+  canvasY Float?
+
+  deals          Deal[]
+  boardRecords   BoardRecord[]
+  contacts       Contact[]
+  companies      Company[]
+  actions        WorkflowAction[]
+  transitionsOut WorkflowTransition[] @relation("WorkflowTransitionFrom")
+  transitionsIn  WorkflowTransition[] @relation("WorkflowTransitionTo")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([workflowId, name])
+  @@index([workflowId, position])
+}
+
+/// A named move on the blueprint. `fromStatusId` null means a common
+/// transition — available from every status except the destination.
+///
+/// Zero transitions on a workflow = the board is still open. The first
+/// arrow turns enforcement on.
+model WorkflowTransition {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  name String
+
+  fromStatusId String?
+  fromStatus   WorkflowStatus? @relation("WorkflowTransitionFrom", fields: [fromStatusId], references: [id], onDelete: Cascade)
+  toStatusId   String
+  toStatus     WorkflowStatus  @relation("WorkflowTransitionTo", fields: [toStatusId], references: [id], onDelete: Cascade)
+
+  canvasX Float?
+  canvasY Float?
+
+  actions WorkflowAction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workflowId])
+  @@index([fromStatusId])
+  @@index([toStatusId])
+}
+
+/// An action on a transition (before / during / after) or a status
+/// (onEnter / onLeave). `type` + `config` are validated by the registry
+/// in `src/lib/workflow/actions.ts`, not by SQL.
+model WorkflowAction {
+  id String @id @default(cuid())
+
+  transitionId String?
+  transition   WorkflowTransition? @relation(fields: [transitionId], references: [id], onDelete: Cascade)
+
+  statusId String?
+  status   WorkflowStatus? @relation(fields: [statusId], references: [id], onDelete: Cascade)
+
+  /// before | during | after | onEnter | onLeave
+  hook String
+  /// A key from the action registry.
+  type String
+  /// JSON object. Shape depends on `type`.
+  config String @default("{}")
+
+  position Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([transitionId, position])
+  @@index([statusId, position])
+}
+
+/// A named create/edit form. Each task flow picks one.
+model FormLayout {
+  id         String @id @default(cuid())
+  entityType String
+  name       String
+  /// Empty for module-global layouts (deals). Project id for a project board.
+  projectId  String @default("")
+  position   Float
+
+  sections  CustomFieldSection[]
+  fields    CustomField[]
+  workflows Workflow[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([entityType, projectId, name])
+  @@index([entityType, projectId, position])
+}
+
+/// A named group of custom fields on create/edit forms for one entity type.
+model CustomFieldSection {
+  id         String @id @default(cuid())
+  entityType String
+  name       String
+  position   Float
+  /// 1 or 2 — how many columns the section uses on create/edit forms.
+  columns    Int    @default(1)
+
+  layoutId String?
+  layout   FormLayout? @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+
+  fields CustomField[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityType, position])
+  @@index([layoutId, position])
+}
+
+/// A user-defined field on an entity type. Native fields (title, value, …)
+/// stay on the record; these are extras stored in CustomFieldValue.
+model CustomField {
+  id         String @id @default(cuid())
+  entityType String
+  key        String
+  label      String
+  /// text | textarea | number | select | multi_select | date | checkbox | url | email | phone | user | file | relation
+  type       String @default("text")
+  /// JSON array of choices for select / multi_select, or `{ model, multiple }` for relation.
+  options    String?
+  /// Maps this row to a real column or join table (title, value, contacts, …).
+  /// Null means the value lives in CustomFieldValue.
+  binding    String?
+  required   Boolean @default(false)
+  /// create | edit | both
+  showOn     String  @default("both")
+
+  layoutId String?
+  layout   FormLayout? @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+
+  sectionId String?
+  section   CustomFieldSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+
+  position Float
+
+  values CustomFieldValue[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([layoutId, key])
+  @@index([entityType, position])
+  @@index([layoutId, position])
+  @@index([layoutId, binding])
+  @@index([sectionId])
+}
+
+/// One answer to one custom field on one record. Stored as text so the
+/// renderer can encode selects and file lists the same way BoardFieldValue does.
+model CustomFieldValue {
+  id         String @id @default(cuid())
+  entityType String
+  recordId   String
+  fieldId    String
+  field      CustomField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  value      String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([entityType, recordId, fieldId])
+  @@index([fieldId])
+  @@index([entityType, recordId])
+}
+
+/// Field-level change log for deals, contacts, companies, and board cards.
+model RecordHistory {
+  id         String   @id @default(cuid())
+  entityType String
+  recordId   String
+  batchId    String
+  fieldKey   String
+  fieldLabel String
+  oldValue   String?  @db.Text
+  newValue   String?  @db.Text
+
+  userId String
+  user   User   @relation("RecordHistoryActor", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([entityType, recordId, createdAt])
+  @@index([batchId])
+  @@index([userId])
+}
+
+/// A deal in the pipeline. Title is the whole requirement; value and the
+/// people and companies it is about are optional because a deal is often
+/// named before anyone is attached to it.
+model Deal {
+  id    String @id @default(cuid())
+  title String
+
+  /// Optional money amount, no currency — the team already knows which one
+  /// they invoice in. Decimal rather than Float so 1.10 stays 1.10.
+  value Decimal? @db.Decimal(14, 3)
+
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Restrict)
+
+  statusId String?
+  status   WorkflowStatus? @relation(fields: [statusId], references: [id], onDelete: SetNull)
+
+  createdById String
+  createdBy   User   @relation("DealAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  contacts  DealContact[]
+  companies DealCompany[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workflowId, statusId])
+  @@index([statusId])
+  @@index([createdById])
+  @@index([title])
+}
+
+/// A contact attached to a deal. Cascade both ways: deleting the deal or the
+/// person should drop the link, not the other record.
+model DealContact {
+  dealId    String
+  deal      Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@id([dealId, contactId])
+  @@index([contactId])
+}
+
+/// A company attached to a deal. Same cascade bargain as DealContact.
+model DealCompany {
+  dealId    String
+  deal      Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([dealId, companyId])
+  @@index([companyId])
+}
+
+/// A card on a project board. Same workflow + layout engine as a deal;
+/// values for extra fields live in CustomFieldValue (entityType "board").
+model BoardRecord {
+  id    String @id @default(cuid())
+  title String
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Restrict)
+
+  statusId String?
+  status   WorkflowStatus? @relation(fields: [statusId], references: [id], onDelete: SetNull)
+
+  createdById String
+  createdBy   User   @relation("BoardRecordCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, workflowId, statusId])
+  @@index([workflowId, statusId])
   @@index([createdById])
 }

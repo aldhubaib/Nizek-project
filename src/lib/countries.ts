@@ -59,6 +59,44 @@ export function countryLabel(code: string): string {
   return flag ? `${flag} ${countryName(code)}` : countryName(code);
 }
 
+export function parseCountryCodes(raw: string | null | undefined): string[] {
+  if (!raw?.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) {
+      return [
+        ...new Set(
+          parsed
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.toUpperCase())
+            .filter(isCountryCode),
+        ),
+      ];
+    }
+  } catch {
+    /* comma-separated leftovers */
+  }
+  return [
+    ...new Set(
+      raw
+        .split(/[,\n]/)
+        .map((item) => item.trim().toUpperCase())
+        .filter(isCountryCode),
+    ),
+  ];
+}
+
+export function stringifyCountryCodes(codes: string[]): string {
+  const unique = [
+    ...new Set(codes.map((code) => code.toUpperCase()).filter(isCountryCode)),
+  ];
+  return unique.length > 0 ? JSON.stringify(unique) : "";
+}
+
+export function formatCountryCodes(raw: string | null | undefined): string {
+  return parseCountryCodes(raw).map(countryLabel).join(", ");
+}
+
 /** Codes sorted by name, for a picker to list. */
 export function sortedCountries(): { code: string; name: string }[] {
   return COUNTRY_CODES.map((code) => ({ code, name: countryName(code) })).sort(

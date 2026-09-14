@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import type { ProofBypassRequest } from "@/actions/proof-of-work";
 import { PageHeader, PageBackButton } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { PageBody } from "@/components/page-body";
 import { BypassRequestList } from "@/components/project/bypass-request-list";
 
 export function BypassRequestsClient({
@@ -40,7 +41,7 @@ export function BypassRequestsClient({
         />
       </PageHeader>
 
-      <div className="mx-auto max-w-3xl px-app py-6">
+      <PageBody className="mx-auto max-w-3xl py-6">
         <BypassRequestList
           requests={requests}
           canDecide={canDecide}
@@ -49,7 +50,7 @@ export function BypassRequestsClient({
             router.push(`/dashboard/projects/${projectId}/tasks/${taskId}`)
           }
         />
-      </div>
+      </PageBody>
     </div>
   );
 }

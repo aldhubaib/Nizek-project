@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
 import { PrismaClient } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
@@ -14,6 +16,34 @@ const globalForPrisma = globalThis as unknown as {
   prismaClientClass: typeof PrismaClient | undefined;
   prismaShutdownBound?: boolean;
 };
+
+/** Cached getter names from the generated class on disk (not the in-memory module). */
+let diskDelegates: { mtimeMs: number; names: Set<string> } | null = null;
+
+function generatedDelegateNames(): Set<string> | null {
+  const file = path.join(
+    process.cwd(),
+    "src/generated/prisma/internal/class.ts",
+  );
+  if (!existsSync(file)) return null;
+  try {
+    const { mtimeMs } = statSync(file);
+    if (diskDelegates && diskDelegates.mtimeMs === mtimeMs) {
+      return diskDelegates.names;
+    }
+    const names = new Set<string>();
+    const text = readFileSync(file, "utf8");
+    for (const match of text.matchAll(
+      /^\s*get (\w+)\(\): Prisma\.\w+Delegate/gm,
+    )) {
+      names.add(match[1]);
+    }
+    diskDelegates = { mtimeMs, names };
+    return names;
+  } catch {
+    return null;
+  }
+}
 
 // Pool size is env-tunable so we can raise it per-replica when a Postgres
 // connection pooler (e.g. PgBouncer) sits in front, enabling horizontal
@@ -65,7 +95,46 @@ function getClient() {
   return client;
 }
 
-export const prisma = getClient();
+function staleClientError(prop: string): Error {
+  return new Error(
+    `Prisma client is missing \`${prop}\` even though the generated client on disk has it. Stop next dev and run \`npm run dev\` again so Next reloads after \`prisma generate\`.`,
+  );
+}
+
+function readDelegate(client: PrismaClient, prop: string | symbol): unknown {
+  const value = Reflect.get(client, prop, client);
+  if (typeof value === "function") {
+    return value.bind(client);
+  }
+  return value;
+}
+
+/**
+ * Always resolve through `getClient()` so HMR / a rebuilt singleton is visible
+ * even when importers kept a stale binding of `export const prisma`.
+ */
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = getClient();
+    const value = readDelegate(client, prop);
+    if (value !== undefined) return value;
+
+    if (typeof prop !== "string") return value;
+    const onDisk = generatedDelegateNames();
+    if (!onDisk?.has(prop)) return value;
+    if ((client as unknown as Record<string, unknown>)[prop] != null) return value;
+
+    globalForPrisma.prisma = undefined;
+    globalForPrisma.prismaClientClass = undefined;
+    const retry = getClient();
+    const again = readDelegate(retry, prop);
+    if (again !== undefined) return again;
+    throw staleClientError(prop);
+  },
+  has(_target, prop) {
+    return Reflect.has(getClient(), prop);
+  },
+});
 
 function gracefulShutdown() {
   globalForPrisma.pool?.end().catch(() => {});

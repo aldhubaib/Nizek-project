@@ -13,6 +13,7 @@ import { DEFAULT_TASK_PRIORITY, type TaskPriorityId } from "@/lib/task-label";
 import { cn } from "@/lib/utils";
 import { PageHeader, PageBackButton } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { PageBody } from "@/components/page-body";
 
 type TaskType = "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN";
 
@@ -117,7 +118,8 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
         />
       </PageHeader>
 
-      <form onSubmit={handleSubmit} className="max-w-2xl mx-auto px-app py-8">
+      <PageBody className="py-8">
+      <form onSubmit={handleSubmit} className="max-w-2xl mx-auto">
         <div className="space-y-6">
           {/* Task Type */}
           <div className="space-y-2">
@@ -246,6 +248,7 @@ export function NewTaskForm({ projectId, projectName, questions, allowedTaskType
           </div>
         </div>
       </form>
+      </PageBody>
     </div>
   );
 }
