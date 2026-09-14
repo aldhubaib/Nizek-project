@@ -8,14 +8,10 @@ import {
   subscribeInstallPrompt,
   type BeforeInstallPromptEvent,
 } from "@/lib/install-prompt-capture";
-
-const DISMISSED_KEY = "nizek-install-dismissed-at";
-const DISMISS_DAYS = 30;
-
-function recentlyDismissed(): boolean {
-  const at = Number(localStorage.getItem(DISMISSED_KEY) ?? 0);
-  return Date.now() < at + DISMISS_DAYS * 24 * 60 * 60 * 1000;
-}
+import {
+  dismissInstallPrompt,
+  isInstallPromptDismissed,
+} from "@/lib/install-prompt-dismiss";
 
 function isStandalone(): boolean {
   return (
@@ -37,12 +33,12 @@ export function InstallPrompt() {
   const [showIosHint, setShowIosHint] = useState(false);
   const [visible, setVisible] = useState(() => {
     if (typeof window === "undefined") return false;
-    if (isStandalone() || recentlyDismissed()) return false;
+    if (isStandalone() || isInstallPromptDismissed()) return false;
     return getDeferredInstallPrompt() != null;
   });
 
   useEffect(() => {
-    if (isStandalone() || recentlyDismissed()) return;
+    if (isStandalone() || isInstallPromptDismissed()) return;
 
     const unsubscribe = subscribeInstallPrompt((event) => {
       if (!event) {
@@ -50,6 +46,8 @@ export function InstallPrompt() {
         setDeferred(null);
         return;
       }
+      // Chrome re-fires this on navigation. Closing the banner must stick.
+      if (isInstallPromptDismissed() || isStandalone()) return;
       setDeferred(event);
       setVisible(true);
     });
@@ -57,7 +55,7 @@ export function InstallPrompt() {
     const onInstalled = () => {
       setVisible(false);
       setDeferred(null);
-      localStorage.setItem(DISMISSED_KEY, String(Date.now()));
+      dismissInstallPrompt();
     };
     window.addEventListener("appinstalled", onInstalled);
 
@@ -65,7 +63,7 @@ export function InstallPrompt() {
     const ua = window.navigator.userAgent;
     const isIos = /iphone|ipad|ipod/i.test(ua);
     const isSafari = /safari/i.test(ua) && !/crios|fxios|edgios/i.test(ua);
-    if (isIos && isSafari) {
+    if (isIos && isSafari && !isInstallPromptDismissed()) {
       setShowIosHint(true);
       setVisible(true);
     }
@@ -77,18 +75,19 @@ export function InstallPrompt() {
   }, []);
 
   const dismiss = useCallback(() => {
+    dismissInstallPrompt();
     setVisible(false);
-    localStorage.setItem(DISMISSED_KEY, String(Date.now()));
   }, []);
 
   const install = useCallback(async () => {
     const event = deferred ?? consumeDeferredInstallPrompt();
     if (!event) return;
     await event.prompt();
-    await event.userChoice;
+    const choice = await event.userChoice;
     consumeDeferredInstallPrompt();
     setDeferred(null);
     setVisible(false);
+    if (choice.outcome === "dismissed") dismissInstallPrompt();
   }, [deferred]);
 
   if (!visible || (!deferred && !showIosHint)) return null;
@@ -115,6 +114,7 @@ export function InstallPrompt() {
               Install Nizek on your device
             </span>
             <button
+              type="button"
               onClick={install}
               className="flex h-9 shrink-0 items-center rounded-xl bg-primary px-4 text-s font-bold text-primary-foreground transition-colors hover:bg-primary/90"
             >
@@ -123,6 +123,7 @@ export function InstallPrompt() {
           </>
         )}
         <button
+          type="button"
           onClick={dismiss}
           aria-label="Dismiss"
           className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-foreground"
