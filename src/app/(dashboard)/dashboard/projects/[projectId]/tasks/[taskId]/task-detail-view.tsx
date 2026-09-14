@@ -57,6 +57,7 @@ import { PageOverflowItems } from "@/components/page-overflow-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { SprintDocHeaderLeft } from "@/components/project/note-slide-over";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { PageBody } from "@/components/page-body";
 import { uploadFileToR2 } from "@/lib/upload";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import { markThreadRead } from "@/actions/messages";
@@ -660,7 +661,7 @@ export function TaskDetailPage({
       {noteEditorOpen ? (
         <TaskIssueNote taskId={initialTask.id} fallbackTitle={titleValue} />
       ) : (
-      <div className="mx-auto max-w-[54.6rem] px-app py-8 space-y-6">
+      <PageBody className="mx-auto max-w-[54.6rem] py-8 space-y-6">
         {editBlockedReason && (
           <div className="rounded-lg border border-orange/30 bg-orange/10 px-4 py-3">
             <p className="text-s font-medium text-orange">{editBlockedReason}</p>
@@ -954,7 +955,7 @@ export function TaskDetailPage({
             />
           </div>
         )}
-      </div>
+      </PageBody>
       )}
 
       {showProof ? (

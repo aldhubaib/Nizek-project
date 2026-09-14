@@ -6,6 +6,7 @@ import Link from "next/link";
 import { PieChart, X, FileSignature, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PageHeader, PageName } from "@/components/page-header";
+import { PageBody } from "@/components/page-body";
 import { AddButton } from "@/components/add-button";
 import { EquityMenu } from "@/components/equity/equity-menu";
 import {
@@ -91,7 +92,7 @@ export function EquityPageClient({
         )}
       </PageHeader>
 
-      <div className="px-app py-6 max-w-5xl mx-auto">
+      <PageBody className="py-6 max-w-5xl mx-auto">
       <p className="text-s text-muted-foreground mb-4">
         Equity deals across startups — vesting, dilution and tranche triggers.
       </p>
@@ -199,7 +200,7 @@ export function EquityPageClient({
           })}
           </div>
         ))}
-      </div>
+      </PageBody>
 
       {/* Project picker */}
       {showPicker && (

@@ -12,6 +12,7 @@ import {
   KeyRound,
   Contact,
   Building2,
+  Handshake,
   Menu,
   Trash,
 } from "lucide-react";
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
   { name: "Equity", href: "/dashboard/equity", icon: PieChart, adminOnly: false, auditOnly: false, equityOnly: true, vaultOnly: false, trashOnly: false, contactsOnly: false },
   { name: "Contacts", href: "/dashboard/contacts", icon: Contact, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: true },
   { name: "Companies", href: "/dashboard/companies", icon: Building2, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: true },
+  { name: "Deals", href: "/dashboard/deals", icon: Handshake, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: true },
   { name: "Audit", href: "/dashboard/audit", icon: ClipboardCheck, adminOnly: false, auditOnly: true, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: false },
   { name: "Trash", href: "/dashboard/trash", icon: Trash, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: true, contactsOnly: false },
   { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: false },

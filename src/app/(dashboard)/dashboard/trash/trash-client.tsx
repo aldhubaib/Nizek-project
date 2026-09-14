@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { PageHeaderActions } from "@/components/page-header-actions";
 import { PageHeader, PageName } from "@/components/page-header";
+import { PageBody } from "@/components/page-body";
 import {
   emptyTrash,
   purgeTrashItem,
@@ -65,7 +66,7 @@ export function TrashClient({
         )}
       </PageHeader>
 
-      <div className="px-app py-6 max-w-5xl mx-auto">
+      <PageBody className="py-6 max-w-5xl mx-auto">
         <p className="text-s text-muted-foreground mb-4">
           Deleted things wait here instead of going straight out. Restoring one
           puts it back exactly as it was. Vault credentials only appear here for
@@ -162,7 +163,7 @@ export function TrashClient({
             })}
           </div>
         )}
-      </div>
+      </PageBody>
 
       <EmptyTrashDialog
         open={emptyOpen}

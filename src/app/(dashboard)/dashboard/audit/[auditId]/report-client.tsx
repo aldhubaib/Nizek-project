@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader, PageBackButton } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { PageBody } from "@/components/page-body";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -133,7 +134,7 @@ export function ReportClient({ report }: { report: AuditReportDTO }) {
         <p className="px-app pt-3 text-s text-destructive">{submitError}</p>
       )}
 
-      <div className="space-y-3 px-app py-6">
+      <PageBody className="space-y-3 py-6">
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <ShieldCheck className="mb-2 h-8 w-8 text-success/40" />
@@ -155,7 +156,7 @@ export function ReportClient({ report }: { report: AuditReportDTO }) {
             />
           ))
         )}
-      </div>
+      </PageBody>
     </div>
   );
 }

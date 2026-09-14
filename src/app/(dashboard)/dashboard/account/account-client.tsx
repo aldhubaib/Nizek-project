@@ -7,6 +7,7 @@ import { updateMyAvatar, updateMyName } from "@/actions/account";
 import { useCurrentUser } from "@/components/current-user-provider";
 import { NotificationSetup } from "@/components/notification-setup";
 import { PageHeader, PageBackButton, PageName } from "@/components/page-header";
+import { PageBody } from "@/components/page-body";
 import {
   isNotificationSoundEnabled,
   setNotificationSoundEnabled,
@@ -122,7 +123,7 @@ export function AccountClient({
         )}
         <PageName>Account</PageName>
       </PageHeader>
-      <div className="mx-auto flex w-full max-w-lg flex-col gap-4 px-app py-4 sm:py-6">
+      <PageBody className="mx-auto flex w-full max-w-lg flex-col gap-4 py-4 sm:py-6">
 
       {error && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-s text-destructive">
@@ -228,7 +229,7 @@ export function AccountClient({
 
       {/* Troubleshooting: device/server health checks + test notification */}
       <NotificationDiagnostics />
-      </div>
+      </PageBody>
     </div>
   );
 }

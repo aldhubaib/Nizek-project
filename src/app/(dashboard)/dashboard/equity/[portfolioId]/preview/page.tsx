@@ -4,6 +4,7 @@ import { canAccessEquity } from "@/lib/equity-access";
 import { getEquityPortfolio, listEquityMetrics } from "@/actions/equity";
 import { PageHeader, PageBackButton } from "@/components/page-header";
 import { PageBreadcrumb } from "@/components/page-breadcrumb";
+import { PageBody } from "@/components/page-body";
 import { PortfolioPitch } from "@/components/equity/portfolio-pitch";
 
 /**
@@ -50,9 +51,9 @@ export default async function EquityPreviewPage({
             the menu does — including delete — belongs on the portfolio page. */}
       </PageHeader>
 
-      <div className="px-app py-6 max-w-6xl mx-auto">
+      <PageBody className="py-6 max-w-6xl mx-auto">
         <PortfolioPitch portfolio={portfolio} fields={fields} />
-      </div>
+      </PageBody>
     </div>
   );
 }

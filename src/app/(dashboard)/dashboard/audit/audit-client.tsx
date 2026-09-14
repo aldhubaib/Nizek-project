@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { outlineBadge } from "@/lib/task-label";
 import { PageHeader, PageName } from "@/components/page-header";
+import { PageBody } from "@/components/page-body";
 import { AddButton } from "@/components/add-button";
 import {
   createTodayAudit,
@@ -81,7 +82,7 @@ export function AuditClient({ access, reports }: Props) {
         />
       </PageHeader>
 
-      <div className="px-app py-6">
+      <PageBody className="py-6">
         {reports.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <ClipboardCheck className="mb-2 h-8 w-8 text-muted-foreground/20" />
@@ -153,7 +154,7 @@ export function AuditClient({ access, reports }: Props) {
             </div>
           </div>
         )}
-      </div>
+      </PageBody>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">

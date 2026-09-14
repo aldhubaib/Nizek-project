@@ -7,6 +7,7 @@ import {
   SPRINT_BOARD_COLUMNS,
   sprintBoardColumn,
 } from "@/lib/sprint-status";
+import { PageBody } from "@/components/page-body";
 import { statusDot } from "@/lib/task-label";
 import { cn } from "@/lib/utils";
 
@@ -67,7 +68,7 @@ export function ClientRoadmapPanel({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[46rem] space-y-5 px-app py-4">
+    <PageBody className="mx-auto w-full max-w-[46rem] space-y-5 py-4">
       {SPRINT_BOARD_COLUMNS.map((column) => {
         const rows = sprints.filter(
           (s) => sprintBoardColumn(s.status) === column.id,
@@ -112,6 +113,6 @@ export function ClientRoadmapPanel({ projectId }: { projectId: string }) {
           </section>
         );
       })}
-    </div>
+    </PageBody>
   );
 }

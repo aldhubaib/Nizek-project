@@ -12,8 +12,8 @@ import {
 } from "@/actions/contact";
 
 /**
- * Admin settings: grant members access to Contacts and Companies. One grant
- * covers both, and admins get it only by granting it to themselves.
+ * Admin settings: grant members access to Contacts, Companies and Deals. One
+ * grant covers all three, and admins get it only by granting it to themselves.
  */
 export function ContactsAccessManager() {
   const [members, setMembers] = useState<ContactsMember[]>([]);
@@ -65,7 +65,7 @@ export function ContactsAccessManager() {
           Contacts access
         </h2>
         <p className="mt-1 text-s text-muted-foreground">
-          Choose who can open Contacts and Companies. It holds personal numbers
+          Choose who can open Contacts, Companies and Deals. It holds personal numbers
           for clients and partners, so access is off by default and admins are
           not included automatically — grant it explicitly, including to
           yourself.

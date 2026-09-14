@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { getOrCreateTaskNote } from "@/actions/meeting-note";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { useNoteAutosave } from "@/components/project/use-note-autosave";
+import { PageBody } from "@/components/page-body";
 
 export function TaskIssueNote({
   taskId,
@@ -62,7 +63,7 @@ export function TaskIssueNote({
 
   return (
     <div className="flex flex-col bg-background">
-      <div className="mx-auto w-full max-w-4xl px-app py-6 sm:py-10 lg:px-16">
+      <PageBody className="mx-auto w-full max-w-4xl py-6 sm:py-10">
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -78,7 +79,7 @@ export function TaskIssueNote({
           placeholder="Describe the issue… (type / for commands)"
           borderless
         />
-      </div>
+      </PageBody>
     </div>
   );
 }

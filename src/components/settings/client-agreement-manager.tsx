@@ -26,6 +26,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageHeaderActions } from "@/components/page-header-actions";
+import { PageBody } from "@/components/page-body";
 import { PageOverflowItems } from "@/components/page-overflow-menu";
 import { RichTextEditor } from "@/components/rich-text-editor-lazy";
 import { htmlToParagraphs } from "@/lib/note-content-diff";
@@ -276,9 +277,9 @@ function DocumentCard({
 function DocumentShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-col bg-background">
-      <div className="mx-auto w-full max-w-4xl px-app py-6 sm:py-10 lg:px-16">
+      <PageBody className="mx-auto w-full max-w-4xl py-6 sm:py-10">
         {children}
-      </div>
+      </PageBody>
     </div>
   );
 }

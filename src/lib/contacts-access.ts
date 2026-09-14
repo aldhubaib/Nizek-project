@@ -4,9 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 
 /**
- * Contacts and Companies are one module behind one grant: anyone holding a
- * ContactsPermission row sees both nav entries, both pages, and can call the
- * actions for either.
+ * Contacts, Companies and Deals are one module behind one grant: anyone
+ * holding a ContactsPermission row sees all three nav entries, all three
+ * pages, and can call the actions for any of them.
  *
  * Admins are not implicit, the way they aren't for Equity. The directory holds
  * clients' and partners' personal phone numbers, so everyone who can read it is
@@ -22,8 +22,8 @@ export const canAccessContacts = cache(async function canAccessContacts(
 });
 
 /**
- * The gate every contacts, companies and stage action opens with. Shared so the
- * three action files cannot drift apart on who is allowed in.
+ * The gate every contacts, companies, deals and stage action opens with.
+ * Shared so those action files cannot drift apart on who is allowed in.
  */
 export async function requireContactsAccess() {
   const user = await requireUser();

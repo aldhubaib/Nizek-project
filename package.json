@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/check-next-cache.mjs",
+    "predev": "prisma generate && node scripts/check-next-cache.mjs",
     "dev": "NODE_OPTIONS='--max-old-space-size=8192' next dev",
     "prebuild": "node scripts/check-next-cache.mjs",
     "build": "NODE_OPTIONS='--max-old-space-size=2048' prisma generate && NODE_OPTIONS='--max-old-space-size=2048' next build",
@@ -44,6 +44,7 @@
     "@tiptap/starter-kit": "^3.23.4",
     "@tiptap/y-tiptap": "^3.0.9",
     "@types/web-push": "^3.6.4",
+    "@xyflow/react": "^12.11.6",
     "better-auth": "^1.7.1",
     "bullmq": "^6.2.0",
     "centrifuge": "^5.7.0",

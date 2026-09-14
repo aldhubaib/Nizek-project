@@ -107,7 +107,11 @@ export function DashboardShell({
     router.prefetch("/dashboard/projects");
     if (canVault) router.prefetch("/dashboard/vault");
     if (canEquity) router.prefetch("/dashboard/equity");
-    if (canContacts) router.prefetch("/dashboard/contacts");
+    if (canContacts) {
+      router.prefetch("/dashboard/contacts");
+      router.prefetch("/dashboard/companies");
+      router.prefetch("/dashboard/deals");
+    }
     router.prefetch("/dashboard/settings");
   }, [router, canVault, canEquity, canContacts]);
 
@@ -194,7 +198,7 @@ export function DashboardShell({
       >
         <ClientRouteGuard enabled={isClient} />
         {isDesktop && (
-          <div className="app-shell-chrome fixed top-3 right-0 z-[100] flex items-center gap-xs pe-[env(safe-area-inset-right,0px)]">
+          <div className="app-shell-chrome fixed top-3 right-0 z-[100] flex items-center gap-xs">
             {headerActions}
           </div>
         )}

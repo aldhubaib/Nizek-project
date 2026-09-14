@@ -13,6 +13,7 @@ import {
   KeyRound,
   Contact,
   Building2,
+  Handshake,
   Pin,
   PinOff,
   Trash,
@@ -33,10 +34,11 @@ const navigation = [
   { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: false },
   { name: "Vault", href: "/dashboard/vault", icon: KeyRound, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: true, trashOnly: false, contactsOnly: false },
   { name: "Equity", href: "/dashboard/equity", icon: PieChart, adminOnly: false, auditOnly: false, equityOnly: true, vaultOnly: false, trashOnly: false, contactsOnly: false },
-  // Contacts and Companies are one module behind one grant, listed as two
-  // entries because each is a list you go to directly.
+  // Contacts, Companies and Deals are one module behind one grant, listed
+  // as three entries because each is a list you go to directly.
   { name: "Contacts", href: "/dashboard/contacts", icon: Contact, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: true },
   { name: "Companies", href: "/dashboard/companies", icon: Building2, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: true },
+  { name: "Deals", href: "/dashboard/deals", icon: Handshake, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: true },
   { name: "Audit", href: "/dashboard/audit", icon: ClipboardCheck, adminOnly: false, auditOnly: true, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: false },
   // Trash holds equity + vault soft-deletes. Equity people see equity items;
   // vault items are admin-only. Show the nav when either audience applies.
