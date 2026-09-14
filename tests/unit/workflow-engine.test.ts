@@ -8,6 +8,8 @@ import {
   missingRequiredOnSnapshot,
   moveNeedsDialog,
   requiredFieldIds,
+  snapshotFieldIsFilled,
+  unfilledFieldIds,
   validateDuring,
 } from "../../src/lib/workflow/engine";
 import type { FieldSnapshot, WorkflowActionDef, WorkflowTransitionDef } from "../../src/lib/workflow/types";
@@ -291,5 +293,31 @@ describe("actionsForMove / set_field", () => {
         action({ type: "require_fields", hook: "before", config: { fields: ["title", "value"] } }),
       ]),
     ).toEqual(["title", "value"]);
+  });
+});
+
+describe("snapshotFieldIsFilled", () => {
+  const fields = [
+    { id: "fld_priority", label: "Priority", type: "select" as const },
+    { id: "fld_notes", label: "Notes", type: "textarea" as const },
+  ];
+
+  it("treats a filled title and custom value as already answered", () => {
+    expect(snapshotFieldIsFilled(filled, "title", fields)).toBe(true);
+    expect(snapshotFieldIsFilled(filled, "fld_priority", fields)).toBe(true);
+  });
+
+  it("treats a blank custom field as still needed", () => {
+    expect(snapshotFieldIsFilled(filled, "fld_notes", fields)).toBe(false);
+  });
+
+  it("drops filled fields from the transition prompt list", () => {
+    expect(
+      unfilledFieldIds(
+        ["title", "value", "fld_priority", "fld_notes"],
+        filled,
+        fields,
+      ),
+    ).toEqual(["fld_notes"]);
   });
 });

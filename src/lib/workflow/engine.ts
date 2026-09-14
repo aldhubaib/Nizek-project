@@ -4,6 +4,7 @@ import {
   customFieldIsFilled,
   mergeSnapshot,
   missingNativeFields,
+  nativeFieldIsFilled,
 } from "@/lib/fields/validate";
 import {
   configFields,
@@ -150,6 +151,30 @@ export function shownFieldIds(actions: WorkflowActionDef[]): string[] {
     for (const id of configFields(action.config)) ids.add(id);
   }
   return [...ids];
+}
+
+/** True when the record already holds an answer for this native or custom field. */
+export function snapshotFieldIsFilled(
+  snapshot: FieldSnapshot,
+  fieldId: string,
+  customFields: CustomFieldLookup[],
+): boolean {
+  const native = NATIVE_DEAL_FIELDS.find((field) => field.id === fieldId);
+  if (native) return nativeFieldIsFilled(native.id, snapshot.native);
+  const field = customFields.find((row) => row.id === fieldId);
+  if (!field) return false;
+  return customFieldIsFilled(field.type, snapshot.custom[fieldId]);
+}
+
+/** Fields the transition dialog still needs to ask for. */
+export function unfilledFieldIds(
+  fieldIds: string[],
+  snapshot: FieldSnapshot,
+  customFields: CustomFieldLookup[],
+): string[] {
+  return fieldIds.filter(
+    (id) => !snapshotFieldIsFilled(snapshot, id, customFields),
+  );
 }
 
 export function validateDuring(

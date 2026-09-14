@@ -7,7 +7,12 @@ import { Input } from "@/components/ui/input";
 import { FieldControl } from "@/components/fields/field-control";
 import { RelatedCompanies, RelatedContacts } from "@/components/deals/related-data";
 import { configItems, configText } from "@/lib/workflow/actions";
-import { requiredFieldIds, shownFieldIds, validateDuring } from "@/lib/workflow/engine";
+import {
+  requiredFieldIds,
+  shownFieldIds,
+  unfilledFieldIds,
+  validateDuring,
+} from "@/lib/workflow/engine";
 import { isCustomFieldType, NATIVE_DEAL_FIELDS } from "@/lib/fields/types";
 import { formatDealValue } from "@/lib/deal-value";
 import type { CustomFieldDTO } from "@/actions/custom-field";
@@ -48,8 +53,35 @@ export function TransitionDialog({
   onClose: () => void;
   onConfirm: (payload: DuringPayload) => void;
 }) {
-  const requiredIds = useMemo(() => requiredFieldIds(during), [during]);
-  const shownIds = useMemo(() => shownFieldIds(during), [during]);
+  const snapshot = useMemo(
+    () => ({
+      native: {
+        title: deal.title,
+        value: deal.value,
+        contactIds: deal.contacts.map((c) => c.id),
+        companyIds: deal.companies.map((c) => c.id),
+      },
+      custom: deal.fieldValues ?? {},
+    }),
+    [deal],
+  );
+  const fieldLookup = useMemo(
+    () =>
+      fields.map((f) => ({
+        id: f.id,
+        label: f.label,
+        type: isCustomFieldType(f.type) ? f.type : ("text" as const),
+      })),
+    [fields],
+  );
+  const requiredIds = useMemo(
+    () => unfilledFieldIds(requiredFieldIds(during), snapshot, fieldLookup),
+    [during, snapshot, fieldLookup],
+  );
+  const shownIds = useMemo(
+    () => unfilledFieldIds(shownFieldIds(during), snapshot, fieldLookup),
+    [during, snapshot, fieldLookup],
+  );
   const customShown = fields.filter(
     (f) =>
       !f.binding &&
@@ -57,12 +89,16 @@ export function TransitionDialog({
   );
   const showValue = shownIds.includes("value");
   const showTitle = shownIds.includes("title");
+  const contactsFilled = snapshot.native.contactIds.length > 0;
+  const companiesFilled = snapshot.native.companyIds.length > 0;
   const showContacts =
-    shownIds.includes("contacts") ||
-    during.some((a) => a.type === "associate_contacts");
+    !contactsFilled &&
+    (shownIds.includes("contacts") ||
+      during.some((a) => a.type === "associate_contacts"));
   const showCompanies =
-    shownIds.includes("companies") ||
-    during.some((a) => a.type === "associate_companies");
+    !companiesFilled &&
+    (shownIds.includes("companies") ||
+      during.some((a) => a.type === "associate_companies"));
   const messages = during.filter((a) => a.type === "message");
   const checklists = during.filter((a) => a.type === "checklist");
   const requiredLabels = requiredIds.map((id) => {
@@ -96,25 +132,7 @@ export function TransitionDialog({
         companyIds: showCompanies ? linkedCompanies.map((c) => c.id) : undefined,
       },
     };
-    const snapshot = {
-      native: {
-        title: deal.title,
-        value: deal.value,
-        contactIds: deal.contacts.map((c) => c.id),
-        companyIds: deal.companies.map((c) => c.id),
-      },
-      custom: deal.fieldValues ?? {},
-    };
-    const issues = validateDuring(
-      during,
-      snapshot,
-      payload,
-      fields.map((f) => ({
-        id: f.id,
-        label: f.label,
-        type: isCustomFieldType(f.type) ? f.type : "text",
-      })),
-    );
+    const issues = validateDuring(during, snapshot, payload, fieldLookup);
     if (issues.length > 0) {
       setError(issues.join(". "));
       return;
