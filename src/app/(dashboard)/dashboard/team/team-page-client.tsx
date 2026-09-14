@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Mail, Clock, FolderKanban, Search, X, Ban, Trash2, ShieldCheck, Shield, AlertTriangle, ChevronDown, Eye, Pencil, UserRound, VenetianMask, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -1619,65 +1620,81 @@ function MemberProjectsDialog({
         )}
       </div>
 
-      {transfer && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay backdrop-blur-sm">
-          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-orange" />
+      {transfer &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-overlay backdrop-blur-sm"
+            onMouseDown={(e) => {
+              // Native <select> option clicks land on whatever is under the
+              // menu after it closes. Ignore those; only a real backdrop press
+              // should dismiss. Also stop the projects overlay from closing.
+              e.stopPropagation();
+              if (e.target === e.currentTarget) setTransfer(null);
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md mx-4 p-6"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-orange/15 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-orange" />
+                </div>
+                <div>
+                  <h3 className="text-s font-semibold text-foreground">Transfer Tasks Required</h3>
+                  <p className="text-s text-muted-foreground mt-0.5">
+                    <strong>{userName}</strong> has <strong>{transfer.taskCount}</strong> task
+                    {transfer.taskCount !== 1 ? "s" : ""} in <strong>{transfer.project.name}</strong>.
+                    Select a member to transfer them to before removal.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-s font-semibold text-foreground">Transfer Tasks Required</h3>
-                <p className="text-s text-muted-foreground mt-0.5">
-                  <strong>{userName}</strong> has <strong>{transfer.taskCount}</strong> task
-                  {transfer.taskCount !== 1 ? "s" : ""} in <strong>{transfer.project.name}</strong>.
-                  Select a member to transfer them to before removal.
-                </p>
+              <div className="mb-4">
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Transfer tasks to</label>
+                <select
+                  value={transfer.transferToUserId}
+                  onChange={(e) =>
+                    setTransfer((s) => (s ? { ...s, transferToUserId: e.target.value } : s))
+                  }
+                  className="w-full h-9 px-2 rounded-lg border border-border bg-background text-s text-foreground"
+                >
+                  <option value="">Select a member...</option>
+                  {transfer.targets.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name ?? t.id} ({t.systemRole})
+                    </option>
+                  ))}
+                </select>
+                {transfer.targets.length === 0 && (
+                  <p className="text-xs text-destructive mt-1.5">
+                    No other members in this project to transfer tasks to.
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setTransfer(null)}
+                  disabled={saving === transfer.project.id}
+                  className="px-3 py-1.5 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleRemove(transfer.project, transfer.transferToUserId)}
+                  disabled={!transfer.transferToUserId || saving === transfer.project.id}
+                  className="px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-s font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50"
+                >
+                  {saving === transfer.project.id ? "Transferring..." : "Transfer & Remove"}
+                </button>
               </div>
             </div>
-            <div className="mb-4">
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Transfer tasks to</label>
-              <select
-                value={transfer.transferToUserId}
-                onChange={(e) =>
-                  setTransfer((s) => (s ? { ...s, transferToUserId: e.target.value } : s))
-                }
-                className="w-full h-9 px-2 rounded-lg border border-border bg-background text-s text-foreground"
-              >
-                <option value="">Select a member...</option>
-                {transfer.targets.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name ?? t.id} ({t.systemRole})
-                  </option>
-                ))}
-              </select>
-              {transfer.targets.length === 0 && (
-                <p className="text-xs text-destructive mt-1.5">
-                  No other members in this project to transfer tasks to.
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => setTransfer(null)}
-                disabled={saving === transfer.project.id}
-                className="px-3 py-1.5 rounded-lg text-s text-muted-foreground hover:bg-muted transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleRemove(transfer.project, transfer.transferToUserId)}
-                disabled={!transfer.transferToUserId || saving === transfer.project.id}
-                className="px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground text-s font-medium hover:bg-destructive/90 transition-colors disabled:opacity-50"
-              >
-                {saving === transfer.project.id ? "Transferring..." : "Transfer & Remove"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
