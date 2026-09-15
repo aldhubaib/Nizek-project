@@ -52,20 +52,21 @@ export function writeFieldPickerPrefs(key: string, prefs: FieldPickerPrefs) {
   window.localStorage.setItem(key, JSON.stringify(prefs));
 }
 
+function isSpecialKey(id: string) {
+  return id === TABLE_STATUS_KEY || id === CARD_RECORD_NUMBER_KEY;
+}
+
 function mergeVisible(
   allowed: string[],
   saved: FieldPickerPrefs | null,
   fallback: string[],
 ): string[] {
   const allowedSet = new Set(allowed);
-  const isSpecialKey = (id: string) =>
-    id === TABLE_STATUS_KEY || id === CARD_RECORD_NUMBER_KEY;
-  if (!saved) return fallback.filter((id) => allowedSet.has(id) || isSpecialKey(id));
+  const keep = (id: string) => allowedSet.has(id) || isSpecialKey(id);
+  if (!saved) return fallback.filter(keep);
 
   const seen = new Set(saved.seen.length > 0 ? saved.seen : allowed);
-  const visible = saved.visible.filter(
-    (id) => allowedSet.has(id) || isSpecialKey(id),
-  );
+  const visible = saved.visible.filter(keep);
   const added = allowed.filter((id) => !seen.has(id));
   return [...visible, ...added];
 }
@@ -84,6 +85,7 @@ export function tableColumnsStorageKey(entityType: string, projectId = "") {
 
 export function defaultTableColumnIds(fields: CustomFieldDTO[]): string[] {
   return [
+    CARD_RECORD_NUMBER_KEY,
     TABLE_STATUS_KEY,
     ...fields
       .filter((field) => field.binding !== "title" && field.type !== "file")
@@ -95,19 +97,33 @@ export function resolveTableColumnIds(
   fields: CustomFieldDTO[],
   saved: FieldPickerPrefs | null,
 ): string[] {
-  const allowed = defaultTableColumnIds(fields).filter((id) => id !== TABLE_STATUS_KEY);
+  const allowed = defaultTableColumnIds(fields).filter(
+    (id) => !isSpecialKey(id),
+  );
   const fallback = defaultTableColumnIds(fields);
   const merged = mergeVisible(allowed, saved, fallback);
-  if (saved && saved.visible.includes(TABLE_STATUS_KEY) && !merged.includes(TABLE_STATUS_KEY)) {
-    return [TABLE_STATUS_KEY, ...merged];
-  }
   if (!saved) return fallback;
-  return merged;
+  const withSpecials = [...merged];
+  for (const key of [CARD_RECORD_NUMBER_KEY, TABLE_STATUS_KEY]) {
+    if (saved.visible.includes(key) && !withSpecials.includes(key)) {
+      withSpecials.unshift(key);
+    }
+  }
+  if (
+    !saved.seen.includes(CARD_RECORD_NUMBER_KEY) &&
+    !withSpecials.includes(CARD_RECORD_NUMBER_KEY)
+  ) {
+    withSpecials.unshift(CARD_RECORD_NUMBER_KEY);
+  }
+  return withSpecials;
 }
 
 export function fieldPickerPrefsFromVisible(
   visible: string[],
   knownIds: string[],
 ): FieldPickerPrefs {
-  return { visible, seen: knownIds };
+  const seen = new Set(knownIds);
+  seen.add(TABLE_STATUS_KEY);
+  seen.add(CARD_RECORD_NUMBER_KEY);
+  return { visible, seen: [...seen] };
 }

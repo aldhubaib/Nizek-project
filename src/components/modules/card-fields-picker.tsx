@@ -72,18 +72,30 @@ export function CardFieldsPicker({
                 toggle(CARD_RECORD_NUMBER_KEY, e.target.checked)
               }
             />
-            Record Number
+            ID
           </label>
         )}
         {mode === "table" && (
-          <label className="flex items-center gap-2 text-s">
-            <input
-              type="checkbox"
-              checked={visible.has(TABLE_STATUS_KEY)}
-              onChange={(e) => toggle(TABLE_STATUS_KEY, e.target.checked)}
-            />
-            Status
-          </label>
+          <>
+            <label className="flex items-center gap-2 text-s">
+              <input
+                type="checkbox"
+                checked={visible.has(CARD_RECORD_NUMBER_KEY)}
+                onChange={(e) =>
+                  toggle(CARD_RECORD_NUMBER_KEY, e.target.checked)
+                }
+              />
+              ID
+            </label>
+            <label className="flex items-center gap-2 text-s">
+              <input
+                type="checkbox"
+                checked={visible.has(TABLE_STATUS_KEY)}
+                onChange={(e) => toggle(TABLE_STATUS_KEY, e.target.checked)}
+              />
+              Status
+            </label>
+          </>
         )}
         {choices.length === 0 ? (
           <p className="text-xs text-muted-foreground">

@@ -16,6 +16,7 @@ export const CUSTOM_FIELD_TYPES = [
   "user",
   "file",
   "relation",
+  "formula",
 ] as const;
 
 export const CUSTOM_FIELD_TYPE_LABEL: Record<
@@ -39,6 +40,7 @@ export const CUSTOM_FIELD_TYPE_LABEL: Record<
   user: "User",
   file: "File",
   relation: "Relation",
+  formula: "Formula",
 };
 
 export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];

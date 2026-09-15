@@ -48,6 +48,10 @@ import {
 import type { WorkflowEntityType } from "@/lib/workflow/types";
 import type { TextScript } from "@/lib/fields/text-config";
 import {
+  canBeFormulaPart,
+  type FormulaFieldConfig,
+} from "@/lib/fields/formula-config";
+import {
   canControlVisibility,
   visibilityChoices,
   type FieldVisibility,
@@ -637,6 +641,7 @@ function FieldProperties({
     userMultiple?: boolean;
     countryMultiple?: boolean;
     script?: TextScript | null;
+    formula?: FormulaFieldConfig;
     required?: boolean;
     showOn?: string;
     visibility?: FieldVisibility | null;
@@ -711,14 +716,25 @@ function FieldProperties({
         <input
           type="checkbox"
           checked={field.required}
-          disabled={field.binding === "title"}
+          disabled={field.binding === "title" || field.type === "formula"}
           onChange={(e) => onUpdate({ required: e.target.checked })}
         />
         Required
         {field.binding === "title" && (
           <span className="text-xs text-muted-foreground">Always on</span>
         )}
+        {field.type === "formula" && (
+          <span className="text-xs text-muted-foreground">Read only</span>
+        )}
       </label>
+      {field.type === "formula" && !field.binding && (
+        <FormulaPartsEditor
+          field={field}
+          siblings={siblings}
+          pending={pending}
+          onUpdate={(formula) => onUpdate({ formula })}
+        />
+      )}
       {field.type === "text" && (
         <label className="flex items-center gap-2 text-s">
           <input
@@ -880,6 +896,83 @@ function FieldProperties({
           Delete field
         </Button>
       )}
+    </div>
+  );
+}
+
+function FormulaPartsEditor({
+  field,
+  siblings,
+  pending,
+  onUpdate,
+}: {
+  field: CustomFieldDTO;
+  siblings: CustomFieldDTO[];
+  pending: boolean;
+  onUpdate: (formula: FormulaFieldConfig) => void;
+}) {
+  const parts = field.formula?.parts ?? [];
+  const selected = new Set(parts);
+  const choices = siblings.filter(
+    (row) => row.id !== field.id && canBeFormulaPart(row),
+  );
+  const config: FormulaFieldConfig = {
+    parts,
+    separator: field.formula?.separator ?? " ",
+    cardTitle: field.formula?.cardTitle ?? true,
+  };
+
+  function toggle(id: string, on: boolean) {
+    const nextSelected = new Set(selected);
+    if (on) nextSelected.add(id);
+    else nextSelected.delete(id);
+    onUpdate({
+      ...config,
+      parts: choices
+        .filter((row) => nextSelected.has(row.id))
+        .map((row) => row.id),
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <Label className="text-xs">Combine</Label>
+        <p className="text-xs text-muted-foreground">
+          Tick fields to join, in layout order. First Name then Last Name becomes
+          the full name.
+        </p>
+        {choices.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Add other fields first, then come back.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {choices.map((row) => (
+              <label key={row.id} className="flex items-center gap-2 text-s">
+                <input
+                  type="checkbox"
+                  checked={selected.has(row.id)}
+                  disabled={pending}
+                  onChange={(e) => toggle(row.id, e.target.checked)}
+                />
+                {row.label}
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+      <label className="flex items-center gap-2 text-s">
+        <input
+          type="checkbox"
+          checked={config.cardTitle}
+          disabled={pending}
+          onChange={(e) =>
+            onUpdate({ ...config, cardTitle: e.target.checked })
+          }
+        />
+        Use as card title
+      </label>
     </div>
   );
 }

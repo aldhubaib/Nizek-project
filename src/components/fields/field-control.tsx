@@ -33,6 +33,7 @@ export function FieldControl({
   users = [],
   related = EMPTY_RELATED_CATALOG,
   excludeDealId,
+  preview,
 }: {
   field: CustomFieldDTO;
   value: string;
@@ -40,6 +41,7 @@ export function FieldControl({
   users?: WorkflowUserOption[];
   related?: RelatedRecordCatalog;
   excludeDealId?: string;
+  preview?: string;
 }) {
   if (field.type === "relation") {
     return (
@@ -59,6 +61,17 @@ export function FieldControl({
       {field.required && <span className="ms-0.5 text-destructive">*</span>}
     </Label>
   );
+
+  if (field.type === "formula") {
+    return (
+      <div className="space-y-1.5">
+        {label}
+        <p className="min-h-9 rounded-md border border-input bg-muted/40 px-3 py-2 text-s">
+          {preview?.trim() ? preview : "—"}
+        </p>
+      </div>
+    );
+  }
 
   if (field.type === "file" || field.type === "select" || field.type === "multi_select") {
     const question: TaskQuestion = {

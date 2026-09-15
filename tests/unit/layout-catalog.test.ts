@@ -24,6 +24,7 @@ function field(id: string, sectionId: string | null = null): CustomFieldDTO {
     userMultiple: false,
     countryMultiple: false,
     urlIcon: null,
+    formula: null,
     sectionId,
     position: 0,
   };

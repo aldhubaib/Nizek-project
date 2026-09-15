@@ -5,6 +5,7 @@ import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldControl } from "@/components/fields/field-control";
+import { joinFormulaParts, formulaSourceValues } from "@/lib/fields/formula-config";
 import { RelatedCompanies, RelatedContacts } from "@/components/deals/related-data";
 import { configItems, configText } from "@/lib/workflow/actions";
 import {
@@ -228,7 +229,7 @@ export function TransitionDialog({
                   ),
                 )
                 .map((field) =>
-                field.type === "relation" ? (
+                field.type === "relation" || field.type === "formula" ? (
                   <FieldControl
                     key={field.id}
                     field={field}
@@ -236,6 +237,20 @@ export function TransitionDialog({
                     users={users}
                     related={related}
                     excludeDealId={deal.id}
+                    preview={
+                      field.type === "formula"
+                        ? joinFormulaParts(
+                            field.formula?.parts ?? [],
+                            formulaSourceValues(
+                              fields,
+                              title,
+                              value,
+                              customValues,
+                            ),
+                            field.formula?.separator,
+                          )
+                        : undefined
+                    }
                     onChange={(next) =>
                       setCustomValues((prev) => ({ ...prev, [field.id]: next }))
                     }

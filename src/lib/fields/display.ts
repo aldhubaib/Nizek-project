@@ -14,6 +14,7 @@ import type { WorkflowUserOption } from "@/actions/workflow";
 export type FieldDisplayContext = {
   users: WorkflowUserOption[];
   related: RelatedRecordCatalog;
+  fields?: CustomFieldDTO[];
 };
 
 export function formatFieldValue(
@@ -31,6 +32,23 @@ export function formatFieldValue(
   }
   if (field.binding === "companies") {
     return record.companies.map((row) => row.nameEn).filter(Boolean).join(", ");
+  }
+
+  if (field.type === "formula") {
+    const parts = field.formula?.parts ?? [];
+    const catalog = ctx.fields ?? [];
+    const values: Record<string, string> = {};
+    for (const id of parts) {
+      const part = catalog.find((row) => row.id === id);
+      if (!part || part.type === "formula") continue;
+      values[id] = formatFieldValue(part, record, ctx);
+    }
+    return parts
+      .map((id) => (values[id] ?? "").trim())
+      .filter(Boolean)
+      .join(field.formula?.separator ?? " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   const raw = record.fieldValues?.[field.id] ?? "";

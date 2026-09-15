@@ -52,6 +52,7 @@ export function customFieldIsFilled(
   type: CustomFieldType,
   value: string | null | undefined,
 ): boolean {
+  if (type === "formula") return true;
   if (type === "phone") return phoneValueIsFilled(value);
   if (type === "cost") return costFieldIsFilled(value);
   if (type === "invite") return inviteFieldIsFilled(value);

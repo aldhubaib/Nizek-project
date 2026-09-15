@@ -3139,9 +3139,9 @@ model CustomField {
   entityType String
   key        String
   label      String
-  /// text | textarea | number | cost | select | priority | multi_select | date | checkbox | url | email | phone | user | file | relation
+  /// text | textarea | number | cost | select | priority | multi_select | date | checkbox | url | email | phone | user | file | relation | formula
   type       String @default("text")
-  /// JSON array of choices for select / multi_select, `{ model, multiple }` for relation, or `{ multiple }` for user.
+  /// JSON array of choices for select / multi_select, `{ model, multiple }` for relation, `{ multiple }` for user, or `{ parts, separator, cardTitle }` for formula.
   options    String?
   /// Maps this row to a real column or join table (title, value, contacts, …).
   /// Null means the value lives in CustomFieldValue.

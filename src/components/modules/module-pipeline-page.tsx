@@ -12,8 +12,8 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DealBoard } from "@/components/deals/deal-board";
 import { CardFieldsPicker } from "@/components/modules/card-fields-picker";
 import {
-  cardFieldChoices,
   cardFieldsStorageKey,
+  defaultCardFieldIds,
   defaultTableColumnIds,
   fieldPickerPrefsFromVisible,
   readFieldPickerPrefs,
@@ -172,7 +172,7 @@ export function ModulePipelinePage({
     if (cards && cards.seen.length === 0) {
       const next = fieldPickerPrefsFromVisible(
         cards.visible,
-        cardFieldChoices(fields).map((field) => field.id),
+        defaultCardFieldIds(fields),
       );
       writeFieldPickerPrefs(cardFieldsKey, next);
       setSavedCardFields(next);
@@ -227,7 +227,7 @@ export function ModulePipelinePage({
     () => ({
       fields,
       visibleFieldIds: visibleCardFieldIds,
-      ctx: { users, related },
+      ctx: { users, related, fields },
     }),
     [fields, visibleCardFieldIds, users, related],
   );
@@ -438,10 +438,7 @@ export function ModulePipelinePage({
   }
 
   function changeCardFields(ids: string[]) {
-    const next = fieldPickerPrefsFromVisible(
-      ids,
-      cardFieldChoices(fields).map((field) => field.id),
-    );
+    const next = fieldPickerPrefsFromVisible(ids, defaultCardFieldIds(fields));
     setSavedCardFields(next);
     writeFieldPickerPrefs(cardFieldsKey, next);
   }
@@ -576,7 +573,7 @@ export function ModulePipelinePage({
             onSort={changeSort}
             onOpen={(record) => router.push(openHref(record.id))}
             empty={`No ${surface.recordWord}s`}
-            ctx={{ users, related }}
+            ctx={{ users, related, fields }}
             visibleColumnIds={visibleTableColumnIds}
           />
         ) : (

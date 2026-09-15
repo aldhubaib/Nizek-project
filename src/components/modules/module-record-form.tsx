@@ -44,6 +44,7 @@ import {
 } from "@/lib/fields/relations";
 import type { WorkflowUserOption } from "@/actions/workflow";
 import { FieldControl, fieldShowsOnForm } from "@/components/fields/field-control";
+import { joinFormulaParts, formulaSourceValues } from "@/lib/fields/formula-config";
 import { UserField } from "@/components/fields/user-field";
 import { MemberAvatar } from "@/components/boards/member-avatar";
 import { requiredLayoutFieldIsFilled } from "@/lib/fields/validate";
@@ -326,6 +327,7 @@ export function ModuleRecordForm({
                   title={title}
                   value={value}
                   fieldValues={fieldValues}
+                  allFields={allFields}
                   users={users}
                   related={related}
                   excludeDealId={record?.id}
@@ -358,6 +360,7 @@ export function ModuleRecordForm({
                   title={title}
                   value={value}
                   fieldValues={fieldValues}
+                  allFields={allFields}
                   users={users}
                   related={related}
                   excludeDealId={record?.id}
@@ -456,6 +459,7 @@ function CatalogField({
   title,
   value,
   fieldValues,
+  allFields,
   users,
   related = EMPTY_RELATED_CATALOG,
   excludeDealId,
@@ -467,6 +471,7 @@ function CatalogField({
   title: string;
   value: string;
   fieldValues: Record<string, string>;
+  allFields: CustomFieldDTO[];
   users: WorkflowUserOption[];
   related?: RelatedRecordCatalog;
   excludeDealId?: string;
@@ -518,6 +523,15 @@ function CatalogField({
         users={users}
         related={related}
         excludeDealId={excludeDealId}
+        preview={
+          field.type === "formula"
+            ? joinFormulaParts(
+                field.formula?.parts ?? [],
+                formulaSourceValues(allFields, title, value, fieldValues),
+                field.formula?.separator,
+              )
+            : undefined
+        }
         onChange={onField}
       />
     </div>

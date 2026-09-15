@@ -42,6 +42,12 @@ import {
   stringifyUrlConfig,
   type UrlIconId,
 } from "@/lib/fields/url-config";
+import {
+  DEFAULT_FORMULA,
+  parseFormulaConfig,
+  stringifyFormulaConfig,
+  type FormulaFieldConfig,
+} from "@/lib/fields/formula-config";
 import type { WorkflowEntityType } from "@/lib/workflow/types";
 import { getModule, moduleBinding, projectBoardPaths } from "@/lib/modules/registry";
 
@@ -61,6 +67,7 @@ export type CustomFieldDTO = {
   userMultiple: boolean;
   countryMultiple: boolean;
   urlIcon: UrlIconId | null;
+  formula: FormulaFieldConfig | null;
   sectionId: string | null;
   position: number;
 };
@@ -272,6 +279,7 @@ function toFieldDTO(row: {
     countryMultiple:
       type === "country" ? parseCountryConfig(row.options).multiple : false,
     urlIcon: type === "url" ? parseUrlConfig(row.options).icon : null,
+    formula: type === "formula" ? parseFormulaConfig(row.options) : null,
     binding: row.binding ?? null,
     required: row.required,
     showOn: isFieldShowOn(row.showOn) ? row.showOn : "both",
@@ -702,7 +710,7 @@ export async function createCustomField(input: {
         label: bound?.label ?? label,
         type,
         binding: bound?.key ?? null,
-        required: bound?.required ?? false,
+        required: type === "formula" ? false : bound?.required ?? false,
         options: bound?.relation
           ? stringifyRelationConfig(bound.relation)
           : type === "relation"
@@ -713,7 +721,9 @@ export async function createCustomField(input: {
                 ? stringifyCountryConfig({ multiple: false })
                 : type === "url"
                   ? stringifyUrlConfig({ icon: null })
-                  : undefined,
+                  : type === "formula"
+                    ? stringifyFormulaConfig(DEFAULT_FORMULA)
+                    : undefined,
         sectionId: input.sectionId ?? null,
         position: positionBetween(last?.position ?? null, null),
       },
@@ -734,6 +744,7 @@ export async function updateCustomField(
     countryMultiple?: boolean;
     urlIcon?: UrlIconId | null;
     script?: TextScript | null;
+    formula?: FormulaFieldConfig;
     required?: boolean;
     showOn?: string;
     visibility?: FieldVisibility | null;
@@ -777,6 +788,10 @@ export async function updateCustomField(
       if (input.type === "country" && input.countryMultiple === undefined) {
         data.options = stringifyCountryConfig({ multiple: false });
       }
+      if (input.type === "formula" && input.formula === undefined) {
+        data.options = stringifyFormulaConfig(DEFAULT_FORMULA);
+        data.required = false;
+      }
     }
     if (input.options !== undefined && !existing.binding) {
       data.options = JSON.stringify(input.options.map((o) => o.trim()).filter(Boolean));
@@ -792,13 +807,17 @@ export async function updateCustomField(
         multiple: input.countryMultiple,
       });
     }
+    if (input.formula !== undefined && !existing.binding) {
+      data.options = stringifyFormulaConfig(input.formula);
+    }
     if (input.script !== undefined) {
       const type = data.type ?? existing.type;
       if (type !== "text") throw new Error("Arabic only is for single line fields");
       data.options = stringifyTextConfig({ script: input.script });
     }
     if (input.required !== undefined && existing.binding !== "title") {
-      data.required = input.required;
+      const type = data.type ?? existing.type;
+      data.required = type === "formula" ? false : input.required;
     }
     if (input.showOn !== undefined) {
       if (!isFieldShowOn(input.showOn)) throw new Error("Unknown form visibility");
@@ -911,7 +930,9 @@ export async function saveCustomFieldValues(input: {
     select: { id: true, binding: true, type: true, options: true },
   });
   const allowed = new Set(
-    fields.filter((field) => !field.binding).map((field) => field.id),
+    fields
+      .filter((field) => !field.binding && field.type !== "formula")
+      .map((field) => field.id),
   );
   const entries = Object.entries(input.values)
     .filter(([id]) => allowed.has(id))

@@ -42,10 +42,24 @@ export const DealCard = memo(function DealCard({
   });
 
   const extras =
-    display?.fields.filter(
-      (field) =>
-        field.binding !== "title" && display.visibleFieldIds.includes(field.id),
-    ) ?? [];
+    display?.fields.filter((field) => {
+      if (field.binding === "title") return false;
+      if (!display.visibleFieldIds.includes(field.id)) return false;
+      if (field.type === "formula" && field.formula?.cardTitle) return false;
+      return true;
+    }) ?? [];
+  const heading =
+    (display &&
+      display.fields
+        .filter(
+          (field) =>
+            field.type === "formula" &&
+            field.formula?.cardTitle &&
+            display.visibleFieldIds.includes(field.id),
+        )
+        .map((field) => formatFieldValue(field, deal, display.ctx))
+        .find((value) => value.trim())) ||
+    deal.title;
 
   return (
     <div
@@ -66,7 +80,7 @@ export const DealCard = memo(function DealCard({
           {formatRecordNumber(deal.recordNumber)}
         </span>
       )}
-      <p className="truncate text-s font-semibold">{deal.title}</p>
+      <p className="truncate text-s font-semibold">{heading}</p>
       {extras.map((field) => {
         if (!display) return null;
         const value = formatFieldValue(field, deal, display.ctx);

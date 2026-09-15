@@ -12,7 +12,7 @@ import {
 import type { CustomFieldDTO } from "@/actions/custom-field";
 import type { DealDTO } from "@/actions/deal";
 import type { DealStageDTO } from "@/actions/deal-stage";
-import { TABLE_STATUS_KEY } from "@/lib/modules/card-fields";
+import { TABLE_STATUS_KEY, CARD_RECORD_NUMBER_KEY } from "@/lib/modules/card-fields";
 import { formatRecordNumber } from "@/lib/modules/record-number";
 import { fieldIsLogicallyVisible } from "@/lib/fields/visibility";
 
@@ -214,7 +214,9 @@ function listColumns(
       shown.has(field.id),
   );
   return [
-    { key: ID_KEY, label: "ID", className: "w-[4.5rem]" },
+    ...(shown.has(CARD_RECORD_NUMBER_KEY)
+      ? [{ key: ID_KEY, label: "ID", className: "w-[4.5rem]" }]
+      : []),
     { key: TITLE_KEY, label: title?.label ?? "Name", className: "w-[16rem]" },
     ...(shown.has(TABLE_STATUS_KEY)
       ? [{ key: STATUS_KEY, label: "Status", className: "w-[10rem]" }]
