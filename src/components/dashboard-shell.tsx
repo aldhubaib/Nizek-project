@@ -34,6 +34,10 @@ const OfflineNotice = dynamic(
   () => import("@/components/offline-notice").then((m) => ({ default: m.OfflineNotice })),
   { ssr: false },
 );
+const NotificationGate = dynamic(
+  () => import("@/components/notification-gate").then((m) => ({ default: m.NotificationGate })),
+  { ssr: false },
+);
 
 export function DashboardShell({
   children,
@@ -125,6 +129,7 @@ export function DashboardShell({
   );
 
   const shell = (
+    <NotificationGate>
     <PageOverflowMenuProvider>
       {/* min-h-screen is 100vh and would win over h-dvh's 100dvh on mobile,
           leaving the composer under the browser chrome. The inbox is a fixed
@@ -226,6 +231,7 @@ export function DashboardShell({
       <OfflineNotice />
       </div>
     </PageOverflowMenuProvider>
+    </NotificationGate>
   );
 
   // Chat/inbox realtime runs over a single shared Centrifugo WebSocket for the

@@ -4,12 +4,23 @@
 // Replaces a bare Switch that silently did nothing when permission was
 // blocked, when the service worker never started, or when the subscription
 // never reached the server.
+//
+// Disabling notifications is blocked: the user gets a dialog explaining that
+// notifications are required to use the system.
 
 import { useCallback, useState } from "react";
 import { Bell, Loader2, RefreshCw } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import {
-  disablePush,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   enablePush,
   pushPlatform,
   showLocalTestBanner,
@@ -25,6 +36,7 @@ export function NotificationSetup({ compact = false }: { compact?: boolean }) {
     detail?: string;
   } | null>(null);
   const [confirmed, setConfirmed] = useState<"banner" | "quiet" | null>(null);
+  const [showRequiredDialog, setShowRequiredDialog] = useState(false);
 
   // enablePush() must be reached directly from the click/change handler: iOS
   // only honours the permission prompt while the user gesture is still active.
@@ -44,19 +56,6 @@ export function NotificationSetup({ compact = false }: { compact?: boolean }) {
       } else {
         setFailure({ reason: result.reason, detail: result.detail });
       }
-    } finally {
-      setBusy(false);
-      await refresh();
-    }
-  }, [busy, refresh]);
-
-  const attemptDisable = useCallback(async () => {
-    if (busy) return;
-    setBusy(true);
-    setFailure(null);
-    setConfirmed(null);
-    try {
-      await disablePush();
     } finally {
       setBusy(false);
       await refresh();
@@ -121,7 +120,7 @@ export function NotificationSetup({ compact = false }: { compact?: boolean }) {
           <Switch
             checked={status?.enabled ?? false}
             onCheckedChange={(next) =>
-              void (next ? attemptEnable() : attemptDisable())
+              void (next ? attemptEnable() : setShowRequiredDialog(true))
             }
             disabled={busy || checking || permissionDenied}
             aria-label="Toggle notifications"
@@ -176,6 +175,22 @@ export function NotificationSetup({ compact = false }: { compact?: boolean }) {
           </div>
         </div>
       )}
+
+      <Dialog open={showRequiredDialog} onOpenChange={setShowRequiredDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Notifications Required</DialogTitle>
+            <DialogDescription>
+              You must keep notifications enabled in order to use the system.
+              This ensures you never miss important messages, mentions, and
+              updates.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowRequiredDialog(false)}>Got it</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

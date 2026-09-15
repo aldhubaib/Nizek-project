@@ -27,6 +27,10 @@ const OfflineNotice = dynamic(
   () => import("@/components/offline-notice").then((m) => ({ default: m.OfflineNotice })),
   { ssr: false },
 );
+const NotificationGate = dynamic(
+  () => import("@/components/notification-gate").then((m) => ({ default: m.NotificationGate })),
+  { ssr: false },
+);
 
 function BrandMark({
   logoUrl,
@@ -85,6 +89,7 @@ export function ClientShell({
   }, [router]);
 
   const shell = (
+    <NotificationGate>
     <div
       className="flex h-dvh min-h-0 flex-col overflow-hidden bg-background"
       data-impersonating={impersonatingAs ? "" : undefined}
@@ -113,6 +118,7 @@ export function ClientShell({
       <InstallPrompt />
       <OfflineNotice />
     </div>
+    </NotificationGate>
   );
 
   return currentUserId ? (
