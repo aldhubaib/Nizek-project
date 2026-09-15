@@ -148,6 +148,7 @@ function lookupIsVisible(
     { visibility: parseFieldVisibility(field.visibility) },
     snapshot.custom,
     customFields.map((row) => row.id),
+    customFields,
   );
 }
 

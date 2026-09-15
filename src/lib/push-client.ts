@@ -22,7 +22,7 @@ const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
  * service worker is registered. Awaiting it unguarded is what left the toggle
  * spinning and permanently disabled.
  */
-const SW_READY_TIMEOUT_MS = 10_000;
+const SW_READY_TIMEOUT_MS = 15_000;
 
 /** True when running as an installed PWA rather than a browser tab. */
 export function isStandaloneDisplayMode(): boolean {
@@ -92,6 +92,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 /**
  * Resolve an active service worker registration, registering /sw.js if nothing
  * has yet. Returns null rather than hanging when registration can't complete.
+ *
+ * On iOS PWA cold starts the OS may kill the previous SW, leaving a stale
+ * registration with no active worker. If the first attempt times out we
+ * unregister the stale entry, re-register, and wait once more.
  */
 export async function resolveRegistration(): Promise<ServiceWorkerRegistration | null> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
@@ -108,6 +112,16 @@ export async function resolveRegistration(): Promise<ServiceWorkerRegistration |
     if (!existing) {
       await navigator.serviceWorker.register("/sw.js").catch(() => null);
     }
+    const reg = await withTimeout(navigator.serviceWorker.ready, SW_READY_TIMEOUT_MS);
+    if (reg) return reg;
+
+    // First attempt timed out — the registration may be stuck (iOS cold start,
+    // interrupted update). Unregister the stale entry and start fresh.
+    const stale = await navigator.serviceWorker.getRegistration();
+    if (stale && !stale.active) {
+      await stale.unregister().catch(() => {});
+    }
+    await navigator.serviceWorker.register("/sw.js").catch(() => null);
     return await withTimeout(navigator.serviceWorker.ready, SW_READY_TIMEOUT_MS);
   } catch {
     return null;

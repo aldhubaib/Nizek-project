@@ -377,7 +377,7 @@ async function cleanInput(
   const missing = layoutFields
     .filter((field) => field.required)
     .filter((field) =>
-      fieldAppliesOnForm(field, mode, fieldValues, layoutFieldIds),
+      fieldAppliesOnForm(field, mode, fieldValues, layoutFieldIds, layoutFields),
     )
     .filter((field) => {
       if (field.binding === "title") return !title;

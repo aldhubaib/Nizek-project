@@ -59,6 +59,78 @@ describe("fieldIsLogicallyVisible", () => {
       true,
     );
   });
+
+  it("hides nested fields when an ancestor pick list no longer matches", () => {
+    const eventCost = {
+      visibility: { dependsOn: "role", values: ["Participating"] },
+    };
+    const cost = {
+      visibility: { dependsOn: "eventCost", values: ["paid"] },
+    };
+    const catalog = [
+      { id: "role" },
+      {
+        id: "eventCost",
+        visibility: { dependsOn: "role", values: ["Participating"] },
+      },
+      {
+        id: "cost",
+        visibility: { dependsOn: "eventCost", values: ["paid"] },
+      },
+    ];
+    const values = { role: "Observing", eventCost: "paid", cost: "100" };
+    const ids = catalog.map((row) => row.id);
+    expect(fieldIsLogicallyVisible(eventCost, values, ids, catalog)).toBe(false);
+    expect(fieldIsLogicallyVisible(cost, values, ids, catalog)).toBe(false);
+  });
+
+  it("walks an arbitrary ancestor chain until a parent no longer matches", () => {
+    const catalog = [
+      { id: "a" },
+      { id: "b", visibility: { dependsOn: "a", values: ["1"] } },
+      { id: "c", visibility: { dependsOn: "b", values: ["2"] } },
+      { id: "d", visibility: { dependsOn: "c", values: ["3"] } },
+      { id: "e", visibility: { dependsOn: "d", values: ["4"] } },
+      { id: "f", visibility: { dependsOn: "e", values: ["5"] } },
+      { id: "g", visibility: { dependsOn: "f", values: ["6"] } },
+      { id: "h", visibility: { dependsOn: "g", values: ["7"] } },
+      { id: "i", visibility: { dependsOn: "h", values: ["8"] } },
+    ];
+    const values = {
+      a: "1",
+      b: "2",
+      c: "3",
+      d: "4",
+      e: "5",
+      f: "6",
+      g: "7",
+      h: "8",
+      i: "yes",
+    };
+    const ids = catalog.map((row) => row.id);
+    const leaf = { visibility: { dependsOn: "h", values: ["8"] } };
+    expect(fieldIsLogicallyVisible(leaf, values, ids, catalog)).toBe(true);
+    expect(
+      fieldIsLogicallyVisible(leaf, { ...values, a: "0" }, ids, catalog),
+    ).toBe(false);
+  });
+
+  it("stops walking if a show-when cycle is configured", () => {
+    const catalog = [
+      { id: "a", visibility: { dependsOn: "b", values: ["yes"] } },
+      { id: "b", visibility: { dependsOn: "a", values: ["yes"] } },
+    ];
+    const values = { a: "yes", b: "yes" };
+    const ids = catalog.map((row) => row.id);
+    expect(
+      fieldIsLogicallyVisible(
+        { visibility: { dependsOn: "a", values: ["yes"] } },
+        values,
+        ids,
+        catalog,
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("fieldAppliesOnForm", () => {

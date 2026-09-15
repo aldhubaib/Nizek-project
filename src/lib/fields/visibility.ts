@@ -90,20 +90,71 @@ export function parseFieldAnswers(value: string | null | undefined): string[] {
   return [value];
 }
 
+export type VisibilityCatalogField = {
+  id: string;
+  visibility?: FieldVisibility | string | null;
+};
+
 export function fieldIsLogicallyVisible(
   field: { visibility?: FieldVisibility | null },
   values: Record<string, string>,
   knownFieldIds?: Iterable<string>,
+  catalog?: Iterable<VisibilityCatalogField>,
 ): boolean {
-  const rule = field.visibility;
-  if (!rule?.dependsOn || rule.values.length === 0) return true;
-  if (knownFieldIds) {
-    const ids =
-      knownFieldIds instanceof Set ? knownFieldIds : new Set(knownFieldIds);
-    if (!ids.has(rule.dependsOn)) return true;
+  const known = toKnownIds(knownFieldIds, catalog);
+  const byId = catalogToRules(catalog);
+  return ancestorChainVisible(
+    parseFieldVisibility(field.visibility),
+    values,
+    known,
+    byId,
+    new Set(),
+  );
+}
+
+function catalogToRules(
+  catalog: Iterable<VisibilityCatalogField> | undefined,
+): Map<string, FieldVisibility | null> | null {
+  if (!catalog) return null;
+  const byId = new Map<string, FieldVisibility | null>();
+  for (const row of catalog) {
+    byId.set(row.id, parseFieldVisibility(row.visibility));
   }
+  return byId;
+}
+
+function toKnownIds(
+  knownFieldIds: Iterable<string> | undefined,
+  catalog: Iterable<VisibilityCatalogField> | undefined,
+): Set<string> | null {
+  if (knownFieldIds) {
+    return knownFieldIds instanceof Set ? knownFieldIds : new Set(knownFieldIds);
+  }
+  if (!catalog) return null;
+  return new Set(Array.from(catalog, (row) => row.id));
+}
+
+function ancestorChainVisible(
+  rule: FieldVisibility | null,
+  values: Record<string, string>,
+  known: Set<string> | null,
+  byId: Map<string, FieldVisibility | null> | null,
+  visiting: Set<string>,
+): boolean {
+  if (!rule?.dependsOn || rule.values.length === 0) return true;
+  if (known && !known.has(rule.dependsOn)) return true;
   const answers = parseFieldAnswers(values[rule.dependsOn]);
-  return rule.values.some((wanted) => answers.includes(wanted));
+  if (!rule.values.some((wanted) => answers.includes(wanted))) return false;
+  if (!byId) return true;
+  if (visiting.has(rule.dependsOn)) return true;
+  visiting.add(rule.dependsOn);
+  return ancestorChainVisible(
+    byId.get(rule.dependsOn) ?? null,
+    values,
+    known,
+    byId,
+    visiting,
+  );
 }
 
 export function fieldAppliesOnForm(
@@ -114,12 +165,14 @@ export function fieldAppliesOnForm(
   mode: "create" | "edit",
   values: Record<string, string>,
   knownFieldIds?: Iterable<string>,
+  catalog?: Iterable<VisibilityCatalogField>,
 ): boolean {
   if (field.showOn !== "both" && field.showOn !== mode) return false;
   return fieldIsLogicallyVisible(
     { visibility: parseFieldVisibility(field.visibility) },
     values,
     knownFieldIds,
+    catalog,
   );
 }
 
@@ -150,6 +203,7 @@ export function clearHiddenFieldValues(
           { visibility: parseFieldVisibility(field.visibility) },
           next,
           ids,
+          fields,
         )
       ) {
         continue;

@@ -73,6 +73,7 @@ export const DealCard = memo(function DealCard({
             field,
             deal.fieldValues ?? {},
             display.fields.map((row) => row.id),
+            display.fields,
           )
         ) {
           return null;

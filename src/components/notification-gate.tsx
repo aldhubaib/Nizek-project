@@ -6,12 +6,21 @@
  * Rendered at the shell level so every route is gated.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, Loader2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { enablePush, pushSupported, pushPlatform } from "@/lib/push-client";
 import { describePushFailure, type PushEnableReason } from "@/lib/push-enable";
 import { usePushStatus } from "@/lib/use-push-status";
+
+/** Transient reasons that may self-resolve — the gate retries automatically. */
+const TRANSIENT_REASONS: ReadonlySet<PushEnableReason> = new Set([
+  "no-service-worker",
+  "subscribe-failed",
+  "server-rejected",
+]);
+const AUTO_RETRY_DELAY_MS = 4_000;
+const MAX_AUTO_RETRIES = 3;
 
 export function NotificationGate({ children }: { children: React.ReactNode }) {
   const { status, checking, refresh } = usePushStatus();
@@ -20,6 +29,7 @@ export function NotificationGate({ children }: { children: React.ReactNode }) {
     reason: PushEnableReason;
     detail?: string;
   } | null>(null);
+  const autoRetryCount = useRef(0);
 
   const attemptEnable = useCallback(async () => {
     if (busy) return;
@@ -35,6 +45,29 @@ export function NotificationGate({ children }: { children: React.ReactNode }) {
       await refresh();
     }
   }, [busy, refresh]);
+
+  // Auto-retry for transient failures (SW not started yet, network hiccup).
+  // Resets the counter once the user is through or taps the button manually.
+  const currentReason: PushEnableReason | undefined =
+    failure?.reason ??
+    (status?.support && !status.support.ok ? status.support.reason : undefined);
+
+  useEffect(() => {
+    if (
+      !currentReason ||
+      !TRANSIENT_REASONS.has(currentReason) ||
+      autoRetryCount.current >= MAX_AUTO_RETRIES ||
+      busy ||
+      checking
+    ) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      autoRetryCount.current += 1;
+      void refresh();
+    }, AUTO_RETRY_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [currentReason, busy, checking, refresh]);
 
   // Still loading the initial status — don't flash the gate.
   if (checking && !status) return null;

@@ -174,6 +174,7 @@ export function ModuleRecordList({
                           col.field,
                           record.fieldValues ?? {},
                           fields.map((row) => row.id),
+                          fields,
                         )
                           ? formatFieldValue(col.field, record, ctx) || "—"
                           : "—"

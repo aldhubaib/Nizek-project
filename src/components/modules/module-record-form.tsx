@@ -118,9 +118,8 @@ export function ModuleRecordForm({
     ...catalog.sections.flatMap((section) => section.fields),
     ...catalog.unsectioned,
   ];
-  const fieldIds = allFields.map((field) => field.id);
   const canSave = allFields
-    .filter((field) => fieldShowsOnForm(field, mode, fieldValues, fieldIds))
+    .filter((field) => fieldShowsOnForm(field, mode, fieldValues, allFields))
     .every((field) =>
       requiredLayoutFieldIsFilled(field, {
         title,
@@ -133,7 +132,7 @@ export function ModuleRecordForm({
   const relatedFields = allFields.filter(
     (field) =>
       isRelatedDataLayoutField(field) &&
-      fieldShowsOnForm(field, mode, fieldValues, fieldIds),
+      fieldShowsOnForm(field, mode, fieldValues, allFields),
   );
   const showCompanies = relatedFields.some((field) => field.binding === "companies");
   const showContacts = relatedFields.some((field) => field.binding === "contacts");
@@ -311,7 +310,7 @@ export function ModuleRecordForm({
           const visible = section.fields.filter(
             (field) =>
               !isRelatedDataLayoutField(field) &&
-              fieldShowsOnForm(field, mode, fieldValues, fieldIds),
+              fieldShowsOnForm(field, mode, fieldValues, allFields),
           );
           if (visible.length === 0) return null;
           return (
@@ -343,14 +342,14 @@ export function ModuleRecordForm({
         {catalog.unsectioned.filter(
           (field) =>
             !isRelatedDataLayoutField(field) &&
-            fieldShowsOnForm(field, mode, fieldValues, fieldIds),
+            fieldShowsOnForm(field, mode, fieldValues, allFields),
         ).length > 0 && (
           <FormSection>
             {catalog.unsectioned
               .filter(
                 (field) =>
                   !isRelatedDataLayoutField(field) &&
-                  fieldShowsOnForm(field, mode, fieldValues, fieldIds),
+                  fieldShowsOnForm(field, mode, fieldValues, allFields),
               )
               .map((field) => (
                 <CatalogField

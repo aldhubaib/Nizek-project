@@ -224,6 +224,7 @@ export function TransitionDialog({
                     field,
                     customValues,
                     fields.map((row) => row.id),
+                    fields,
                   ),
                 )
                 .map((field) =>

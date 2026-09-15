@@ -207,7 +207,17 @@ export function fieldShowsOnForm(
   field: CustomFieldDTO,
   mode: "create" | "edit",
   values: Record<string, string>,
-  knownFieldIds?: Iterable<string>,
+  siblings?: Iterable<{
+    id: string;
+    visibility?: CustomFieldDTO["visibility"] | string | null;
+  }>,
 ): boolean {
-  return fieldAppliesOnForm(field, mode, values, knownFieldIds);
+  const catalog = siblings ? [...siblings] : undefined;
+  return fieldAppliesOnForm(
+    field,
+    mode,
+    values,
+    catalog?.map((row) => row.id),
+    catalog,
+  );
 }
