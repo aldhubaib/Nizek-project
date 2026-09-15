@@ -22,7 +22,7 @@ const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
  * service worker is registered. Awaiting it unguarded is what left the toggle
  * spinning and permanently disabled.
  */
-const SW_READY_TIMEOUT_MS = 15_000;
+const SW_READY_TIMEOUT_MS = 8_000;
 
 /** True when running as an installed PWA rather than a browser tab. */
 export function isStandaloneDisplayMode(): boolean {

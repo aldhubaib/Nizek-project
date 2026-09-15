@@ -3,24 +3,19 @@
 /**
  * Full-screen blocking gate that prevents access to the app until the user
  * grants notification permission and the push subscription is registered.
- * Rendered at the shell level so every route is gated.
+ *
+ * IMPORTANT: Children are ALWAYS rendered. The gate is an overlay on top, never
+ * a conditional return. This prevents the shell (Centrifugo, service worker,
+ * effects) from mounting and unmounting on every status change — which was the
+ * root cause of the infinite-loop reports on mobile.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { Bell, Loader2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { enablePush, pushSupported, pushPlatform } from "@/lib/push-client";
 import { describePushFailure, type PushEnableReason } from "@/lib/push-enable";
 import { usePushStatus } from "@/lib/use-push-status";
-
-/** Transient reasons that may self-resolve — the gate retries automatically. */
-const TRANSIENT_REASONS: ReadonlySet<PushEnableReason> = new Set([
-  "no-service-worker",
-  "subscribe-failed",
-  "server-rejected",
-]);
-const AUTO_RETRY_DELAY_MS = 4_000;
-const MAX_AUTO_RETRIES = 3;
 
 export function NotificationGate({ children }: { children: React.ReactNode }) {
   const { status, checking, refresh } = usePushStatus();
@@ -29,7 +24,6 @@ export function NotificationGate({ children }: { children: React.ReactNode }) {
     reason: PushEnableReason;
     detail?: string;
   } | null>(null);
-  const autoRetryCount = useRef(0);
 
   const attemptEnable = useCallback(async () => {
     if (busy) return;
@@ -46,45 +40,50 @@ export function NotificationGate({ children }: { children: React.ReactNode }) {
     }
   }, [busy, refresh]);
 
-  // Auto-retry for transient failures (SW not started yet, network hiccup).
-  // Resets the counter once the user is through or taps the button manually.
-  const currentReason: PushEnableReason | undefined =
-    failure?.reason ??
-    (status?.support && !status.support.ok ? status.support.reason : undefined);
+  // Decide whether to show the blocking overlay. The gate is invisible when:
+  //  - still running the initial/refresh status check (no flash)
+  //  - notifications are fully enabled
+  //  - push isn't supported (old browser, dev mode) — don't lock the app
+  const gated =
+    !checking &&
+    status != null &&
+    !status.enabled &&
+    pushSupported() &&
+    process.env.NODE_ENV === "production";
 
-  useEffect(() => {
-    if (
-      !currentReason ||
-      !TRANSIENT_REASONS.has(currentReason) ||
-      autoRetryCount.current >= MAX_AUTO_RETRIES ||
-      busy ||
-      checking
-    ) {
-      return;
-    }
-    const timer = setTimeout(() => {
-      autoRetryCount.current += 1;
-      void refresh();
-    }, AUTO_RETRY_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [currentReason, busy, checking, refresh]);
+  return (
+    <>
+      {children}
+      {gated && (
+        <GateOverlay
+          status={status}
+          failure={failure}
+          busy={busy}
+          checking={checking}
+          onEnable={attemptEnable}
+        />
+      )}
+    </>
+  );
+}
 
-  // Notifications are fully enabled — render the app normally.
-  if (status?.enabled) return <>{children}</>;
+// ---------------------------------------------------------------------------
+// Overlay — extracted so the main component stays small and readable.
+// ---------------------------------------------------------------------------
 
-  // Status is being checked or refreshed (initial load, post-enable, auto-
-  // retry). Show the app optimistically so the user never stares at a blank
-  // screen or a stale gate after they just granted permission.
-  if (checking) return <>{children}</>;
-
-  // Push isn't supported at all (old browser with no sw) or we're in dev
-  // where service workers are deliberately unregistered — let them through
-  // so the app isn't permanently locked.
-  if (!pushSupported() || process.env.NODE_ENV !== "production") {
-    return <>{children}</>;
-  }
-
-  // Build guidance for whatever is blocking.
+function GateOverlay({
+  status,
+  failure,
+  busy,
+  checking,
+  onEnable,
+}: {
+  status: import("@/lib/push-client").PushStatus | null;
+  failure: { reason: PushEnableReason; detail?: string } | null;
+  busy: boolean;
+  checking: boolean;
+  onEnable: () => void;
+}) {
   const shownReason: PushEnableReason | null = failure
     ? failure.reason
     : status?.support && !status.support.ok
@@ -113,13 +112,10 @@ export function NotificationGate({ children }: { children: React.ReactNode }) {
 
         {/* Title & body */}
         <div className="space-y-2 text-center">
-          <h2 className="text-lg font-semibold">
-            Notifications Required
-          </h2>
+          <h2 className="text-lg font-semibold">Notifications Required</h2>
           <p className="text-s text-muted-foreground">
-            You must enable notifications in order to use the system.
-            This ensures you never miss important messages, mentions, and
-            updates.
+            You must enable notifications in order to use the system. This
+            ensures you never miss important messages, mentions, and updates.
           </p>
         </div>
 
@@ -149,7 +145,7 @@ export function NotificationGate({ children }: { children: React.ReactNode }) {
         <Button
           className="w-full"
           size="lg"
-          onClick={() => void attemptEnable()}
+          onClick={onEnable}
           disabled={busy || checking}
         >
           {busy || checking ? (

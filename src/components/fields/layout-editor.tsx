@@ -6,9 +6,11 @@ import {
   DndContext,
   PointerSensor,
   closestCorners,
+  pointerWithin,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
@@ -53,6 +55,29 @@ import {
 import { cn } from "@/lib/utils";
 
 const UNSECTIONED = "unsectioned";
+const SECTION_SORTABLE = "section:";
+const LANE = "lane:";
+
+function sectionSortableId(sectionId: string) {
+  return `${SECTION_SORTABLE}${sectionId}`;
+}
+
+function laneId(containerId: string) {
+  return `${LANE}${containerId}`;
+}
+
+/** Fields collide with lanes and other fields; section cards only collide with sections. */
+const layoutCollision: CollisionDetection = (args) => {
+  const draggingSection = args.active.data.current?.type === "section";
+  const droppableContainers = args.droppableContainers.filter((container) => {
+    const kind = container.data.current?.type;
+    return draggingSection ? kind === "section" : kind !== "section";
+  });
+  const filtered = { ...args, droppableContainers };
+  const pointerHits = pointerWithin(filtered);
+  if (pointerHits.length > 0) return pointerHits;
+  return closestCorners(filtered);
+};
 
 export function LayoutEditor({
   initial,
@@ -258,11 +283,13 @@ export function LayoutEditor({
         <DndContext
           id={catalog.layoutId ? `layout-${catalog.layoutId}` : "layout-editor"}
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={layoutCollision}
           onDragEnd={onDragEnd}
         >
           <SortableContext
-            items={catalog.sections.map((section) => section.id)}
+            items={catalog.sections.map((section) =>
+              sectionSortableId(section.id),
+            )}
             strategy={verticalListSortingStrategy}
           >
             {catalog.sections.map((section) => (
@@ -381,11 +408,9 @@ export function LayoutEditor({
                     patch.sectionId !== undefined &&
                     (selected.sectionId ?? null) !==
                       (updated.sectionId ?? null);
-                  setNextCatalog((prev) => {
-                    const next = upsertField(prev, updated);
-                    if (moved) persistOrder(next);
-                    return next;
-                  });
+                  const next = upsertField(catalog, updated);
+                  setNextCatalog(() => next);
+                  if (moved) persistOrder(next);
                 },
               )
             }
@@ -451,19 +476,20 @@ function LayoutBlock({
     transition,
     isDragging,
   } = useSortable({
-    id: sortable ? itemId : `section-disabled-${itemId}`,
+    id: sortable ? sectionSortableId(itemId) : `section-disabled-${itemId}`,
     data: { type: "section" },
     disabled: !sortable,
   });
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
-    id: itemId,
-    disabled: !droppableId || sortable,
+    id: droppableId ? laneId(droppableId) : `lane-disabled-${itemId}`,
+    data: { type: "lane", containerId: droppableId },
+    disabled: !droppableId,
   });
   const two = columns === 2;
 
   return (
     <section
-      ref={sortable ? setSortableRef : droppableId ? setDroppableRef : undefined}
+      ref={sortable ? setSortableRef : undefined}
       style={
         sortable
           ? { transform: CSS.Transform.toString(transform), transition }
@@ -471,7 +497,6 @@ function LayoutBlock({
       }
       className={cn(
         "rounded-lg border border-border/60 bg-background/40 p-3",
-        isOver && "border-primary/50 bg-primary/5",
         isDragging && "z-10 opacity-70",
       )}
     >
@@ -521,7 +546,14 @@ function LayoutBlock({
           </button>
         )}
       </div>
-      <div className={two ? "grid grid-cols-2 gap-1.5" : "space-y-1.5"}>
+      <div
+        ref={setDroppableRef}
+        className={cn(
+          two ? "grid grid-cols-2 gap-1.5" : "space-y-1.5",
+          "min-h-8 rounded-md",
+          isOver && "bg-primary/5 ring-1 ring-primary/40",
+        )}
+      >
         {children}
       </div>
     </section>
@@ -1048,7 +1080,7 @@ function replaceField(
 }
 
 /** Keep slot on property edits; only jump when the section actually changes. */
-function upsertField(
+export function upsertField(
   prev: CustomFieldCatalogDTO,
   field: CustomFieldDTO,
 ): CustomFieldCatalogDTO {
@@ -1097,13 +1129,25 @@ function placementsOf(catalog: CustomFieldCatalogDTO) {
   ];
 }
 
-function containerOf(catalog: CustomFieldCatalogDTO, id: string): string | null {
-  if (id === UNSECTIONED) return UNSECTIONED;
-  if (catalog.sections.some((section) => section.id === id)) return id;
-  if (catalog.unsectioned.some((field) => field.id === id)) return UNSECTIONED;
+export function containerOf(catalog: CustomFieldCatalogDTO, id: string): string | null {
+  const value = String(id);
+  if (value === UNSECTIONED || value === laneId(UNSECTIONED)) return UNSECTIONED;
+  if (value.startsWith(LANE)) {
+    const lane = value.slice(LANE.length);
+    if (lane === UNSECTIONED) return UNSECTIONED;
+    return catalog.sections.some((section) => section.id === lane) ? lane : null;
+  }
+  if (value.startsWith(SECTION_SORTABLE)) {
+    const sectionId = value.slice(SECTION_SORTABLE.length);
+    return catalog.sections.some((section) => section.id === sectionId)
+      ? sectionId
+      : null;
+  }
+  if (catalog.sections.some((section) => section.id === value)) return value;
+  if (catalog.unsectioned.some((field) => field.id === value)) return UNSECTIONED;
   return (
     catalog.sections.find((section) =>
-      section.fields.some((field) => field.id === id),
+      section.fields.some((field) => field.id === value),
     )?.id ?? null
   );
 }
@@ -1130,29 +1174,24 @@ function withFields(
   };
 }
 
-function moveDraggedSection(
+export function moveDraggedSection(
   catalog: CustomFieldCatalogDTO,
   movedId: string,
   overId: string,
 ): CustomFieldCatalogDTO | null {
-  const from = catalog.sections.findIndex((section) => section.id === movedId);
-  if (from < 0) return null;
-  const overSectionId =
-    catalog.sections.find((section) => section.id === overId)?.id ??
-    catalog.sections.find((section) =>
-      section.fields.some((field) => field.id === overId),
-    )?.id ??
-    null;
-  if (!overSectionId) return null;
+  const fromId = containerOf(catalog, movedId);
+  const overSectionId = containerOf(catalog, overId);
+  if (!fromId || !overSectionId || overSectionId === UNSECTIONED) return null;
+  const from = catalog.sections.findIndex((section) => section.id === fromId);
   const to = catalog.sections.findIndex((section) => section.id === overSectionId);
-  if (to < 0 || from === to) return null;
+  if (from < 0 || to < 0 || from === to) return null;
   return {
     ...catalog,
     sections: arrayMove(catalog.sections, from, to),
   };
 }
 
-function moveDraggedField(
+export function moveDraggedField(
   catalog: CustomFieldCatalogDTO,
   movedId: string,
   overId: string,
