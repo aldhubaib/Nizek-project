@@ -347,11 +347,19 @@ export function LayoutEditor({
             sections={catalog.sections}
             siblings={allFields}
             pending={pending}
-            onUpdate={(next) =>
+            onUpdate={(patch) =>
               run(
-                () => updateCustomField(selected.id, next),
+                () => updateCustomField(selected.id, patch),
                 (updated) => {
-                  setNextCatalog((prev) => moveField(prev, updated));
+                  const moved =
+                    patch.sectionId !== undefined &&
+                    (selected.sectionId ?? null) !==
+                      (updated.sectionId ?? null);
+                  setNextCatalog((prev) => {
+                    const next = upsertField(prev, updated);
+                    if (moved) persistOrder(next);
+                    return next;
+                  });
                 },
               )
             }
@@ -359,7 +367,7 @@ export function LayoutEditor({
               run(
                 () => updateCustomField(id, { visibility }),
                 (updated) => {
-                  setNextCatalog((prev) => moveField(prev, updated));
+                  setNextCatalog((prev) => upsertField(prev, updated));
                 },
               )
             }
@@ -951,6 +959,45 @@ function VisibilityRules({
       )}
     </div>
   );
+}
+
+function sectionIdOf(
+  catalog: CustomFieldCatalogDTO,
+  fieldId: string,
+): string | null {
+  if (catalog.unsectioned.some((field) => field.id === fieldId)) return null;
+  return (
+    catalog.sections.find((section) =>
+      section.fields.some((field) => field.id === fieldId),
+    )?.id ?? null
+  );
+}
+
+function replaceField(
+  prev: CustomFieldCatalogDTO,
+  field: CustomFieldDTO,
+): CustomFieldCatalogDTO {
+  return {
+    ...prev,
+    sections: prev.sections.map((section) => ({
+      ...section,
+      fields: section.fields.map((row) => (row.id === field.id ? field : row)),
+    })),
+    unsectioned: prev.unsectioned.map((row) =>
+      row.id === field.id ? field : row,
+    ),
+  };
+}
+
+/** Keep slot on property edits; only jump when the section actually changes. */
+function upsertField(
+  prev: CustomFieldCatalogDTO,
+  field: CustomFieldDTO,
+): CustomFieldCatalogDTO {
+  if (sectionIdOf(prev, field.id) === (field.sectionId ?? null)) {
+    return replaceField(prev, field);
+  }
+  return moveField(prev, field);
 }
 
 function moveField(

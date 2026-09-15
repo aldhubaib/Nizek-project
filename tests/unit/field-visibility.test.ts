@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clearHiddenFieldValues,
   fieldAppliesOnForm,
   fieldIsLogicallyVisible,
   parseFieldAnswers,
@@ -83,5 +84,76 @@ describe("parseFieldVisibility", () => {
   it("round-trips a rule", () => {
     const rule = { dependsOn: "type", values: ["Company"] };
     expect(parseFieldVisibility(stringifyFieldVisibility(rule))).toEqual(rule);
+  });
+});
+
+describe("clearHiddenFieldValues", () => {
+  const organizer = {
+    id: "organizer",
+    visibility: { dependsOn: "type", values: ["Company"] },
+  };
+
+  it("clears a hidden field and keeps a visible one", () => {
+    expect(
+      clearHiddenFieldValues(
+        [{ id: "type" }, organizer, { id: "contact" }],
+        {
+          type: "Personal",
+          organizer: '["co_1"]',
+          contact: '["c_1"]',
+        },
+      ),
+    ).toEqual({
+      type: "Personal",
+      organizer: "",
+      contact: '["c_1"]',
+    });
+  });
+
+  it("keeps the answer while the pick list still matches", () => {
+    expect(
+      clearHiddenFieldValues([{ id: "type" }, organizer], {
+        type: "Company",
+        organizer: '["co_1"]',
+      }),
+    ).toEqual({
+      type: "Company",
+      organizer: '["co_1"]',
+    });
+  });
+
+  it("clears nested fields after their parent is wiped", () => {
+    expect(
+      clearHiddenFieldValues(
+        [
+          { id: "kind" },
+          {
+            id: "mid",
+            visibility: { dependsOn: "kind", values: ["Yes"] },
+          },
+          {
+            id: "leaf",
+            visibility: { dependsOn: "mid", values: ["Option2"] },
+          },
+        ],
+        { kind: "No", mid: "Option2", leaf: "secret" },
+      ),
+    ).toEqual({ kind: "No", mid: "", leaf: "" });
+  });
+
+  it("leaves bound fields alone", () => {
+    expect(
+      clearHiddenFieldValues(
+        [
+          { id: "type" },
+          {
+            id: "title",
+            binding: "title",
+            visibility: { dependsOn: "type", values: ["Company"] },
+          },
+        ],
+        { type: "Personal", title: "Acme" },
+      ),
+    ).toEqual({ type: "Personal", title: "Acme" });
   });
 });

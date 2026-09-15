@@ -6,7 +6,12 @@ import {
   missingNativeFields,
   nativeFieldIsFilled,
 } from "@/lib/fields/validate";
-import { fieldIsLogicallyVisible, parseFieldVisibility, type FieldVisibility } from "@/lib/fields/visibility";
+import {
+  clearHiddenFieldValues,
+  fieldIsLogicallyVisible,
+  parseFieldVisibility,
+  type FieldVisibility,
+} from "@/lib/fields/visibility";
 import {
   configFields,
   configItems,
@@ -251,6 +256,7 @@ export function validateDuring(
 export function applySetFieldActions(
   actions: WorkflowActionDef[],
   snapshot: FieldSnapshot,
+  customFields: CustomFieldLookup[] = [],
 ): FieldSnapshot {
   let next = snapshot;
   for (const action of actions) {
@@ -269,7 +275,11 @@ export function applySetFieldActions(
       };
     }
   }
-  return next;
+  if (customFields.length === 0) return next;
+  return {
+    ...next,
+    custom: clearHiddenFieldValues(customFields, next.custom),
+  };
 }
 
 function applyNativeSet(

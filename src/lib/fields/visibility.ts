@@ -123,6 +123,45 @@ export function fieldAppliesOnForm(
   );
 }
 
+type VisibilityLayoutField = {
+  id: string;
+  binding?: string | null;
+  visibility?: FieldVisibility | string | null;
+};
+
+/**
+ * Drop answers on fields the pick list has hidden. Walks the chain so a
+ * nested “Show when” field is cleared after its parent is wiped.
+ */
+export function clearHiddenFieldValues(
+  fields: VisibilityLayoutField[],
+  values: Record<string, string>,
+  knownFieldIds?: Iterable<string>,
+): Record<string, string> {
+  const next = { ...values };
+  const ids = knownFieldIds ?? fields.map((field) => field.id);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const field of fields) {
+      if (field.binding) continue;
+      if (
+        fieldIsLogicallyVisible(
+          { visibility: parseFieldVisibility(field.visibility) },
+          next,
+          ids,
+        )
+      ) {
+        continue;
+      }
+      if (!next[field.id]?.trim()) continue;
+      next[field.id] = "";
+      changed = true;
+    }
+  }
+  return next;
+}
+
 function normalizeVisibility(
   dependsOn: string,
   values: string[],

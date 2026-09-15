@@ -894,22 +894,30 @@ export async function saveCustomFieldValues(input: {
 
   await prisma.$transaction(
     entries.map(([fieldId, value]) =>
-      prisma.customFieldValue.upsert({
-        where: {
-          entityType_recordId_fieldId: {
-            entityType: input.entityType,
-            recordId: input.recordId,
-            fieldId,
-          },
-        },
-        create: {
-          entityType: input.entityType,
-          recordId: input.recordId,
-          fieldId,
-          value,
-        },
-        update: { value },
-      }),
+      value.trim()
+        ? prisma.customFieldValue.upsert({
+            where: {
+              entityType_recordId_fieldId: {
+                entityType: input.entityType,
+                recordId: input.recordId,
+                fieldId,
+              },
+            },
+            create: {
+              entityType: input.entityType,
+              recordId: input.recordId,
+              fieldId,
+              value,
+            },
+            update: { value },
+          })
+        : prisma.customFieldValue.deleteMany({
+            where: {
+              entityType: input.entityType,
+              recordId: input.recordId,
+              fieldId,
+            },
+          }),
     ),
   );
 }

@@ -6,7 +6,10 @@ import { requireContactsAccess } from "@/lib/contacts-access";
 import { getModule } from "@/lib/modules/registry";
 import { applyLayoutTextScripts } from "@/lib/fields/text-config";
 import { customFieldIsFilled } from "@/lib/fields/validate";
-import { fieldAppliesOnForm } from "@/lib/fields/visibility";
+import {
+  clearHiddenFieldValues,
+  fieldAppliesOnForm,
+} from "@/lib/fields/visibility";
 import { isCustomFieldType, type CustomFieldType } from "@/lib/fields/types";
 import {
   RELATION_MODEL_LABEL,
@@ -332,6 +335,11 @@ async function cleanInput(
     .map((field) => field.label);
   if (missing.length > 0) throw new Error(`Fill ${missing.join(", ")}`);
   if (!title) title = "Untitled";
+  fieldValues = clearHiddenFieldValues(
+    layoutFields,
+    fieldValues,
+    layoutFieldIds,
+  );
 
   for (const field of layoutFields) {
     if (field.binding || field.type !== "relation") continue;
@@ -1008,6 +1016,7 @@ export async function moveDirectoryRecord(
     const after = applySetFieldActions(
       [...grouped.before, ...grouped.after],
       merged,
+      fieldLookup,
     );
 
     if (entityType === "contact") {

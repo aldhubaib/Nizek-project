@@ -317,6 +317,7 @@ export async function moveDealToStage(
     const after = applySetFieldActions(
       [...grouped.before, ...grouped.after],
       merged,
+      fieldLookup,
     );
 
     await prisma.$transaction(async (tx) => {

@@ -308,6 +308,33 @@ describe("actionsForMove / set_field", () => {
     expect(next.custom.fld_x).toBe("done");
   });
 
+  it("clears answers hidden after a pick list is set", () => {
+    const next = applySetFieldActions(
+      [
+        action({
+          type: "set_field",
+          hook: "after",
+          config: { field: "type", value: "Personal" },
+        }),
+      ],
+      {
+        ...filled,
+        custom: { type: "Company", organizer: '["co_1"]' },
+      },
+      [
+        { id: "type", label: "Type", type: "select" },
+        {
+          id: "organizer",
+          label: "Organizer",
+          type: "relation",
+          visibility: { dependsOn: "type", values: ["Company"] },
+        },
+      ],
+    );
+    expect(next.custom.type).toBe("Personal");
+    expect(next.custom.organizer).toBe("");
+  });
+
   it("collects require_fields ids", () => {
     expect(
       requiredFieldIds([

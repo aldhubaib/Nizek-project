@@ -5,7 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { requireContactsAccess } from "@/lib/contacts-access";
 import { getCustomFieldValues, saveCustomFieldValues } from "@/actions/custom-field";
 import { customFieldIsFilled } from "@/lib/fields/validate";
-import { fieldAppliesOnForm } from "@/lib/fields/visibility";
+import {
+  clearHiddenFieldValues,
+  fieldAppliesOnForm,
+} from "@/lib/fields/visibility";
 import { isCustomFieldType } from "@/lib/fields/types";
 import {
   RELATION_MODEL_LABEL,
@@ -263,6 +266,11 @@ async function cleanInput(input: DealInput, mode: "create" | "edit") {
     throw new Error(`Fill ${missing.join(", ")}`);
   }
   if (!title) title = "Untitled";
+  fieldValues = clearHiddenFieldValues(
+    layoutFields,
+    fieldValues,
+    layoutFieldIds,
+  );
 
   for (const field of layoutFields) {
     if (field.binding || field.type !== "relation") continue;
