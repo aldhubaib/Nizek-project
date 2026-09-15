@@ -339,7 +339,26 @@ export async function listWorkflowTransitions(
   return rows.map(toTransitionDTO);
 }
 
-export async function listWorkflowUsers(): Promise<WorkflowUserOption[]> {
+export async function listWorkflowUsers(
+  projectId?: string,
+): Promise<WorkflowUserOption[]> {
+  if (projectId) {
+    await requireProjectMember(projectId);
+    const members = await prisma.projectMember.findMany({
+      where: { projectId, user: { blocked: false } },
+      select: {
+        user: { select: { id: true, name: true, email: true, imageUrl: true } },
+      },
+      orderBy: { user: { name: "asc" } },
+    });
+    return members.map(({ user }) => ({
+      id: user.id,
+      name: user.name?.trim() || user.email,
+      email: user.email,
+      imageUrl: user.imageUrl,
+    }));
+  }
+
   await requireUser();
   const pending = await prisma.pendingTeamInvite.findMany({
     select: { email: true },

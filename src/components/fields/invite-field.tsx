@@ -15,7 +15,6 @@ import { CountryField } from "@/components/fields/country-field";
 import { LocationPicker } from "@/components/fields/location-picker";
 import type { WorkflowUserOption } from "@/actions/workflow";
 import { parseCountryCodes, stringifyCountryCodes } from "@/lib/countries";
-import type { RelatedRecordOption } from "@/lib/fields/relations";
 import {
   addHoursIso,
   attendeeKey,
@@ -108,35 +107,27 @@ export function InviteField({
   value,
   onChange,
   users,
-  contacts,
 }: {
   value: string;
   onChange: (next: string) => void;
   users: WorkflowUserOption[];
-  contacts: RelatedRecordOption[];
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const invite = parseInviteValue(value);
 
-  const people = useMemo<Person[]>(() => {
-    const fromUsers: Person[] = users.map((user) => ({
-      kind: "user",
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      imageUrl: user.imageUrl,
-    }));
-    const fromContacts: Person[] = contacts.map((contact) => ({
-      kind: "contact",
-      id: contact.id,
-      name: contact.title,
-      email: contact.subtitle,
-      imageUrl: null,
-    }));
-    return [...fromUsers, ...fromContacts];
-  }, [users, contacts]);
+  const people = useMemo<Person[]>(
+    () =>
+      users.map((user) => ({
+        kind: "user",
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        imageUrl: user.imageUrl,
+      })),
+    [users],
+  );
 
   const selectedKeys = new Set(invite.attendees.map(attendeeKey));
 
@@ -257,7 +248,7 @@ export function InviteField({
       />
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <Label className="text-xs">People</Label>
+          <Label className="text-xs">Attendance</Label>
           {invite.attendees.length > 0 ? (
             <InviteRsvpSummary attendees={invite.attendees} />
           ) : null}
@@ -276,7 +267,7 @@ export function InviteField({
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
               {invite.attendees.length === 0 ? (
                 <span className="text-s text-muted-foreground">
-                  Select people…
+                  Select attendance…
                 </span>
               ) : (
                 invite.attendees.map((attendee) => {
@@ -340,7 +331,7 @@ export function InviteField({
                 ref={searchRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search team and contacts"
+                placeholder="Search the project"
                 className="h-8 ps-8 text-s"
               />
             </div>
@@ -375,8 +366,7 @@ export function InviteField({
                               {person.name}
                             </span>
                             <span className="block truncate text-xs text-muted-foreground">
-                              {person.kind === "user" ? "Team" : "Contact"}
-                              {person.email ? ` · ${person.email}` : ""}
+                              {person.email}
                             </span>
                           </span>
                           {on && (
@@ -392,8 +382,8 @@ export function InviteField({
           </PopoverContent>
         </Popover>
         <p className="text-xs text-muted-foreground">
-          Saving does not send. The blueprint Send invite action emails these
-          people when the record arrives at that stage.
+          Saving does not send. The blueprint Send invite action emails the
+          attendance when the record arrives at that stage.
         </p>
       </div>
     </div>

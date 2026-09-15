@@ -95,7 +95,6 @@ export function FieldControl({
             value={value}
             onChange={onChange}
             users={users}
-            contacts={related.contact}
           />
         </div>
       ) : field.type === "priority" ? (

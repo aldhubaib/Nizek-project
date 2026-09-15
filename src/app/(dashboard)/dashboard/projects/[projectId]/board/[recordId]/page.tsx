@@ -30,7 +30,7 @@ export default async function BoardRecordPage({
     getBoardRecord(projectId, recordId),
     listWorkflows("board", projectId),
     getAllLayoutCatalogs("board", projectId),
-    listWorkflowUsers(),
+    listWorkflowUsers(projectId),
     canAccessContacts(userId),
   ]);
   if (!record) notFound();

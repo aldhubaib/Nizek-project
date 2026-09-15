@@ -28,7 +28,7 @@ export default async function ProjectBoardBlueprintPage({
   const [settings, catalogs, users] = await Promise.all([
     getWorkflowSettings("board", projectId),
     getAllLayoutCatalogs("board", projectId),
-    listWorkflowUsers(),
+    listWorkflowUsers(projectId),
   ]);
 
   return (

@@ -35,7 +35,7 @@ export default async function NewBoardRecordPage({
       searchParams,
       listWorkflows("board", projectId),
       getAllLayoutCatalogs("board", projectId),
-      listWorkflowUsers(),
+      listWorkflowUsers(projectId),
       canAccessContacts(userId),
     ]);
   const related = canContacts

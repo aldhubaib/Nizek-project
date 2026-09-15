@@ -469,7 +469,7 @@ export async function getProjectBoard(
     listDealStages(selected),
     listBoardRecords(projectId, selected),
     listWorkflowTransitions(selected),
-    listWorkflowUsers(),
+    listWorkflowUsers(projectId),
     listCustomFields("board", layoutId, projectId),
   ]);
 

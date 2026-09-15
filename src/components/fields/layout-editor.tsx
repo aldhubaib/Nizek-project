@@ -654,7 +654,7 @@ function FieldProperties({
       )}
       {field.type === "invite" && (
         <p className="text-xs text-muted-foreground">
-          People, time, and a Google Maps pin on the form. Sending waits for a
+          Attendance, time, and a Google Maps pin on the form. Sending waits for a
           Send invite action on the blueprint.
         </p>
       )}
