@@ -28,6 +28,7 @@ import {
   deleteCustomField,
   deleteCustomFieldSection,
   placeCustomFields,
+  placeCustomFieldSections,
   updateCustomField,
   updateCustomFieldSection,
   type CustomFieldCatalogDTO,
@@ -116,11 +117,30 @@ export function LayoutEditor({
     );
   }
 
+  function persistSectionOrder(next: CustomFieldCatalogDTO) {
+    if (!next.layoutId) return;
+    run(
+      () =>
+        placeCustomFieldSections({
+          layoutId: next.layoutId!,
+          orderedIds: next.sections.map((section) => section.id),
+        }),
+      () => {},
+    );
+  }
+
   function onDragEnd(event: DragEndEvent) {
     const overId = event.over?.id;
     if (!overId) return;
     const moved = String(event.active.id);
     const over = String(overId);
+    if (event.active.data.current?.type === "section") {
+      const next = moveDraggedSection(catalog, moved, over);
+      if (!next) return;
+      setNextCatalog(() => next);
+      persistSectionOrder(next);
+      return;
+    }
     const next = moveDraggedField(catalog, moved, over);
     if (!next) return;
     setNextCatalog(() => next);
@@ -241,10 +261,15 @@ export function LayoutEditor({
           collisionDetection={closestCorners}
           onDragEnd={onDragEnd}
         >
-          {catalog.sections.map((section) => (
+          <SortableContext
+            items={catalog.sections.map((section) => section.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {catalog.sections.map((section) => (
             <LayoutBlock
               key={section.id}
               droppableId={section.id}
+              sortable
               title={section.name}
               columns={section.columns}
               onColumns={(columns) =>
@@ -316,6 +341,7 @@ export function LayoutEditor({
               </SortableContext>
             </LayoutBlock>
           ))}
+          </SortableContext>
           <LayoutBlock droppableId={UNSECTIONED} title="More fields">
             <SortableContext
               items={catalog.unsectioned.map((field) => field.id)}
@@ -401,6 +427,7 @@ function LayoutBlock({
   title,
   children,
   droppableId,
+  sortable = false,
   columns = 1,
   onColumns,
   onRename,
@@ -409,26 +436,57 @@ function LayoutBlock({
   title: string;
   children: ReactNode;
   droppableId?: string;
+  sortable?: boolean;
   columns?: number;
   onColumns?: (columns: 1 | 2) => void;
   onRename?: (name: string) => void;
   onDelete?: () => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: droppableId ?? title,
-    disabled: !droppableId,
+  const itemId = droppableId ?? title;
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setSortableRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: sortable ? itemId : `section-disabled-${itemId}`,
+    data: { type: "section" },
+    disabled: !sortable,
+  });
+  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
+    id: itemId,
+    disabled: !droppableId || sortable,
   });
   const two = columns === 2;
 
   return (
     <section
-      ref={droppableId ? setNodeRef : undefined}
+      ref={sortable ? setSortableRef : droppableId ? setDroppableRef : undefined}
+      style={
+        sortable
+          ? { transform: CSS.Transform.toString(transform), transition }
+          : undefined
+      }
       className={cn(
         "rounded-lg border border-border/60 bg-background/40 p-3",
         isOver && "border-primary/50 bg-primary/5",
+        isDragging && "z-10 opacity-70",
       )}
     >
       <div className="mb-2 flex items-center gap-2">
+        {sortable && (
+          <button
+            type="button"
+            className="shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing"
+            aria-label={`Drag ${title} section`}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-3.5 w-3.5" />
+          </button>
+        )}
         {onRename ? (
           <input
             defaultValue={title}
@@ -486,7 +544,7 @@ function FieldRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: field.id });
+  } = useSortable({ id: field.id, data: { type: "field" } });
 
   return (
     <div
@@ -1069,6 +1127,28 @@ function withFields(
     sections: catalog.sections.map((section) =>
       section.id === containerId ? { ...section, fields } : section,
     ),
+  };
+}
+
+function moveDraggedSection(
+  catalog: CustomFieldCatalogDTO,
+  movedId: string,
+  overId: string,
+): CustomFieldCatalogDTO | null {
+  const from = catalog.sections.findIndex((section) => section.id === movedId);
+  if (from < 0) return null;
+  const overSectionId =
+    catalog.sections.find((section) => section.id === overId)?.id ??
+    catalog.sections.find((section) =>
+      section.fields.some((field) => field.id === overId),
+    )?.id ??
+    null;
+  if (!overSectionId) return null;
+  const to = catalog.sections.findIndex((section) => section.id === overSectionId);
+  if (to < 0 || from === to) return null;
+  return {
+    ...catalog,
+    sections: arrayMove(catalog.sections, from, to),
   };
 }
 

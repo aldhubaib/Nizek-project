@@ -598,6 +598,36 @@ export async function deleteCustomFieldSection(
   });
 }
 
+export async function placeCustomFieldSections(input: {
+  layoutId: string;
+  orderedIds: string[];
+}): Promise<ActionResult<{ ids: string[] }>> {
+  return fieldAction("section-place", async () => {
+    const layout = await requireLayout(input.layoutId);
+    const existing = await prisma.customFieldSection.findMany({
+      where: { layoutId: input.layoutId },
+      select: { id: true },
+    });
+    const known = new Set(existing.map((row) => row.id));
+    if (
+      input.orderedIds.length !== existing.length ||
+      input.orderedIds.some((id) => !known.has(id))
+    ) {
+      throw new Error("The list changed — reload and try again");
+    }
+    await prisma.$transaction(
+      planReorder(input.orderedIds).map((row) =>
+        prisma.customFieldSection.update({
+          where: { id: row.id },
+          data: { position: row.position },
+        }),
+      ),
+    );
+    revalidate(layout.entityType, layout.projectId);
+    return { ids: input.orderedIds };
+  });
+}
+
 export async function createCustomField(input: {
   entityType?: WorkflowEntityType;
   layoutId?: string | null;

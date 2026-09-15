@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Building2, Contact, Plus, Search, X } from "lucide-react";
+import { Building2, Contact, Loader2, Plus, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -239,14 +239,23 @@ export function AttachPicker({
   empty,
   items,
   onPick,
+  canCreate = false,
+  creating = false,
+  createError = null,
+  onCreate,
 }: {
   label: string;
   empty: string;
   items: { id: string; title: string; subtitle: string }[];
   onPick: (id: string) => void;
+  canCreate?: boolean;
+  creating?: boolean;
+  createError?: string | null;
+  onCreate?: (title: string) => Promise<boolean | void>;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -257,6 +266,25 @@ export function AttachPicker({
         item.subtitle.toLowerCase().includes(q),
     );
   }, [items, query]);
+  const typed = query.trim();
+  const exact = typed
+    ? items.some((item) => item.title.toLowerCase() === typed.toLowerCase())
+    : false;
+  const showCreate = Boolean(canCreate && onCreate && typed && !exact);
+
+  function pick(id: string) {
+    onPick(id);
+    setOpen(false);
+    setQuery("");
+  }
+
+  async function createTyped() {
+    if (!showCreate || !onCreate) return;
+    const ok = await onCreate(typed);
+    if (ok === false) return;
+    setOpen(false);
+    setQuery("");
+  }
 
   return (
     <Popover
@@ -273,21 +301,34 @@ export function AttachPicker({
       >
         <Plus className="size-4" />
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-72 gap-2 p-2">
-        <div className="relative">
+      <PopoverContent align="end" className="flex w-72 max-h-[min(20rem,var(--available-height))] flex-col overflow-hidden p-2">
+        <div className="relative shrink-0">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
+            ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              e.preventDefault();
+              if (showCreate) {
+                void createTyped();
+                return;
+              }
+              if (filtered[0]) pick(filtered[0].id);
+            }}
             placeholder="Search"
             className="h-8 ps-8 text-s"
-            autoFocus
           />
         </div>
-        <div className="max-h-64 overflow-y-auto">
-          {filtered.length === 0 ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {filtered.length === 0 && !showCreate ? (
             <p className="px-2 py-6 text-center text-s text-muted-foreground">
-              {items.length === 0 ? empty : `No matches for “${query.trim()}”`}
+              {items.length === 0
+                ? canCreate
+                  ? "Type a name to add one"
+                  : empty
+                : `No matches for “${typed}”`}
             </p>
           ) : (
             <ul>
@@ -295,11 +336,7 @@ export function AttachPicker({
                 <li key={item.id}>
                   <button
                     type="button"
-                    onClick={() => {
-                      onPick(item.id);
-                      setOpen(false);
-                      setQuery("");
-                    }}
+                    onClick={() => pick(item.id)}
                     className={cn(
                       "flex w-full flex-col rounded-md px-2 py-1.5 text-start transition-colors hover:bg-accent/60",
                     )}
@@ -315,9 +352,33 @@ export function AttachPicker({
                   </button>
                 </li>
               ))}
+              {showCreate && (
+                <li>
+                  <button
+                    type="button"
+                    disabled={creating}
+                    onClick={() => void createTyped()}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-s hover:bg-accent/60 disabled:opacity-50"
+                  >
+                    {creating ? (
+                      <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                    ) : (
+                      <Plus className="size-3.5 shrink-0" />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">
+                      Create “{typed}”
+                    </span>
+                  </button>
+                </li>
+              )}
             </ul>
           )}
         </div>
+        {createError && (
+          <p className="shrink-0 px-2 pt-1 text-xs text-destructive">
+            {createError}
+          </p>
+        )}
       </PopoverContent>
     </Popover>
   );

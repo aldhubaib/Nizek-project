@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Briefcase,
@@ -8,6 +8,8 @@ import {
   Check,
   ChevronDown,
   Contact,
+  Loader2,
+  Plus,
   Search,
   User,
   type LucideIcon,
@@ -20,11 +22,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  COMBOBOX_COLLISION_AVOIDANCE,
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import type { CustomFieldDTO } from "@/actions/custom-field";
+import { createRelatedRecord } from "@/actions/related-records";
 import type { RelatedRecordOption } from "@/lib/fields/relations";
 import {
   RELATION_MODEL_LABEL,
@@ -57,11 +61,42 @@ export function RelatedField({
   const model = field.relation?.model ?? "company";
   const multiple = field.relation?.multiple ?? true;
   const attachedIds = parseRelationIds(value);
-  const catalog = useMemo(
-    () => options.filter((row) => row.id !== excludeId),
-    [options, excludeId],
-  );
+  const [created, setCreated] = useState<RelatedRecordOption[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const catalog = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: RelatedRecordOption[] = [];
+    for (const row of [...created, ...options]) {
+      if (row.id === excludeId || seen.has(row.id)) continue;
+      seen.add(row.id);
+      merged.push(row);
+    }
+    return merged;
+  }, [created, options, excludeId]);
   const modelLabel = RELATION_MODEL_LABEL[model];
+  const canCreate = model !== "user";
+
+  async function createRecord(title: string): Promise<string | null> {
+    if (!canCreate || creating) return null;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const result = await createRelatedRecord(model, title);
+      if (!result.ok) {
+        setCreateError(result.error);
+        return null;
+      }
+      setCreated((prev) =>
+        prev.some((row) => row.id === result.data.id)
+          ? prev
+          : [...prev, result.data],
+      );
+      return result.data.id;
+    } finally {
+      setCreating(false);
+    }
+  }
 
   if (!multiple) {
     const selectedId = attachedIds[0] ?? "";
@@ -82,6 +117,10 @@ export function RelatedField({
               ? [selected, ...catalog]
               : catalog
           }
+          canCreate={canCreate}
+          creating={creating}
+          createError={createError}
+          onCreate={createRecord}
           onChange={(id) => onChange(stringifyRelationIds(id ? [id] : []))}
         />
       </div>
@@ -118,6 +157,16 @@ export function RelatedField({
               title: row.title,
               subtitle: row.subtitle,
             }))}
+            canCreate={canCreate}
+            creating={creating}
+            createError={createError}
+            onCreate={async (title) => {
+              const id = await createRecord(title);
+              if (!id) return false;
+              const next = multiple ? [...attachedIds, id] : [id];
+              onChange(stringifyRelationIds(next));
+              return true;
+            }}
             onPick={(id) => {
               const next = multiple ? [...attachedIds, id] : [id];
               onChange(stringifyRelationIds(next));
@@ -176,15 +225,24 @@ function RelationSearchSelect({
   label,
   value,
   options,
+  canCreate,
+  creating,
+  createError,
+  onCreate,
   onChange,
 }: {
   label: string;
   value?: RelatedRecordOption;
   options: RelatedRecordOption[];
+  canCreate: boolean;
+  creating: boolean;
+  createError: string | null;
+  onCreate: (title: string) => Promise<string | null>;
   onChange: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return options;
@@ -194,11 +252,22 @@ function RelationSearchSelect({
         row.subtitle.toLowerCase().includes(q),
     );
   }, [options, query]);
+  const typed = query.trim();
+  const exact = typed
+    ? options.some((row) => row.title.toLowerCase() === typed.toLowerCase())
+    : false;
+  const showCreate = canCreate && typed.length > 0 && !exact;
 
   function pick(id: string) {
     onChange(id);
     setOpen(false);
     setQuery("");
+  }
+
+  async function createTyped() {
+    if (!showCreate) return;
+    const id = await onCreate(typed);
+    if (id) pick(id);
   }
 
   return (
@@ -227,34 +296,55 @@ function RelationSearchSelect({
         </span>
         <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[var(--anchor-width)] min-w-64 p-2">
-        <div className="relative">
+      <PopoverContent
+        align="start"
+        collisionAvoidance={COMBOBOX_COLLISION_AVOIDANCE}
+        className="flex w-[var(--anchor-width)] min-w-64 max-h-[min(20rem,var(--available-height))] flex-col overflow-hidden p-2"
+        initialFocus={() => {
+          searchRef.current?.focus({ preventScroll: true });
+          return false;
+        }}
+      >
+        <div className="relative shrink-0">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
+            ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key !== "Enter") return;
               e.preventDefault();
-              if (filtered[0]) pick(filtered[0].id);
+              const exactRow = typed
+                ? filtered.find(
+                    (row) => row.title.toLowerCase() === typed.toLowerCase(),
+                  )
+                : undefined;
+              if (exactRow) {
+                pick(exactRow.id);
+                return;
+              }
+              if (filtered[0]) {
+                pick(filtered[0].id);
+                return;
+              }
+              if (showCreate) void createTyped();
             }}
             placeholder={`Search ${label.toLowerCase()}s`}
             className="h-8 ps-8 text-s"
-            autoFocus
           />
         </div>
-        <div className="max-h-64 overflow-y-auto">
-          {filtered.length === 0 && options.length === 0 ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {filtered.length === 0 && !showCreate ? (
             <p className="px-2 py-6 text-center text-s text-muted-foreground">
-              No {label.toLowerCase()}s to pick
-            </p>
-          ) : filtered.length === 0 ? (
-            <p className="px-2 py-6 text-center text-s text-muted-foreground">
-              No matches for “{query.trim()}”
+              {options.length === 0
+                ? canCreate
+                  ? `Type a name to add a ${label.toLowerCase()}`
+                  : `No ${label.toLowerCase()}s to pick`
+                : `No matches for “${typed}”`}
             </p>
           ) : (
             <ul>
-              {!query.trim() && (
+              {!typed && (
                 <li>
                   <button
                     type="button"
@@ -296,9 +386,33 @@ function RelationSearchSelect({
                   </li>
                 );
               })}
+              {showCreate && (
+                <li>
+                  <button
+                    type="button"
+                    disabled={creating}
+                    onClick={() => void createTyped()}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-s hover:bg-accent/60 disabled:opacity-50"
+                  >
+                    {creating ? (
+                      <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                    ) : (
+                      <Plus className="size-3.5 shrink-0" />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">
+                      Create “{typed}”
+                    </span>
+                  </button>
+                </li>
+              )}
             </ul>
           )}
         </div>
+        {createError && (
+          <p className="shrink-0 px-2 pt-1 text-xs text-destructive">
+            {createError}
+          </p>
+        )}
       </PopoverContent>
     </Popover>
   );
