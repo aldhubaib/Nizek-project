@@ -13,7 +13,7 @@ import {
 import { MemberAvatar } from "@/components/boards/member-avatar";
 import { CountryField } from "@/components/fields/country-field";
 import { LocationPicker } from "@/components/fields/location-picker";
-import type { WorkflowUserOption } from "@/actions/workflow";
+import { listWorkflowUsers, type WorkflowUserOption } from "@/actions/workflow";
 import { parseCountryCodes, stringifyCountryCodes } from "@/lib/countries";
 import {
   addHoursIso,
@@ -24,6 +24,7 @@ import {
   parseInviteValue,
   stringifyInviteValue,
   type InviteAttendee,
+  type InviteAudience,
   type InvitePersonKind,
   type InviteRsvp,
 } from "@/lib/fields/invite";
@@ -114,20 +115,61 @@ export function InviteField({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [workspaceUsers, setWorkspaceUsers] = useState<WorkflowUserOption[] | null>(
+    null,
+  );
+  const [loadingAll, setLoadingAll] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const invite = parseInviteValue(value);
 
+  useEffect(() => {
+    if (invite.audience !== "all" || workspaceUsers) return;
+    let cancelled = false;
+    setLoadingAll(true);
+    void listWorkflowUsers()
+      .then((rows) => {
+        if (!cancelled) setWorkspaceUsers(rows);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingAll(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [invite.audience, workspaceUsers]);
+
+  const directory = invite.audience === "all" && workspaceUsers
+    ? workspaceUsers
+    : users;
+
   const people = useMemo<Person[]>(
     () =>
-      users.map((user) => ({
+      directory.map((user) => ({
         kind: "user",
         id: user.id,
         name: user.name,
         email: user.email,
         imageUrl: user.imageUrl,
       })),
-    [users],
+    [directory],
   );
+
+  const knownPeople = useMemo<Person[]>(() => {
+    const seen = new Set<string>();
+    const rows: Person[] = [];
+    for (const user of [...users, ...(workspaceUsers ?? [])]) {
+      if (seen.has(user.id)) continue;
+      seen.add(user.id);
+      rows.push({
+        kind: "user",
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        imageUrl: user.imageUrl,
+      });
+    }
+    return rows;
+  }, [users, workspaceUsers]);
 
   const selectedKeys = new Set(invite.attendees.map(attendeeKey));
 
@@ -189,9 +231,14 @@ export function InviteField({
     );
   }, [people, query]);
 
+  function setAudience(audience: InviteAudience) {
+    if (audience === invite.audience) return;
+    commit({ ...invite, audience });
+  }
+
   function resolve(attendee: InviteAttendee): Person {
     return (
-      people.find(
+      knownPeople.find(
         (person) => person.kind === attendee.kind && person.id === attendee.id,
       ) ?? {
         kind: attendee.kind,
@@ -246,6 +293,37 @@ export function InviteField({
         }}
         onChange={(place) => commit({ ...invite, ...place })}
       />
+      <div className="space-y-1.5">
+        <Label className="text-xs">Who can be invited</Label>
+        <div className="flex h-9 rounded-md border border-input p-0.5">
+          {(
+            [
+              { id: "all", label: "All" },
+              { id: "private", label: "Private" },
+            ] as const
+          ).map((choice) => (
+            <button
+              key={choice.id}
+              type="button"
+              aria-pressed={invite.audience === choice.id}
+              onClick={() => setAudience(choice.id)}
+              className={cn(
+                "flex-1 rounded-sm text-s transition-colors",
+                invite.audience === choice.id
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {invite.audience === "all"
+            ? "Everyone in the workspace."
+            : "Only people on this project."}
+        </p>
+      </div>
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <Label className="text-xs">Attendance</Label>
@@ -331,12 +409,20 @@ export function InviteField({
                 ref={searchRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search the project"
+                placeholder={
+                  invite.audience === "all"
+                    ? "Search everyone"
+                    : "Search the project"
+                }
                 className="h-8 ps-8 text-s"
               />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              {filtered.length === 0 ? (
+              {invite.audience === "all" && loadingAll ? (
+                <p className="px-2 py-6 text-center text-s text-muted-foreground">
+                  Loading people…
+                </p>
+              ) : filtered.length === 0 ? (
                 <p className="px-2 py-6 text-center text-s text-muted-foreground">
                   No matches
                 </p>

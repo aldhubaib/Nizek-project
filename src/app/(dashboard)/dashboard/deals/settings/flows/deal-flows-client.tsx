@@ -20,6 +20,7 @@ import {
 } from "@/actions/workflow";
 import type { FormLayoutDTO } from "@/actions/custom-field";
 import type { WorkflowEntityType } from "@/lib/workflow/types";
+import { exclusiveLayoutChoices } from "@/lib/modules/layout-assignment";
 
 export function DealFlowsClient({
   initial,
@@ -165,11 +166,13 @@ export function DealFlowsClient({
                     className="h-8 min-w-40 rounded-md border border-input bg-transparent px-2 text-xs"
                   >
                     {!item.layoutId && <option value="">Pick a layout</option>}
-                    {layouts.map((layout) => (
-                      <option key={layout.id} value={layout.id}>
-                        {layout.name}
-                      </option>
-                    ))}
+                    {exclusiveLayoutChoices(layouts, flows, item.id).map(
+                      (layout) => (
+                        <option key={layout.id} value={layout.id}>
+                          {layout.name}
+                        </option>
+                      ),
+                    )}
                   </select>
                 )}
               </td>

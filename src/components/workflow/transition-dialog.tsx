@@ -229,7 +229,9 @@ export function TransitionDialog({
                   ),
                 )
                 .map((field) =>
-                field.type === "relation" || field.type === "formula" ? (
+                field.type === "relation" ||
+                field.type === "formula" ||
+                field.type === "article" ? (
                   <FieldControl
                     key={field.id}
                     field={field}

@@ -406,7 +406,7 @@ export async function createWorkflow(input: {
       orderBy: { position: "desc" },
       select: { position: true },
     });
-    const layout = await ensureDefaultLayout(entityType, projectId);
+    const layout = await firstUnusedLayout(entityType, projectId);
 
     const created = await prisma.workflow.create({
       data: {
@@ -414,12 +414,15 @@ export async function createWorkflow(input: {
         projectId,
         name,
         position: positionBetween(last?.position ?? null, null),
-        layoutId: layout.id,
+        layoutId: layout?.id ?? null,
       },
     });
 
     revalidateWorkflow(entityType, projectId);
-    return toWorkflowDTO(created, layout, { statusCount: 0, recordCount: 0 });
+    return toWorkflowDTO(created, layout ?? undefined, {
+      statusCount: 0,
+      recordCount: 0,
+    });
   });
 }
 
@@ -468,6 +471,13 @@ export async function updateWorkflow(
         ) {
           throw new Error("That layout is not on this module");
         }
+        const taken = await prisma.workflow.findFirst({
+          where: { layoutId: input.layoutId, id: { not: id } },
+          select: { name: true },
+        });
+        if (taken) {
+          throw new Error(`“${taken.name}” already uses that layout`);
+        }
       }
       data.layoutId = input.layoutId;
     }
@@ -496,6 +506,21 @@ export async function updateWorkflow(
     revalidateWorkflow(existing.entityType, existing.projectId);
     return toWorkflowDTO(updated, layout);
   });
+}
+
+async function firstUnusedLayout(entityType: string, projectId = "") {
+  const layouts = await prisma.formLayout.findMany({
+    where: { entityType, projectId },
+    orderBy: { position: "asc" },
+    select: { id: true, name: true },
+  });
+  if (layouts.length === 0) return ensureDefaultLayout(entityType, projectId);
+  const taken = await prisma.workflow.findMany({
+    where: { entityType, projectId, layoutId: { not: null } },
+    select: { layoutId: true },
+  });
+  const used = new Set(taken.map((row) => row.layoutId));
+  return layouts.find((layout) => !used.has(layout.id)) ?? null;
 }
 
 async function ensureDefaultLayout(entityType: string, projectId = "") {

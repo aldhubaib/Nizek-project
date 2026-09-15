@@ -24,6 +24,7 @@ import { PriorityField } from "@/components/fields/priority-field";
 import { CostField } from "@/components/fields/cost-field";
 import { UserField } from "@/components/fields/user-field";
 import { InviteField } from "@/components/fields/invite-field";
+import { ArticleField } from "@/components/fields/article-field";
 import { cn } from "@/lib/utils";
 
 export function FieldControl({
@@ -34,6 +35,7 @@ export function FieldControl({
   related = EMPTY_RELATED_CATALOG,
   excludeDealId,
   preview,
+  projectId,
 }: {
   field: CustomFieldDTO;
   value: string;
@@ -42,6 +44,7 @@ export function FieldControl({
   related?: RelatedRecordCatalog;
   excludeDealId?: string;
   preview?: string;
+  projectId?: string;
 }) {
   if (field.type === "relation") {
     return (
@@ -95,8 +98,8 @@ export function FieldControl({
   }
 
   return (
-    <div className={field.type === "cost" || field.type === "invite" ? undefined : "space-y-1.5"}>
-      {field.type !== "cost" && field.type !== "invite" && label}
+    <div className={field.type === "cost" || field.type === "invite" || field.type === "article" ? undefined : "space-y-1.5"}>
+      {field.type !== "cost" && field.type !== "invite" && field.type !== "article" && label}
       {field.type === "phone" ? (
         <PhoneField value={value} onChange={onChange} />
       ) : field.type === "cost" ? (
@@ -108,6 +111,15 @@ export function FieldControl({
             value={value}
             onChange={onChange}
             users={users}
+          />
+        </div>
+      ) : field.type === "article" ? (
+        <div className="space-y-1.5">
+          {label}
+          <ArticleField
+            value={value}
+            onChange={onChange}
+            projectId={projectId}
           />
         </div>
       ) : field.type === "priority" ? (
@@ -213,7 +225,7 @@ export function visibleOnForm(
   field: CustomFieldDTO,
   mode: "create" | "edit",
 ): boolean {
-  return field.showOn === "both" || field.showOn === mode;
+  return field.showOn !== "hidden" && (field.showOn === "both" || field.showOn === mode);
 }
 
 export function fieldShowsOnForm(

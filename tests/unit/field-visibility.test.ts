@@ -149,6 +149,16 @@ describe("fieldAppliesOnForm", () => {
         type: "Company",
       }),
     ).toBe(false);
+    expect(
+      fieldAppliesOnForm({ ...field, showOn: "hidden" }, "create", {
+        type: "Company",
+      }),
+    ).toBe(false);
+    expect(
+      fieldAppliesOnForm({ ...field, showOn: "hidden" }, "edit", {
+        type: "Company",
+      }),
+    ).toBe(false);
   });
 });
 

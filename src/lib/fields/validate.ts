@@ -1,5 +1,6 @@
 import { isFieldAnswered } from "@/lib/board-fields";
 import { costFieldIsFilled } from "./cost";
+import { articleFieldIsFilled } from "./article";
 import { inviteFieldIsFilled } from "./invite";
 import { phoneValueIsFilled } from "@/lib/dial-codes";
 import {
@@ -56,6 +57,7 @@ export function customFieldIsFilled(
   if (type === "phone") return phoneValueIsFilled(value);
   if (type === "cost") return costFieldIsFilled(value);
   if (type === "invite") return inviteFieldIsFilled(value);
+  if (type === "article") return articleFieldIsFilled(value);
   if (type === "user") {
     return isFieldAnswered({ type: "select", multiple: true }, value) ||
       Boolean(value?.trim());

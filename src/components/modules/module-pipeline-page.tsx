@@ -11,6 +11,7 @@ import { PageOverflowItems } from "@/components/page-overflow-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DealBoard } from "@/components/deals/deal-board";
 import { CardFieldsPicker } from "@/components/modules/card-fields-picker";
+import { ModuleFieldFilters } from "@/components/modules/module-field-filters";
 import {
   cardFieldsStorageKey,
   defaultCardFieldIds,
@@ -23,6 +24,7 @@ import {
   writeFieldPickerPrefs,
   type FieldPickerPrefs,
 } from "@/lib/modules/card-fields";
+import { recordMatchesFieldFilters } from "@/lib/fields/filter";
 import {
   ModuleRecordList,
   type ListSort,
@@ -133,6 +135,7 @@ export function ModulePipelinePage({
     surface.entityType,
     surface.projectId ?? "",
   );
+  const filtersKey = `module-field-filters:${surface.entityType}:${surface.projectId ?? ""}`;
   const [savedCardFields, setSavedCardFields] =
     useState<FieldPickerPrefs | null>(null);
   const [savedTableColumns, setSavedTableColumns] =
@@ -140,6 +143,7 @@ export function ModulePipelinePage({
   const [records, setRecords] = useState(initialRecords);
   const [stages, setStages] = useState(initialStages);
   const [query, setQuery] = useState("");
+  const [fieldFilters, setFieldFilters] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [pendingMove, setPendingMove] = useState<{
     deal: DealDTO;
@@ -189,7 +193,25 @@ export function ModulePipelinePage({
     } else {
       setSavedTableColumns(columns);
     }
-  }, [viewKey, sortKey, cardFieldsKey, tableColumnsKey, fields]);
+    try {
+      const savedFilters = JSON.parse(
+        window.localStorage.getItem(filtersKey) ?? "",
+      ) as unknown;
+      if (
+        savedFilters &&
+        typeof savedFilters === "object" &&
+        !Array.isArray(savedFilters)
+      ) {
+        const next: Record<string, string> = {};
+        for (const [id, value] of Object.entries(savedFilters)) {
+          if (typeof value === "string" && value) next[id] = value;
+        }
+        setFieldFilters(next);
+      }
+    } catch {
+      /* keep empty */
+    }
+  }, [viewKey, sortKey, cardFieldsKey, tableColumnsKey, filtersKey, fields]);
   useEffect(() => {
     if (pending.current > 0) return;
     setRecords(initialRecords);
@@ -199,11 +221,23 @@ export function ModulePipelinePage({
     setStages(initialStages);
   }, [initialStages]);
 
+  const displayCtx = useMemo(
+    () => ({ users, related, fields }),
+    [users, related, fields],
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return records;
-    return records.filter((row) => matches(row, q));
-  }, [records, query]);
+    return records.filter((row) => {
+      if (q && !matches(row, q)) return false;
+      return recordMatchesFieldFilters(row, fields, fieldFilters, displayCtx);
+    });
+  }, [records, query, fields, fieldFilters, displayCtx]);
+
+  function changeFieldFilters(next: Record<string, string>) {
+    setFieldFilters(next);
+    window.localStorage.setItem(filtersKey, JSON.stringify(next));
+  }
 
   const fieldLookup = useMemo(
     () =>
@@ -227,9 +261,9 @@ export function ModulePipelinePage({
     () => ({
       fields,
       visibleFieldIds: visibleCardFieldIds,
-      ctx: { users, related, fields },
+      ctx: displayCtx,
     }),
-    [fields, visibleCardFieldIds, users, related],
+    [fields, visibleCardFieldIds, displayCtx],
   );
 
   async function commit<T>(
@@ -553,6 +587,13 @@ export function ModulePipelinePage({
               className="h-9 ps-8 text-s"
             />
           </div>
+          <ModuleFieldFilters
+            fields={fields}
+            records={records}
+            ctx={displayCtx}
+            selected={fieldFilters}
+            onChange={changeFieldFilters}
+          />
           {viewToggle}
           <CardFieldsPicker
             mode={view === "list" ? "table" : "card"}
@@ -573,7 +614,7 @@ export function ModulePipelinePage({
             onSort={changeSort}
             onOpen={(record) => router.push(openHref(record.id))}
             empty={`No ${surface.recordWord}s`}
-            ctx={{ users, related, fields }}
+            ctx={displayCtx}
             visibleColumnIds={visibleTableColumnIds}
           />
         ) : (
@@ -582,6 +623,10 @@ export function ModulePipelinePage({
             deals={filtered}
             emptyLabel={`No ${surface.recordWord}s`}
             cardDisplay={cardDisplay}
+            transitions={transitions}
+            blueprintEnabled={
+              flows.find((f) => f.id === flowId)?.blueprintEnabled
+            }
             onMoveDeal={moveRecord}
             onReorderStages={reorderStages}
             onAddStage={addStage}

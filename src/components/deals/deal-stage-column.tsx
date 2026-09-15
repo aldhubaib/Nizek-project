@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { ColorPicker } from "@/components/boards/board-settings/settings-controls";
 import { boardColor } from "@/lib/board-palette";
 import { cn } from "@/lib/utils";
+import type { ColumnDropHint } from "@/lib/workflow/engine";
 import { DealCard, type DealCardDisplay } from "./deal-card";
 import type { DealDTO } from "@/actions/deal";
 import type { DealStageDTO } from "@/actions/deal-stage";
@@ -24,6 +25,18 @@ const COLUMN_SHELL =
   "flex h-full w-[280px] shrink-0 flex-col overflow-hidden rounded-lg border border-border/50 bg-muted/30 transition-colors";
 
 const OVER_SHELL = "border-primary/60 bg-primary/5";
+const ALLOWED_SHELL = "border-primary/70 bg-primary/10 ring-2 ring-primary/50";
+const LANE = "lane:";
+
+export function stageDropId(stageId: string) {
+  return `${LANE}${stageId}`;
+}
+
+export function stageIdFromDrop(overId: string): string | null | undefined {
+  if (overId === UNASSIGNED_ID) return null;
+  if (overId.startsWith(LANE)) return overId.slice(LANE.length);
+  return undefined;
+}
 
 interface CardListProps {
   deals: DealDTO[];
@@ -60,6 +73,8 @@ interface ColumnProps extends CardListProps {
   ) => Promise<void>;
   onDelete: (stage: DealStageDTO) => void;
   reorderable: boolean;
+  dropHint?: ColumnDropHint | null;
+  draggingKind?: "deal" | "column" | null;
 }
 
 export function DealStageColumn({
@@ -71,33 +86,45 @@ export function DealStageColumn({
   onRename,
   onDelete,
   reorderable,
+  dropHint = null,
+  draggingKind = null,
 }: ColumnProps) {
   const {
-    setNodeRef,
+    setNodeRef: setSortRef,
     attributes,
     listeners,
     transform,
     transition,
     isDragging,
-    isOver,
   } = useSortable({
     id: stage.id,
     data: { type: "column" },
     disabled: { draggable: !reorderable, droppable: false },
+  });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: stageDropId(stage.id),
+    data: { type: "stage", stageId: stage.id },
+    disabled: draggingKind === "column" || dropHint === "blocked",
   });
   const palette = boardColor(stage.color);
   const [editorOpen, setEditorOpen] = useState(false);
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => {
+        setSortRef(node);
+        setDropRef(node);
+      }}
       style={{
         transform: CSS.Translate.toString(transform),
         transition,
       }}
       className={cn(
         COLUMN_SHELL,
-        isOver && OVER_SHELL,
+        dropHint === "allowed" && ALLOWED_SHELL,
+        dropHint === "blocked" && "opacity-35",
+        dropHint === "allowed" && isOver && "ring-primary bg-primary/15",
+        dropHint === null && isOver && OVER_SHELL,
         isDragging && "z-10 opacity-60 shadow-2xl",
       )}
     >
@@ -162,16 +189,29 @@ export function UnassignedColumn({
   onOpenDeal,
   emptyLabel,
   cardDisplay,
-}: CardListProps) {
+  dropHint = null,
+  draggingKind = null,
+}: CardListProps & {
+  dropHint?: ColumnDropHint | null;
+  draggingKind?: "deal" | "column" | null;
+}) {
   const { setNodeRef, isOver } = useDroppable({
     id: UNASSIGNED_ID,
     data: { type: "column" },
+    disabled: draggingKind === "column" || dropHint === "blocked",
   });
 
   return (
     <div
       ref={setNodeRef}
-      className={cn(COLUMN_SHELL, "border-dashed", isOver && OVER_SHELL)}
+      className={cn(
+        COLUMN_SHELL,
+        "border-dashed",
+        dropHint === "allowed" && ALLOWED_SHELL,
+        dropHint === "blocked" && "opacity-35",
+        dropHint === "allowed" && isOver && "ring-primary bg-primary/15",
+        dropHint === null && isOver && OVER_SHELL,
+      )}
     >
       <div className="flex items-center gap-1.5 border-b border-border/50 px-3 py-2.5">
         <h3 className="truncate text-s font-medium text-muted-foreground">

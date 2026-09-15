@@ -17,6 +17,7 @@ export const CUSTOM_FIELD_TYPES = [
   "file",
   "relation",
   "formula",
+  "article",
 ] as const;
 
 export const CUSTOM_FIELD_TYPE_LABEL: Record<
@@ -41,11 +42,12 @@ export const CUSTOM_FIELD_TYPE_LABEL: Record<
   file: "File",
   relation: "Relation",
   formula: "Formula",
+  article: "Article",
 };
 
 export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
 
-export const FIELD_SHOW_ON = ["create", "edit", "both"] as const;
+export const FIELD_SHOW_ON = ["create", "edit", "both", "hidden"] as const;
 export type FieldShowOn = (typeof FIELD_SHOW_ON)[number];
 
 export const NATIVE_DEAL_FIELDS = [

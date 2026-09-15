@@ -3,6 +3,7 @@ import {
   actionsForMove,
   allowedDestinations,
   applySetFieldActions,
+  columnDropHint,
   findTransition,
   isMoveAllowed,
   missingRequiredOnSnapshot,
@@ -105,6 +106,31 @@ describe("allowedDestinations", () => {
         { fromStatusId: null, toStatusId: "lost" },
       ]),
     ).toEqual(["b", "lost"]);
+  });
+});
+
+describe("columnDropHint", () => {
+  const arrows = [
+    { fromStatusId: "todo", toStatusId: "review" },
+    { fromStatusId: "review", toStatusId: "confirmed" },
+  ];
+
+  it("stays quiet when the blueprint has no arrows", () => {
+    expect(
+      columnDropHint("review", { fromStatusId: "todo", transitions: [] }),
+    ).toBeNull();
+  });
+
+  it("marks reachable columns and dims the rest", () => {
+    expect(
+      columnDropHint("review", { fromStatusId: "todo", transitions: arrows }),
+    ).toBe("allowed");
+    expect(
+      columnDropHint("confirmed", { fromStatusId: "todo", transitions: arrows }),
+    ).toBe("blocked");
+    expect(
+      columnDropHint("todo", { fromStatusId: "todo", transitions: arrows }),
+    ).toBe("home");
   });
 });
 

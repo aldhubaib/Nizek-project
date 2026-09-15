@@ -167,6 +167,7 @@ export function fieldAppliesOnForm(
   knownFieldIds?: Iterable<string>,
   catalog?: Iterable<VisibilityCatalogField>,
 ): boolean {
+  if (field.showOn === "hidden") return false;
   if (field.showOn !== "both" && field.showOn !== mode) return false;
   return fieldIsLogicallyVisible(
     { visibility: parseFieldVisibility(field.visibility) },

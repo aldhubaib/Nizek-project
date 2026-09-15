@@ -26,9 +26,12 @@ import {
   DealStageColumn,
   UnassignedColumn,
   UNASSIGNED_ID,
+  stageIdFromDrop,
 } from "./deal-stage-column";
 import type { DealDTO } from "@/actions/deal";
 import type { DealStageDTO } from "@/actions/deal-stage";
+import { columnDropHint } from "@/lib/workflow/engine";
+import type { WorkflowTransitionDTO } from "@/actions/workflow";
 
 const BOARD_ROW =
   "flex h-full min-h-0 w-full min-w-0 flex-1 items-stretch gap-3 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-2";
@@ -47,6 +50,8 @@ interface Props {
   onOpenDeal: (deal: DealDTO) => void;
   emptyLabel?: string;
   cardDisplay?: DealCardDisplay;
+  transitions?: WorkflowTransitionDTO[];
+  blueprintEnabled?: boolean;
 }
 
 export function DealBoard({
@@ -60,6 +65,8 @@ export function DealBoard({
   onOpenDeal,
   emptyLabel = "No deals",
   cardDisplay,
+  transitions = [],
+  blueprintEnabled,
 }: Props) {
   const [active, setActive] = useState<{
     id: string;
@@ -109,6 +116,15 @@ export function DealBoard({
       ? deals.find((d) => d.id === active.id) ?? null
       : null;
 
+  const hintFor = (stageId: string | null) =>
+    active?.type === "deal"
+      ? columnDropHint(stageId, {
+          fromStatusId: activeDeal?.stageId ?? null,
+          transitions,
+          enabled: blueprintEnabled,
+        })
+      : null;
+
   function handleDragStart(event: DragStartEvent) {
     setActive({
       id: String(event.active.id),
@@ -137,9 +153,10 @@ export function DealBoard({
     const deal = deals.find((d) => d.id === activeDragId);
     if (!deal) return;
 
+    const dropped = stageIdFromDrop(overId);
     const targetStageId =
-      overId === UNASSIGNED_ID
-        ? null
+      dropped !== undefined
+        ? dropped
         : stageIdSet.has(overId)
           ? overId
           : undefined;
@@ -164,6 +181,8 @@ export function DealBoard({
             onOpenDeal={onOpenDeal}
             emptyLabel={emptyLabel}
             cardDisplay={cardDisplay}
+            dropHint={hintFor(null)}
+            draggingKind={active?.type ?? null}
           />
         )}
 
@@ -179,6 +198,8 @@ export function DealBoard({
               cardDisplay={cardDisplay}
               onRename={onRenameStage}
               onDelete={onDeleteStage}
+              dropHint={hintFor(stage.id)}
+              draggingKind={active?.type ?? null}
             />
           ))}
         </SortableContext>

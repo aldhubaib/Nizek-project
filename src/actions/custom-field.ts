@@ -63,6 +63,7 @@ export type CustomFieldDTO = {
   binding: string | null;
   required: boolean;
   showOn: FieldShowOn;
+  filterable: boolean;
   visibility: FieldVisibility | null;
   userMultiple: boolean;
   countryMultiple: boolean;
@@ -261,6 +262,7 @@ function toFieldDTO(row: {
   binding?: string | null;
   required: boolean;
   showOn: string;
+  filterable?: boolean;
   visibility?: string | null;
   sectionId: string | null;
   position: number;
@@ -283,6 +285,7 @@ function toFieldDTO(row: {
     binding: row.binding ?? null,
     required: row.required,
     showOn: isFieldShowOn(row.showOn) ? row.showOn : "both",
+    filterable: row.filterable === true,
     visibility: parseFieldVisibility(row.visibility),
     sectionId: row.sectionId,
     position: row.position,
@@ -407,7 +410,7 @@ export async function deleteFormLayout(
     await prisma.$transaction([
       prisma.workflow.updateMany({
         where: { layoutId: id },
-        data: { layoutId: remaining.id },
+        data: { layoutId: null },
       }),
       prisma.formLayout.delete({ where: { id } }),
     ]);
@@ -711,6 +714,7 @@ export async function createCustomField(input: {
         type,
         binding: bound?.key ?? null,
         required: type === "formula" ? false : bound?.required ?? false,
+        showOn: type === "formula" ? "hidden" : undefined,
         options: bound?.relation
           ? stringifyRelationConfig(bound.relation)
           : type === "relation"
@@ -747,6 +751,7 @@ export async function updateCustomField(
     formula?: FormulaFieldConfig;
     required?: boolean;
     showOn?: string;
+    filterable?: boolean;
     visibility?: FieldVisibility | null;
     sectionId?: string | null;
   },
@@ -768,6 +773,7 @@ export async function updateCustomField(
       options?: string | null;
       required?: boolean;
       showOn?: string;
+      filterable?: boolean;
       visibility?: string | null;
       sectionId?: string | null;
     } = {};
@@ -791,6 +797,7 @@ export async function updateCustomField(
       if (input.type === "formula" && input.formula === undefined) {
         data.options = stringifyFormulaConfig(DEFAULT_FORMULA);
         data.required = false;
+        if (input.showOn === undefined) data.showOn = "hidden";
       }
     }
     if (input.options !== undefined && !existing.binding) {
@@ -822,6 +829,9 @@ export async function updateCustomField(
     if (input.showOn !== undefined) {
       if (!isFieldShowOn(input.showOn)) throw new Error("Unknown form visibility");
       data.showOn = input.showOn;
+    }
+    if (input.filterable !== undefined) {
+      data.filterable = input.filterable;
     }
     if (input.visibility !== undefined) {
       data.visibility = stringifyFieldVisibility(input.visibility);

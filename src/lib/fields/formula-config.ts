@@ -26,7 +26,8 @@ export function canBeFormulaPart(field: {
     field.type !== "formula" &&
     field.type !== "file" &&
     field.type !== "invite" &&
-    field.type !== "cost"
+    field.type !== "cost" &&
+    field.type !== "article"
   );
 }
 

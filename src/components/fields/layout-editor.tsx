@@ -443,8 +443,8 @@ export function LayoutEditor({
           />
         ) : (
           <p className="text-s text-muted-foreground">
-            Select a field on the layout to edit its label, type, and whether it
-            shows on create or edit.
+            Select a field on the layout to edit its label, type, whether it
+            shows on create or edit, and whether it is a filter.
           </p>
         )}
       </aside>
@@ -644,6 +644,7 @@ function FieldProperties({
     formula?: FormulaFieldConfig;
     required?: boolean;
     showOn?: string;
+    filterable?: boolean;
     visibility?: FieldVisibility | null;
     sectionId?: string | null;
   }) => void;
@@ -710,7 +711,14 @@ function FieldProperties({
           <option value="both">Create & edit</option>
           <option value="create">Create only</option>
           <option value="edit">Edit only</option>
+          <option value="hidden">Hidden</option>
         </select>
+        {field.type === "formula" && (
+          <p className="text-xs text-muted-foreground">
+            Hidden keeps it off create and edit. Cards and lists can still use
+            it.
+          </p>
+        )}
       </div>
       <label className="flex items-center gap-2 text-s">
         <input
@@ -726,6 +734,18 @@ function FieldProperties({
         {field.type === "formula" && (
           <span className="text-xs text-muted-foreground">Read only</span>
         )}
+      </label>
+      <label className="flex items-center gap-2 text-s">
+        <input
+          type="checkbox"
+          checked={field.filterable}
+          disabled={pending}
+          onChange={(e) => onUpdate({ filterable: e.target.checked })}
+        />
+        Show as filter
+        <span className="text-xs text-muted-foreground">
+          On the board and list
+        </span>
       </label>
       {field.type === "formula" && !field.binding && (
         <FormulaPartsEditor
@@ -762,6 +782,13 @@ function FieldProperties({
         <p className="text-xs text-muted-foreground">
           Attendance, time, and a Google Maps pin on the form. Sending waits for a
           Send invite action on the blueprint.
+        </p>
+      )}
+      {field.type === "article" && (
+        <p className="text-xs text-muted-foreground">
+          Same free-form notes editor, with English and Arabic. Required is
+          met when either language has text — used on the form and on the
+          blueprint.
         </p>
       )}
       {field.type === "user" && !field.binding && (

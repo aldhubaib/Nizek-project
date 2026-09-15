@@ -331,6 +331,7 @@ export function ModuleRecordForm({
                   users={users}
                   related={related}
                   excludeDealId={record?.id}
+                  projectId={projectId}
                   onTitle={setTitle}
                   onValue={setValue}
                   onField={(next) =>
@@ -364,6 +365,7 @@ export function ModuleRecordForm({
                   users={users}
                   related={related}
                   excludeDealId={record?.id}
+                  projectId={projectId}
                   onTitle={setTitle}
                   onValue={setValue}
                   onField={(next) =>
@@ -463,6 +465,7 @@ function CatalogField({
   users,
   related = EMPTY_RELATED_CATALOG,
   excludeDealId,
+  projectId,
   onTitle,
   onValue,
   onField,
@@ -475,12 +478,15 @@ function CatalogField({
   users: WorkflowUserOption[];
   related?: RelatedRecordCatalog;
   excludeDealId?: string;
+  projectId?: string;
   onTitle: (next: string) => void;
   onValue: (next: string) => void;
   onField: (next: string) => void;
 }) {
   const wide =
-    field.type === "cost" || field.type === "invite" ? "sm:col-span-2" : undefined;
+    field.type === "cost" || field.type === "invite" || field.type === "article"
+      ? "sm:col-span-2"
+      : undefined;
 
   if (field.binding === "title") {
     return (
@@ -523,6 +529,7 @@ function CatalogField({
         users={users}
         related={related}
         excludeDealId={excludeDealId}
+        projectId={projectId}
         preview={
           field.type === "formula"
             ? joinFormulaParts(
@@ -549,7 +556,7 @@ function FormSection({
 }) {
   const two = columns === 2;
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
+    <div className="rounded-xl border border-border bg-card">
       {title && (
         <div className="px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {title}

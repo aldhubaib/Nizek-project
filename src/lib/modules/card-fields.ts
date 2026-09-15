@@ -88,7 +88,12 @@ export function defaultTableColumnIds(fields: CustomFieldDTO[]): string[] {
     CARD_RECORD_NUMBER_KEY,
     TABLE_STATUS_KEY,
     ...fields
-      .filter((field) => field.binding !== "title" && field.type !== "file")
+      .filter(
+        (field) =>
+          field.binding !== "title" &&
+          field.type !== "file" &&
+          field.type !== "article",
+      )
       .map((field) => field.id),
   ];
 }

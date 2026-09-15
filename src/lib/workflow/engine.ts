@@ -63,6 +63,32 @@ export function allowedDestinations(
   return [...ids];
 }
 
+export type ColumnDropHint = "allowed" | "home" | "blocked";
+
+/**
+ * How a column should look while a card is mid-drag. Null means the blueprint
+ * is off or empty, so every column is legal and nothing is singled out.
+ */
+export function columnDropHint(
+  stageId: string | null,
+  input: {
+    fromStatusId: string | null;
+    transitions: Pick<WorkflowTransitionDef, "fromStatusId" | "toStatusId">[];
+    enabled?: boolean;
+  },
+): ColumnDropHint | null {
+  if (input.enabled === false || input.transitions.length === 0) return null;
+  if (stageId === input.fromStatusId) return "home";
+  const allowed = isMoveAllowed({
+    fromStatusId: input.fromStatusId,
+    toStatusId: stageId,
+    transitionCount: input.transitions.length,
+    allowedToIds: allowedDestinations(input.fromStatusId, input.transitions),
+    enabled: input.enabled,
+  });
+  return allowed ? "allowed" : "blocked";
+}
+
 export function findTransition(
   fromStatusId: string | null,
   toStatusId: string | null,

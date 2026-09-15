@@ -27,6 +27,7 @@ import {
   type FormLayoutDTO,
 } from "@/actions/custom-field";
 import type { WorkflowEntityType } from "@/lib/workflow/types";
+import { exclusiveLayoutChoices } from "@/lib/modules/layout-assignment";
 
 const STATUS_FIELD = "Status";
 
@@ -142,7 +143,69 @@ export function DealSettingsHub({
                   {moduleLabel}
                 </td>
                 <td className="px-4 py-3.5 text-start align-middle text-s text-muted-foreground">
-                  {flow.layoutName ?? "—"}
+                  {layouts.length === 0 ? (
+                    "—"
+                  ) : (
+                    <SettingsRowAction>
+                      <select
+                        value={flow.layoutId ?? ""}
+                        disabled={pending}
+                        aria-label={`Layout for ${flow.name}`}
+                        onChange={(e) => {
+                          const layoutId = e.target.value || null;
+                          const snapshot = { flows, layouts };
+                          const picked = layouts.find((item) => item.id === layoutId);
+                          setFlows((prev) =>
+                            prev.map((item) =>
+                              item.id === flow.id
+                                ? {
+                                    ...item,
+                                    layoutId,
+                                    layoutName: picked?.name ?? null,
+                                  }
+                                : item,
+                            ),
+                          );
+                          setLayouts((prev) =>
+                            prev.map((item) => {
+                              let flowCount = item.flowCount;
+                              if (item.id === flow.layoutId) flowCount -= 1;
+                              if (item.id === layoutId) flowCount += 1;
+                              return { ...item, flowCount };
+                            }),
+                          );
+                          startPending(async () => {
+                            const result = await updateWorkflow(flow.id, {
+                              layoutId,
+                            });
+                            if (!result.ok) {
+                              setError(result.error);
+                              setFlows(snapshot.flows);
+                              setLayouts(snapshot.layouts);
+                              return;
+                            }
+                            setError(null);
+                            setFlows((prev) =>
+                              prev.map((item) =>
+                                item.id === result.data.id ? result.data : item,
+                              ),
+                            );
+                            router.refresh();
+                          });
+                        }}
+                        className="h-8 min-w-40 rounded-md border border-input bg-transparent px-2 text-s"
+                      >
+                        {!flow.layoutId && <option value="">Pick a layout</option>}
+                        {exclusiveLayoutChoices(layouts, flows, flow.id).map(
+                          (layout) => (
+                            <option key={layout.id} value={layout.id}>
+                              {layout.name}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </SettingsRowAction>
+                  )}
                 </td>
                 <td className="px-4 py-3.5 text-start align-middle text-s text-muted-foreground">
                   {flow.statusCount}
@@ -320,7 +383,7 @@ export function DealSettingsHub({
                         onClick={() => {
                           if (
                             !confirm(
-                              `Delete the “${layout.name}” layout? Its fields go with it. Task flows using it will switch to another layout.`,
+                              `Delete the “${layout.name}” layout? Its fields go with it. The task flow using it will need another layout.`,
                             )
                           ) {
                             return;

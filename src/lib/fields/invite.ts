@@ -17,6 +17,9 @@ export type InviteRsvp = (typeof INVITE_RSVP)[number];
 export const INVITE_PERSON_KINDS = ["user", "contact"] as const;
 export type InvitePersonKind = (typeof INVITE_PERSON_KINDS)[number];
 
+export const INVITE_AUDIENCES = ["all", "private"] as const;
+export type InviteAudience = (typeof INVITE_AUDIENCES)[number];
+
 export type InviteAttendee = {
   kind: InvitePersonKind;
   id: string;
@@ -37,6 +40,8 @@ export type InviteValue = InvitePlace & {
   start: string;
   end: string;
   attendees: InviteAttendee[];
+  /** Who the attendance picker lists: everyone, or only people on the project. */
+  audience: InviteAudience;
   uid: string;
   sequence: number;
   /** Google Calendar event id when Send invite created it on the organizer's calendar. */
@@ -54,6 +59,7 @@ export const EMPTY_INVITE: InviteValue = {
   placeId: "",
   country: "",
   attendees: [],
+  audience: "private",
   uid: "",
   sequence: 0,
   googleEventId: "",
@@ -92,6 +98,10 @@ export function isInviteRsvp(value: string): value is InviteRsvp {
 
 export function isInvitePersonKind(value: string): value is InvitePersonKind {
   return (INVITE_PERSON_KINDS as readonly string[]).includes(value);
+}
+
+export function isInviteAudience(value: string): value is InviteAudience {
+  return (INVITE_AUDIENCES as readonly string[]).includes(value);
 }
 
 export function attendeeKey(attendee: Pick<InviteAttendee, "kind" | "id">): string {
@@ -134,6 +144,7 @@ export function parseInviteValue(raw: string | null | undefined): InviteValue {
       placeId?: unknown;
       country?: unknown;
       attendees?: unknown;
+      audience?: unknown;
       uid?: unknown;
       sequence?: unknown;
       googleEventId?: unknown;
@@ -165,6 +176,10 @@ export function parseInviteValue(raw: string | null | undefined): InviteValue {
       placeId: typeof row.placeId === "string" ? row.placeId : "",
       country: parseCountry(row.country),
       attendees: unique,
+      audience:
+        typeof row.audience === "string" && isInviteAudience(row.audience)
+          ? row.audience
+          : "private",
       uid: typeof row.uid === "string" ? row.uid : "",
       sequence,
       googleEventId:
@@ -190,7 +205,8 @@ export function stringifyInviteValue(value: InviteValue): string {
     lng == null &&
     !placeId.trim() &&
     !country &&
-    value.attendees.length === 0
+    value.attendees.length === 0 &&
+    value.audience !== "all"
   ) {
     return "";
   }
@@ -203,6 +219,7 @@ export function stringifyInviteValue(value: InviteValue): string {
     placeId,
     country,
     attendees: value.attendees,
+    audience: isInviteAudience(value.audience) ? value.audience : "private",
     uid: value.uid,
     sequence: value.sequence,
     googleEventId: value.googleEventId ?? "",

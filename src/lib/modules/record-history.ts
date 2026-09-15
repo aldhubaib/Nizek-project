@@ -4,6 +4,7 @@ import { formatPhoneValue } from "@/lib/dial-codes";
 import { formatCountryCodes } from "@/lib/countries";
 import { fieldPriorityLabel } from "@/lib/fields/priority";
 import { formatCostFieldDetail } from "@/lib/fields/cost";
+import { formatArticleFieldDetail } from "@/lib/fields/article";
 import { formatInviteFieldDetail, parseInviteValue } from "@/lib/fields/invite";
 import { parseUserIds } from "@/lib/fields/user-config";
 import {
@@ -100,6 +101,7 @@ function formatPlain(type: string, raw: string): string {
   if (type === "priority") return fieldPriorityLabel(raw);
   if (type === "cost") return formatCostFieldDetail(raw);
   if (type === "invite") return formatInviteFieldDetail(raw);
+  if (type === "article") return formatArticleFieldDetail(raw);
   if (type === "number") {
     const amount = Number(raw);
     return Number.isFinite(amount) ? formatDealValue(raw) : raw;

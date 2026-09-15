@@ -4,6 +4,7 @@ import { formatCountryCodes } from "@/lib/countries";
 import { parseUserIds } from "@/lib/fields/user-config";
 import { parseRelationIds } from "@/lib/fields/relations";
 import { fieldPriorityLabel, fieldPriorityRank } from "@/lib/fields/priority";
+import { formatArticleField } from "@/lib/fields/article";
 import { formatCostField, sumCostRows, parseCostRows } from "@/lib/fields/cost";
 import { formatInviteField, parseInviteValue } from "@/lib/fields/invite";
 import type { CustomFieldDTO } from "@/actions/custom-field";
@@ -97,6 +98,7 @@ export function formatFieldValue(
   if (field.type === "priority") return fieldPriorityLabel(raw);
   if (field.type === "cost") return formatCostField(raw);
   if (field.type === "invite") return formatInviteField(raw);
+  if (field.type === "article") return formatArticleField(raw);
   if (field.type === "number") {
     const amount = Number(raw);
     return Number.isFinite(amount) ? formatDealValue(raw) : raw;

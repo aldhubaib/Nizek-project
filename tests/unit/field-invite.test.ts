@@ -107,6 +107,28 @@ describe("calendar invite field", () => {
     expect(inviteMapsUrl(parsed)).toContain("query=Office");
   });
 
+  it("keeps All even before dates or people are set", () => {
+    const raw = stringifyInviteValue({ ...EMPTY_INVITE, audience: "all" });
+    expect(raw).not.toBe("");
+    expect(parseInviteValue(raw).audience).toBe("all");
+    expect(inviteFieldIsFilled(raw)).toBe(false);
+  });
+
+  it("keeps All or Private through a round trip", () => {
+    const raw = stringifyInviteValue({
+      ...EMPTY_INVITE,
+      start: "2026-09-14T07:00:00.000Z",
+      audience: "all",
+      attendees: [
+        { kind: "user", id: "u1", status: "needs_action", sentAt: null },
+      ],
+    });
+    expect(parseInviteValue(raw).audience).toBe("all");
+    expect(parseInviteValue(JSON.stringify({ location: "Office" })).audience).toBe(
+      "private",
+    );
+  });
+
   it("keeps a country through a round trip", () => {
     const raw = stringifyInviteValue({
       ...EMPTY_INVITE,

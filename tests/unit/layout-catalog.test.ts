@@ -20,6 +20,7 @@ function field(id: string, sectionId: string | null = null): CustomFieldDTO {
     binding: null,
     required: false,
     showOn: "both",
+    filterable: false,
     visibility: null,
     userMultiple: false,
     countryMultiple: false,

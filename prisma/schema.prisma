@@ -3139,7 +3139,7 @@ model CustomField {
   entityType String
   key        String
   label      String
-  /// text | textarea | number | cost | select | priority | multi_select | date | checkbox | url | email | phone | user | file | relation | formula
+  /// text | textarea | number | cost | select | priority | multi_select | date | checkbox | url | email | phone | user | file | relation | formula | article
   type       String @default("text")
   /// JSON array of choices for select / multi_select, `{ model, multiple }` for relation, `{ multiple }` for user, or `{ parts, separator, cardTitle }` for formula.
   options    String?
@@ -3147,8 +3147,10 @@ model CustomField {
   /// Null means the value lives in CustomFieldValue.
   binding    String?
   required   Boolean @default(false)
-  /// create | edit | both
+  /// create | edit | both | hidden
   showOn     String  @default("both")
+  /// When true, this field is offered as a filter on the board and list.
+  filterable Boolean @default(false)
   /// JSON `{ dependsOn: fieldId, values: string[] }` — show only when that sibling matches.
   visibility String?
 
