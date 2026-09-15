@@ -34,6 +34,7 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
+  Smile,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { uploadFileToR2 } from "@/lib/upload";
@@ -42,6 +43,7 @@ import { NoteImage } from "@/components/tiptap/note-image";
 import { TextDirection } from "@/components/tiptap/text-direction";
 import { ALIGNABLE_TYPES, BlockTextAlign } from "@/components/tiptap/block-align";
 import { HeadingBreak } from "@/components/tiptap/heading-break";
+import { NoteSymbolPicker } from "@/components/tiptap/note-symbol-picker";
 import {
   AttendanceBlock,
   type AttendancePerson,
@@ -462,6 +464,7 @@ export function RichTextEditor({
   const [slashMenu, setSlashMenu] = useState<{ x: number; y: number; query: string } | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const [attendancePicker, setAttendancePicker] = useState<{ x: number; y: number } | null>(null);
+  const [symbolPicker, setSymbolPicker] = useState<{ x: number; y: number } | null>(null);
   const [members, setMembers] = useState<AttendancePerson[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -639,6 +642,7 @@ export function RichTextEditor({
     if (slashMatch) {
       const coords = ed.view.coordsAtPos(from);
       const editorRect = ed.view.dom.getBoundingClientRect();
+      setSymbolPicker(null);
       setSlashMenu({
         x: coords.left - editorRect.left,
         y: coords.bottom - editorRect.top + 4,
@@ -661,6 +665,7 @@ export function RichTextEditor({
     { id: "divider", label: "Divider", description: "Horizontal rule", icon: Minus, aliases: [] },
     { id: "code", label: "Code Block", description: "Code snippet", icon: Code, aliases: [] },
     { id: "image", label: "Image", description: "Upload from device", icon: ImageIcon, aliases: [] },
+    { id: "symbol", label: "Symbol", description: "Check, cross, and marks", icon: Smile, aliases: ["emoji", "icon", "check", "cross"] },
     { id: "rtl", label: "Right to left", description: "Arabic and RTL text", icon: AlignRight, aliases: ["arabic", "ar"] },
     { id: "ltr", label: "Left to right", description: "English and LTR text", icon: AlignLeft, aliases: [] },
     ...(projectId
@@ -739,6 +744,17 @@ export function RichTextEditor({
         setMemberQuery("");
         void openAttendancePicker();
       }
+      return;
+    }
+
+    if (id === "symbol") {
+      const coords = editor.view.coordsAtPos(
+        range?.from ?? editor.state.selection.from,
+      );
+      if (range) editor.chain().focus().deleteRange(range).run();
+      setSlashMenu(null);
+      setAttendancePicker(null);
+      setSymbolPicker({ x: coords.left, y: coords.bottom + 4 });
       return;
     }
 
@@ -873,6 +889,7 @@ export function RichTextEditor({
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setSlashMenu(null);
         setAttendancePicker(null);
+        setSymbolPicker(null);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -1034,6 +1051,18 @@ export function RichTextEditor({
         >
           <Minus className="h-3.5 w-3.5" />
         </ToolbarButton>
+        <ToolbarButton
+          onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            setSlashMenu(null);
+            setAttendancePicker(null);
+            setSymbolPicker({ x: rect.left, y: rect.bottom + 4 });
+          }}
+          active={Boolean(symbolPicker)}
+          title="Symbol"
+        >
+          <Smile className="h-3.5 w-3.5" />
+        </ToolbarButton>
       </div>
     ) : null;
 
@@ -1057,6 +1086,18 @@ export function RichTextEditor({
         />
       )}
       {picker}
+      {symbolPicker ? (
+        <NoteSymbolPicker
+          ref={menuRef}
+          x={symbolPicker.x}
+          y={symbolPicker.y}
+          onPick={(glyph) => {
+            editor.chain().focus().insertContent(glyph).run();
+            setSymbolPicker(null);
+          }}
+          onClose={() => setSymbolPicker(null)}
+        />
+      ) : null}
     </div>
   );
 
@@ -1245,7 +1286,7 @@ function ToolbarButton({
   title,
 }: {
   children: React.ReactNode;
-  onClick: () => void;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   active: boolean;
   title?: string;
 }) {

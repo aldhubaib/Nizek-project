@@ -69,8 +69,9 @@ export function NotificationGate({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer);
   }, [currentReason, busy, checking, refresh]);
 
-  // Still loading the initial status — don't flash the gate.
-  if (checking && !status) return null;
+  // Still loading the initial status — show the app optimistically so the
+  // user doesn't stare at a blank screen while we check.
+  if (checking && !status) return <>{children}</>;
 
   // Notifications are fully enabled — render the app normally.
   if (status?.enabled) return <>{children}</>;
