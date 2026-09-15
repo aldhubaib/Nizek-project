@@ -19,11 +19,12 @@ function PopoverContent({
   alignOffset = 0,
   side = "bottom",
   sideOffset = 4,
+  collisionAvoidance,
   ...props
 }: PopoverPrimitive.Popup.Props &
   Pick<
     PopoverPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset"
+    "align" | "alignOffset" | "side" | "sideOffset" | "collisionAvoidance"
   >) {
   return (
     <PopoverPrimitive.Portal>
@@ -32,6 +33,7 @@ function PopoverContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
+        collisionAvoidance={collisionAvoidance}
         className="isolate z-[10000]"
       >
         <PopoverPrimitive.Popup
@@ -80,6 +82,11 @@ function PopoverDescription({
   )
 }
 
+/** Prefer top/bottom; never flip to the side. Pair with max-h-(--available-height). */
+const COMBOBOX_COLLISION_AVOIDANCE = {
+  fallbackAxisSide: "none",
+} as const
+
 export {
   Popover,
   PopoverContent,
@@ -87,4 +94,5 @@ export {
   PopoverHeader,
   PopoverTitle,
   PopoverTrigger,
+  COMBOBOX_COLLISION_AVOIDANCE,
 }

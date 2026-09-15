@@ -64,6 +64,7 @@ export type WorkflowUserOption = {
   id: string;
   name: string;
   email: string;
+  imageUrl: string | null;
 };
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -340,9 +341,20 @@ export async function listWorkflowTransitions(
 
 export async function listWorkflowUsers(): Promise<WorkflowUserOption[]> {
   await requireUser();
+  const pending = await prisma.pendingTeamInvite.findMany({
+    select: { email: true },
+  });
+  if (pending.length > 0) {
+    const { provisionUserFromPendingInvite } = await import(
+      "@/lib/pending-invite"
+    );
+    for (const row of pending) {
+      await provisionUserFromPendingInvite(row.email);
+    }
+  }
   const rows = await prisma.user.findMany({
     where: { blocked: false },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, imageUrl: true },
     orderBy: { name: "asc" },
     take: 200,
   });
@@ -350,6 +362,7 @@ export async function listWorkflowUsers(): Promise<WorkflowUserOption[]> {
     id: u.id,
     name: u.name?.trim() || u.email,
     email: u.email,
+    imageUrl: u.imageUrl,
   }));
 }
 

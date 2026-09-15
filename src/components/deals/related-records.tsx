@@ -1,11 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Briefcase,
   Building2,
+  Check,
+  ChevronDown,
   Contact,
+  Search,
   User,
   type LucideIcon,
 } from "lucide-react";
@@ -14,6 +17,13 @@ import {
   RelatedCard,
   UnlinkButton,
 } from "@/components/deals/related-data";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { CustomFieldDTO } from "@/actions/custom-field";
 import type { RelatedRecordOption } from "@/lib/fields/relations";
 import {
@@ -22,6 +32,7 @@ import {
   stringifyRelationIds,
   type RelationModel,
 } from "@/lib/fields/relations";
+import { cn } from "@/lib/utils";
 
 const MODEL_ICON: Record<RelationModel, LucideIcon> = {
   company: Building2,
@@ -50,6 +61,33 @@ export function RelatedField({
     () => options.filter((row) => row.id !== excludeId),
     [options, excludeId],
   );
+  const modelLabel = RELATION_MODEL_LABEL[model];
+
+  if (!multiple) {
+    const selectedId = attachedIds[0] ?? "";
+    const selected =
+      catalog.find((row) => row.id === selectedId) ??
+      options.find((row) => row.id === selectedId);
+    return (
+      <div className="space-y-1.5">
+        <Label className="text-s">
+          {field.label}
+          {field.required && <span className="ms-0.5 text-destructive">*</span>}
+        </Label>
+        <RelationSearchSelect
+          label={modelLabel}
+          value={selected}
+          options={
+            selected && !catalog.some((row) => row.id === selected.id)
+              ? [selected, ...catalog]
+              : catalog
+          }
+          onChange={(id) => onChange(stringifyRelationIds(id ? [id] : []))}
+        />
+      </div>
+    );
+  }
+
   const attached = attachedIds.map((id) => {
     const row = catalog.find((item) => item.id === id);
     return (
@@ -64,7 +102,6 @@ export function RelatedField({
   const attachedSet = new Set(attached.map((row) => row.id));
   const available = catalog.filter((row) => !attachedSet.has(row.id));
   const canAdd = multiple || attached.length === 0;
-  const modelLabel = RELATION_MODEL_LABEL[model];
 
   return (
     <RelatedCard
@@ -132,5 +169,137 @@ export function RelatedField({
         </tbody>
       </table>
     </RelatedCard>
+  );
+}
+
+function RelationSearchSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value?: RelatedRecordOption;
+  options: RelatedRecordOption[];
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter(
+      (row) =>
+        row.title.toLowerCase().includes(q) ||
+        row.subtitle.toLowerCase().includes(q),
+    );
+  }, [options, query]);
+
+  function pick(id: string) {
+    onChange(id);
+    setOpen(false);
+    setQuery("");
+  }
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setQuery("");
+      }}
+    >
+      <PopoverTrigger
+        type="button"
+        className="flex h-9 w-full items-center gap-2 rounded-md border border-input bg-transparent px-3 text-start text-s dark:bg-input/30"
+      >
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate",
+            !value && "text-muted-foreground",
+          )}
+        >
+          {value
+            ? value.subtitle
+              ? `${value.title} · ${value.subtitle}`
+              : value.title
+            : "—"}
+        </span>
+        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[var(--anchor-width)] min-w-64 p-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              e.preventDefault();
+              if (filtered[0]) pick(filtered[0].id);
+            }}
+            placeholder={`Search ${label.toLowerCase()}s`}
+            className="h-8 ps-8 text-s"
+            autoFocus
+          />
+        </div>
+        <div className="max-h-64 overflow-y-auto">
+          {filtered.length === 0 && options.length === 0 ? (
+            <p className="px-2 py-6 text-center text-s text-muted-foreground">
+              No {label.toLowerCase()}s to pick
+            </p>
+          ) : filtered.length === 0 ? (
+            <p className="px-2 py-6 text-center text-s text-muted-foreground">
+              No matches for “{query.trim()}”
+            </p>
+          ) : (
+            <ul>
+              {!query.trim() && (
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => pick("")}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-s text-muted-foreground hover:bg-accent/60",
+                      !value && "bg-accent/40",
+                    )}
+                  >
+                    <span className="min-w-0 flex-1">—</span>
+                    {!value && <Check className="size-3.5 shrink-0" />}
+                  </button>
+                </li>
+              )}
+              {filtered.map((row) => {
+                const on = value?.id === row.id;
+                return (
+                  <li key={row.id}>
+                    <button
+                      type="button"
+                      onClick={() => pick(row.id)}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start hover:bg-accent/60",
+                        on && "bg-accent/40",
+                      )}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-s font-medium">
+                          {row.title}
+                        </span>
+                        {row.subtitle && (
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {row.subtitle}
+                          </span>
+                        )}
+                      </span>
+                      {on && <Check className="size-3.5 shrink-0" />}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

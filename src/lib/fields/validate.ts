@@ -1,4 +1,6 @@
 import { isFieldAnswered } from "@/lib/board-fields";
+import { costFieldIsFilled } from "./cost";
+import { inviteFieldIsFilled } from "./invite";
 import { phoneValueIsFilled } from "@/lib/dial-codes";
 import {
   NATIVE_DEAL_FIELDS,
@@ -51,6 +53,12 @@ export function customFieldIsFilled(
   value: string | null | undefined,
 ): boolean {
   if (type === "phone") return phoneValueIsFilled(value);
+  if (type === "cost") return costFieldIsFilled(value);
+  if (type === "invite") return inviteFieldIsFilled(value);
+  if (type === "user") {
+    return isFieldAnswered({ type: "select", multiple: true }, value) ||
+      Boolean(value?.trim());
+  }
   if (type === "checkbox") {
     if (value === "true") return true;
     return isFieldAnswered({ type: "select", multiple: true }, value);

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Camera, Loader2, Volume2 } from "lucide-react";
+import { Calendar, Camera, Loader2, Volume2 } from "lucide-react";
+import { ConnectGoogleCalendarButton } from "@/components/auth/connect-google-calendar";
 import { Switch } from "@/components/ui/switch";
 import { updateMyAvatar, updateMyName } from "@/actions/account";
 import { useCurrentUser } from "@/components/current-user-provider";
@@ -25,11 +26,15 @@ export function AccountClient({
   email,
   imageUrl: initialImageUrl,
   isClient = false,
+  calendarConnected = false,
+  showCalendarSettings = false,
 }: {
   name: string;
   email: string;
   imageUrl: string | null;
   isClient?: boolean;
+  calendarConnected?: boolean;
+  showCalendarSettings?: boolean;
 }) {
   const me = useCurrentUser();
   const resolvedName = (initialName || me?.name || "").trim();
@@ -202,6 +207,34 @@ export function AccountClient({
           />
         </div>
       </section>
+
+      {!isClient && (showCalendarSettings || calendarConnected) && (
+        <section className="rounded-2xl border border-border/60 bg-card p-5">
+          <div className="flex items-start gap-3">
+            <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted/40 text-foreground">
+              <Calendar className="h-4.5 w-4.5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-s font-semibold">Google Calendar</div>
+              <div className="mt-0.5 text-s text-muted-foreground">
+                {calendarConnected
+                  ? "On projects that send invites, events are created on your calendar."
+                  : "Only needed if you send invites on a project that uses Calendar. Everyone else can skip this."}
+              </div>
+              {calendarConnected ? (
+                <div className="mt-3 text-s font-medium text-emerald-400">
+                  Connected
+                </div>
+              ) : (
+                <ConnectGoogleCalendarButton
+                  className="mt-3"
+                  callbackURL="/dashboard/account"
+                />
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Notifications (toggle + per-platform recovery steps) */}
       <NotificationSetup />

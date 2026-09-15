@@ -44,6 +44,11 @@ import {
 } from "@/lib/fields/relations";
 import type { WorkflowEntityType } from "@/lib/workflow/types";
 import type { TextScript } from "@/lib/fields/text-config";
+import {
+  canControlVisibility,
+  visibilityChoices,
+  type FieldVisibility,
+} from "@/lib/fields/visibility";
 import { cn } from "@/lib/utils";
 
 const UNSECTIONED = "unsectioned";
@@ -340,10 +345,19 @@ export function LayoutEditor({
           <FieldProperties
             field={selected}
             sections={catalog.sections}
+            siblings={allFields}
             pending={pending}
             onUpdate={(next) =>
               run(
                 () => updateCustomField(selected.id, next),
+                (updated) => {
+                  setNextCatalog((prev) => moveField(prev, updated));
+                },
+              )
+            }
+            onUpdateSibling={(id, visibility) =>
+              run(
+                () => updateCustomField(id, { visibility }),
                 (updated) => {
                   setNextCatalog((prev) => moveField(prev, updated));
                 },
@@ -507,23 +521,30 @@ function FieldRow({
 function FieldProperties({
   field,
   sections,
+  siblings,
   pending,
   onUpdate,
+  onUpdateSibling,
   onDelete,
 }: {
   field: CustomFieldDTO;
   sections: CustomFieldCatalogDTO["sections"];
+  siblings: CustomFieldDTO[];
   pending: boolean;
   onUpdate: (input: {
     label?: string;
     type?: string;
     options?: string[];
     relation?: RelationConfig;
+    userMultiple?: boolean;
+    countryMultiple?: boolean;
     script?: TextScript | null;
     required?: boolean;
     showOn?: string;
+    visibility?: FieldVisibility | null;
     sectionId?: string | null;
   }) => void;
+  onUpdateSibling: (id: string, visibility: FieldVisibility | null) => void;
   onDelete?: () => void;
 }) {
   return (
@@ -613,6 +634,54 @@ function FieldProperties({
           Arabic only
         </label>
       )}
+      {field.type === "cost" && (
+        <p className="text-xs text-muted-foreground">
+          Title and cost rows, with a running total.
+        </p>
+      )}
+      {field.type === "priority" && (
+        <p className="text-xs text-muted-foreground">
+          Very high, High, Normal, Low, Very low.
+        </p>
+      )}
+      {field.type === "invite" && (
+        <p className="text-xs text-muted-foreground">
+          People, time, and a Google Maps pin on the form. Sending waits for a
+          Send invite action on the blueprint.
+        </p>
+      )}
+      {field.type === "user" && !field.binding && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Picker</Label>
+          <select
+            value={field.userMultiple ? "many" : "one"}
+            disabled={pending}
+            onChange={(e) =>
+              onUpdate({ userMultiple: e.target.value === "many" })
+            }
+            className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-s"
+          >
+            <option value="one">One person</option>
+            <option value="many">Several people</option>
+          </select>
+        </div>
+      )}
+      {field.type === "country" && !field.binding && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Picker</Label>
+          <select
+            value={field.countryMultiple ? "many" : "one"}
+            disabled={pending}
+            onChange={(e) =>
+              onUpdate({ countryMultiple: e.target.value === "many" })
+            }
+            className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-s"
+          >
+            <option value="one">One country</option>
+            <option value="many">Several countries</option>
+          </select>
+        </div>
+      )}
       {field.type === "relation" && !field.binding && (
         <>
           <div className="space-y-1.5">
@@ -637,7 +706,9 @@ function FieldProperties({
               ))}
             </select>
             <p className="text-xs text-muted-foreground">
-              Shows under Related data on the form.
+              {field.relation?.multiple === false
+                ? "Shows as a dropdown on the form."
+                : "Shows under Related data on the form."}
             </p>
           </div>
           <label className="flex items-center gap-2 text-s">
@@ -684,6 +755,22 @@ function FieldProperties({
           />
         </div>
       )}
+      {canControlVisibility(field) && (
+        <SituationsEditor
+          field={field}
+          siblings={siblings}
+          pending={pending}
+          onUpdateSibling={onUpdateSibling}
+        />
+      )}
+      {field.binding !== "title" && (
+        <VisibilityRules
+          field={field}
+          siblings={siblings}
+          pending={pending}
+          onUpdate={(visibility) => onUpdate({ visibility })}
+        />
+      )}
       {onDelete && (
         <Button
           type="button"
@@ -694,6 +781,173 @@ function FieldProperties({
           <Trash2 className="me-1.5 h-3.5 w-3.5" />
           Delete field
         </Button>
+      )}
+    </div>
+  );
+}
+
+function SituationsEditor({
+  field,
+  siblings,
+  pending,
+  onUpdateSibling,
+}: {
+  field: CustomFieldDTO;
+  siblings: CustomFieldDTO[];
+  pending: boolean;
+  onUpdateSibling: (id: string, visibility: FieldVisibility | null) => void;
+}) {
+  const options = visibilityChoices(field);
+  const targets = siblings.filter(
+    (sibling) => sibling.id !== field.id && sibling.binding !== "title",
+  );
+
+  if (options.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Add options above, then tick which fields should appear for each one.
+      </p>
+    );
+  }
+
+  if (targets.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Add another field (for example a relation), then tick it under the
+        option that should reveal it.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs">Situations</Label>
+      <p className="text-xs text-muted-foreground">
+        Tick the fields that should appear for each option.
+      </p>
+      {options.map((choice) => (
+        <div
+          key={choice.value}
+          className="space-y-1.5 rounded-md border border-border/60 bg-muted/20 px-2.5 py-2"
+        >
+          <p className="text-xs text-muted-foreground">When {choice.label}</p>
+          {targets.map((target) => {
+            const rule = target.visibility;
+            const tiedToThis = rule?.dependsOn === field.id;
+            const locked = Boolean(rule?.dependsOn && rule.dependsOn !== field.id);
+            const checked = tiedToThis && (rule?.values.includes(choice.value) ?? false);
+            return (
+              <label key={target.id} className="flex items-center gap-2 text-s">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={pending || locked}
+                  onChange={() => {
+                    const current = tiedToThis ? (rule?.values ?? []) : [];
+                    const values = checked
+                      ? current.filter((item) => item !== choice.value)
+                      : [...current, choice.value];
+                    onUpdateSibling(
+                      target.id,
+                      values.length > 0
+                        ? { dependsOn: field.id, values }
+                        : null,
+                    );
+                  }}
+                />
+                <span className="min-w-0 truncate">{target.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function VisibilityRules({
+  field,
+  siblings,
+  pending,
+  onUpdate,
+}: {
+  field: CustomFieldDTO;
+  siblings: CustomFieldDTO[];
+  pending: boolean;
+  onUpdate: (visibility: FieldVisibility | null) => void;
+}) {
+  const controllers = siblings.filter(
+    (sibling) => sibling.id !== field.id && canControlVisibility(sibling),
+  );
+  const rule = field.visibility;
+  const controller =
+    controllers.find((sibling) => sibling.id === rule?.dependsOn) ?? null;
+  const choices = controller ? visibilityChoices(controller) : [];
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">Show when</Label>
+      {controllers.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Add a pick list (or checkbox) to this layout to hide this field
+          unless that list equals a value you choose.
+        </p>
+      ) : (
+        <>
+          <select
+            value={rule?.dependsOn ?? ""}
+            disabled={pending}
+            onChange={(e) => {
+              const dependsOn = e.target.value;
+              if (!dependsOn) {
+                onUpdate(null);
+                return;
+              }
+              onUpdate({ dependsOn, values: [] });
+            }}
+            className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-s"
+          >
+            <option value="">Always</option>
+            {controllers.map((sibling) => (
+              <option key={sibling.id} value={sibling.id}>
+                {sibling.label}
+              </option>
+            ))}
+          </select>
+          {controller && choices.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Add options on “{controller.label}” first.
+            </p>
+          )}
+          {controller && choices.length > 0 && (
+            <div className="space-y-1.5 rounded-md border border-border/60 bg-muted/20 px-2.5 py-2">
+              <p className="text-xs text-muted-foreground">equals</p>
+              {choices.map((choice) => {
+                const checked = rule?.values.includes(choice.value) ?? false;
+                return (
+                  <label key={choice.value} className="flex items-center gap-2 text-s">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={pending}
+                      onChange={() => {
+                        const current = rule?.values ?? [];
+                        const values = checked
+                          ? current.filter((item) => item !== choice.value)
+                          : [...current, choice.value];
+                        onUpdate({
+                          dependsOn: controller.id,
+                          values,
+                        });
+                      }}
+                    />
+                    {choice.label}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

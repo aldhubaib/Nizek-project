@@ -12,6 +12,10 @@ import { notFound, redirect } from "next/navigation";
 import { ProjectDetailClient } from "../project-detail-client";
 import { viewerBoardState } from "@/actions/board";
 import type { KanbanTask } from "@/store/kanban";
+import {
+  projectUsesCalendarInvite,
+  userHasGoogleCalendarAccess,
+} from "@/lib/google-calendar";
 
 interface Props {
   params: Promise<{ projectId: string }>;
@@ -35,7 +39,11 @@ export default async function ProjectDetailPage({ params }: Props) {
   const canAccessVault = await canAccessProjectVault(user.id, projectId);
   // All false for every project that has no board, which is all of them until
   // one is added — so the tab set below is unchanged for existing projects.
-  const board = await viewerBoardState(projectId);
+  const [board, calendarConnected, projectHasInvite] = await Promise.all([
+    viewerBoardState(projectId),
+    userHasGoogleCalendarAccess(user.id),
+    projectUsesCalendarInvite(projectId),
+  ]);
 
   const isSystemAdmin = user.systemRole === "ADMIN";
   const isProjectAdmin = member.projectRole?.isAdmin ?? false;
@@ -90,6 +98,7 @@ export default async function ProjectDetailPage({ params }: Props) {
       boardExists={board.exists}
       boardEnabled={board.enabled}
       sprintsEnabled={project.sprintsEnabled}
+      needsCalendarConnect={projectHasInvite && !calendarConnected}
     />
   );
 }

@@ -55,6 +55,7 @@ export default async function BoardRecordPage({
       projectId={projectId}
       record={{
         id: record.id,
+        recordNumber: record.recordNumber,
         title: record.title,
         value: null,
         flowId: record.flowId,
@@ -64,6 +65,8 @@ export default async function BoardRecordPage({
         fieldValues: record.fieldValues,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
+        createdBy: record.createdBy,
+        assignee: record.assignee,
       }}
       flows={flows}
       catalogs={catalogs}

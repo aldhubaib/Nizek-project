@@ -27,6 +27,8 @@ export const WORKFLOW_ACTION_TYPES = [
   "associate_companies",
   "set_field",
   "notify",
+  "send_invite",
+  "assign_user",
 ] as const;
 export type WorkflowActionType = (typeof WORKFLOW_ACTION_TYPES)[number];
 
@@ -36,6 +38,8 @@ export type WorkflowActionConfig =
   | { items: string[] }
   | { field: string; value: string }
   | { userIds: string[] }
+  | { field: string }
+  | { userId: string }
   | Record<string, never>;
 
 export type WorkflowActionDef = {

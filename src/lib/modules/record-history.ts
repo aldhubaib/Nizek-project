@@ -2,6 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { formatDealValue } from "@/lib/deal-value";
 import { formatPhoneValue } from "@/lib/dial-codes";
 import { formatCountryCodes } from "@/lib/countries";
+import { fieldPriorityLabel } from "@/lib/fields/priority";
+import { formatCostFieldDetail } from "@/lib/fields/cost";
+import { formatInviteFieldDetail, parseInviteValue } from "@/lib/fields/invite";
+import { parseUserIds } from "@/lib/fields/user-config";
 import {
   parseRelationConfig,
   parseRelationIds,
@@ -23,6 +27,7 @@ export type RecordHistorySnapshot = {
   title: string;
   value?: string | null;
   statusId?: string | null;
+  assigneeId?: string | null;
   contactIds?: string[];
   companyIds?: string[];
   fieldValues: Record<string, string>;
@@ -92,6 +97,9 @@ function formatPlain(type: string, raw: string): string {
     });
   }
   if (type === "file") return "Attached";
+  if (type === "priority") return fieldPriorityLabel(raw);
+  if (type === "cost") return formatCostFieldDetail(raw);
+  if (type === "invite") return formatInviteFieldDetail(raw);
   if (type === "number") {
     const amount = Number(raw);
     return Number.isFinite(amount) ? formatDealValue(raw) : raw;
@@ -165,7 +173,20 @@ function displayHistoryValue(
 ): string {
   const value = raw ?? "";
   if (!value) return "";
-  if (field.type === "user") return maps.user.get(value) ?? value;
+  if (field.type === "user") {
+    return parseUserIds(value)
+      .map((id) => maps.user.get(id) ?? id)
+      .join(", ");
+  }
+  if (field.type === "invite") {
+    const invite = parseInviteValue(value);
+    const names = invite.attendees.map((row) => {
+      const map = row.kind === "user" ? maps.user : maps.contact;
+      return map.get(row.id) ?? row.id;
+    });
+    const when = formatInviteFieldDetail(value);
+    return names.length ? `${when} (${names.join(", ")})` : when;
+  }
   if (field.type === "relation") {
     const config = parseRelationConfig(field.options);
     return joinTitles(maps[config.model], parseRelationIds(value));
@@ -260,6 +281,8 @@ export async function logRecordChanges(input: {
     "Companies";
 
   const userIds = new Set<string>();
+  if (input.before.assigneeId) userIds.add(input.before.assigneeId);
+  if (input.after.assigneeId) userIds.add(input.after.assigneeId);
   const contactIds = new Set([
     ...(input.before.contactIds ?? []),
     ...(input.after.contactIds ?? []),
@@ -276,8 +299,16 @@ export async function logRecordChanges(input: {
     const afterRaw = input.after.fieldValues[field.id] ?? "";
     if (same(beforeRaw, afterRaw)) continue;
     if (field.type === "user") {
-      if (beforeRaw) userIds.add(beforeRaw);
-      if (afterRaw) userIds.add(afterRaw);
+      collectIds(userIds, parseUserIds(beforeRaw));
+      collectIds(userIds, parseUserIds(afterRaw));
+    }
+    if (field.type === "invite") {
+      for (const raw of [beforeRaw, afterRaw]) {
+        for (const attendee of parseInviteValue(raw).attendees) {
+          if (attendee.kind === "user") userIds.add(attendee.id);
+          else contactIds.add(attendee.id);
+        }
+      }
     }
     if (field.type === "relation") {
       const model = parseRelationConfig(field.options).model;
@@ -336,6 +367,23 @@ export async function logRecordChanges(input: {
       joinTitles(maps.contact, input.after.contactIds ?? []),
     );
   }
+  if (
+    input.before.assigneeId !== undefined ||
+    input.after.assigneeId !== undefined
+  ) {
+    pushChange(
+      changes,
+      "assignee",
+      "Assignee",
+      input.before.assigneeId
+        ? (maps.user.get(input.before.assigneeId) ?? "Someone")
+        : "",
+      input.after.assigneeId
+        ? (maps.user.get(input.after.assigneeId) ?? "Someone")
+        : "",
+    );
+  }
+
   if (input.before.companyIds || input.after.companyIds) {
     pushChange(
       changes,

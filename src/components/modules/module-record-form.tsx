@@ -11,6 +11,7 @@ import { PageHeaderActions } from "@/components/page-header-actions";
 import { PageBody } from "@/components/page-body";
 import { PageOverflowItems } from "@/components/page-overflow-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { formatRecordNumber } from "@/lib/modules/record-number";
 import { RelatedCompanies, RelatedContacts } from "@/components/deals/related-data";
 import { RelatedField } from "@/components/deals/related-records";
 import {
@@ -38,16 +39,20 @@ import type { DealFlowDTO } from "@/actions/deal-flow";
 import type { CustomFieldCatalogDTO, CustomFieldDTO } from "@/actions/custom-field";
 import {
   EMPTY_RELATED_CATALOG,
+  isRelatedDataLayoutField,
   type RelatedRecordCatalog,
 } from "@/lib/fields/relations";
 import type { WorkflowUserOption } from "@/actions/workflow";
-import { FieldControl, visibleOnForm } from "@/components/fields/field-control";
+import { FieldControl, fieldShowsOnForm } from "@/components/fields/field-control";
+import { UserField } from "@/components/fields/user-field";
+import { MemberAvatar } from "@/components/boards/member-avatar";
 import { requiredLayoutFieldIsFilled } from "@/lib/fields/validate";
 import { moduleSurface } from "@/lib/modules/registry";
 import { applyTextScript } from "@/lib/fields/text-config";
 import type { WorkflowEntityType } from "@/lib/workflow/types";
 import { cn } from "@/lib/utils";
 import { RecordHistoryDialog } from "@/components/modules/record-history-dialog";
+import { RecordCommentSection } from "@/components/modules/record-comment-section";
 
 export function ModuleRecordForm({
   entityType,
@@ -94,6 +99,7 @@ export function ModuleRecordForm({
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(
     record?.fieldValues ?? {},
   );
+  const [assigneeId, setAssigneeId] = useState(record?.assignee?.id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [saving, startSaving] = useTransition();
@@ -112,8 +118,9 @@ export function ModuleRecordForm({
     ...catalog.sections.flatMap((section) => section.fields),
     ...catalog.unsectioned,
   ];
+  const fieldIds = allFields.map((field) => field.id);
   const canSave = allFields
-    .filter((field) => visibleOnForm(field, mode))
+    .filter((field) => fieldShowsOnForm(field, mode, fieldValues, fieldIds))
     .every((field) =>
       requiredLayoutFieldIsFilled(field, {
         title,
@@ -124,7 +131,9 @@ export function ModuleRecordForm({
       }),
     );
   const relatedFields = allFields.filter(
-    (field) => isRelatedLayoutField(field) && visibleOnForm(field, mode),
+    (field) =>
+      isRelatedDataLayoutField(field) &&
+      fieldShowsOnForm(field, mode, fieldValues, fieldIds),
   );
   const showCompanies = relatedFields.some((field) => field.binding === "companies");
   const showContacts = relatedFields.some((field) => field.binding === "contacts");
@@ -144,9 +153,10 @@ export function ModuleRecordForm({
       return record ? updateDeal(record.id, input) : createDeal(input);
     }
     if (entityType === "board") {
+      const boardInput = { ...input, assigneeId: assigneeId || null };
       return record
-        ? updateBoardRecord(projectId, record.id, input)
-        : createBoardRecord(projectId, input);
+        ? updateBoardRecord(projectId, record.id, boardInput)
+        : createBoardRecord(projectId, boardInput);
     }
     const directory = entityType as DirectoryEntity;
     return record
@@ -198,17 +208,6 @@ export function ModuleRecordForm({
   return (
     <div>
       <PageHeaderActions>
-        {record && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setHistoryOpen(true)}
-          >
-            <History data-icon="inline-start" />
-            History
-          </Button>
-        )}
         <Button
           type="submit"
           form="module-record-form"
@@ -221,6 +220,10 @@ export function ModuleRecordForm({
       </PageHeaderActions>
       {record && (
         <PageOverflowItems id="module-record-form-actions" order={0}>
+          <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
+            <History className="h-4 w-4" />
+            <span className="flex-1">History</span>
+          </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
             disabled={busy}
@@ -234,7 +237,11 @@ export function ModuleRecordForm({
 
       <PageHeader hasMenu={Boolean(record)}>
         <PageBackButton href={boardHref} label={`Back to ${surface.label.toLowerCase()}`} />
-        <PageName>{record ? record.title : `Add ${surface.recordWord}`}</PageName>
+        <PageName>
+          {record
+            ? `${formatRecordNumber(record.recordNumber)} ${record.title}`
+            : `Add ${surface.recordWord}`}
+        </PageName>
       </PageHeader>
 
       <PageBody className="py-8">
@@ -271,10 +278,40 @@ export function ModuleRecordForm({
           </FormSection>
         )}
 
+        {entityType === "board" && (
+          <FormSection title="People" columns={2}>
+            <div className="space-y-1.5">
+              <Label className="text-s">Reported by</Label>
+              {record?.createdBy ? (
+                <div className="flex h-9 items-center gap-2 rounded-md border border-input px-2">
+                  <MemberAvatar person={record.createdBy} size="sm" />
+                  <span className="text-s">
+                    {record.createdBy.name ?? "Someone"}
+                  </span>
+                </div>
+              ) : (
+                <p className="text-s text-muted-foreground">
+                  Set to you when the card is created.
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-s">Assignee</Label>
+              <UserField
+                multiple={false}
+                users={users}
+                value={assigneeId}
+                onChange={setAssigneeId}
+              />
+            </div>
+          </FormSection>
+        )}
+
         {catalog.sections.map((section) => {
           const visible = section.fields.filter(
             (field) =>
-              !isRelatedLayoutField(field) && visibleOnForm(field, mode),
+              !isRelatedDataLayoutField(field) &&
+              fieldShowsOnForm(field, mode, fieldValues, fieldIds),
           );
           if (visible.length === 0) return null;
           return (
@@ -291,6 +328,8 @@ export function ModuleRecordForm({
                   value={value}
                   fieldValues={fieldValues}
                   users={users}
+                  related={related}
+                  excludeDealId={record?.id}
                   onTitle={setTitle}
                   onValue={setValue}
                   onField={(next) =>
@@ -303,13 +342,15 @@ export function ModuleRecordForm({
         })}
         {catalog.unsectioned.filter(
           (field) =>
-            !isRelatedLayoutField(field) && visibleOnForm(field, mode),
+            !isRelatedDataLayoutField(field) &&
+            fieldShowsOnForm(field, mode, fieldValues, fieldIds),
         ).length > 0 && (
           <FormSection>
             {catalog.unsectioned
               .filter(
                 (field) =>
-                  !isRelatedLayoutField(field) && visibleOnForm(field, mode),
+                  !isRelatedDataLayoutField(field) &&
+                  fieldShowsOnForm(field, mode, fieldValues, fieldIds),
               )
               .map((field) => (
                 <CatalogField
@@ -319,6 +360,8 @@ export function ModuleRecordForm({
                   value={value}
                   fieldValues={fieldValues}
                   users={users}
+                  related={related}
+                  excludeDealId={record?.id}
                   onTitle={setTitle}
                   onValue={setValue}
                   onField={(next) =>
@@ -386,6 +429,16 @@ export function ModuleRecordForm({
 
         {error && <p className="text-s text-destructive">{error}</p>}
       </form>
+      {record && entityType === "board" && projectId && (
+        <div className="mx-auto mt-8 max-w-3xl space-y-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Comments
+          </p>
+          <div className="rounded-xl border border-border bg-card px-4 py-4">
+            <RecordCommentSection projectId={projectId} recordId={record.id} />
+          </div>
+        </div>
+      )}
       </PageBody>
       {record && historyOpen && (
         <RecordHistoryDialog
@@ -399,20 +452,14 @@ export function ModuleRecordForm({
   );
 }
 
-function isRelatedLayoutField(field: CustomFieldDTO) {
-  return (
-    field.binding === "companies" ||
-    field.binding === "contacts" ||
-    field.type === "relation"
-  );
-}
-
 function CatalogField({
   field,
   title,
   value,
   fieldValues,
   users,
+  related = EMPTY_RELATED_CATALOG,
+  excludeDealId,
   onTitle,
   onValue,
   onField,
@@ -422,13 +469,18 @@ function CatalogField({
   value: string;
   fieldValues: Record<string, string>;
   users: WorkflowUserOption[];
+  related?: RelatedRecordCatalog;
+  excludeDealId?: string;
   onTitle: (next: string) => void;
   onValue: (next: string) => void;
   onField: (next: string) => void;
 }) {
+  const wide =
+    field.type === "cost" || field.type === "invite" ? "sm:col-span-2" : undefined;
+
   if (field.binding === "title") {
     return (
-      <div className="space-y-1.5">
+      <div className={cn("space-y-1.5", wide)}>
         <Label className="text-s">
           {field.label}
           {field.required && <span className="ms-0.5 text-destructive">*</span>}
@@ -445,7 +497,7 @@ function CatalogField({
   }
   if (field.binding === "value") {
     return (
-      <div className="space-y-1.5">
+      <div className={cn("space-y-1.5", wide)}>
         <Label className="text-s">
           {field.label}
           {field.required && <span className="ms-0.5 text-destructive">*</span>}
@@ -460,12 +512,16 @@ function CatalogField({
     );
   }
   return (
-    <FieldControl
-      field={field}
-      value={fieldValues[field.id] ?? ""}
-      users={users}
-      onChange={onField}
-    />
+    <div className={wide}>
+      <FieldControl
+        field={field}
+        value={fieldValues[field.id] ?? ""}
+        users={users}
+        related={related}
+        excludeDealId={excludeDealId}
+        onChange={onField}
+      />
+    </div>
   );
 }
 

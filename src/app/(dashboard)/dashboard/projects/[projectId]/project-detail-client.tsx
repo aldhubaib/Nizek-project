@@ -216,6 +216,8 @@ interface Props {
    * instead. Nothing is deleted — turning it back on restores the tabs.
    */
   sprintsEnabled?: boolean;
+  /** This project's board sends Calendar invites and the viewer has not connected Google. */
+  needsCalendarConnect?: boolean;
 }
 
 function TabSpinner() {
@@ -244,6 +246,7 @@ export function ProjectDetailClient({
   boardExists = false,
   boardEnabled = false,
   sprintsEnabled = true,
+  needsCalendarConnect = false,
 }: Props) {
   const canEdit = userPermissions.canModifyTask || userPermissions.isAdmin;
   const isAdmin = userPermissions.isAdmin;
@@ -690,7 +693,12 @@ export function ProjectDetailClient({
               board but never opens it costs nothing to load. */}
           {hasBoard && (
             <TabsContent value="boards" className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-              {activeTab === "boards" && <BoardTab projectId={project.id} />}
+              {activeTab === "boards" && (
+                <BoardTab
+                  projectId={project.id}
+                  needsCalendarConnect={needsCalendarConnect}
+                />
+              )}
             </TabsContent>
           )}
 

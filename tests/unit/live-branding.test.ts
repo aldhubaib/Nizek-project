@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyDocumentLogos,
   logosEqual,
+  nizekBotLogoUrl,
   parseLiveLogos,
 } from "@/lib/live-branding";
 
@@ -16,6 +17,7 @@ describe("parseLiveLogos", () => {
           favicon: "/pwa-icons/1/favicon.ico",
           faviconDark: "/pwa-icons/1/favicon-dark.ico",
           appleTouchIcon: "/pwa-icons/1/apple-touch-icon.png",
+          homeScreenSource: "https://cdn/home.png?v=1",
           webLogo: "https://cdn/w.svg?v=1",
           iosSplash: null,
           manifest: "/manifest.json?v=9",
@@ -26,6 +28,7 @@ describe("parseLiveLogos", () => {
       favicon: "/pwa-icons/1/favicon.ico",
       faviconDark: "/pwa-icons/1/favicon-dark.ico",
       appleTouchIcon: "/pwa-icons/1/apple-touch-icon.png",
+      homeScreenSource: "https://cdn/home.png?v=1",
       webLogo: "https://cdn/w.svg?v=1",
       iosSplash: null,
       manifest: "/manifest.json?v=9",
@@ -38,6 +41,7 @@ describe("parseLiveLogos", () => {
       favicon: "https://cdn/old.png",
       faviconDark: null,
       appleTouchIcon: null,
+      homeScreenSource: null,
       webLogo: null,
       iosSplash: null,
       manifest: null,
@@ -75,6 +79,50 @@ describe("logosEqual", () => {
   });
 });
 
+describe("nizekBotLogoUrl", () => {
+  it("prefers the home-screen source over apple-touch and the wordmark", () => {
+    expect(
+      nizekBotLogoUrl({
+        favicon: null,
+        faviconDark: null,
+        appleTouchIcon: "/apple.png",
+        homeScreenSource: "https://cdn/home.png",
+        webLogo: "https://cdn/w.svg",
+        iosSplash: null,
+        manifest: null,
+        iconToken: null,
+      }),
+    ).toBe("https://cdn/home.png");
+  });
+
+  it("falls back to apple-touch, then the wordmark", () => {
+    expect(
+      nizekBotLogoUrl({
+        favicon: null,
+        faviconDark: null,
+        appleTouchIcon: "/apple.png",
+        homeScreenSource: null,
+        webLogo: "https://cdn/w.svg",
+        iosSplash: null,
+        manifest: null,
+        iconToken: null,
+      }),
+    ).toBe("/apple.png");
+    expect(
+      nizekBotLogoUrl({
+        favicon: null,
+        faviconDark: null,
+        appleTouchIcon: null,
+        homeScreenSource: null,
+        webLogo: "https://cdn/w.svg",
+        iosSplash: null,
+        manifest: null,
+        iconToken: null,
+      }),
+    ).toBe("https://cdn/w.svg");
+  });
+});
+
 describe("applyDocumentLogos", () => {
   it("upserts favicon, apple-touch-icon, and splash links", () => {
     document.head.innerHTML = "";
@@ -82,6 +130,7 @@ describe("applyDocumentLogos", () => {
       favicon: "/pwa-icons/2/favicon.ico",
       faviconDark: null,
       appleTouchIcon: "/pwa-icons/2/apple-touch-icon.png",
+      homeScreenSource: "https://cdn/home.png?v=2",
       webLogo: "https://cdn/w.svg?v=2",
       iosSplash: "https://cdn/s.png?v=2",
       manifest: "/manifest.json?v=2",

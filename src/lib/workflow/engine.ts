@@ -6,6 +6,7 @@ import {
   missingNativeFields,
   nativeFieldIsFilled,
 } from "@/lib/fields/validate";
+import { fieldIsLogicallyVisible, parseFieldVisibility, type FieldVisibility } from "@/lib/fields/visibility";
 import {
   configFields,
   configItems,
@@ -100,6 +101,28 @@ export function actionsForMove(input: {
   return { before, during, after };
 }
 
+/** Send invite on the column you leave, the column you enter, or the arrow. */
+export function sendInviteActionsForMove(input: {
+  fromActions: WorkflowActionDef[];
+  toActions: WorkflowActionDef[];
+  transition: WorkflowTransitionDef | null;
+}): WorkflowActionDef[] {
+  const transitionActions = input.transition?.actions ?? [];
+  const seen = new Set<string>();
+  const out: WorkflowActionDef[] = [];
+  for (const action of [
+    ...input.fromActions,
+    ...input.toActions,
+    ...transitionActions,
+  ]) {
+    if (action.type !== "send_invite") continue;
+    if (seen.has(action.id)) continue;
+    seen.add(action.id);
+    out.push(action);
+  }
+  return out;
+}
+
 export function moveNeedsDialog(during: WorkflowActionDef[]): boolean {
   return during.length > 0;
 }
@@ -108,7 +131,20 @@ type CustomFieldLookup = {
   id: string;
   label: string;
   type: CustomFieldType;
+  visibility?: FieldVisibility | string | null;
 };
+
+function lookupIsVisible(
+  field: CustomFieldLookup,
+  snapshot: FieldSnapshot,
+  customFields: CustomFieldLookup[],
+): boolean {
+  return fieldIsLogicallyVisible(
+    { visibility: parseFieldVisibility(field.visibility) },
+    snapshot.custom,
+    customFields.map((row) => row.id),
+  );
+}
 
 function isNativeFieldId(id: string): boolean {
   return (
@@ -128,6 +164,7 @@ export function missingRequiredOnSnapshot(
     if (isNativeFieldId(id)) continue;
     const field = customFields.find((f) => f.id === id);
     if (!field) continue;
+    if (!lookupIsVisible(field, snapshot, customFields)) continue;
     if (!customFieldIsFilled(field.type, snapshot.custom[id])) {
       missing.push(field.label);
     }
@@ -163,6 +200,7 @@ export function snapshotFieldIsFilled(
   if (native) return nativeFieldIsFilled(native.id, snapshot.native);
   const field = customFields.find((row) => row.id === fieldId);
   if (!field) return false;
+  if (!lookupIsVisible(field, snapshot, customFields)) return true;
   return customFieldIsFilled(field.type, snapshot.custom[fieldId]);
 }
 

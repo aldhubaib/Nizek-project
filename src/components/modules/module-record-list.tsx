@@ -13,11 +13,14 @@ import type { CustomFieldDTO } from "@/actions/custom-field";
 import type { DealDTO } from "@/actions/deal";
 import type { DealStageDTO } from "@/actions/deal-stage";
 import { TABLE_STATUS_KEY } from "@/lib/modules/card-fields";
+import { formatRecordNumber } from "@/lib/modules/record-number";
+import { fieldIsLogicallyVisible } from "@/lib/fields/visibility";
 
 export type ListSort = { key: string; dir: "asc" | "desc" };
 
 const STATUS_KEY = "status";
 const TITLE_KEY = "title";
+const ID_KEY = "recordNumber";
 
 export function ModuleRecordList({
   records,
@@ -52,6 +55,9 @@ export function ModuleRecordList({
         stageById.get(b.stageId ?? "")?.name ?? "",
         activeSort.dir,
       );
+    }
+    if (activeSort.key === ID_KEY) {
+      return compareSortValues(a.recordNumber, b.recordNumber, activeSort.dir);
     }
     if (activeSort.key === TITLE_KEY) {
       return compareSortValues(
@@ -148,7 +154,11 @@ export function ModuleRecordList({
                       )}
                       dir={col.rtl ? "rtl" : undefined}
                     >
-                      {col.key === TITLE_KEY ? (
+                      {col.key === ID_KEY ? (
+                        <span className="font-mono text-muted-foreground">
+                          {formatRecordNumber(record.recordNumber)}
+                        </span>
+                      ) : col.key === TITLE_KEY ? (
                         <span className="font-medium text-foreground">
                           {record.title}
                         </span>
@@ -160,7 +170,13 @@ export function ModuleRecordList({
                           {stage?.name ?? "Unassigned"}
                         </span>
                       ) : col.field ? (
-                        formatFieldValue(col.field, record, ctx) || "—"
+                        fieldIsLogicallyVisible(
+                          col.field,
+                          record.fieldValues ?? {},
+                          fields.map((row) => row.id),
+                        )
+                          ? formatFieldValue(col.field, record, ctx) || "—"
+                          : "—"
                       ) : (
                         "—"
                       )}
@@ -197,6 +213,7 @@ function listColumns(
       shown.has(field.id),
   );
   return [
+    { key: ID_KEY, label: "ID", className: "w-[4.5rem]" },
     { key: TITLE_KEY, label: title?.label ?? "Name", className: "w-[16rem]" },
     ...(shown.has(TABLE_STATUS_KEY)
       ? [{ key: STATUS_KEY, label: "Status", className: "w-[10rem]" }]

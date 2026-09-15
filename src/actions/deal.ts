@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireContactsAccess } from "@/lib/contacts-access";
 import { getCustomFieldValues, saveCustomFieldValues } from "@/actions/custom-field";
 import { customFieldIsFilled } from "@/lib/fields/validate";
+import { fieldAppliesOnForm } from "@/lib/fields/visibility";
 import { isCustomFieldType } from "@/lib/fields/types";
 import {
   RELATION_MODEL_LABEL,
@@ -19,6 +20,7 @@ import {
   logRecordChanges,
   logRecordCreated,
 } from "@/lib/modules/record-history";
+import { takeNextRecordNumber } from "@/lib/modules/record-number";
 
 export type DealContactDTO = {
   id: string;
@@ -37,8 +39,15 @@ export type DealCompanyDTO = {
   industry: string;
 };
 
+export type RecordPersonDTO = {
+  id: string;
+  name: string | null;
+  imageUrl: string | null;
+};
+
 export type DealDTO = {
   id: string;
+  recordNumber: number;
   title: string;
   /** Decimal as a string so 1.10 stays 1.10 across the wire. */
   value: string | null;
@@ -49,6 +58,8 @@ export type DealDTO = {
   fieldValues: Record<string, string>;
   createdAt: string;
   updatedAt: string;
+  createdBy?: RecordPersonDTO;
+  assignee?: RecordPersonDTO | null;
 };
 
 export type DealInput = {
@@ -95,6 +106,7 @@ const DEAL_INCLUDE = {
 
 type DealRow = {
   id: string;
+  recordNumber: number;
   title: string;
   value: { toString(): string } | null;
   workflowId: string;
@@ -108,6 +120,7 @@ type DealRow = {
 function toDTO(row: DealRow, fieldValues: Record<string, string> = {}): DealDTO {
   return {
     id: row.id,
+    recordNumber: row.recordNumber,
     title: row.title,
     value: row.value ? row.value.toString() : null,
     flowId: row.workflowId,
@@ -222,6 +235,7 @@ async function cleanInput(input: DealInput, mode: "create" | "edit") {
           required: true,
           options: true,
           binding: true,
+          visibility: true,
         },
       })
     : [];
@@ -230,9 +244,12 @@ async function cleanInput(input: DealInput, mode: "create" | "edit") {
     title,
     fieldValues,
   ));
+  const layoutFieldIds = layoutFields.map((field) => field.id);
   const missing = layoutFields
     .filter((field) => field.required)
-    .filter((field) => field.showOn === "both" || field.showOn === mode)
+    .filter((field) =>
+      fieldAppliesOnForm(field, mode, fieldValues, layoutFieldIds),
+    )
     .filter((field) => {
       if (field.binding === "title") return !title;
       if (field.binding === "value") return !input.value?.trim();
@@ -345,16 +362,20 @@ export async function createDeal(
     const data = await cleanInput(input, "create");
 
     const flowId = data.flowId ?? (await firstFlowId());
-    const created = await prisma.deal.create({
-      data: {
-        title: data.title,
-        value: data.value,
-        workflowId: flowId,
-        statusId: data.stageId ?? (await firstStageId(flowId)),
-        createdById: user.id,
-        ...relatedWrites(data.contactIds, data.companyIds),
-      },
-      include: DEAL_INCLUDE,
+    const created = await prisma.$transaction(async (tx) => {
+      const recordNumber = await takeNextRecordNumber(tx, "deal");
+      return tx.deal.create({
+        data: {
+          recordNumber,
+          title: data.title,
+          value: data.value,
+          workflowId: flowId,
+          statusId: data.stageId ?? (await firstStageId(flowId)),
+          createdById: user.id,
+          ...relatedWrites(data.contactIds, data.companyIds),
+        },
+        include: DEAL_INCLUDE,
+      });
     });
 
     await saveCustomFieldValues({

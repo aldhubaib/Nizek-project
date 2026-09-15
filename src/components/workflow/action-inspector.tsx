@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { ColorPicker } from "@/components/boards/board-settings/settings-controls";
 import {
   ACTION_REGISTRY,
+  ASSIGN_MOVER,
+  configAssignUser,
   configFields,
   configItems,
   configSetField,
@@ -128,6 +130,26 @@ export function ActionInspector({
           onDelete={onDeleteAction}
         />
       </div>
+      <div className="space-y-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          When a record arrives
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Runs after the move into {status.name}. Send invite also emails
+          when a card leaves this column.
+        </p>
+        <ActionLists
+          actions={status.actions}
+          hooks={["after"]}
+          fields={fields}
+          users={users}
+          onAdd={(hook, type) =>
+            onAddAction({ statusId: status.id, hook, type })
+          }
+          onUpdate={onUpdateAction}
+          onDelete={onDeleteAction}
+        />
+      </div>
       {outgoing.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -195,6 +217,9 @@ function ActionLists({
     id: f.binding ?? f.id,
     label: f.label,
   }));
+  const inviteFields = fields
+    .filter((field) => field.type === "invite" && !field.binding)
+    .map((field) => ({ id: field.id, label: field.label }));
 
   return (
     <div className="space-y-4">
@@ -214,6 +239,7 @@ function ActionLists({
                   key={action.id}
                   action={action}
                   catalog={catalog}
+                  inviteFields={inviteFields}
                   users={users}
                   onUpdate={onUpdate}
                   onDelete={onDelete}
@@ -243,12 +269,14 @@ function ActionLists({
 function ActionRow({
   action,
   catalog,
+  inviteFields,
   users,
   onUpdate,
   onDelete,
 }: {
   action: WorkflowActionDTO;
   catalog: { id: string; label: string }[];
+  inviteFields: { id: string; label: string }[];
   users: WorkflowUserOption[];
   onUpdate: (id: string, input: { config?: unknown }) => void;
   onDelete: (id: string) => void;
@@ -334,6 +362,51 @@ function ActionRow({
           catalog={users.map((u) => ({ id: u.id, label: u.name }))}
           onChange={(next) => onUpdate(action.id, { config: { userIds: next } })}
         />
+      )}
+      {action.type === "assign_user" && (
+        <div className="space-y-1.5">
+          <select
+            value={configAssignUser(action.config).userId}
+            onChange={(e) =>
+              onUpdate(action.id, { config: { userId: e.target.value } })
+            }
+            className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-s"
+          >
+            <option value="">Unassigned</option>
+            <option value={ASSIGN_MOVER}>Person who moves the card</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Applied when the card arrives here.
+          </p>
+        </div>
+      )}
+      {action.type === "send_invite" && (
+        <div className="space-y-1.5">
+          <select
+            value={configSetField(action.config).field}
+            onChange={(e) =>
+              onUpdate(action.id, { config: { field: e.target.value } })
+            }
+            className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-s"
+          >
+            <option value="">Choose a Calendar invite field</option>
+            {inviteFields.map((field) => (
+              <option key={field.id} value={field.id}>
+                {field.label}
+              </option>
+            ))}
+          </select>
+          {inviteFields.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Add a Calendar invite field on the layout first.
+            </p>
+          )}
+        </div>
       )}
       {(action.type === "associate_contacts" ||
         action.type === "associate_companies") && (

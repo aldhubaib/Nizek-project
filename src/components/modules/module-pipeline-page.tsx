@@ -58,9 +58,14 @@ import {
   type DealStageDTO,
 } from "@/actions/deal-stage";
 import type { ModuleSurface } from "@/lib/modules/registry";
+import { formatRecordNumber } from "@/lib/modules/record-number";
 
 function matches(record: DealDTO, q: string) {
   if (record.title.toLowerCase().includes(q)) return true;
+  const id = formatRecordNumber(record.recordNumber).toLowerCase();
+  if (id === q || id.includes(q) || String(record.recordNumber) === q) {
+    return true;
+  }
   if (
     record.value &&
     formatDealValue(record.value).replace(/,/g, "").includes(q)
@@ -201,7 +206,13 @@ export function ModulePipelinePage({
   }, [records, query]);
 
   const fieldLookup = useMemo(
-    () => fields.map((f) => ({ id: f.id, label: f.label, type: f.type })),
+    () =>
+      fields.map((f) => ({
+        id: f.id,
+        label: f.label,
+        type: f.type,
+        visibility: f.visibility,
+      })),
     [fields],
   );
   const visibleCardFieldIds = useMemo(

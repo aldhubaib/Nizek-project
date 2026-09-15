@@ -12,6 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
 import { getModule, projectBoardPaths } from "@/lib/modules/registry";
 import { customFieldIsFilled } from "@/lib/fields/validate";
+import { fieldAppliesOnForm } from "@/lib/fields/visibility";
 import { isCustomFieldType, type CustomFieldType } from "@/lib/fields/types";
 import {
   RELATION_MODEL_LABEL,
@@ -26,6 +27,7 @@ import {
   logRecordChanges,
   logRecordCreated,
 } from "@/lib/modules/record-history";
+import { takeNextRecordNumber } from "@/lib/modules/record-number";
 import {
   getCustomFieldValues,
   listCustomFields,
@@ -42,7 +44,12 @@ import {
 import {
   createAndPublishNotifications,
 } from "@/lib/notify";
-import { parseActionConfig } from "@/lib/workflow/actions";
+import { dispatchSendInviteActions } from "@/lib/calendar-invite-send";
+import { syncGoogleInviteRsvps } from "@/lib/calendar-invite-sync";
+import {
+  assignedUserIdFromActions,
+  parseActionConfig,
+} from "@/lib/workflow/actions";
 import {
   actionsForMove,
   allowedDestinations,
@@ -52,18 +59,22 @@ import {
   missingRequiredOnSnapshot,
   notifyUserIds,
   requiredFieldIds,
+  sendInviteActionsForMove,
   validateDuring,
 } from "@/lib/workflow/engine";
 import type { DuringPayload, FieldSnapshot } from "@/lib/workflow/types";
-import type { DealDTO } from "@/actions/deal";
+import type { DealDTO, RecordPersonDTO } from "@/actions/deal";
 import type { DealFlowDTO } from "@/actions/deal-flow";
 import {
   listDealStages,
   type DealStageDTO,
 } from "@/actions/deal-stage";
 
+const PERSON_SELECT = { id: true, name: true, imageUrl: true } as const;
+
 export type BoardRecordDTO = {
   id: string;
+  recordNumber: number;
   title: string;
   projectId: string;
   flowId: string;
@@ -71,6 +82,8 @@ export type BoardRecordDTO = {
   fieldValues: Record<string, string>;
   createdAt: string;
   updatedAt: string;
+  createdBy: RecordPersonDTO;
+  assignee: RecordPersonDTO | null;
 };
 
 export type BoardRecordInput = {
@@ -78,6 +91,7 @@ export type BoardRecordInput = {
   flowId?: string | null;
   stageId?: string | null;
   fieldValues?: Record<string, string>;
+  assigneeId?: string | null;
 };
 
 export type ProjectBoardDTO = {
@@ -95,12 +109,15 @@ type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 type BoardRow = {
   id: string;
+  recordNumber: number;
   title: string;
   projectId: string;
   workflowId: string;
   statusId: string | null;
   createdAt: Date;
   updatedAt: Date;
+  createdBy: RecordPersonDTO;
+  assignee: RecordPersonDTO | null;
 };
 
 function revalidateBoard(projectId: string) {
@@ -123,6 +140,7 @@ async function recordAction<T>(
 function boardRecordToDeal(row: BoardRecordDTO): DealDTO {
   return {
     id: row.id,
+    recordNumber: row.recordNumber,
     title: row.title,
     value: null,
     flowId: row.flowId,
@@ -132,12 +150,15 @@ function boardRecordToDeal(row: BoardRecordDTO): DealDTO {
     fieldValues: row.fieldValues,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    createdBy: row.createdBy,
+    assignee: row.assignee,
   };
 }
 
 function toDTO(row: BoardRow, fieldValues: Record<string, string> = {}): BoardRecordDTO {
   return {
     id: row.id,
+    recordNumber: row.recordNumber,
     title: row.title,
     projectId: row.projectId,
     flowId: row.workflowId,
@@ -145,6 +166,8 @@ function toDTO(row: BoardRow, fieldValues: Record<string, string> = {}): BoardRe
     fieldValues,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    createdBy: row.createdBy,
+    assignee: row.assignee,
   };
 }
 
@@ -338,6 +361,7 @@ async function cleanInput(
           required: true,
           options: true,
           binding: true,
+          visibility: true,
         },
       })
     : [];
@@ -346,9 +370,12 @@ async function cleanInput(
     title,
     fieldValues,
   ));
+  const layoutFieldIds = layoutFields.map((field) => field.id);
   const missing = layoutFields
     .filter((field) => field.required)
-    .filter((field) => field.showOn === "both" || field.showOn === mode)
+    .filter((field) =>
+      fieldAppliesOnForm(field, mode, fieldValues, layoutFieldIds),
+    )
     .filter((field) => {
       if (field.binding === "title") return !title;
       const type = isCustomFieldType(field.type) ? field.type : "text";
@@ -377,7 +404,19 @@ async function cleanInput(
     fieldValues[field.id] = stringifyRelationIds(unique);
   }
 
-  return { title, flowId, layoutId, stageId, fieldValues, layoutFields };
+  const assigneeId =
+    input.assigneeId === undefined
+      ? undefined
+      : input.assigneeId?.trim() || null;
+  if (assigneeId) {
+    const member = await prisma.projectMember.findUnique({
+      where: { userId_projectId: { userId: assigneeId, projectId } },
+      select: { userId: true },
+    });
+    if (!member) throw new Error("Assignee must be a project member");
+  }
+
+  return { title, flowId, layoutId, stageId, fieldValues, layoutFields, assigneeId };
 }
 
 async function firstStageId(flowId: string): Promise<string | null> {
@@ -446,6 +485,10 @@ export async function listBoardRecords(
   const rows = await prisma.boardRecord.findMany({
     where: flowId ? { projectId, workflowId: flowId } : { projectId },
     orderBy: { title: "asc" },
+    include: {
+      createdBy: { select: PERSON_SELECT },
+      assignee: { select: PERSON_SELECT },
+    },
   });
   const values = await valuesByRecord(rows.map((row) => row.id));
   return rows.map((row) => toDTO(row, values.get(row.id) ?? {}));
@@ -455,13 +498,25 @@ export async function getBoardRecord(
   projectId: string,
   id: string,
 ): Promise<BoardRecordDTO | null> {
-  await requireProjectMember(projectId);
+  const { user } = await requireProjectMember(projectId);
   const row = await prisma.boardRecord.findFirst({
     where: { id, projectId },
+    include: {
+      createdBy: { select: PERSON_SELECT },
+      assignee: { select: PERSON_SELECT },
+      workflow: { select: { layoutId: true } },
+    },
   });
   if (!row) return null;
   const fieldValues = await getCustomFieldValues("board", id);
-  return toDTO(row, fieldValues);
+  const synced = await syncGoogleInviteRsvps({
+    viewerUserId: user.id,
+    entityType: "board",
+    recordId: id,
+    values: fieldValues,
+    layoutId: row.workflow.layoutId,
+  });
+  return toDTO(row, synced);
 }
 
 export async function createBoardRecord(
@@ -472,14 +527,23 @@ export async function createBoardRecord(
     const { user } = await requireProjectMember(projectId);
     await ensureProjectBoard(projectId);
     const data = await cleanInput(projectId, input, "create");
-    const created = await prisma.boardRecord.create({
-      data: {
-        title: data.title,
-        projectId,
-        workflowId: data.flowId,
-        statusId: data.stageId ?? (await firstStageId(data.flowId)),
-        createdById: user.id,
-      },
+    const created = await prisma.$transaction(async (tx) => {
+      const recordNumber = await takeNextRecordNumber(tx, "board", projectId);
+      return tx.boardRecord.create({
+        data: {
+          recordNumber,
+          title: data.title,
+          projectId,
+          workflowId: data.flowId,
+          statusId: data.stageId ?? (await firstStageId(data.flowId)),
+          createdById: user.id,
+          assigneeId: data.assigneeId ?? null,
+        },
+        include: {
+          createdBy: { select: PERSON_SELECT },
+          assignee: { select: PERSON_SELECT },
+        },
+      });
     });
     await saveCustomFieldValues({
       entityType: "board",
@@ -487,6 +551,39 @@ export async function createBoardRecord(
       values: data.fieldValues,
       layoutId: data.layoutId,
     });
+    if (created.statusId) {
+      const status = await prisma.workflowStatus.findUnique({
+        where: { id: created.statusId },
+        include: { actions: true },
+      });
+      const fields = await prisma.customField.findMany({
+        where: data.layoutId
+          ? { layoutId: data.layoutId }
+          : { entityType: "board", layout: { projectId } },
+        select: { id: true, label: true, type: true },
+      });
+      await dispatchSendInviteActions({
+        actions: (status?.actions ?? []).map((action) => ({
+          id: action.id,
+          hook: action.hook as WorkflowTransitionDTO["actions"][number]["hook"],
+          type: action.type as WorkflowTransitionDTO["actions"][number]["type"],
+          config: parseActionConfig(action.config),
+          position: action.position,
+        })),
+        entityType: "board",
+        recordId: created.id,
+        recordTitle: created.title,
+        fields,
+        values: data.fieldValues,
+        organizer: {
+          id: user.id,
+          name: user.name?.trim() || user.email,
+          email: user.email,
+        },
+        linkUrl: `/dashboard/projects/${projectId}/board/${created.id}`,
+        layoutId: data.layoutId,
+      });
+    }
     await logRecordCreated({
       entityType: "board",
       recordId: created.id,
@@ -511,7 +608,14 @@ export async function updateBoardRecord(
     const data = await cleanInput(projectId, input, "edit");
     const updated = await prisma.boardRecord.update({
       where: { id },
-      data: { title: data.title },
+      data: {
+        title: data.title,
+        ...(data.assigneeId !== undefined ? { assigneeId: data.assigneeId } : {}),
+      },
+      include: {
+        createdBy: { select: PERSON_SELECT },
+        assignee: { select: PERSON_SELECT },
+      },
     });
     await saveCustomFieldValues({
       entityType: "board",
@@ -525,10 +629,12 @@ export async function updateBoardRecord(
       userId: user.id,
       before: {
         title: before.title,
+        assigneeId: before.assignee?.id ?? null,
         fieldValues: before.fieldValues,
       },
       after: {
         title: data.title,
+        assigneeId: updated.assignee?.id ?? null,
         fieldValues: data.fieldValues,
       },
       fields: data.layoutFields,
@@ -550,6 +656,9 @@ export async function deleteBoardRecord(
     });
     if (!existing) throw new Error("That card no longer exists");
     await deleteRecordHistory("board", id);
+    await prisma.recordComment.deleteMany({
+      where: { entityType: "board", recordId: id },
+    });
     await prisma.boardRecord.delete({ where: { id } });
     revalidateBoard(projectId);
     return { id };
@@ -576,6 +685,7 @@ async function boardSnapshot(projectId: string, recordId: string) {
     layoutId: row.workflow.layoutId,
     blueprintEnabled: row.workflow.blueprintEnabled,
     statusId: row.statusId,
+    assigneeId: row.assigneeId,
     snapshot: {
       native: {
         title: row.title,
@@ -647,7 +757,7 @@ export async function moveBoardRecordToStage(
         where: loaded.layoutId
           ? { layoutId: loaded.layoutId }
           : { entityType: "board", layout: { projectId } },
-        select: { id: true, label: true, type: true },
+        select: { id: true, label: true, type: true, visibility: true },
       }),
     ]);
 
@@ -703,6 +813,7 @@ export async function moveBoardRecordToStage(
       id: f.id,
       label: f.label,
       type: (isCustomFieldType(f.type) ? f.type : "text") as CustomFieldType,
+      visibility: f.visibility,
     }));
 
     if (loaded.statusId && stageId && loaded.statusId !== stageId) {
@@ -741,12 +852,21 @@ export async function moveBoardRecordToStage(
       [...grouped.before, ...grouped.after],
       merged,
     );
+    const assignedId = assignedUserIdFromActions(grouped.after, user.id);
+    if (assignedId) {
+      const member = await prisma.projectMember.findUnique({
+        where: { userId_projectId: { userId: assignedId, projectId } },
+        select: { userId: true },
+      });
+      if (!member) throw new Error("Assignee must be a project member");
+    }
 
     await prisma.boardRecord.update({
       where: { id: recordId },
       data: {
         statusId: stageId,
         title: after.native.title,
+        ...(assignedId !== undefined ? { assigneeId: assignedId || null } : {}),
       },
     });
 
@@ -769,6 +889,26 @@ export async function moveBoardRecordToStage(
       });
     }
 
+    await dispatchSendInviteActions({
+      actions: sendInviteActionsForMove({
+        fromActions: toActions(from),
+        toActions: toActions(to),
+        transition,
+      }),
+      entityType: "board",
+      recordId,
+      recordTitle: after.native.title,
+      fields: customFields,
+      values: after.custom,
+      organizer: {
+        id: user.id,
+        name: user.name?.trim() || user.email,
+        email: user.email,
+      },
+      linkUrl: `/dashboard/projects/${projectId}/board/${recordId}`,
+      layoutId: loaded.layoutId,
+    });
+
     await logRecordChanges({
       entityType: "board",
       recordId,
@@ -776,11 +916,14 @@ export async function moveBoardRecordToStage(
       before: {
         title: loaded.snapshot.native.title,
         statusId: loaded.statusId,
+        assigneeId: loaded.assigneeId,
         fieldValues: loaded.snapshot.custom,
       },
       after: {
         title: after.native.title,
         statusId: stageId,
+        assigneeId:
+          assignedId !== undefined ? assignedId || null : loaded.assigneeId,
         fieldValues: after.custom,
       },
       fields: customFields,

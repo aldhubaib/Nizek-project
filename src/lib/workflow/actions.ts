@@ -54,6 +54,17 @@ export const ACTION_REGISTRY: Record<
     hooks: ["after", "onEnter"],
     description: "Send an in-app notification to chosen people",
   },
+  send_invite: {
+    label: "Send invite",
+    hooks: ["after", "onEnter", "onLeave", "before"],
+    description:
+      "Create a Google Calendar event (or email an invite) when a card leaves or arrives here",
+  },
+  assign_user: {
+    label: "Assign",
+    hooks: ["after", "onEnter"],
+    description: "Set who is responsible when the card arrives here",
+  },
 };
 
 export function isWorkflowActionType(value: string): value is WorkflowActionType {
@@ -113,6 +124,14 @@ export function cleanActionConfig(
           ? input.userIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
           : [],
       };
+    case "send_invite":
+      return {
+        field: typeof input.field === "string" ? input.field : "",
+      };
+    case "assign_user":
+      return {
+        userId: typeof input.userId === "string" ? input.userId : "",
+      };
     case "associate_contacts":
     case "associate_companies":
       return {};
@@ -153,4 +172,28 @@ export function configUserIds(config: WorkflowActionConfig): string[] {
   return "userIds" in config && Array.isArray(config.userIds)
     ? config.userIds
     : [];
+}
+
+/** Empty string unassigns. `__mover__` means the person who made the move. */
+export const ASSIGN_MOVER = "__mover__";
+
+export function configAssignUser(config: WorkflowActionConfig): {
+  userId: string;
+} {
+  return {
+    userId: "userId" in config && typeof config.userId === "string" ? config.userId : "",
+  };
+}
+
+export function assignedUserIdFromActions(
+  actions: { type: string; config: WorkflowActionConfig }[],
+  actorId: string,
+): string | undefined {
+  let found: string | undefined;
+  for (const action of actions) {
+    if (action.type !== "assign_user") continue;
+    const id = configAssignUser(action.config).userId;
+    found = id === ASSIGN_MOVER ? actorId : id;
+  }
+  return found;
 }

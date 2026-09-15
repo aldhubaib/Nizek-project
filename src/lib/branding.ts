@@ -86,14 +86,14 @@ export async function getBrandingMapUncached(): Promise<BrandingMap> {
 /**
  * URLs for the surfaces we live-apply in open clients.
  * Favicon / apple-touch / manifest use same-origin versioned paths.
- * webLogo / splash stay on R2 and are null when unset (letter-N fallback).
+ * homeScreenSource / webLogo / splash stay on R2 and are null when unset.
  */
 export async function getLiveLogos(): Promise<
   import("@/lib/live-branding").LiveLogos
 > {
   const map = await getBrandingMapUncached();
   const token = pwaIconToken(map);
-  const pickR2 = (slot: "webLogo" | "iosSplash") => {
+  const pickR2 = (slot: "webLogo" | "iosSplash" | "homeScreenSource") => {
     const entry = map[slot];
     return entry ? withBrandingBust(entry.url, entry.updatedAt) : null;
   };
@@ -106,6 +106,7 @@ export async function getLiveLogos(): Promise<
       "apple-touch-icon.png",
       map.appleTouchIcon?.updatedAt,
     ),
+    homeScreenSource: pickR2("homeScreenSource"),
     webLogo: pickR2("webLogo"),
     iosSplash: pickR2("iosSplash"),
     manifest: `/manifest.json?v=${token}`,
@@ -133,6 +134,15 @@ export function brandingUrlWithBust(
   const entry = map[slot];
   if (entry) return withBrandingBust(entry.url, entry.updatedAt);
   return BRANDING_FALLBACKS[slot] ?? null;
+}
+
+/** Face for Nizek Bot: home-screen source, then the in-app wordmark. */
+export async function getNizekBotImageUrl(): Promise<string | null> {
+  const map = await getBrandingMap();
+  return (
+    brandingUrlWithBust(map, "homeScreenSource") ??
+    brandingUrlWithBust(map, "webLogo")
+  );
 }
 
 // Storage slot for the admin-configured custom notification sound. Stored in the

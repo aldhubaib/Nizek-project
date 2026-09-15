@@ -15,6 +15,7 @@ import {
 } from "@/lib/workflow/engine";
 import { isCustomFieldType, NATIVE_DEAL_FIELDS } from "@/lib/fields/types";
 import { formatDealValue } from "@/lib/deal-value";
+import { formatRecordNumber } from "@/lib/modules/record-number";
 import type { CustomFieldDTO } from "@/actions/custom-field";
 import type { DealCompanyDTO, DealContactDTO, DealDTO } from "@/actions/deal";
 import type { ContactOption } from "@/actions/contact";
@@ -25,6 +26,7 @@ import {
   EMPTY_RELATED_CATALOG,
   type RelatedRecordCatalog,
 } from "@/lib/fields/relations";
+import { fieldIsLogicallyVisible } from "@/lib/fields/visibility";
 
 export function TransitionDialog({
   open,
@@ -71,6 +73,7 @@ export function TransitionDialog({
         id: f.id,
         label: f.label,
         type: isCustomFieldType(f.type) ? f.type : ("text" as const),
+        visibility: f.visibility,
       })),
     [fields],
   );
@@ -182,6 +185,9 @@ export function TransitionDialog({
             </div>
 
             <div className="mb-4 flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-2">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                {formatRecordNumber(deal.recordNumber)}
+              </span>
               <span className="min-w-0 flex-1 truncate text-s">{deal.title}</span>
               {deal.value && (
                 <span className="shrink-0 text-xs text-muted-foreground">
@@ -212,7 +218,15 @@ export function TransitionDialog({
                   />
                 </FieldBlock>
               )}
-              {customShown.map((field) =>
+              {customShown
+                .filter((field) =>
+                  fieldIsLogicallyVisible(
+                    field,
+                    customValues,
+                    fields.map((row) => row.id),
+                  ),
+                )
+                .map((field) =>
                 field.type === "relation" ? (
                   <FieldControl
                     key={field.id}
@@ -235,6 +249,7 @@ export function TransitionDialog({
                       field={field}
                       value={customValues[field.id] ?? ""}
                       users={users}
+                      related={related}
                       onChange={(next) =>
                         setCustomValues((prev) => ({ ...prev, [field.id]: next }))
                       }

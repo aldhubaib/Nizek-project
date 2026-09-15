@@ -14,8 +14,15 @@ import {
   type ProjectBoardDTO,
 } from "@/actions/board-record";
 import { moduleSurface } from "@/lib/modules/registry";
+import { ConnectGoogleCalendarBanner } from "@/components/auth/connect-google-calendar";
 
-export function BoardTab({ projectId }: { projectId: string }) {
+export function BoardTab({
+  projectId,
+  needsCalendarConnect = false,
+}: {
+  projectId: string;
+  needsCalendarConnect?: boolean;
+}) {
   const [board, setBoard] = useState<ProjectBoardDTO | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -51,6 +58,8 @@ export function BoardTab({ projectId }: { projectId: string }) {
   }
 
   return (
+    <>
+    {needsCalendarConnect ? <ConnectGoogleCalendarBanner /> : null}
     <ModulePipelinePage
       surface={moduleSurface("board", projectId)}
       flows={board.flows}
@@ -68,5 +77,6 @@ export function BoardTab({ projectId }: { projectId: string }) {
         void reload(flowId);
       }}
     />
+    </>
   );
 }

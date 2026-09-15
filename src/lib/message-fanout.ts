@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { notifyAndPush } from "@/lib/notify";
 import { broadcastInboxPreview } from "@/lib/inbox-broadcast";
+import { NIZEK_BOT_AUTHOR_ID } from "@/lib/deadline-reminder-payload";
 
 /**
  * Everything that happens around a chat message once the row exists:
@@ -28,6 +29,8 @@ export async function fanOutMessageSideEffects(input: {
   preview: string;
   notifIcon: string | undefined;
   messageCreatedAt: Date;
+  /** Sprint cards in the client room speak as Nizek Bot — no actor alias photo. */
+  asBot?: boolean;
 }) {
   const {
     conversationId,
@@ -46,12 +49,15 @@ export async function fanOutMessageSideEffects(input: {
     preview,
     notifIcon,
     messageCreatedAt,
+    asBot,
   } = input;
 
   if (uniqueRecipients.length > 0) {
     const pushTag = `thread-${threadId}`;
     // The title embeds the author's real name, so client recipients need their
     // own rendered copy — notifyAndPush stores and pushes both variants.
+    // Bot cards keep project-level name masking in the body but drop the
+    // actor photo so the banner does not show the person who triggered it.
     await notifyAndPush(
       {
         recipientIds: uniqueRecipients,
@@ -61,8 +67,8 @@ export async function fanOutMessageSideEffects(input: {
         linkUrl: url,
         tag: pushTag,
         threadKey: threadId,
-        authorId: userId,
-        alias: { projectId, actorUserId: userId },
+        authorId: asBot ? NIZEK_BOT_AUTHOR_ID : userId,
+        alias: { projectId, actorUserId: asBot ? undefined : userId },
       },
       {
         title,
@@ -116,7 +122,7 @@ export async function fanOutMessageSideEffects(input: {
     taskId,
     conversationId,
     kind: isClientRoom ? "client" : conversationId ? "direct" : "project",
-    authorId: userId,
+    authorId: asBot ? NIZEK_BOT_AUTHOR_ID : userId,
     lastAuthor: authorName,
     lastMessage: preview,
     lastAt: new Date().toISOString(),

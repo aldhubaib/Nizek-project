@@ -24,6 +24,24 @@ import {
   stringifyTextConfig,
   type TextScript,
 } from "@/lib/fields/text-config";
+import {
+  parseFieldVisibility,
+  stringifyFieldVisibility,
+  type FieldVisibility,
+} from "@/lib/fields/visibility";
+import {
+  parseUserConfig,
+  stringifyUserConfig,
+} from "@/lib/fields/user-config";
+import {
+  parseCountryConfig,
+  stringifyCountryConfig,
+} from "@/lib/fields/country-config";
+import {
+  parseUrlConfig,
+  stringifyUrlConfig,
+  type UrlIconId,
+} from "@/lib/fields/url-config";
 import type { WorkflowEntityType } from "@/lib/workflow/types";
 import { getModule, moduleBinding, projectBoardPaths } from "@/lib/modules/registry";
 
@@ -39,6 +57,10 @@ export type CustomFieldDTO = {
   binding: string | null;
   required: boolean;
   showOn: FieldShowOn;
+  visibility: FieldVisibility | null;
+  userMultiple: boolean;
+  countryMultiple: boolean;
+  urlIcon: UrlIconId | null;
   sectionId: string | null;
   position: number;
 };
@@ -232,6 +254,7 @@ function toFieldDTO(row: {
   binding?: string | null;
   required: boolean;
   showOn: string;
+  visibility?: string | null;
   sectionId: string | null;
   position: number;
 }): CustomFieldDTO {
@@ -245,9 +268,14 @@ function toFieldDTO(row: {
     options: type === "relation" ? [] : parseFieldOptions(row.options),
     relation: type === "relation" ? parseRelationConfig(row.options) : null,
     script: type === "text" ? parseTextConfig(row.options).script : null,
+    userMultiple: type === "user" ? parseUserConfig(row.options).multiple : false,
+    countryMultiple:
+      type === "country" ? parseCountryConfig(row.options).multiple : false,
+    urlIcon: type === "url" ? parseUrlConfig(row.options).icon : null,
     binding: row.binding ?? null,
     required: row.required,
     showOn: isFieldShowOn(row.showOn) ? row.showOn : "both",
+    visibility: parseFieldVisibility(row.visibility),
     sectionId: row.sectionId,
     position: row.position,
   };
@@ -649,7 +677,13 @@ export async function createCustomField(input: {
           ? stringifyRelationConfig(bound.relation)
           : type === "relation"
             ? stringifyRelationConfig(DEFAULT_RELATION)
-            : undefined,
+            : type === "user"
+              ? stringifyUserConfig({ multiple: false })
+              : type === "country"
+                ? stringifyCountryConfig({ multiple: false })
+                : type === "url"
+                  ? stringifyUrlConfig({ icon: null })
+                  : undefined,
         sectionId: input.sectionId ?? null,
         position: positionBetween(last?.position ?? null, null),
       },
@@ -666,9 +700,13 @@ export async function updateCustomField(
     type?: string;
     options?: string[];
     relation?: RelationConfig;
+    userMultiple?: boolean;
+    countryMultiple?: boolean;
+    urlIcon?: UrlIconId | null;
     script?: TextScript | null;
     required?: boolean;
     showOn?: string;
+    visibility?: FieldVisibility | null;
     sectionId?: string | null;
   },
 ): Promise<ActionResult<CustomFieldDTO>> {
@@ -689,6 +727,7 @@ export async function updateCustomField(
       options?: string | null;
       required?: boolean;
       showOn?: string;
+      visibility?: string | null;
       sectionId?: string | null;
     } = {};
     if (input.label !== undefined) {
@@ -702,12 +741,26 @@ export async function updateCustomField(
       if (input.type === "relation" && input.relation === undefined) {
         data.options = stringifyRelationConfig(DEFAULT_RELATION);
       }
+      if (input.type === "user" && input.userMultiple === undefined) {
+        data.options = stringifyUserConfig({ multiple: false });
+      }
+      if (input.type === "country" && input.countryMultiple === undefined) {
+        data.options = stringifyCountryConfig({ multiple: false });
+      }
     }
     if (input.options !== undefined && !existing.binding) {
       data.options = JSON.stringify(input.options.map((o) => o.trim()).filter(Boolean));
     }
     if (input.relation !== undefined && !existing.binding) {
       data.options = stringifyRelationConfig(input.relation);
+    }
+    if (input.userMultiple !== undefined && !existing.binding) {
+      data.options = stringifyUserConfig({ multiple: input.userMultiple });
+    }
+    if (input.countryMultiple !== undefined && !existing.binding) {
+      data.options = stringifyCountryConfig({
+        multiple: input.countryMultiple,
+      });
     }
     if (input.script !== undefined) {
       const type = data.type ?? existing.type;
@@ -720,6 +773,9 @@ export async function updateCustomField(
     if (input.showOn !== undefined) {
       if (!isFieldShowOn(input.showOn)) throw new Error("Unknown form visibility");
       data.showOn = input.showOn;
+    }
+    if (input.visibility !== undefined) {
+      data.visibility = stringifyFieldVisibility(input.visibility);
     }
     if (input.sectionId !== undefined) data.sectionId = input.sectionId;
 

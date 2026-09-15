@@ -151,6 +151,27 @@ describe("missingRequiredOnSnapshot", () => {
       ),
     ).toEqual(["Value", "At least one contact", "Priority"]);
   });
+
+  it("skips a required field hidden by a pick list", () => {
+    expect(
+      missingRequiredOnSnapshot(
+        {
+          native: { title: "A", value: null, contactIds: [], companyIds: [] },
+          custom: { type: "Personal" },
+        },
+        ["fld_company"],
+        [
+          { id: "type", label: "Type", type: "select" },
+          {
+            id: "fld_company",
+            label: "Company",
+            type: "relation",
+            visibility: { dependsOn: "type", values: ["Company"] },
+          },
+        ],
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe("validateDuring", () => {

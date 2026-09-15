@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireContactsAccess } from "@/lib/contacts-access";
 import { createAndPublishNotifications } from "@/lib/notify";
+import { dispatchSendInviteActions } from "@/lib/calendar-invite-send";
 import { saveCustomFieldValues } from "@/actions/custom-field";
 import {
   createWorkflowStatus,
@@ -26,6 +27,7 @@ import {
   missingRequiredOnSnapshot,
   notifyUserIds,
   requiredFieldIds,
+  sendInviteActionsForMove,
   validateDuring,
 } from "@/lib/workflow/engine";
 import type { DealBlueprintFieldId } from "@/lib/deal-blueprint";
@@ -216,7 +218,7 @@ export async function moveDealToStage(
         where: loaded.layoutId
           ? { layoutId: loaded.layoutId }
           : { entityType: "deal" },
-        select: { id: true, label: true, type: true },
+        select: { id: true, label: true, type: true, visibility: true },
       }),
     ]);
 
@@ -272,6 +274,7 @@ export async function moveDealToStage(
       id: f.id,
       label: f.label,
       type: (isCustomFieldType(f.type) ? f.type : "text") as CustomFieldType,
+      visibility: f.visibility,
     }));
 
     if (loaded.statusId && stageId && loaded.statusId !== stageId) {
@@ -353,6 +356,26 @@ export async function moveDealToStage(
         linkUrl: `/dashboard/deals/${dealId}`,
       });
     }
+
+    await dispatchSendInviteActions({
+      actions: sendInviteActionsForMove({
+        fromActions: toActions(from),
+        toActions: toActions(to),
+        transition,
+      }),
+      entityType: "deal",
+      recordId: dealId,
+      recordTitle: after.native.title,
+      fields: customFields,
+      values: after.custom,
+      organizer: {
+        id: user.id,
+        name: user.name?.trim() || user.email,
+        email: user.email,
+      },
+      linkUrl: `/dashboard/deals/${dealId}`,
+      layoutId: loaded.layoutId,
+    });
 
     await logRecordChanges({
       entityType: "deal",

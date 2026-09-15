@@ -472,6 +472,10 @@ export async function inviteToTeam(data: {
     }
   }
 
+  // So they appear in Calendar invite / assignee pickers before first Google login.
+  const { provisionUserFromPendingInvite } = await import("@/lib/pending-invite");
+  await provisionUserFromPendingInvite(email);
+
   revalidatePath("/dashboard/team");
 }
 

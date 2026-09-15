@@ -98,3 +98,13 @@ export const EMPTY_RELATED_CATALOG: RelatedRecordCatalog = {
   deal: [],
   user: [],
 };
+
+/** Native many-links and custom “allow many” relations go under Related data. */
+export function isRelatedDataLayoutField(field: {
+  type: string;
+  binding: string | null;
+  relation: RelationConfig | null;
+}): boolean {
+  if (field.binding === "companies" || field.binding === "contacts") return true;
+  return field.type === "relation" && field.relation?.multiple !== false;
+}

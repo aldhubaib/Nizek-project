@@ -6,6 +6,7 @@ import { requireContactsAccess } from "@/lib/contacts-access";
 import { getModule } from "@/lib/modules/registry";
 import { applyLayoutTextScripts } from "@/lib/fields/text-config";
 import { customFieldIsFilled } from "@/lib/fields/validate";
+import { fieldAppliesOnForm } from "@/lib/fields/visibility";
 import { isCustomFieldType, type CustomFieldType } from "@/lib/fields/types";
 import {
   RELATION_MODEL_LABEL,
@@ -27,6 +28,7 @@ import {
   type WorkflowUserOption,
 } from "@/actions/workflow";
 import { createAndPublishNotifications } from "@/lib/notify";
+import { dispatchSendInviteActions } from "@/lib/calendar-invite-send";
 import { parseActionConfig } from "@/lib/workflow/actions";
 import { mergeNativeFieldValues } from "@/lib/modules/native-field-values";
 import {
@@ -34,6 +36,7 @@ import {
   logRecordChanges,
   logRecordCreated,
 } from "@/lib/modules/record-history";
+import { takeNextRecordNumber } from "@/lib/modules/record-number";
 import { parseCountryCodes } from "@/lib/countries";
 import { parsePhoneValue } from "@/lib/dial-codes";
 import { isIndustry } from "@/lib/industries";
@@ -46,6 +49,7 @@ import {
   missingRequiredOnSnapshot,
   notifyUserIds,
   requiredFieldIds,
+  sendInviteActionsForMove,
   validateDuring,
 } from "@/lib/workflow/engine";
 import type { DuringPayload, FieldSnapshot } from "@/lib/workflow/types";
@@ -108,6 +112,7 @@ function toFlowDTO(row: {
 function toRecord(
   row: {
     id: string;
+    recordNumber: number;
     title: string;
     workflowId: string;
     statusId: string | null;
@@ -118,6 +123,7 @@ function toRecord(
 ): DealDTO {
   return {
     id: row.id,
+    recordNumber: row.recordNumber,
     title: row.title,
     value: null,
     flowId: row.workflowId,
@@ -303,6 +309,7 @@ async function cleanInput(
           required: true,
           options: true,
           binding: true,
+          visibility: true,
         },
       })
     : [];
@@ -311,9 +318,12 @@ async function cleanInput(
     title,
     fieldValues,
   ));
+  const layoutFieldIds = layoutFields.map((field) => field.id);
   const missing = layoutFields
     .filter((field) => field.required)
-    .filter((field) => field.showOn === "both" || field.showOn === mode)
+    .filter((field) =>
+      fieldAppliesOnForm(field, mode, fieldValues, layoutFieldIds),
+    )
     .filter((field) => {
       if (field.binding === "title") return !title;
       const type = isCustomFieldType(field.type) ? field.type : "text";
@@ -487,6 +497,7 @@ export async function listDirectoryRecords(
       orderBy: { title: "asc" },
       select: {
         id: true,
+        recordNumber: true,
         title: true,
         firstName: true,
         lastName: true,
@@ -519,6 +530,7 @@ export async function listDirectoryRecords(
     orderBy: { nameEn: "asc" },
     select: {
       id: true,
+      recordNumber: true,
       nameEn: true,
       website: true,
       industry: true,
@@ -551,6 +563,7 @@ export async function getDirectoryRecord(
       where: { id },
       select: {
         id: true,
+        recordNumber: true,
         title: true,
         firstName: true,
         lastName: true,
@@ -580,6 +593,7 @@ export async function getDirectoryRecord(
     where: { id },
     select: {
       id: true,
+      recordNumber: true,
       nameEn: true,
       website: true,
       industry: true,
@@ -613,16 +627,20 @@ export async function createDirectoryRecord(
 
     if (entityType === "contact") {
       const names = namesFromTitle(data.title);
-      const created = await prisma.contact.create({
-        data: {
-          title: data.title,
-          firstName: names.firstName,
-          lastName: names.lastName,
-          workflowId: data.flowId,
-          statusId,
-          createdById: user.id,
-          ...nativeContactPatch(data.layoutFields, data.fieldValues),
-        },
+      const created = await prisma.$transaction(async (tx) => {
+        const recordNumber = await takeNextRecordNumber(tx, "contact");
+        return tx.contact.create({
+          data: {
+            recordNumber,
+            title: data.title,
+            firstName: names.firstName,
+            lastName: names.lastName,
+            workflowId: data.flowId,
+            statusId,
+            createdById: user.id,
+            ...nativeContactPatch(data.layoutFields, data.fieldValues),
+          },
+        });
       });
       await saveCustomFieldValues({
         entityType,
@@ -646,17 +664,21 @@ export async function createDirectoryRecord(
       select: { id: true },
     });
     if (clash) throw new Error(`“${data.title}” is already in the list`);
-    const created = await prisma.company.create({
-      data: {
-        nameEn: data.title,
-        nameAr: "",
-        industry: "",
-        countries: [],
-        workflowId: data.flowId,
-        statusId,
-        createdById: user.id,
-        ...nativeCompanyPatch(data.layoutFields, data.fieldValues),
-      },
+    const created = await prisma.$transaction(async (tx) => {
+      const recordNumber = await takeNextRecordNumber(tx, "company");
+      return tx.company.create({
+        data: {
+          recordNumber,
+          nameEn: data.title,
+          nameAr: "",
+          industry: "",
+          countries: [],
+          workflowId: data.flowId,
+          statusId,
+          createdById: user.id,
+          ...nativeCompanyPatch(data.layoutFields, data.fieldValues),
+        },
+      });
     });
     await saveCustomFieldValues({
       entityType,
@@ -898,7 +920,7 @@ export async function moveDirectoryRecord(
         where: loaded.layoutId
           ? { layoutId: loaded.layoutId }
           : { entityType },
-        select: { id: true, label: true, type: true },
+        select: { id: true, label: true, type: true, visibility: true },
       }),
     ]);
 
@@ -951,6 +973,7 @@ export async function moveDirectoryRecord(
       id: f.id,
       label: f.label,
       type: (isCustomFieldType(f.type) ? f.type : "text") as CustomFieldType,
+      visibility: f.visibility,
     }));
 
     if (loaded.statusId && stageId && loaded.statusId !== stageId) {
@@ -1024,6 +1047,26 @@ export async function moveDirectoryRecord(
         linkUrl: `${path}/${recordId}`,
       });
     }
+
+    await dispatchSendInviteActions({
+      actions: sendInviteActionsForMove({
+        fromActions: toActions(from),
+        toActions: toActions(to),
+        transition,
+      }),
+      entityType,
+      recordId,
+      recordTitle: after.native.title,
+      fields: customFields,
+      values: after.custom,
+      organizer: {
+        id: user.id,
+        name: user.name?.trim() || user.email,
+        email: user.email,
+      },
+      linkUrl: `${getModule(entityType).recordPath}/${recordId}`,
+      layoutId: loaded.layoutId,
+    });
 
     await logRecordChanges({
       entityType,

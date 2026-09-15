@@ -1,8 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { useBranding } from "@/components/branding-provider";
+import { nizekBotLogoUrl } from "@/lib/live-branding";
 import {
   NIZEK_BOT_AUTHOR_ID,
   NIZEK_BOT_INITIALS,
@@ -143,11 +147,20 @@ function formatTime(iso: string) {
   });
 }
 
-export function NizekBotAvatar({ show }: { show: boolean }) {
+export function NizekBotAvatar({
+  show,
+  imageUrl,
+}: {
+  show: boolean;
+  imageUrl?: string | null;
+}) {
+  const branding = useBranding();
+  const src = (branding ? nizekBotLogoUrl(branding.logos) : null) || imageUrl || null;
   if (!show) return <div className="size-8 shrink-0" aria-hidden />;
   return (
     <div className="shrink-0 self-start">
       <Avatar>
+        {src ? <AvatarImage src={src} alt="" /> : null}
         <AvatarFallback className="bg-success font-bold text-white shadow-sm">
           {NIZEK_BOT_INITIALS}
         </AvatarFallback>
@@ -189,7 +202,7 @@ export function ChatPostAvatar({
   authorImageUrl?: string | null;
 }) {
   if (isNizekBotAuthor(authorId) || !authorName?.trim()) {
-    return <NizekBotAvatar show={show} />;
+    return <NizekBotAvatar show={show} imageUrl={authorImageUrl} />;
   }
   if (!show) return <div className="size-8 shrink-0" aria-hidden />;
   const name = authorName.trim();

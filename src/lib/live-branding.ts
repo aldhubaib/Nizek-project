@@ -7,6 +7,7 @@ export type LiveLogos = {
   favicon: string | null;
   faviconDark: string | null;
   appleTouchIcon: string | null;
+  homeScreenSource: string | null;
   webLogo: string | null;
   iosSplash: string | null;
   /** Cache-busted manifest href so installed PWAs re-read icons. */
@@ -19,11 +20,17 @@ export const EMPTY_LIVE_LOGOS: LiveLogos = {
   favicon: null,
   faviconDark: null,
   appleTouchIcon: null,
+  homeScreenSource: null,
   webLogo: null,
   iosSplash: null,
   manifest: null,
   iconToken: null,
 };
+
+/** Face for Nizek Bot: Settings home-screen source, then apple-touch, then wordmark. */
+export function nizekBotLogoUrl(logos: LiveLogos): string | null {
+  return logos.homeScreenSource || logos.appleTouchIcon || logos.webLogo;
+}
 
 function str(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
@@ -45,6 +52,7 @@ export function parseLiveLogos(data: unknown): LiveLogos | null {
       favicon: str(l.favicon),
       faviconDark: str(l.faviconDark),
       appleTouchIcon: str(l.appleTouchIcon),
+      homeScreenSource: str(l.homeScreenSource),
       webLogo: str(l.webLogo),
       iosSplash: str(l.iosSplash),
       manifest,
@@ -66,6 +74,7 @@ export function logosEqual(a: LiveLogos, b: LiveLogos): boolean {
     a.favicon === b.favicon &&
     a.faviconDark === b.faviconDark &&
     a.appleTouchIcon === b.appleTouchIcon &&
+    a.homeScreenSource === b.homeScreenSource &&
     a.webLogo === b.webLogo &&
     a.iosSplash === b.iosSplash &&
     a.manifest === b.manifest &&

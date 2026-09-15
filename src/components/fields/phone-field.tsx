@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
+  COMBOBOX_COLLISION_AVOIDANCE,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -26,6 +27,7 @@ export function PhoneField({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const parsed = parsePhoneValue(value);
   const country = parsed.country || DEFAULT_DIAL_COUNTRY;
   const options = useMemo(() => dialOptions(), []);
@@ -72,10 +74,19 @@ export function PhoneField({
           </span>
           <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-80 p-2">
-          <div className="relative">
+        <PopoverContent
+          align="start"
+          collisionAvoidance={COMBOBOX_COLLISION_AVOIDANCE}
+          className="flex w-80 max-h-[min(20rem,var(--available-height))] flex-col overflow-hidden p-2"
+          initialFocus={() => {
+            searchRef.current?.focus({ preventScroll: true });
+            return false;
+          }}
+        >
+          <div className="relative shrink-0">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
+              ref={searchRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -85,10 +96,9 @@ export function PhoneField({
               }}
               placeholder="Search country or code"
               className="h-8 ps-8 text-s"
-              autoFocus
             />
           </div>
-          <div className="max-h-64 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {filtered.length === 0 ? (
               <p className="px-2 py-6 text-center text-s text-muted-foreground">
                 No matches for “{query.trim()}”

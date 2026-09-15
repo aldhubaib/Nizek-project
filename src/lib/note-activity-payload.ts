@@ -32,6 +32,15 @@ export function isSprintScopeCard(noteType: string): boolean {
   return noteType === SPRINT_TASK_ADDED || noteType === SPRINT_TASK_REMOVED;
 }
 
+/** The four sprint cards that speak as Nizek Bot in the client room. */
+export function isSprintAnnouncementCard(noteType: string): boolean {
+  return (
+    noteType === "SPRINT_PLANNING" ||
+    noteType === "SPRINT_REVIEW" ||
+    isSprintScopeCard(noteType)
+  );
+}
+
 const TYPE_LABEL: Record<string, string> = {
   MEETING_NOTE: "Meeting Note",
   DECISION: "Decision",
@@ -94,6 +103,13 @@ export function decodeNoteActivityPayload(body: string): NoteActivityPayload | n
 
 export function isNoteActivityMessage(kind: string): boolean {
   return kind === "note_activity";
+}
+
+/** A sprint announcement sitting in a client room — display as Nizek Bot. */
+export function isClientSprintBotMessage(kind: string, body: string): boolean {
+  if (!isNoteActivityMessage(kind)) return false;
+  const payload = decodeNoteActivityPayload(body);
+  return Boolean(payload && isSprintAnnouncementCard(payload.noteType));
 }
 
 export function noteActivityUrl(projectId: string, noteId: string, noteType?: string): string {

@@ -719,3 +719,7 @@ mark.note-annotation-task {
   user-select: none;
   pointer-events: none;
 }
+
+.nizek-location-map .gm-style {
+  border-radius: inherit;
+}

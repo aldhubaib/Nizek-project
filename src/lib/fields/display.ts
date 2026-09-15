@@ -1,7 +1,11 @@
 import { formatDealValue } from "@/lib/deal-value";
 import { formatPhoneValue } from "@/lib/dial-codes";
 import { formatCountryCodes } from "@/lib/countries";
+import { parseUserIds } from "@/lib/fields/user-config";
 import { parseRelationIds } from "@/lib/fields/relations";
+import { fieldPriorityLabel, fieldPriorityRank } from "@/lib/fields/priority";
+import { formatCostField, sumCostRows, parseCostRows } from "@/lib/fields/cost";
+import { formatInviteField, parseInviteValue } from "@/lib/fields/invite";
 import type { CustomFieldDTO } from "@/actions/custom-field";
 import type { DealDTO } from "@/actions/deal";
 import type { RelatedRecordCatalog } from "@/lib/fields/relations";
@@ -56,7 +60,9 @@ export function formatFieldValue(
   }
 
   if (field.type === "user") {
-    return ctx.users.find((user) => user.id === raw)?.name ?? raw;
+    return parseUserIds(raw)
+      .map((id) => ctx.users.find((user) => user.id === id)?.name ?? id)
+      .join(", ");
   }
 
   if (field.type === "relation") {
@@ -70,6 +76,9 @@ export function formatFieldValue(
   if (field.type === "phone") return formatPhoneValue(raw);
   if (field.type === "country") return formatCountryCodes(raw);
   if (field.type === "file") return "Attached";
+  if (field.type === "priority") return fieldPriorityLabel(raw);
+  if (field.type === "cost") return formatCostField(raw);
+  if (field.type === "invite") return formatInviteField(raw);
   if (field.type === "number") {
     const amount = Number(raw);
     return Number.isFinite(amount) ? formatDealValue(raw) : raw;
@@ -92,6 +101,19 @@ export function fieldSortValue(
   if (field.type === "date") {
     const raw = record.fieldValues?.[field.id] ?? "";
     const time = Date.parse(raw);
+    return Number.isNaN(time) ? "" : time;
+  }
+  if (field.type === "priority") {
+    const rank = fieldPriorityRank(record.fieldValues?.[field.id]);
+    return rank < 0 ? "" : rank;
+  }
+  if (field.type === "cost") {
+    const rows = parseCostRows(record.fieldValues?.[field.id]);
+    return rows.length === 0 ? "" : sumCostRows(rows);
+  }
+  if (field.type === "invite") {
+    const invite = parseInviteValue(record.fieldValues?.[field.id]);
+    const time = Date.parse(invite.start);
     return Number.isNaN(time) ? "" : time;
   }
   return formatFieldValue(field, record, ctx).toLowerCase();

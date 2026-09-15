@@ -17,8 +17,13 @@ import { RelatedField } from "@/components/deals/related-records";
 import type { RelatedRecordCatalog } from "@/lib/fields/relations";
 import { EMPTY_RELATED_CATALOG } from "@/lib/fields/relations";
 import { applyTextScript } from "@/lib/fields/text-config";
+import { fieldAppliesOnForm } from "@/lib/fields/visibility";
 import { PhoneField } from "@/components/fields/phone-field";
 import { CountryField } from "@/components/fields/country-field";
+import { PriorityField } from "@/components/fields/priority-field";
+import { CostField } from "@/components/fields/cost-field";
+import { UserField } from "@/components/fields/user-field";
+import { InviteField } from "@/components/fields/invite-field";
 import { cn } from "@/lib/utils";
 
 export function FieldControl({
@@ -77,12 +82,34 @@ export function FieldControl({
   }
 
   return (
-    <div className="space-y-1.5">
-      {label}
+    <div className={field.type === "cost" || field.type === "invite" ? undefined : "space-y-1.5"}>
+      {field.type !== "cost" && field.type !== "invite" && label}
       {field.type === "phone" ? (
         <PhoneField value={value} onChange={onChange} />
+      ) : field.type === "cost" ? (
+        <CostField label={label} value={value} onChange={onChange} />
+      ) : field.type === "invite" ? (
+        <div className="space-y-1.5">
+          {label}
+          <InviteField
+            value={value}
+            onChange={onChange}
+            users={users}
+            contacts={related.contact}
+          />
+        </div>
+      ) : field.type === "priority" ? (
+        <PriorityField
+          value={value}
+          onChange={onChange}
+          required={field.required}
+        />
       ) : field.type === "country" ? (
-        <CountryField value={value} onChange={onChange} />
+        <CountryField
+          value={value}
+          onChange={onChange}
+          multiple={field.countryMultiple}
+        />
       ) : field.type === "textarea" ? (
         <Textarea value={value} onChange={(e) => onChange(e.target.value)} />
       ) : field.type === "checkbox" ? (
@@ -118,18 +145,12 @@ export function FieldControl({
           </label>
         )
       ) : field.type === "user" ? (
-        <select
+        <UserField
           value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-s"
-        >
-          <option value="">—</option>
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name}
-            </option>
-          ))}
-        </select>
+          users={users}
+          multiple={field.userMultiple}
+          onChange={onChange}
+        />
       ) : (
         <Input
           type={
@@ -181,4 +202,13 @@ export function visibleOnForm(
   mode: "create" | "edit",
 ): boolean {
   return field.showOn === "both" || field.showOn === mode;
+}
+
+export function fieldShowsOnForm(
+  field: CustomFieldDTO,
+  mode: "create" | "edit",
+  values: Record<string, string>,
+  knownFieldIds?: Iterable<string>,
+): boolean {
+  return fieldAppliesOnForm(field, mode, values, knownFieldIds);
 }

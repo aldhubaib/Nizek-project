@@ -18,6 +18,7 @@ import { getClientConversation } from "@/lib/client-chat";
 import { fanOutMessageSideEffects } from "@/lib/message-fanout";
 import {
   encodeNoteActivityBody,
+  isSprintAnnouncementCard,
   noteActivityPreview,
   type NoteActivityPayload,
 } from "@/lib/note-activity-payload";
@@ -26,6 +27,11 @@ import {
   encodeClientIssueBody,
   type ClientIssuePayload,
 } from "@/lib/client-issue-payload";
+import {
+  NIZEK_BOT_AUTHOR_ID,
+  NIZEK_BOT_NAME,
+} from "@/lib/deadline-reminder-payload";
+import { getNizekBotImageUrl } from "@/lib/branding";
 import type { MessageDTO } from "@/actions/messages";
 
 /**
@@ -77,6 +83,7 @@ function cardDTO(input: {
   conversationId: string | null;
   preview: string;
   payload: Partial<Pick<MessageDTO, "noteActivity" | "clientIssue">>;
+  authorImageUrl?: string | null;
 }): MessageDTO {
   return {
     id: input.message.id,
@@ -86,7 +93,10 @@ function cardDTO(input: {
     kind: input.message.kind,
     authorId: input.authorId,
     authorName: input.authorName,
-    authorImageUrl: input.message.author.imageUrl ?? null,
+    authorImageUrl:
+      input.authorImageUrl !== undefined
+        ? input.authorImageUrl
+        : (input.message.author.imageUrl ?? null),
     body: input.preview,
     createdAt: input.message.createdAt.toISOString(),
     attachments: [],
@@ -142,16 +152,22 @@ export async function postNoteActivityToClientRoom(input: {
     kind: "note_activity",
   });
 
-  const authorName = message.author.name ?? message.author.email ?? "Someone";
+  const asBot = isSprintAnnouncementCard(payload.noteType);
+  const botImageUrl = asBot ? await getNizekBotImageUrl() : null;
+  const authorName = asBot
+    ? NIZEK_BOT_NAME
+    : (message.author.name ?? message.author.email ?? "Someone");
+  const displayAuthorId = asBot ? NIZEK_BOT_AUTHOR_ID : authorId;
   const preview = noteActivityPreview(payload);
   const dto = cardDTO({
     message,
-    authorId,
+    authorId: displayAuthorId,
     authorName,
     projectId,
     conversationId: convo.id,
     preview,
     payload: { noteActivity: payload },
+    authorImageUrl: asBot ? botImageUrl : undefined,
   });
 
   void publish(conversationChannel(convo.id), { type: "message.new", message: dto });
@@ -161,8 +177,10 @@ export async function postNoteActivityToClientRoom(input: {
     type: "message.new",
     message: {
       ...dto,
-      authorName: maskName(authorId, authorName, aliasMap),
-      authorImageUrl: maskImage(authorId, dto.authorImageUrl, aliasMap),
+      authorName: asBot ? NIZEK_BOT_NAME : maskName(authorId, authorName, aliasMap),
+      authorImageUrl: asBot
+        ? botImageUrl
+        : maskImage(authorId, dto.authorImageUrl, aliasMap),
       body: maskPlainNames(dto.body, aliasMap),
       noteActivity: maskNoteActivity(payload, aliasMap),
     } satisfies MessageDTO,
@@ -183,8 +201,11 @@ export async function postNoteActivityToClientRoom(input: {
     threadId: `conv-${convo.id}`,
     authorName,
     preview,
-    notifIcon: project.logoUrl ?? message.author.imageUrl ?? undefined,
+    notifIcon: asBot
+      ? (botImageUrl ?? project.logoUrl ?? undefined)
+      : (project.logoUrl ?? message.author.imageUrl ?? undefined),
     messageCreatedAt: message.createdAt,
+    asBot,
   });
 }
 

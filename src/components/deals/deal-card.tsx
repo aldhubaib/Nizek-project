@@ -3,10 +3,13 @@
 import { memo } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
+import { formatRecordNumber } from "@/lib/modules/record-number";
 import {
   formatFieldValue,
   type FieldDisplayContext,
 } from "@/lib/fields/display";
+import { fieldIsLogicallyVisible } from "@/lib/fields/visibility";
+import { MemberAvatar } from "@/components/boards/member-avatar";
 import type { CustomFieldDTO } from "@/actions/custom-field";
 import type { DealDTO } from "@/actions/deal";
 
@@ -57,12 +60,23 @@ export const DealCard = memo(function DealCard({
         isOverlay && "shadow-2xl",
       )}
     >
+      <span className="font-mono text-xs text-muted-foreground/60">
+        {formatRecordNumber(deal.recordNumber)}
+      </span>
       <p className="truncate text-s font-semibold">{deal.title}</p>
       {extras.map((field) => {
-        const value = display
-          ? formatFieldValue(field, deal, display.ctx)
-          : "";
+        if (!display) return null;
+        const value = formatFieldValue(field, deal, display.ctx);
         if (!value) return null;
+        if (
+          !fieldIsLogicallyVisible(
+            field,
+            deal.fieldValues ?? {},
+            display.fields.map((row) => row.id),
+          )
+        ) {
+          return null;
+        }
         return (
           <p
             key={field.id}
@@ -75,6 +89,14 @@ export const DealCard = memo(function DealCard({
           </p>
         );
       })}
+      {deal.assignee && (
+        <div className="mt-2 flex items-center gap-1.5">
+          <MemberAvatar person={deal.assignee} size="xs" />
+          <span className="truncate text-xs text-muted-foreground">
+            {deal.assignee.name ?? "Assigned"}
+          </span>
+        </div>
+      )}
     </div>
   );
 });

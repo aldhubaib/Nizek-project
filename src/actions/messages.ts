@@ -28,7 +28,9 @@ import {
 } from "@/lib/task-comment-payload";
 import {
   decodeNoteActivityPayload,
+  isClientSprintBotMessage,
   isNoteActivityMessage,
+  isSprintAnnouncementCard,
   noteActivityPreview,
   type NoteActivityPayload,
   noteCardShowsExcerpt,
@@ -247,20 +249,27 @@ function inboxPreview(body: string): string {
 function mapDeadlineReminderMessage<T extends { kind: string; body: string; authorId: string; author: { name: string | null; email: string; imageUrl: string | null } }>(
   c: T,
   aliasMap: Map<string, AliasIdentity> = NO_MASK,
+  options: { isClientRoom?: boolean } = {},
 ) {
   // Mask before decoding so mention tokens in the header and any real name
   // quoted inside a comment payload are both rewritten.
   const body = maskBody(c.body, aliasMap);
   const payload = decodeDeadlineReminderPayload(body);
-  const isBot = isDeadlineReminderMessage(c.kind);
+  const noteActivity = isNoteActivityMessage(c.kind)
+    ? decodeNoteActivityPayload(body)
+    : null;
+  const isBot =
+    isDeadlineReminderMessage(c.kind) ||
+    Boolean(
+      options.isClientRoom &&
+        noteActivity &&
+        isSprintAnnouncementCard(noteActivity.noteType),
+    );
   const noteComment = isNoteCommentMessage(c.kind)
     ? decodeNoteCommentPayload(body)
     : null;
   const taskComment = isTaskCommentMessage(c.kind)
     ? decodeTaskCommentPayload(body)
-    : null;
-  const noteActivity = isNoteActivityMessage(c.kind)
-    ? decodeNoteActivityPayload(body)
     : null;
   const clientIssue = isClientIssueMessage(c.kind)
     ? decodeClientIssuePayload(body)
@@ -298,6 +307,23 @@ function mapDeadlineReminderMessage<T extends { kind: string; body: string; auth
     clientIssue,
     proofBypass,
   };
+}
+
+function inboxLastAuthor(
+  last: {
+    kind: string;
+    body: string;
+    author: { id: string; name: string | null; email: string };
+  },
+  options: { clientRoom?: boolean; aliasMap?: Map<string, AliasIdentity> } = {},
+): string {
+  if (options.clientRoom && isClientSprintBotMessage(last.kind, last.body)) {
+    return NIZEK_BOT_NAME;
+  }
+  const name = last.author.name ?? last.author.email;
+  return options.aliasMap
+    ? maskName(last.author.id, name, options.aliasMap)
+    : name;
 }
 
 /** Names mentioned in a body — the client highlights "@Name" runs as chips. */
@@ -516,6 +542,7 @@ export async function getThreadMessages(input: {
     conversationId?: string | null;
   };
   let aliasProjectId: string | null = null;
+  let isClientRoom = false;
   if (input.conversationId) {
     const convoMeta = await prisma.conversation.findUnique({
       where: { id: input.conversationId },
@@ -528,6 +555,7 @@ export async function getThreadMessages(input: {
     } else if (convoMeta.kind === CLIENT_CONVERSATION_KIND) {
       const access = await canAccessClientConversation(input.conversationId, user);
       if (!access.ok) throw new Error("Permission denied");
+      isClientRoom = true;
     } else {
       const convo = await prisma.conversation.findFirst({
         where: {
@@ -598,7 +626,7 @@ export async function getThreadMessages(input: {
       list.push(r.memberId);
       byEmoji.set(r.emoji, list);
     }
-    const mapped = mapDeadlineReminderMessage(c, aliasMap);
+    const mapped = mapDeadlineReminderMessage(c, aliasMap, { isClientRoom });
     const edited =
       c.updatedAt.getTime() - c.createdAt.getTime() > 2000;
     return {
@@ -1932,7 +1960,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         peerMemberIds: [],
         lastMessage: last ? inboxPreview(maskBody(last.body, aliasMap)) : "",
         lastAuthor: last
-          ? maskName(last.author.id, last.author.name ?? last.author.email, aliasMap)
+          ? inboxLastAuthor(last, { clientRoom: true, aliasMap })
           : "",
         lastAt: last ? last.createdAt.toISOString() : "",
         unread: unreadMap.get(`conv-${c.id}`) ?? 0,
@@ -2110,7 +2138,9 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         peerImageUrl: null,
         peerMemberIds: [],
         lastMessage: last ? inboxPreview(last.body) : "",
-        lastAuthor: last ? (last.author.name ?? last.author.email) : "",
+        lastAuthor: last
+          ? inboxLastAuthor(last, { clientRoom: true })
+          : "",
         lastAt: last ? last.createdAt.toISOString() : "",
         unread: unreadMap.get(`conv-${c.id}`) ?? 0,
         avatar: generateColor(name),
