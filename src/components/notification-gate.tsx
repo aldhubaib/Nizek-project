@@ -27,8 +27,26 @@ export function NotificationGate({ children }: { children: React.ReactNode }) {
 
   const attemptEnable = useCallback(async () => {
     if (busy) return;
-    setBusy(true);
     setFailure(null);
+
+    // 1. Request permission FIRST — must be the very first await so that the
+    //    user-gesture token is still active. iOS silently returns "denied" and
+    //    Android demotes to the quiet mini-infobar if any other async work
+    //    (setState, SW resolution) runs before this call.
+    let perm: NotificationPermission;
+    try {
+      perm = await Notification.requestPermission();
+    } catch {
+      perm = Notification.permission;
+    }
+    if (perm !== "granted") {
+      await refresh({ force: true });
+      return;
+    }
+
+    // 2. Permission granted — now do the slower SW registration + subscription.
+    //    The gesture is no longer needed for these steps.
+    setBusy(true);
     try {
       const result = await enablePush();
       if (!result.ok) {
@@ -36,16 +54,26 @@ export function NotificationGate({ children }: { children: React.ReactNode }) {
       }
     } finally {
       setBusy(false);
-      await refresh();
+      await refresh({ force: true });
     }
   }, [busy, refresh]);
 
+  // Sync fast-path: if the browser already reports permission as granted we can
+  // skip the overlay while the full async status check runs. This eliminates
+  // the flash users see on slow mobile connections (3-16s round-trip) when they
+  // already have permission.
+  const permissionGranted =
+    typeof Notification !== "undefined" &&
+    Notification.permission === "granted";
+
   // Decide whether to show the blocking overlay. The gate is invisible when:
+  //  - the OS already reports permission as granted (sync fast-path)
   //  - still running the initial/refresh status check (no flash)
   //  - notifications are fully enabled
   //  - push isn't supported (old browser, dev mode) — don't lock the app
   const gated =
     !checking &&
+    !permissionGranted &&
     status != null &&
     !status.enabled &&
     pushSupported() &&

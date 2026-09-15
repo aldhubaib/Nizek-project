@@ -1,7 +1,8 @@
 import IORedis from "ioredis";
 
-const REDIS_URL =
-  process.env.REDIS_URL || process.env.CENTRIFUGO_REDIS_URL || "redis://localhost:6379";
+// BullMQ uses its own Redis. In production, set REDIS_URL to a dedicated
+// instance so push queue traffic doesn't compete with Centrifugo pub/sub.
+const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 
 const globalForRedis = globalThis as unknown as {
   redis: IORedis | undefined;

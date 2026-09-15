@@ -27,10 +27,11 @@ import {
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const REDIS_URL =
-  process.env.REDIS_URL || process.env.CENTRIFUGO_REDIS_URL || "redis://localhost:6379";
+// BullMQ uses its own Redis. In production, set REDIS_URL to a dedicated
+// instance so push queue traffic doesn't compete with Centrifugo pub/sub.
+const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const QUEUE_NAME = "push-notifications";
-const CONCURRENCY = Number(process.env.PUSH_WORKER_CONCURRENCY ?? 10) || 10;
+const CONCURRENCY = Number(process.env.PUSH_WORKER_CONCURRENCY ?? 25) || 25;
 
 const VAPID_PUBLIC = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
@@ -232,9 +233,30 @@ process.on("SIGINT", () => shutdown("SIGINT"));
 // ─── Health endpoint (Railway requires an HTTP health check) ─────────────────
 
 const HEALTH_PORT = Number(process.env.PORT ?? 3001) || 3001;
-const healthServer = http.createServer((_req, res) => {
-  res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ status: "ok", service: "push-worker" }));
+let lastJobCompletedAt: number | null = null;
+worker.on("completed", () => {
+  lastJobCompletedAt = Date.now();
+});
+
+const healthServer = http.createServer(async (_req, res) => {
+  try {
+    const waiting = await worker.client.then((c) =>
+      c.llen(`bull:${QUEUE_NAME}:wait`),
+    );
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        status: "ok",
+        service: "push-worker",
+        concurrency: CONCURRENCY,
+        queueWaiting: waiting,
+        lastJobCompletedAt,
+      }),
+    );
+  } catch {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: "ok", service: "push-worker" }));
+  }
 });
 healthServer.listen(HEALTH_PORT, () => {
   console.log(`[worker] health endpoint listening on :${HEALTH_PORT}`);

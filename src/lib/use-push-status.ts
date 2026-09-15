@@ -8,11 +8,60 @@
 // A minimum interval between refreshes prevents rapid visibilitychange events
 // (common on mobile during app-switch animations) from firing multiple
 // concurrent getPushStatus() calls.
+//
+// The hook caches the last successful PushStatus in localStorage with a 5-min
+// TTL. On visibilitychange we read the cache first and only hit the server when
+// expired or when the browser-level permission changed since the last check.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getPushStatus, type PushStatus } from "@/lib/push-client";
 
 const MIN_REFRESH_INTERVAL_MS = 3_000;
+
+// ─── localStorage cache ─────────────────────────────────────────────────────
+
+const STATUS_CACHE_KEY = "nizek:push-status";
+const STATUS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+interface CachedStatus {
+  status: PushStatus;
+  permission: NotificationPermission | "unsupported";
+  ts: number;
+}
+
+function readCachedStatus(): PushStatus | null {
+  try {
+    const raw = localStorage.getItem(STATUS_CACHE_KEY);
+    if (!raw) return null;
+    const cached: CachedStatus = JSON.parse(raw);
+    if (Date.now() - cached.ts > STATUS_CACHE_TTL_MS) return null;
+    // Invalidate if the browser-level permission changed since we cached.
+    const currentPerm =
+      typeof Notification !== "undefined"
+        ? Notification.permission
+        : "unsupported";
+    if (currentPerm !== cached.permission) return null;
+    return cached.status;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedStatus(status: PushStatus): void {
+  try {
+    const entry: CachedStatus = {
+      status,
+      permission:
+        typeof Notification !== "undefined"
+          ? Notification.permission
+          : "unsupported",
+      ts: Date.now(),
+    };
+    localStorage.setItem(STATUS_CACHE_KEY, JSON.stringify(entry));
+  } catch {
+    // localStorage may be full or disabled (private browsing).
+  }
+}
 
 export function usePushStatus() {
   const [status, setStatus] = useState<PushStatus | null>(null);
@@ -39,13 +88,27 @@ export function usePushStatus() {
         return;
       }
 
+      // Non-forced refresh (e.g. visibilitychange): try the localStorage cache
+      // first to avoid a network round-trip.
+      if (!opts?.force) {
+        const cached = readCachedStatus();
+        if (cached) {
+          setStatus(cached);
+          setChecking(false);
+          return;
+        }
+      }
+
       const runId = ++runIdRef.current;
       inflightRef.current = true;
       lastRefreshAtRef.current = now;
       setChecking(true);
       try {
         const next = await getPushStatus();
-        if (runId === runIdRef.current) setStatus(next);
+        if (runId === runIdRef.current) {
+          setStatus(next);
+          writeCachedStatus(next);
+        }
       } finally {
         if (runId === runIdRef.current) {
           setChecking(false);
