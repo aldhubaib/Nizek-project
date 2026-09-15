@@ -9,7 +9,11 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { TABLE_STATUS_KEY, cardFieldChoices } from "@/lib/modules/card-fields";
+import {
+  TABLE_STATUS_KEY,
+  CARD_RECORD_NUMBER_KEY,
+  cardFieldChoices,
+} from "@/lib/modules/card-fields";
 import type { CustomFieldDTO } from "@/actions/custom-field";
 
 export function CardFieldsPicker({
@@ -59,6 +63,18 @@ export function CardFieldsPicker({
           <input type="checkbox" checked disabled />
           {title}
         </label>
+        {mode === "card" && (
+          <label className="flex items-center gap-2 text-s">
+            <input
+              type="checkbox"
+              checked={visible.has(CARD_RECORD_NUMBER_KEY)}
+              onChange={(e) =>
+                toggle(CARD_RECORD_NUMBER_KEY, e.target.checked)
+              }
+            />
+            Record Number
+          </label>
+        )}
         {mode === "table" && (
           <label className="flex items-center gap-2 text-s">
             <input

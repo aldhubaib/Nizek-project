@@ -4,6 +4,7 @@ import { memo } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import { formatRecordNumber } from "@/lib/modules/record-number";
+import { CARD_RECORD_NUMBER_KEY } from "@/lib/modules/card-fields";
 import {
   formatFieldValue,
   type FieldDisplayContext,
@@ -60,9 +61,11 @@ export const DealCard = memo(function DealCard({
         isOverlay && "shadow-2xl",
       )}
     >
-      <span className="font-mono text-xs text-muted-foreground/60">
-        {formatRecordNumber(deal.recordNumber)}
-      </span>
+      {(!display || display.visibleFieldIds.includes(CARD_RECORD_NUMBER_KEY)) && (
+        <span className="font-mono text-xs text-muted-foreground/60">
+          {formatRecordNumber(deal.recordNumber)}
+        </span>
+      )}
       <p className="truncate text-s font-semibold">{deal.title}</p>
       {extras.map((field) => {
         if (!display) return null;

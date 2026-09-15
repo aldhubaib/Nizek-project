@@ -1,6 +1,7 @@
 import type { CustomFieldDTO } from "@/actions/custom-field";
 
 export const TABLE_STATUS_KEY = "status";
+export const CARD_RECORD_NUMBER_KEY = "record-number";
 
 export type FieldPickerPrefs = {
   visible: string[];
@@ -16,7 +17,10 @@ export function cardFieldChoices(fields: CustomFieldDTO[]): CustomFieldDTO[] {
 }
 
 export function defaultCardFieldIds(fields: CustomFieldDTO[]): string[] {
-  return cardFieldChoices(fields).map((field) => field.id);
+  return [
+    CARD_RECORD_NUMBER_KEY,
+    ...cardFieldChoices(fields).map((field) => field.id),
+  ];
 }
 
 function stringIds(value: unknown): string[] {
@@ -54,11 +58,13 @@ function mergeVisible(
   fallback: string[],
 ): string[] {
   const allowedSet = new Set(allowed);
-  if (!saved) return fallback.filter((id) => allowedSet.has(id) || id === TABLE_STATUS_KEY);
+  const isSpecialKey = (id: string) =>
+    id === TABLE_STATUS_KEY || id === CARD_RECORD_NUMBER_KEY;
+  if (!saved) return fallback.filter((id) => allowedSet.has(id) || isSpecialKey(id));
 
   const seen = new Set(saved.seen.length > 0 ? saved.seen : allowed);
   const visible = saved.visible.filter(
-    (id) => allowedSet.has(id) || id === TABLE_STATUS_KEY,
+    (id) => allowedSet.has(id) || isSpecialKey(id),
   );
   const added = allowed.filter((id) => !seen.has(id));
   return [...visible, ...added];
