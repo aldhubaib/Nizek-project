@@ -1,3 +1,4 @@
+// @BUILD_VERSION
 // Service worker: Web Push + notification-sound caching + safe app-shell
 // caching. App updates are still owned by the in-app UpdateNotifier (it
 // clears every cache except notif-sound-v1 on apply).
