@@ -13,7 +13,12 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { Bell, Loader2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { enablePush, pushSupported, pushPlatform } from "@/lib/push-client";
+import {
+  enablePush,
+  pushPlatform,
+  pushSupported,
+  pushSupportStatus,
+} from "@/lib/push-client";
 import {
   describePushFailure,
   shouldGate,
@@ -73,6 +78,14 @@ export function NotificationGate({ children }: { children: React.ReactNode }) {
   // to wait for); "granted" only gates once the device is confirmed not
   // enabled AND the automatic repair has already failed — never while a check
   // is merely in flight, which is what used to hide the gate forever.
+  // Synchronous, so an iOS Safari tab is gated with install steps on the very
+  // first client render instead of after the async status check.
+  const support = mounted ? pushSupportStatus() : null;
+  const supportFailure: PushEnableFailure | null =
+    support && !support.ok
+      ? { reason: support.reason, detail: support.detail }
+      : null;
+
   const gated =
     mounted &&
     shouldGate({
@@ -83,6 +96,7 @@ export function NotificationGate({ children }: { children: React.ReactNode }) {
       enabled: status ? status.enabled : null,
       healFailure,
       supported: pushSupported(),
+      supportReason: supportFailure?.reason ?? null,
       production: process.env.NODE_ENV === "production",
     });
 
@@ -92,7 +106,7 @@ export function NotificationGate({ children }: { children: React.ReactNode }) {
       {gated && (
         <GateOverlay
           status={status}
-          failure={failure ?? healFailure}
+          failure={failure ?? healFailure ?? supportFailure}
           busy={busy}
           onEnable={attemptEnable}
         />
@@ -177,17 +191,20 @@ function GateOverlay({
           </div>
         )}
 
-        {/* Action button */}
-        {/* Only the user's own attempt disables the button — a background
-            status check must never lock them out of retrying. */}
-        <Button className="w-full" size="lg" onClick={onEnable} disabled={busy}>
-          {busy ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Bell className="h-4 w-4" />
-          )}
-          {guidance?.retryLabel ?? "Enable Notifications"}
-        </Button>
+        {/* Action button. Hidden when retrying cannot help (e.g. iOS browser
+            tab: the install steps above are the only way forward). Only the
+            user's own attempt disables it — a background status check must
+            never lock them out of retrying. */}
+        {(!guidance || guidance.retryLabel) && (
+          <Button className="w-full" size="lg" onClick={onEnable} disabled={busy}>
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Bell className="h-4 w-4" />
+            )}
+            {guidance?.retryLabel ?? "Enable Notifications"}
+          </Button>
+        )}
 
         {guidance?.showDiagnostics && (
           <p className="text-center text-xs text-muted-foreground">

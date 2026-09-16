@@ -387,9 +387,42 @@ describe("shouldGate", () => {
     ).toBe(true);
   });
 
-  it("never gates in development or where push is unsupported", () => {
+  it("never gates in development or where push is unsupported with no fix", () => {
     expect(shouldGate({ ...base, permission: "default", production: false })).toBe(false);
-    expect(shouldGate({ ...base, permission: "default", supported: false })).toBe(false);
+    expect(
+      shouldGate({
+        ...base,
+        permission: "default",
+        supported: false,
+        supportReason: "unsupported",
+      }),
+    ).toBe(false);
     expect(shouldGate({ ...base, permission: "unsupported" })).toBe(false);
+  });
+
+  // An iOS browser tab has no Notification API at all, so permission reads
+  // "unsupported" — it must still be gated with the install instructions.
+  it("gates an iOS browser tab with install steps (Safari and non-Safari)", () => {
+    const iosTab = {
+      ...base,
+      permission: "unsupported" as const,
+      supported: false,
+    };
+    expect(shouldGate({ ...iosTab, supportReason: "needs-install" })).toBe(true);
+    expect(shouldGate({ ...iosTab, supportReason: "needs-safari-install" })).toBe(true);
+    // ...but not in development.
+    expect(
+      shouldGate({ ...iosTab, supportReason: "needs-install", production: false }),
+    ).toBe(false);
+  });
+
+  it("does not lock out an admin who is impersonating", () => {
+    expect(
+      shouldGate({
+        ...base,
+        enabled: false,
+        healFailure: { reason: "impersonating" },
+      }),
+    ).toBe(false);
   });
 });

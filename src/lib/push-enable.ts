@@ -210,9 +210,18 @@ export function shouldAttemptHeal(input: {
   return input.now - input.lastHealAt >= HEAL_COOLDOWN_MS;
 }
 
+/** Support failures the user CAN fix by installing the app the right way. */
+export function isInstallRequired(reason: PushEnableReason | null | undefined): boolean {
+  return reason === "needs-install" || reason === "needs-safari-install";
+}
+
 /**
  * Whether the full-screen gate must block the app.
  *
+ * - iOS browser tab (push unsupported until installed from Safari): gate with
+ *   the install instructions — notifications are mandatory, so a tab is not a
+ *   way around them. Truly unsupported browsers (no install path) are never
+ *   gated; there is nothing the user could do.
  * - Permission `default`/`denied`: gate immediately. This is synchronous
  *   browser state, so we never wait on a network check (and never hide the
  *   gate behind a `checking` flag that can stay true forever).
@@ -225,11 +234,18 @@ export function shouldGate(input: {
   enabled: boolean | null;
   healFailure: PushEnableFailure | null;
   supported: boolean;
+  /** Why push is unsupported here, when it is (from classifySupport). */
+  supportReason?: PushEnableReason | null;
   production: boolean;
 }): boolean {
-  if (!input.production || !input.supported) return false;
+  if (!input.production) return false;
+  if (isInstallRequired(input.supportReason)) return true;
+  if (!input.supported) return false;
   if (input.permission === "unsupported") return false;
   if (input.permission !== "granted") return true;
+  // An admin viewing as another user is refused registration by design;
+  // locking them out would be a bug, not enforcement.
+  if (input.healFailure?.reason === "impersonating") return false;
   return input.enabled === false && input.healFailure !== null;
 }
 
