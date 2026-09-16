@@ -121,15 +121,16 @@ export function usePushStatus() {
             writeCachedStatus(next);
           }
 
-          // Self-heal: permission is granted but getPushStatus() timed out or
-          // came back with no subscription. Re-register the SW + subscription
-          // in the background so push delivery resumes without the user having
-          // to manually re-toggle.
-          if (
-            !next &&
+          // Self-heal: permission is granted but the subscription is missing or
+          // broken (status check timed out OR returned enabled=false). This
+          // covers: iOS cold-start zombie SW, users who granted permission but
+          // never completed subscription, stale server rows after key rotation.
+          const permGranted =
             typeof Notification !== "undefined" &&
-            Notification.permission === "granted"
-          ) {
+            Notification.permission === "granted";
+          const needsHeal = !next || (next && !next.enabled && permGranted);
+
+          if (needsHeal && permGranted) {
             syncPushSubscription()
               .then(() => refresh({ force: true }))
               .catch(() => {});
