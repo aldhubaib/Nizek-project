@@ -3,8 +3,12 @@ dockerfilePath = "Dockerfile.worker"
 
 [deploy]
 startCommand = "./start-worker.sh"
-# Horizontal scale: BullMQ supports multiple workers on the same queue.
-# Each replica runs PUSH_WORKER_CONCURRENCY (default 25) concurrent jobs.
+# Horizontal scale: BullMQ supports multiple workers on the same queue. Jobs
+# carry deterministic ids (batchId:chunk), so two replicas never double-send.
+# Each replica runs PUSH_WORKER_CONCURRENCY (default 10) jobs in parallel with
+# PUSH_SEND_CONCURRENCY (default 20) sends each; one replica alone clears the
+# 100 sends/s design burst with >10x headroom (scripts/push-load-test.ts).
+# start-worker.sh applies pending Prisma migrations before the worker boots.
 numReplicas = 2
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10

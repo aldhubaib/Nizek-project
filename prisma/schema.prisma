@@ -164,6 +164,7 @@ model User {
   notifications     Notification[]            @relation("NotificationRecipient")
   pushSubscriptions PushSubscription[]        @relation("PushSubscriptionMember")
   pushDeliveryLogs  PushDeliveryLog[]         @relation("PushDeliveryLogRecipient")
+  pushDevices       PushDevice[]              @relation("PushDeviceUser")
   notificationPreference NotificationPreference? @relation("UserNotificationPreference")
   mutedThreads      MutedThread[]             @relation("UserMutedThreads")
   auditPermissions  AuditPermission[]         @relation("UserAuditPermissions")
@@ -1979,11 +1980,71 @@ model PushSubscription {
   /// false from a browser tab, null for rows created before this was tracked
   /// (backfilled on the device's next app open via syncPushSubscription).
   standalone Boolean?
+  /// "ios" | "android" | "desktop" — derived from the UA at subscribe time.
+  platform  String?
+  /// Consecutive permanent delivery failures (400/401/403/413). Reset to 0 on
+  /// any success; the row is retired once it reaches PUSH_MAX_FAIL_COUNT.
+  failCount         Int       @default(0)
+  lastSuccessAt     DateTime?
+  lastFailureAt     DateTime?
+  lastFailureStatus Int?
+  /// Short hash of the VAPID public key the browser subscribed with, so a key
+  /// rotation can be detected server-side as well as client-side.
+  vapidKeyHash String?
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
   @@index([memberId])
   @@index([memberId, deviceId])
+  @@index([memberId, failCount])
+}
+
+/// Last known push state of one browser/PWA install, reported by the client.
+/// One row per (user, deviceId), upserted — bounded by device count, never
+/// pruned. This is what the admin Push Health page shows so "why does this
+/// phone not receive notifications" is answered without a screenshot.
+model PushDevice {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation("PushDeviceUser", fields: [userId], references: [id], onDelete: Cascade)
+  deviceId String
+
+  platform      String? // "ios" | "android" | "desktop"
+  standalone    Boolean?
+  permission    String? // "default" | "granted" | "denied" | "unsupported"
+  supportReason String? // PushEnableReason when the device cannot subscribe
+  hasSubscription Boolean @default(false)
+  registered      Boolean @default(false)
+  enabled         Boolean @default(false)
+  /// Last failure reason/detail from an enable attempt or automatic repair.
+  lastReason String?
+  lastDetail String?
+  userAgent  String?
+  appBuild   String?
+  lastSeenAt    DateTime  @default(now())
+  lastEnabledAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+
+  @@unique([userId, deviceId])
+  @@index([enabled, lastSeenAt])
+  @@index([userId])
+}
+
+/// Transactional outbox for push delivery. Written in the same transaction as
+/// the Notification rows, then dispatched to BullMQ; a cron re-dispatches rows
+/// that never made it (Redis down, process crash). Deterministic job ids make
+/// duplicate dispatch harmless.
+model PushOutbox {
+  id           String    @id @default(cuid())
+  batchId      String    @unique
+  recipientIds Json
+  payload      Json
+  attempts     Int       @default(0)
+  createdAt    DateTime  @default(now())
+  dispatchedAt DateTime?
+
+  @@index([dispatchedAt, createdAt])
 }
 
 // Audit trail for every web-push send attempt. Powers the admin push-health

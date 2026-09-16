@@ -15,8 +15,8 @@ import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { useAppLogo } from "@/components/branding-provider";
 import { cn } from "@/lib/utils";
 
-const PushNotifier = dynamic(
-  () => import("@/components/push-notifier").then((m) => ({ default: m.PushNotifier })),
+const PushBootstrap = dynamic(
+  () => import("@/components/push-bootstrap").then((m) => ({ default: m.PushBootstrap })),
   { ssr: false },
 );
 const InstallPrompt = dynamic(
@@ -114,7 +114,7 @@ export function ClientShell({
       </div>
       <NotificationSound currentUserId={currentUserId} soundUrl={notificationSoundUrl} />
       <BrandingLiveListener />
-      <PushNotifier />
+      <PushBootstrap />
       <InstallPrompt />
       <OfflineNotice />
     </div>

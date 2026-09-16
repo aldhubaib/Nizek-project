@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Smartphone } from "lucide-react";
 import { useBranding } from "@/components/branding-provider";
-import { isStandaloneDisplayMode } from "@/lib/push-client";
+import { isStandaloneDisplayMode } from "@/lib/push/env";
 import {
   decideHomeScreenBanner,
   isIosUserAgent,

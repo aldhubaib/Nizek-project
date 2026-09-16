@@ -13,7 +13,8 @@ the notification pipeline.
 | App closed / browser closed / phone locked | **OS push banner with the OS notification sound.** |
 | Viewing the exact thread the message is for | Message appears in place. No chime, no banner. |
 | Notification read on another device | Banner disappears on all open devices; badge re-syncs everywhere. |
-| Thread muted / type disabled in preferences | Nothing, anywhere, on any device. |
+| Thread muted | Nothing, anywhere, on any device. |
+| Device cannot receive push (permission denied, iOS tab, …) | Full-screen gate blocks the app until fixed. Notifications are mandatory; there is no per-type or per-device opt-out. |
 
 ## Architecture recap
 
@@ -23,10 +24,15 @@ the notification pipeline.
   sends** to every registered device; each device's service worker suppresses
   the banner only when a tab is focused AND visible there
   (`public/sw-lib.js: shouldShowPushNotification`).
-- **Delivery audit:** every send attempt is recorded in `PushDeliveryLog`
+- **Push pipeline** (outbox → BullMQ → worker → APNs/FCM), device states, and
+  the runbook: `docs/push-architecture.md`. Scenario matrix for
+  reinstall / fresh install / update: `docs/push-qa-scenarios.md`.
+- **Delivery audit:** every send attempt is recorded in `PushDeliveryLog`; the
+  last reported state of every device is in `PushDevice`
   (admin → Settings → Member Notifications → Push health).
-- **Preferences/mutes:** `NotificationPreference` + `MutedThread`, enforced
-  server-side in `src/lib/notify.ts` before rows/pushes are created.
+- **Mutes:** `MutedThread` is the only opt-out, enforced server-side in
+  `src/lib/notify.ts` before rows/pushes are created. Old
+  `NotificationPreference` values are ignored.
 
 ## Automated coverage (runs in CI on every push)
 

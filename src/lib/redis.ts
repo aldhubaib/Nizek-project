@@ -12,6 +12,11 @@ function createConnection(): IORedis {
   const conn = new IORedis(REDIS_URL, {
     maxRetriesPerRequest: null, // required by BullMQ
     enableReadyCheck: false,
+    // Fail fast while disconnected instead of buffering commands forever: the
+    // push outbox keeps the notification durable, and the worker's sweep
+    // re-dispatches it once Redis is back.
+    enableOfflineQueue: false,
+    connectTimeout: 5_000,
     retryStrategy(times) {
       return Math.min(times * 200, 5000);
     },

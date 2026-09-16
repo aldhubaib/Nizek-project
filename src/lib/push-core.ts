@@ -45,6 +45,140 @@ export function isGoneStatus(statusCode: number | undefined): boolean {
   return statusCode === 404 || statusCode === 410;
 }
 
+/**
+ * Statuses that will keep failing for this subscription no matter how often
+ * we retry: malformed subscription (400), VAPID mismatch/expired key (401/403),
+ * oversized payload (413). Unlike "gone" they don't prove the device is dead
+ * (a key rotation is fixable client-side), so the row is retired only after
+ * PUSH_MAX_FAIL_COUNT consecutive permanent failures.
+ */
+export function isPermanentStatus(statusCode: number | undefined): boolean {
+  return (
+    statusCode === 400 ||
+    statusCode === 401 ||
+    statusCode === 403 ||
+    statusCode === 413
+  );
+}
+
+/** Consecutive permanent failures after which a subscription row is deleted. */
+export const PUSH_MAX_FAIL_COUNT = 5;
+
+export type DeliveryOutcomeKind = "ok" | "gone" | "permanent" | "transient";
+
+/** Collapses a send result into the action the worker must take. */
+export function classifyOutcome(
+  ok: boolean,
+  statusCode: number | undefined,
+): DeliveryOutcomeKind {
+  if (ok) return "ok";
+  if (isGoneStatus(statusCode)) return "gone";
+  if (isPermanentStatus(statusCode)) return "permanent";
+  return "transient";
+}
+
+// ─── Job shape ──────────────────────────────────────────────────────────────
+
+/** Recipients per queue job. Bounds the fan-out (and the DB query) per job. */
+export const PUSH_JOB_CHUNK_SIZE = 50;
+
+/** Original job shape (still accepted for one release during rollout). */
+export type PushJobV1 = { recipientIds: string[]; payload: PushPayload };
+
+/** Outbox-backed job: identified by batch + chunk so re-dispatch is idempotent. */
+export type PushJobV2 = {
+  v: 2;
+  batchId: string;
+  chunk: number;
+  recipientIds: string[];
+  payload: PushPayload;
+};
+
+export type ParsedPushJob = {
+  batchId: string | null;
+  chunk: number;
+  recipientIds: string[];
+  payload: PushPayload;
+};
+
+/** Accepts both job shapes; returns null for anything unusable. */
+export function parsePushJob(data: unknown): ParsedPushJob | null {
+  if (!data || typeof data !== "object") return null;
+  const d = data as Partial<PushJobV2> & Partial<PushJobV1>;
+  if (!Array.isArray(d.recipientIds) || !d.payload || typeof d.payload !== "object") {
+    return null;
+  }
+  const recipientIds = d.recipientIds.filter(
+    (id): id is string => typeof id === "string" && id.length > 0,
+  );
+  if (typeof d.payload.title !== "string") return null;
+  const isV2 = d.v === 2 && typeof d.batchId === "string";
+  return {
+    batchId: isV2 ? d.batchId! : null,
+    chunk: isV2 && typeof d.chunk === "number" ? d.chunk : 0,
+    recipientIds,
+    payload: d.payload,
+  };
+}
+
+export function chunkRecipients(
+  ids: string[],
+  size: number = PUSH_JOB_CHUNK_SIZE,
+): string[][] {
+  const unique = [...new Set(ids)].filter(Boolean);
+  const out: string[][] = [];
+  for (let i = 0; i < unique.length; i += size) {
+    out.push(unique.slice(i, i + size));
+  }
+  return out;
+}
+
+/**
+ * Deterministic BullMQ job id. Enqueuing the same id twice is a no-op, which is
+ * what makes outbox re-dispatch safe. Uses "-" because ":" is BullMQ's key
+ * separator.
+ */
+export function pushJobId(batchId: string, chunk: number): string {
+  return `${batchId}-${chunk}`;
+}
+
+/** Splits an outbox row into the queue jobs it should produce. */
+export function buildPushJobs(
+  batchId: string,
+  recipientIds: string[],
+  payload: PushPayload,
+): { jobId: string; data: PushJobV2 }[] {
+  return chunkRecipients(recipientIds).map((ids, chunk) => ({
+    jobId: pushJobId(batchId, chunk),
+    data: { v: 2, batchId, chunk, recipientIds: ids, payload },
+  }));
+}
+
+/**
+ * Runs `fn` over `items` with at most `limit` in flight. Replaces the unbounded
+ * Promise.allSettled fan-out that opened one HTTPS request per device at once.
+ */
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.max(1, Math.min(limit, items.length)) },
+    async () => {
+      while (true) {
+        const i = next++;
+        if (i >= items.length) return;
+        results[i] = await fn(items[i], i);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
+}
+
 /** Hostname of a push endpoint for grouping in delivery logs (never throws). */
 export function endpointHost(endpoint: string): string | null {
   try {

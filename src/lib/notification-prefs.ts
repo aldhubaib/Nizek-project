@@ -1,5 +1,5 @@
 // Pure preference-filtering logic, separated from data access so it is unit
-// testable. Server enforcement lives in notify.ts / sendPush callers: a filtered
+// testable. Server enforcement lives in notify.ts (before the outbox row): a filtered
 // recipient gets no Notification row, no push, and therefore no chime anywhere.
 
 export type NotificationTypeKey =

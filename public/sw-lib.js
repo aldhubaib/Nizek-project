@@ -67,6 +67,37 @@
     };
   }
 
+  /**
+   * Body for POST /api/push after the push service rotated this device's
+   * subscription. Carries the OLD endpoint so the server retires that row in
+   * the same request instead of waiting for APNs/FCM to return 410. deviceId
+   * lives in localStorage (unreachable from a SW); the next app open backfills
+   * it. Returns null when the new subscription is unusable.
+   */
+  function subscriptionChangeBody(newSubJson, oldEndpoint, userAgent) {
+    if (!newSubJson || typeof newSubJson.endpoint !== "string" || !newSubJson.endpoint) {
+      return null;
+    }
+    var keys = newSubJson.keys;
+    if (!keys || typeof keys.p256dh !== "string" || typeof keys.auth !== "string") {
+      return null;
+    }
+    var body = {
+      endpoint: newSubJson.endpoint,
+      keys: { p256dh: keys.p256dh, auth: keys.auth },
+    };
+    if (typeof oldEndpoint === "string" && oldEndpoint && oldEndpoint !== newSubJson.endpoint) {
+      body.oldEndpoint = oldEndpoint;
+    }
+    if (typeof userAgent === "string" && userAgent) {
+      body.userAgent = userAgent;
+      if (/iphone|ipad|ipod/i.test(userAgent)) body.platform = "ios";
+      else if (/android/i.test(userAgent)) body.platform = "android";
+      else body.platform = "desktop";
+    }
+    return body;
+  }
+
   function headerGet(headers, name) {
     if (!headers) return null;
     if (typeof headers.get === "function") {
@@ -159,7 +190,9 @@
 
     if (!sameOrigin) return null;
 
-    if (pathname === "/sw.js" || pathname === "/sw-lib.js") return null;
+    if (pathname === "/sw.js" || pathname === "/sw-lib.js" || pathname === "/sw-cache.js") {
+      return null;
+    }
 
     if (isExcludedApiPath(pathname)) return null;
 
@@ -212,6 +245,7 @@
     parsePushPayload: parsePushPayload,
     shouldShowPushNotification: shouldShowPushNotification,
     notificationOptionsFor: notificationOptionsFor,
+    subscriptionChangeBody: subscriptionChangeBody,
     classifyRequest: classifyRequest,
     isCacheableResponse: isCacheableResponse,
     knownCacheNames: knownCacheNames,

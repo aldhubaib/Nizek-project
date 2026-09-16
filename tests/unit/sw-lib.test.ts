@@ -276,6 +276,54 @@ describe("isCacheableResponse", () => {
   });
 });
 
+describe("subscriptionChangeBody", () => {
+  const lib = swLib as unknown as {
+    subscriptionChangeBody: (
+      sub: unknown,
+      oldEndpoint: string | null,
+      ua?: string,
+    ) => Record<string, unknown> | null;
+    classifyRequest: (req: unknown, origin: string) => string | null;
+  };
+  const newSub = {
+    endpoint: "https://web.push.apple.com/new",
+    keys: { p256dh: "p", auth: "a" },
+  };
+  const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) Safari/604.1";
+
+  it("carries the old endpoint so the server retires the dead row immediately", () => {
+    expect(lib.subscriptionChangeBody(newSub, "https://web.push.apple.com/old", IPHONE)).toEqual({
+      endpoint: newSub.endpoint,
+      keys: { p256dh: "p", auth: "a" },
+      oldEndpoint: "https://web.push.apple.com/old",
+      userAgent: IPHONE,
+      platform: "ios",
+    });
+  });
+
+  it("omits oldEndpoint when unchanged or missing", () => {
+    expect(lib.subscriptionChangeBody(newSub, newSub.endpoint)).not.toHaveProperty("oldEndpoint");
+    expect(lib.subscriptionChangeBody(newSub, null)).not.toHaveProperty("oldEndpoint");
+  });
+
+  it("returns null for an unusable new subscription", () => {
+    expect(lib.subscriptionChangeBody(null, "x")).toBeNull();
+    expect(lib.subscriptionChangeBody({ endpoint: "" }, "x")).toBeNull();
+    expect(lib.subscriptionChangeBody({ endpoint: "https://e", keys: { p256dh: "p" } }, "x")).toBeNull();
+  });
+
+  it("never caches any of the worker scripts", () => {
+    for (const path of ["/sw.js", "/sw-lib.js", "/sw-cache.js"]) {
+      expect(
+        lib.classifyRequest(
+          { method: "GET", url: `https://app.test${path}`, headers: {} },
+          "https://app.test",
+        ),
+      ).toBeNull();
+    }
+  });
+});
+
 describe("knownCacheNames", () => {
   it("keeps the notification-sound cache name stable", () => {
     expect(swLib.CACHE_NAMES.sound).toBe("notif-sound-v1");

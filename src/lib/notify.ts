@@ -6,7 +6,7 @@ import {
   filterRecipientsByPreferences,
   type PreferenceFlags,
 } from "@/lib/notification-prefs";
-import { enqueuePush } from "@/lib/push-queue";
+import { dispatchOutbox, writePushOutbox } from "@/lib/push-queue";
 import type { PushPayload } from "@/lib/push-core";
 import { sumInboxMessageUnreads } from "@/lib/inbox-unread";
 import { getAliasMap, maskPlainNames, NO_MASK, type AliasIdentity } from "@/lib/alias";
@@ -125,8 +125,17 @@ async function resolveAliasAudience(
   };
 }
 
-export async function createAndPublishNotifications(
+type PushGroup = { recipientIds: string[]; payload: PushPayload };
+
+/**
+ * Creates the Notification rows and, when `buildPush` is given, the PushOutbox
+ * rows in ONE transaction, so a notification can never exist without its push
+ * (or a push without its notification). Publishes the bell events and hands
+ * the outbox to the queue only after commit.
+ */
+async function createNotifications(
   input: NotifyInput,
+  buildPush?: (rows: CreatedNotification[]) => PushGroup[],
 ): Promise<CreatedNotification[]> {
   const recipients = await resolveNotifiableRecipients({
     recipientIds: input.recipientIds,
@@ -137,20 +146,28 @@ export async function createAndPublishNotifications(
 
   const { clientIds, aliasMap } = await resolveAliasAudience(input, recipients);
 
-  const rows = await prisma.notification.createManyAndReturn({
-    data: recipients.map((rid) => {
-      const mask = clientIds.has(rid);
-      return {
-        recipientId: rid,
-        type: input.type,
-        title: mask ? maskPlainNames(input.title, aliasMap) : input.title,
-        body: mask
-          ? maskPlainNames(input.body ?? "", aliasMap) || null
-          : (input.body ?? null),
-        linkUrl: input.linkUrl ?? null,
-        tag: input.tag ?? null,
-      };
-    }),
+  const { rows, outbox } = await prisma.$transaction(async (tx) => {
+    const rows = await tx.notification.createManyAndReturn({
+      data: recipients.map((rid) => {
+        const mask = clientIds.has(rid);
+        return {
+          recipientId: rid,
+          type: input.type,
+          title: mask ? maskPlainNames(input.title, aliasMap) : input.title,
+          body: mask
+            ? maskPlainNames(input.body ?? "", aliasMap) || null
+            : (input.body ?? null),
+          linkUrl: input.linkUrl ?? null,
+          tag: input.tag ?? null,
+        };
+      }),
+    });
+
+    const groups = buildPush ? buildPush(rows) : [];
+    const outbox = await Promise.all(
+      groups.map((g) => writePushOutbox(tx, g.recipientIds, g.payload)),
+    );
+    return { rows, outbox };
   });
 
   // Each recipient gets a distinct row/id — batch all publishes into one
@@ -175,40 +192,50 @@ export async function createAndPublishNotifications(
     })),
   );
 
+  // After commit. If Redis is down this logs and returns; the worker's outbox
+  // sweep delivers the push once the queue is reachable again.
+  if (outbox.length > 0) void dispatchOutbox(outbox);
+
   return rows;
 }
 
 /**
- * Create notification rows, broadcast to Centrifugo, AND enqueue push delivery
- * to the background worker — all in one call. This is the primary entry point
- * for production notification triggers (messages, mentions, rejections, etc.).
+ * Create Notification rows for the given recipients (after mute filtering) and
+ * publish a per-recipient `notification.new` event on each user's Centrifugo
+ * channel carrying the full row, so the bell prepends it live without a
+ * refetch. No push — use notifyAndPush for that.
+ */
+export async function createAndPublishNotifications(
+  input: NotifyInput,
+): Promise<CreatedNotification[]> {
+  return createNotifications(input);
+}
+
+/**
+ * Create notification rows, broadcast to Centrifugo, AND durably record push
+ * delivery for the background worker — all in one call. This is the primary
+ * entry point for production notification triggers (messages, mentions,
+ * rejections, etc.).
  */
 export async function notifyAndPush(
   input: NotifyInput,
   pushPayload: Omit<PushPayload, "tag" | "type"> & { type: string },
 ): Promise<CreatedNotification[]> {
-  const rows = await createAndPublishNotifications(input);
-  if (rows.length === 0) return rows;
-
   const tag = input.tag ?? undefined;
 
   if (!input.alias?.projectId) {
-    void enqueuePush(
-      rows.map((r) => r.recipientId),
-      { ...pushPayload, tag },
-    );
-    return rows;
+    return createNotifications(input, (rows) => [
+      { recipientIds: rows.map((r) => r.recipientId), payload: { ...pushPayload, tag } },
+    ]);
   }
 
   // Rows already carry the audience-correct title and body, so grouping by them
   // keeps each banner consistent with the stored notification. Clients also get
   // the actor's alias photo rather than their real face.
+  const projectId = input.alias.projectId;
   const [clientIds, aliasMap] = await Promise.all([
-    clientViewerIds(
-      rows.map((r) => r.recipientId),
-      input.alias.projectId,
-    ),
-    getAliasMap(input.alias.projectId),
+    clientViewerIds([...new Set(input.recipientIds)], projectId),
+    getAliasMap(projectId),
   ]);
   const actorAlias = input.alias.actorUserId
     ? aliasMap.get(input.alias.actorUserId)
@@ -220,35 +247,29 @@ export async function notifyAndPush(
     ? (actorAlias.imageUrl ?? undefined)
     : pushPayload.icon;
 
-  const groups = new Map<
-    string,
-    { title: string; body?: string; icon?: string; ids: string[] }
-  >();
-  for (const row of rows) {
-    const forClient = clientIds.has(row.recipientId);
-    const icon = forClient ? clientIcon : pushPayload.icon;
-    const key = `${forClient ? "c" : "s"}\u0000${row.title}\u0000${row.body ?? ""}`;
-    const group = groups.get(key) ?? {
-      title: row.title,
-      body: row.body ?? undefined,
-      icon: icon ?? undefined,
-      ids: [],
-    };
-    group.ids.push(row.recipientId);
-    groups.set(key, group);
-  }
-
-  for (const group of groups.values()) {
-    void enqueuePush(group.ids, {
-      ...pushPayload,
-      title: group.title,
-      body: group.body,
-      icon: group.icon,
-      tag,
-    });
-  }
-
-  return rows;
+  return createNotifications(input, (rows) => {
+    const groups = new Map<
+      string,
+      { title: string; body?: string; icon?: string; ids: string[] }
+    >();
+    for (const row of rows) {
+      const forClient = clientIds.has(row.recipientId);
+      const icon = forClient ? clientIcon : pushPayload.icon;
+      const key = `${forClient ? "c" : "s"}\u0000${row.title}\u0000${row.body ?? ""}`;
+      const group = groups.get(key) ?? {
+        title: row.title,
+        body: row.body ?? undefined,
+        icon: icon ?? undefined,
+        ids: [],
+      };
+      group.ids.push(row.recipientId);
+      groups.set(key, group);
+    }
+    return [...groups.values()].map((g) => ({
+      recipientIds: g.ids,
+      payload: { ...pushPayload, title: g.title, body: g.body, icon: g.icon, tag },
+    }));
+  });
 }
 
 /** Fresh unread count for a recipient (used to sync read-state across devices). */

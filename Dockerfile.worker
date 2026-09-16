@@ -13,6 +13,7 @@ RUN npm install --omit=dev
 
 COPY worker.ts ./
 COPY src/lib/push-core.ts ./src/lib/
+COPY src/lib/push/delivery.ts src/lib/push/outbox-core.ts ./src/lib/push/
 COPY src/generated ./src/generated
 COPY start-worker.sh ./
 RUN chmod +x start-worker.sh

@@ -3,8 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { endpointHost } from "@/lib/push-core";
-import { isPushConfigured, sendPush } from "@/lib/push";
-import { createAndPublishNotifications } from "@/lib/notify";
+import { isPushConfigured } from "@/lib/push";
+import { notifyAndPush } from "@/lib/notify";
 
 export type MemberNotificationDevice = {
   id: string;
@@ -109,26 +109,22 @@ export async function sendTestNotificationToMember(memberId: string): Promise<{
   const body = `Sent by ${user.name || "an admin"} to check notifications reach you.`;
   const tag = `test-${member.id}`;
 
-  await createAndPublishNotifications({
-    recipientIds: [member.id],
-    type: "test",
-    title,
-    body,
-    linkUrl: "/dashboard/account",
-    tag,
-  });
+  // Same path as every production notification: Notification row + outbox in
+  // one transaction, delivered by the worker (test jobs get top priority).
+  await notifyAndPush(
+    {
+      recipientIds: [member.id],
+      type: "test",
+      title,
+      body,
+      linkUrl: "/dashboard/account",
+      tag,
+    },
+    { title, body, url: "/dashboard/account", type: "test" },
+  );
 
   const deviceCount = await prisma.pushSubscription.count({
     where: { memberId: member.id },
-  });
-  // Await (rather than fire-and-forget) so the delivery log is written before
-  // the admin panel refreshes.
-  await sendPush([member.id], {
-    title,
-    body,
-    url: "/dashboard/account",
-    tag,
-    type: "test",
   });
 
   return { pushed: isPushConfigured() && deviceCount > 0, deviceCount };

@@ -16,7 +16,8 @@ import {
   sendTestNotification,
   type PushDiagnosticsDTO,
 } from "@/actions/push-diagnostics";
-import { pushSupported, isPushEnabled } from "@/lib/push-client";
+import { getDeviceId } from "@/lib/device-id";
+import { refreshPushStatus, usePushStore } from "@/lib/push/store";
 import {
   getAudioReadiness,
   isNotificationSoundEnabled,
@@ -66,9 +67,7 @@ function CheckRow({
 export function NotificationDiagnostics() {
   const [open, setOpen] = useState(false);
   const [server, setServer] = useState<PushDiagnosticsDTO | null>(null);
-  const [permission, setPermission] = useState<NotificationPermission | "unsupported">("unsupported");
-  const [swRegistered, setSwRegistered] = useState(false);
-  const [deviceSubscribed, setDeviceSubscribed] = useState(false);
+  const push = usePushStore();
   const [audio, setAudio] = useState<"unlocked" | "suspended" | "unavailable">("unavailable");
   const [soundOn, setSoundOn] = useState(true);
   const [testing, setTesting] = useState(false);
@@ -76,20 +75,14 @@ export function NotificationDiagnostics() {
   const lastSound = useNotificationStore((s) => s.lastSound);
   const lastEvent = useNotificationStore((s) => s.lastEvent);
 
+  // Device-side facts come from the shared push store (one runtime, no extra
+  // pushManager probing here); server-side facts from the action.
   const refresh = useCallback(async () => {
-    if (typeof window !== "undefined" && "Notification" in window) {
-      setPermission(Notification.permission);
-    }
     setAudio(getAudioReadiness());
     setSoundOn(isNotificationSoundEnabled());
-
-    if ("serviceWorker" in navigator) {
-      const reg = await navigator.serviceWorker.getRegistration();
-      setSwRegistered(Boolean(reg?.active));
-    }
-    setDeviceSubscribed(await isPushEnabled());
+    void refreshPushStatus({ force: true });
     try {
-      setServer(await getPushDiagnostics());
+      setServer(await getPushDiagnostics(getDeviceId() || undefined));
     } catch {
       setServer(null);
     }
@@ -121,7 +114,9 @@ export function NotificationDiagnostics() {
     }
   };
 
-  const supported = pushSupported();
+  const supported = push.support.ok;
+  const permission = push.permission;
+  const deviceSubscribed = push.view === "enabled";
 
   return (
     <section className="rounded-2xl border border-border/60 bg-card">
@@ -169,23 +164,38 @@ export function NotificationDiagnostics() {
                 ? undefined
                 : permission === "denied"
                   ? "Blocked — allow notifications for this site in your browser settings."
-                  : "Not requested yet — use the Notifications toggle above."
+                  : "Not requested yet — use Enable in the Notifications card above."
             }
           />
           <CheckRow
-            state={swRegistered ? "ok" : "fail"}
-            label="Service worker active"
-            detail={swRegistered ? undefined : "Reload the app to register it."}
+            state={push.hasLocalSubscription ? "ok" : push.view === "verifying" || push.view === "repairing" ? "warn" : "fail"}
+            label="Browser holds a push subscription"
+            detail={
+              push.hasLocalSubscription
+                ? undefined
+                : push.view === "verifying" || push.view === "repairing"
+                  ? "Checking…"
+                  : "Not subscribed yet — use Enable in the Notifications card above."
+            }
           />
           <CheckRow
             state={deviceSubscribed ? "ok" : "warn"}
-            label="This device is subscribed"
+            label="Server knows this device"
             detail={
               deviceSubscribed
                 ? undefined
-                : "Turn on the Notifications toggle above to subscribe this device."
+                : push.lastFailure
+                  ? `Last attempt failed: ${push.lastFailure.reason}${push.lastFailure.detail ? ` — ${push.lastFailure.detail}` : ""}`
+                  : "The server has no registered subscription for this browser yet."
             }
           />
+          {server?.thisDevice && (
+            <CheckRow
+              state={server.thisDevice.enabled ? "ok" : "warn"}
+              label="Last report from this device"
+              detail={`${server.thisDevice.enabled ? "enabled" : "not enabled"} · permission ${server.thisDevice.permission ?? "?"}${server.thisDevice.lastReason ? ` · ${server.thisDevice.lastReason}` : ""} · ${formatDistanceToNow(new Date(server.thisDevice.lastSeenAt), { addSuffix: true })}`}
+            />
+          )}
           {server && (
             <>
               <CheckRow
@@ -293,12 +303,13 @@ export function NotificationDiagnostics() {
                       </span>
                     </div>
                     {/* 401/403 means the push service rejected our signature —
-                        usually a subscription made under an older VAPID key,
-                        which no amount of retrying fixes on its own. */}
+                        usually a subscription made under an older VAPID key.
+                        The runtime replaces it automatically on the next open;
+                        the row is retired after repeated failures. */}
                     {!d.ok && (d.statusCode === 403 || d.statusCode === 401) && (
                       <p className="ms-5.5 mt-0.5 text-xs text-orange">
-                        This device is subscribed with an outdated key. Turn the
-                        Notifications toggle off and on again to re-subscribe it.
+                        This subscription used an outdated key. Reopen the app on
+                        that device so it re-subscribes automatically.
                       </p>
                     )}
                   </div>

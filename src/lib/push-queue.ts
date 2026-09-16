@@ -1,7 +1,15 @@
 import "server-only";
 import { Queue } from "bullmq";
+import { randomUUID } from "node:crypto";
+import { prisma } from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 import type { PushPayload } from "@/lib/push-core";
+import {
+  dispatchOutboxRows,
+  type OutboxRow,
+  type QueueLike,
+} from "@/lib/push/outbox-core";
+import type { Prisma } from "@/generated/prisma/client";
 
 export const PUSH_QUEUE_NAME = "push-notifications";
 
@@ -16,7 +24,7 @@ function getQueue(): Queue {
       defaultJobOptions: {
         attempts: 3,
         backoff: { type: "exponential", delay: 1000 },
-        removeOnComplete: { count: 500 },
+        removeOnComplete: { count: 1000 },
         removeOnFail: { count: 1000 },
       },
     });
@@ -24,34 +32,9 @@ function getQueue(): Queue {
   return globalForQueue.pushQueue;
 }
 
-export type PushJobData = {
-  recipientIds: string[];
-  payload: PushPayload;
-};
-
-/**
- * Enqueue a push notification job. The web server returns immediately; the
- * worker process picks up the job from Redis and fans out to all devices.
- */
-export async function enqueuePush(
-  recipientIds: string[],
-  payload: PushPayload,
-): Promise<void> {
-  const unique = [...new Set(recipientIds)].filter(Boolean);
-  if (unique.length === 0) return;
-
-  await getQueue().add(
-    "send",
-    { recipientIds: unique, payload } satisfies PushJobData,
-    { priority: payload.type === "test" ? 1 : 2 },
-  );
-}
-
-/**
- * BullMQ requires `maxRetriesPerRequest: null`, so commands issued against an
- * unreachable Redis queue up forever instead of failing. Anything a request is
- * waiting on therefore has to be bounded, or the page just spins.
- */
+// The Redis connection has enableOfflineQueue=false, so add() rejects at once
+// when Redis is down instead of buffering forever. This bound covers the slow
+// (not down) case so a request never waits on the queue for long.
 const QUEUE_OP_TIMEOUT_MS = 3_000;
 
 async function withQueueTimeout<T>(op: Promise<T>, label: string): Promise<T> {
@@ -71,18 +54,85 @@ async function withQueueTimeout<T>(op: Promise<T>, label: string): Promise<T> {
   }
 }
 
+const queueAdapter: QueueLike = {
+  add: (name, data, opts) =>
+    withQueueTimeout(getQueue().add(name, data, opts), "Queueing the notification"),
+};
+
+type OutboxWriter = Pick<Prisma.TransactionClient, "pushOutbox">;
+
 /**
- * enqueuePush for request paths that await the result. Fails fast instead of
- * hanging when the queue is unreachable, so the caller can say so.
+ * Records a push in the outbox. Call inside the same transaction that creates
+ * the Notification rows so a push can never exist without its notification (or
+ * vice versa). Returns the row for dispatchOutbox() after commit.
+ */
+export async function writePushOutbox(
+  tx: OutboxWriter,
+  recipientIds: string[],
+  payload: PushPayload,
+): Promise<OutboxRow | null> {
+  const unique = [...new Set(recipientIds)].filter(Boolean);
+  if (unique.length === 0) return null;
+  const row = await tx.pushOutbox.create({
+    data: {
+      batchId: randomUUID(),
+      recipientIds: unique,
+      payload: payload as unknown as Prisma.InputJsonValue,
+    },
+    select: { id: true, batchId: true, recipientIds: true, payload: true, attempts: true },
+  });
+  return row;
+}
+
+/**
+ * Hands committed outbox rows to the worker queue. Failure here is not fatal:
+ * the worker sweeps undispatched rows every 30s and picks them up.
+ */
+export async function dispatchOutbox(rows: (OutboxRow | null)[]): Promise<void> {
+  const real = rows.filter((r): r is OutboxRow => r !== null);
+  if (real.length === 0) return;
+  try {
+    await dispatchOutboxRows(queueAdapter, prisma, real);
+  } catch (err) {
+    console.error(
+      "[push] outbox dispatch failed (worker sweep will retry):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/**
+ * Enqueue a push for recipients who already have their Notification rows (or
+ * need none). Durable: the outbox row is written first, so a Redis outage
+ * delays the push instead of dropping it. Never throws.
+ */
+export async function enqueuePush(
+  recipientIds: string[],
+  payload: PushPayload,
+): Promise<void> {
+  let row: OutboxRow | null = null;
+  try {
+    row = await writePushOutbox(prisma, recipientIds, payload);
+  } catch (err) {
+    console.error(
+      "[push] outbox write failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return;
+  }
+  await dispatchOutbox([row]);
+}
+
+/**
+ * enqueuePush for request paths that want to know whether the push is at
+ * least durably recorded. Throws only when even the outbox write fails.
  */
 export async function enqueuePushBounded(
   recipientIds: string[],
   payload: PushPayload,
 ): Promise<void> {
-  return withQueueTimeout(
-    enqueuePush(recipientIds, payload),
-    "Queueing the notification",
-  );
+  const row = await writePushOutbox(prisma, recipientIds, payload);
+  await dispatchOutbox([row]);
 }
 
 export interface PushQueueHealth {
@@ -93,6 +143,9 @@ export interface PushQueueHealth {
   failed: number;
   /** When the worker last finished a job, or null if it never has. */
   lastCompletedAt: Date | null;
+  /** Outbox rows not yet handed to Redis, and how old the oldest is. */
+  outboxPending: number;
+  outboxOldestAgeMs: number | null;
 }
 
 /**
@@ -101,6 +154,20 @@ export interface PushQueueHealth {
  * per-device checks cannot see.
  */
 export async function getPushQueueHealth(): Promise<PushQueueHealth> {
+  const outbox = await prisma.pushOutbox
+    .findFirst({
+      where: { dispatchedAt: null },
+      orderBy: { createdAt: "asc" },
+      select: { createdAt: true },
+    })
+    .then(async (oldest) => ({
+      pending: oldest
+        ? await prisma.pushOutbox.count({ where: { dispatchedAt: null } })
+        : 0,
+      oldestAgeMs: oldest ? Date.now() - oldest.createdAt.getTime() : null,
+    }))
+    .catch(() => ({ pending: 0, oldestAgeMs: null }));
+
   try {
     const queue = getQueue();
     const [counts, completed] = await withQueueTimeout(
@@ -118,6 +185,8 @@ export async function getPushQueueHealth(): Promise<PushQueueHealth> {
       active: counts.active ?? 0,
       failed: counts.failed ?? 0,
       lastCompletedAt: finishedOn ? new Date(finishedOn) : null,
+      outboxPending: outbox.pending,
+      outboxOldestAgeMs: outbox.oldestAgeMs,
     };
   } catch {
     return {
@@ -126,6 +195,8 @@ export async function getPushQueueHealth(): Promise<PushQueueHealth> {
       active: 0,
       failed: 0,
       lastCompletedAt: null,
+      outboxPending: outbox.pending,
+      outboxOldestAgeMs: outbox.oldestAgeMs,
     };
   }
 }

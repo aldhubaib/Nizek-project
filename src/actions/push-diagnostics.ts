@@ -5,8 +5,8 @@ import { requireUser } from "@/lib/auth";
 import { isCentrifugoConfigured } from "@/lib/centrifugo";
 import { isPushConfigured } from "@/lib/push";
 import { assessPushQueue, type PushQueueAssessment } from "@/lib/push-core";
-import { enqueuePushBounded, getPushQueueHealth } from "@/lib/push-queue";
-import { createAndPublishNotifications } from "@/lib/notify";
+import { getPushQueueHealth } from "@/lib/push-queue";
+import { notifyAndPush } from "@/lib/notify";
 
 export type PushDiagnosticsDTO = {
   vapidConfigured: boolean;
@@ -18,8 +18,22 @@ export type PushDiagnosticsDTO = {
     id: string;
     deviceId: string | null;
     userAgent: string | null;
+    platform: string | null;
+    failCount: number;
+    lastSuccessAt: Date | null;
+    lastFailureAt: Date | null;
+    lastFailureStatus: number | null;
     createdAt: Date;
   }[];
+  /** What the server last heard from THIS install (null if never reported). */
+  thisDevice: {
+    permission: string | null;
+    enabled: boolean;
+    lastReason: string | null;
+    lastDetail: string | null;
+    lastSeenAt: Date;
+    lastEnabledAt: Date | null;
+  } | null;
   recentDeliveries: {
     id: string;
     ok: boolean;
@@ -31,15 +45,38 @@ export type PushDiagnosticsDTO = {
 };
 
 /** Server-side health facts for the account diagnostics panel. */
-export async function getPushDiagnostics(): Promise<PushDiagnosticsDTO> {
+export async function getPushDiagnostics(deviceId?: string): Promise<PushDiagnosticsDTO> {
   const user = await requireUser();
 
-  const [devices, recentDeliveries, queueHealth] = await Promise.all([
+  const [devices, thisDevice, recentDeliveries, queueHealth] = await Promise.all([
     prisma.pushSubscription.findMany({
       where: { memberId: user.id },
-      select: { id: true, deviceId: true, userAgent: true, createdAt: true },
+      select: {
+        id: true,
+        deviceId: true,
+        userAgent: true,
+        platform: true,
+        failCount: true,
+        lastSuccessAt: true,
+        lastFailureAt: true,
+        lastFailureStatus: true,
+        createdAt: true,
+      },
       orderBy: { createdAt: "desc" },
     }),
+    deviceId
+      ? prisma.pushDevice.findUnique({
+          where: { userId_deviceId: { userId: user.id, deviceId } },
+          select: {
+            permission: true,
+            enabled: true,
+            lastReason: true,
+            lastDetail: true,
+            lastSeenAt: true,
+            lastEnabledAt: true,
+          },
+        })
+      : Promise.resolve(null),
     prisma.pushDeliveryLog.findMany({
       where: { recipientId: user.id },
       select: {
@@ -62,23 +99,21 @@ export async function getPushDiagnostics(): Promise<PushDiagnosticsDTO> {
     queue: assessPushQueue(queueHealth),
     subscriptionCount: devices.length,
     devices,
+    thisDevice,
     recentDeliveries,
   };
 }
 
 /**
- * Sends a real end-to-end test notification to the calling user: a Notification
- * row + bell event + web push to every registered device.
- *
- * This deliberately goes through the same queue as real notifications instead
- * of sending inline. Sending inline made the test pass while a stopped worker
- * silently swallowed every genuine notification — the exact scenario users
- * open this panel to diagnose.
+ * Sends a real end-to-end test notification to the calling user through the
+ * exact production path (Notification row + outbox + worker). Sending inline
+ * once made the test pass while a stopped worker swallowed every genuine
+ * notification — the scenario users open this panel to diagnose.
  */
 export async function sendTestNotification(): Promise<{
   queued: boolean;
   deviceCount: number;
-  /** Set when the job could not even be enqueued (queue unreachable). */
+  /** Set when the push could not even be recorded for delivery. */
   queueError: string | null;
 }> {
   const user = await requireUser();
@@ -86,31 +121,19 @@ export async function sendTestNotification(): Promise<{
   const body = "If you can read this, notifications reach this account.";
   const tag = `test-${user.id}`;
 
-  await createAndPublishNotifications({
-    recipientIds: [user.id],
-    type: "test",
-    title,
-    body,
-    linkUrl: "/dashboard/account",
-    tag,
-  });
+  let queueError: string | null = null;
+  try {
+    await notifyAndPush(
+      { recipientIds: [user.id], type: "test", title, body, linkUrl: "/dashboard/account", tag },
+      { title, body, url: "/dashboard/account", type: "test" },
+    );
+  } catch (err) {
+    queueError = err instanceof Error ? err.message : "Failed to queue the push.";
+  }
 
   const deviceCount = await prisma.pushSubscription.count({
     where: { memberId: user.id },
   });
-
-  let queueError: string | null = null;
-  try {
-    await enqueuePushBounded([user.id], {
-      title,
-      body,
-      url: "/dashboard/account",
-      tag,
-      type: "test",
-    });
-  } catch (err) {
-    queueError = err instanceof Error ? err.message : "Failed to queue the push.";
-  }
 
   return {
     queued: queueError === null && isPushConfigured() && deviceCount > 0,

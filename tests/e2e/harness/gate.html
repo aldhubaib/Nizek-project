@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Notification gate harness</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; }
+      .animate-spin { animation: spin 1s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- The real NotificationGate + push store, bundled by the harness server. -->
+    <script src="/gate.js"></script>
+  </body>
+</html>

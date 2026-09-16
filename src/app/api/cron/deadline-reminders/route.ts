@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processDeadlineReminders } from "@/lib/deadline-reminders";
 import { prisma } from "@/lib/prisma";
+import { OUTBOX_RETENTION_MS } from "@/lib/push/outbox-core";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,18 @@ async function prunePushDeliveryLogs(): Promise<number> {
   const cutoff = new Date(Date.now() - DELIVERY_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const { count } = await prisma.pushDeliveryLog.deleteMany({
     where: { createdAt: { lt: cutoff } },
+  });
+  return count;
+}
+
+/**
+ * Dispatched outbox rows are kept for a day for debugging, then dropped.
+ * Undispatched rows are never pruned here — the worker's sweep owns them.
+ */
+async function prunePushOutbox(): Promise<number> {
+  const cutoff = new Date(Date.now() - OUTBOX_RETENTION_MS);
+  const { count } = await prisma.pushOutbox.deleteMany({
+    where: { dispatchedAt: { not: null, lt: cutoff } },
   });
   return count;
 }
@@ -29,14 +42,23 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [result, pruned] = await Promise.all([
+    const [result, pruned, prunedOutbox] = await Promise.all([
       processDeadlineReminders(),
       prunePushDeliveryLogs().catch((err) => {
         console.error("PushDeliveryLog prune failed:", err);
         return 0;
       }),
+      prunePushOutbox().catch((err) => {
+        console.error("PushOutbox prune failed:", err);
+        return 0;
+      }),
     ]);
-    return NextResponse.json({ ok: true, ...result, prunedDeliveryLogs: pruned });
+    return NextResponse.json({
+      ok: true,
+      ...result,
+      prunedDeliveryLogs: pruned,
+      prunedOutbox,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Deadline reminders failed";
     console.error("deadline-reminders cron failed:", err);
