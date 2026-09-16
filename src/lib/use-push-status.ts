@@ -1,27 +1,41 @@
 "use client";
 
-// Keeps a component in sync with this device's real push state. Permission can
+// Keeps components in sync with this device's real push state. Permission can
 // change outside the app (iOS Settings, Chrome site settings), so a one-shot
-// check on mount leaves the toggle stale — this re-reads on permission change
-// and whenever the app returns to the foreground.
+// check on mount leaves the UI stale — this re-reads on permission change and
+// whenever the app returns to the foreground.
 //
-// A minimum interval between refreshes prevents rapid visibilitychange events
-// (common on mobile during app-switch animations) from firing multiple
-// concurrent getPushStatus() calls.
+// The state lives in ONE module-level store shared by every mounted consumer
+// (NotificationGate, NotificationSetup, ...). Previously each hook instance ran
+// its own status check and its own self-heal, and a failed heal force-refreshed
+// itself into an endless "checking" loop: the spinner never stopped, the gate
+// never appeared, and the real failure reason was swallowed.
 //
-// The hook caches the last successful PushStatus in localStorage with a 5-min
-// TTL. On visibilitychange we read the cache first and only hit the server when
-// expired or when the browser-level permission changed since the last check.
+// Rules that keep it stable:
+//  - one in-flight getPushStatus() at a time, raced against a timeout
+//  - automatic repair (syncPushSubscription) at most once per HEAL_COOLDOWN_MS
+//  - a failed repair is SURFACED as `healFailure`, never retried in a loop
+//  - only a SUCCESSFUL repair triggers a follow-up status refresh
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { getPushStatus, syncPushSubscription, type PushStatus } from "@/lib/push-client";
+import { useEffect, useSyncExternalStore } from "react";
+import {
+  getPushStatus,
+  pushSupported,
+  syncPushSubscription,
+  type PushStatus,
+} from "@/lib/push-client";
+import {
+  shouldAttemptHeal,
+  type PushEnableFailure,
+} from "@/lib/push-enable";
 
 const MIN_REFRESH_INTERVAL_MS = 3_000;
 
-// On iOS PWA, getPushStatus() can hang forever when the service worker is in a
-// zombie state after a cold start (pushManager.getSubscription() or fetch never
-// settle). This timeout ensures the spinner always stops.
+// On iOS PWA, getPushStatus() can hang when the service worker is in a zombie
+// state after a cold start (pushManager.getSubscription() or fetch never
+// settle). These timeouts ensure `checking` / `healing` always clear.
 const STATUS_TIMEOUT_MS = 15_000;
+const HEAL_TIMEOUT_MS = 20_000;
 
 // ─── localStorage cache ─────────────────────────────────────────────────────
 
@@ -34,6 +48,12 @@ interface CachedStatus {
   ts: number;
 }
 
+function currentPermission(): NotificationPermission | "unsupported" {
+  return typeof Notification !== "undefined"
+    ? Notification.permission
+    : "unsupported";
+}
+
 function readCachedStatus(): PushStatus | null {
   try {
     const raw = localStorage.getItem(STATUS_CACHE_KEY);
@@ -41,11 +61,7 @@ function readCachedStatus(): PushStatus | null {
     const cached: CachedStatus = JSON.parse(raw);
     if (Date.now() - cached.ts > STATUS_CACHE_TTL_MS) return null;
     // Invalidate if the browser-level permission changed since we cached.
-    const currentPerm =
-      typeof Notification !== "undefined"
-        ? Notification.permission
-        : "unsupported";
-    if (currentPerm !== cached.permission) return null;
+    if (currentPermission() !== cached.permission) return null;
     return cached.status;
   } catch {
     return null;
@@ -56,10 +72,7 @@ function writeCachedStatus(status: PushStatus): void {
   try {
     const entry: CachedStatus = {
       status,
-      permission:
-        typeof Notification !== "undefined"
-          ? Notification.permission
-          : "unsupported",
+      permission: currentPermission(),
       ts: Date.now(),
     };
     localStorage.setItem(STATUS_CACHE_KEY, JSON.stringify(entry));
@@ -68,117 +81,222 @@ function writeCachedStatus(status: PushStatus): void {
   }
 }
 
+// ─── Shared store ───────────────────────────────────────────────────────────
+
+export interface PushStatusSnapshot {
+  status: PushStatus | null;
+  /** A getPushStatus() check is in flight. */
+  checking: boolean;
+  /** An automatic subscription repair is in flight. */
+  healing: boolean;
+  /** Why the last automatic repair failed; null when none failed / it worked. */
+  healFailure: PushEnableFailure | null;
+}
+
+const SERVER_SNAPSHOT: PushStatusSnapshot = {
+  status: null,
+  checking: true,
+  healing: false,
+  healFailure: null,
+};
+
+let snapshot: PushStatusSnapshot = SERVER_SNAPSHOT;
+const listeners = new Set<() => void>();
+
+function setSnapshot(patch: Partial<PushStatusSnapshot>): void {
+  snapshot = { ...snapshot, ...patch };
+  for (const l of listeners) l();
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function getSnapshot(): PushStatusSnapshot {
+  return snapshot;
+}
+
+function getServerSnapshot(): PushStatusSnapshot {
+  return SERVER_SNAPSHOT;
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    p,
+    new Promise<null>((r) => setTimeout(() => r(null), ms)),
+  ]);
+}
+
+let inflight: Promise<void> | null = null;
+let lastRefreshAt = 0;
+let lastHealAt = 0;
+let healInflight: Promise<void> | null = null;
+
+/**
+ * Re-read this device's push state. Non-forced calls are throttled and may be
+ * served from the localStorage cache; forced calls always hit the browser APIs
+ * and the server (used after the user acts, e.g. tapping Enable).
+ */
+export async function refreshPushStatus(opts?: {
+  force?: boolean;
+}): Promise<void> {
+  if (inflight && !opts?.force) return inflight;
+  // A forced refresh must observe state from AFTER the caller's action, so
+  // let any stale check settle first and then run a fresh one.
+  while (inflight) await inflight;
+
+  const now = Date.now();
+  if (!opts?.force) {
+    if (now - lastRefreshAt < MIN_REFRESH_INTERVAL_MS) return;
+    const cached = readCachedStatus();
+    if (cached) {
+      setSnapshot({ status: cached, checking: false });
+      return;
+    }
+  }
+
+  lastRefreshAt = now;
+  setSnapshot({ checking: true });
+  inflight = (async () => {
+    try {
+      const next = await withTimeout(getPushStatus(), STATUS_TIMEOUT_MS);
+      if (next) {
+        writeCachedStatus(next);
+        setSnapshot({
+          status: next,
+          // A device that is fully on has nothing left to repair.
+          healFailure: next.enabled ? null : snapshot.healFailure,
+        });
+      }
+      maybeHeal(next ? next.enabled : null);
+    } finally {
+      setSnapshot({ checking: false });
+      inflight = null;
+    }
+  })();
+  return inflight;
+}
+
+/**
+ * Automatic repair for "permission granted but no working subscription":
+ * iOS cold-start zombie SW, a user who granted permission but never finished
+ * subscribing, or a stale server row. Guarded by a cooldown so a persistent
+ * failure is reported once instead of looping.
+ */
+function maybeHeal(enabled: boolean | null): void {
+  if (healInflight) return;
+  if (
+    !shouldAttemptHeal({
+      permission: currentPermission(),
+      enabled,
+      supported: pushSupported(),
+      lastHealAt,
+      now: Date.now(),
+    })
+  ) {
+    return;
+  }
+
+  lastHealAt = Date.now();
+  setSnapshot({ healing: true });
+  healInflight = (async () => {
+    try {
+      const result = await withTimeout(syncPushSubscription(), HEAL_TIMEOUT_MS);
+      if (result?.ok) {
+        setSnapshot({ healFailure: null });
+        await refreshPushStatus({ force: true });
+      } else if (result) {
+        setSnapshot({
+          healFailure: { reason: result.reason, detail: result.detail },
+        });
+      } else {
+        setSnapshot({
+          healFailure: {
+            reason: "no-service-worker",
+            detail: "Timed out waiting for the background service to respond.",
+          },
+        });
+      }
+    } catch (err) {
+      setSnapshot({
+        healFailure: {
+          reason: "subscribe-failed",
+          detail: err instanceof Error ? err.message : String(err),
+        },
+      });
+    } finally {
+      setSnapshot({ healing: false });
+      healInflight = null;
+    }
+  })();
+}
+
+// ─── Global listeners (attached while at least one consumer is mounted) ────
+
+let consumers = 0;
+let detachGlobal: (() => void) | null = null;
+
+function attachGlobalListeners(): () => void {
+  let permissionStatus: PermissionStatus | null = null;
+  const onPermissionChange = () => void refreshPushStatus({ force: true });
+
+  if (typeof navigator !== "undefined" && navigator.permissions?.query) {
+    navigator.permissions
+      // Not in every lib.dom version's PermissionName union.
+      .query({ name: "notifications" as PermissionName })
+      .then((result) => {
+        permissionStatus = result;
+        result.addEventListener("change", onPermissionChange);
+      })
+      .catch(() => {
+        // Safari/iOS don't expose the notifications permission here; the
+        // visibilitychange path below covers those.
+      });
+  }
+
+  const onVisibility = () => {
+    if (!document.hidden) void refreshPushStatus();
+  };
+  document.addEventListener("visibilitychange", onVisibility);
+
+  return () => {
+    permissionStatus?.removeEventListener("change", onPermissionChange);
+    document.removeEventListener("visibilitychange", onVisibility);
+  };
+}
+
 export function usePushStatus() {
-  const [status, setStatus] = useState<PushStatus | null>(null);
-  const [checking, setChecking] = useState(true);
-  // Guards against a slow in-flight check overwriting a newer result.
-  const runIdRef = useRef(0);
-  const lastRefreshAtRef = useRef(0);
-  const inflightRef = useRef(false);
-
-  const refresh = useCallback(
-    async (opts?: { force?: boolean }) => {
-      // Throttle: skip if a refresh ran recently, unless forced.
-      const now = Date.now();
-      if (
-        !opts?.force &&
-        inflightRef.current
-      ) {
-        return;
-      }
-      if (
-        !opts?.force &&
-        now - lastRefreshAtRef.current < MIN_REFRESH_INTERVAL_MS
-      ) {
-        return;
-      }
-
-      // Non-forced refresh (e.g. visibilitychange): try the localStorage cache
-      // first to avoid a network round-trip.
-      if (!opts?.force) {
-        const cached = readCachedStatus();
-        if (cached) {
-          setStatus(cached);
-          setChecking(false);
-          return;
-        }
-      }
-
-      const runId = ++runIdRef.current;
-      inflightRef.current = true;
-      lastRefreshAtRef.current = now;
-      setChecking(true);
-      try {
-        // Race against a timeout so the spinner always stops, even when iOS
-        // hangs on pushManager.getSubscription() or a fetch() never settles.
-        const next = await Promise.race([
-          getPushStatus(),
-          new Promise<null>((r) => setTimeout(() => r(null), STATUS_TIMEOUT_MS)),
-        ]);
-        if (runId === runIdRef.current) {
-          if (next) {
-            setStatus(next);
-            writeCachedStatus(next);
-          }
-
-          // Self-heal: permission is granted but the subscription is missing or
-          // broken (status check timed out OR returned enabled=false). This
-          // covers: iOS cold-start zombie SW, users who granted permission but
-          // never completed subscription, stale server rows after key rotation.
-          const permGranted =
-            typeof Notification !== "undefined" &&
-            Notification.permission === "granted";
-          const needsHeal = !next || (next && !next.enabled && permGranted);
-
-          if (needsHeal && permGranted) {
-            syncPushSubscription()
-              .then(() => refresh({ force: true }))
-              .catch(() => {});
-          }
-        }
-      } finally {
-        if (runId === runIdRef.current) {
-          setChecking(false);
-          inflightRef.current = false;
-        }
-      }
-    },
-    [],
-  );
+  const snap = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   useEffect(() => {
-    // Push state lives entirely in browser APIs and the database, none of it
-    // readable during render — the first read can only happen after mount.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refresh({ force: true });
-
-    let permissionStatus: PermissionStatus | null = null;
-    const onPermissionChange = () => void refresh({ force: true });
-
-    if (typeof navigator !== "undefined" && navigator.permissions?.query) {
-      navigator.permissions
-        // Not in every lib.dom version's PermissionName union.
-        .query({ name: "notifications" as PermissionName })
-        .then((result) => {
-          permissionStatus = result;
-          result.addEventListener("change", onPermissionChange);
-        })
-        .catch(() => {
-          // Safari/iOS don't expose the notifications permission here; the
-          // visibilitychange path below covers those.
-        });
+    consumers += 1;
+    if (consumers === 1) {
+      detachGlobal = attachGlobalListeners();
+      // Push state lives entirely in browser APIs and the database, none of it
+      // readable during render — the first read can only happen after mount.
+      void refreshPushStatus({ force: true });
+    } else {
+      // Another consumer already primed the store; a cheap (cached/throttled)
+      // refresh is enough.
+      void refreshPushStatus();
     }
-
-    const onVisibility = () => {
-      if (!document.hidden) void refresh();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-
     return () => {
-      permissionStatus?.removeEventListener("change", onPermissionChange);
-      document.removeEventListener("visibilitychange", onVisibility);
+      consumers -= 1;
+      if (consumers === 0) {
+        detachGlobal?.();
+        detachGlobal = null;
+      }
     };
-  }, [refresh]);
+  }, []);
 
-  return { status, checking, refresh, setStatus };
+  return {
+    status: snap.status,
+    checking: snap.checking,
+    healing: snap.healing,
+    healFailure: snap.healFailure,
+    refresh: refreshPushStatus,
+  };
 }

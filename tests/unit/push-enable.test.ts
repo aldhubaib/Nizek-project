@@ -12,7 +12,10 @@ import {
   decodeVapidKey,
   describePushFailure,
   detectPushPlatform,
+  HEAL_COOLDOWN_MS,
   isIosNonSafari,
+  shouldAttemptHeal,
+  shouldGate,
 } from "@/lib/push-enable";
 
 const IOS_UA =
@@ -284,5 +287,109 @@ describe("describePushFailure", () => {
       expect(guidance.title.length).toBeGreaterThan(0);
       expect(guidance.steps.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// Regression: on iOS PWAs where permission was granted but subscribing kept
+// failing, the hook re-ran its repair after every failure. Each cycle flipped
+// `checking` back on, so the toggle spun forever and the gate never appeared.
+describe("shouldAttemptHeal", () => {
+  const base = {
+    permission: "granted" as const,
+    enabled: false,
+    supported: true,
+    lastHealAt: 0,
+    now: 1_000_000,
+  };
+
+  it("repairs a granted-but-not-enabled device once", () => {
+    expect(shouldAttemptHeal(base)).toBe(true);
+  });
+
+  it("also repairs when the status check timed out (enabled unknown)", () => {
+    expect(shouldAttemptHeal({ ...base, enabled: null })).toBe(true);
+  });
+
+  it("does not re-run within the cooldown after a failed attempt", () => {
+    const first = shouldAttemptHeal(base);
+    expect(first).toBe(true);
+    const lastHealAt = base.now;
+    expect(
+      shouldAttemptHeal({ ...base, lastHealAt, now: lastHealAt + 1 }),
+    ).toBe(false);
+    expect(
+      shouldAttemptHeal({
+        ...base,
+        lastHealAt,
+        now: lastHealAt + HEAL_COOLDOWN_MS - 1,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAttemptHeal({
+        ...base,
+        lastHealAt,
+        now: lastHealAt + HEAL_COOLDOWN_MS,
+      }),
+    ).toBe(true);
+  });
+
+  it("never repairs without granted permission (a gesture is required)", () => {
+    expect(shouldAttemptHeal({ ...base, permission: "default" })).toBe(false);
+    expect(shouldAttemptHeal({ ...base, permission: "denied" })).toBe(false);
+    expect(shouldAttemptHeal({ ...base, permission: "unsupported" })).toBe(false);
+  });
+
+  it("does nothing when already enabled or unsupported", () => {
+    expect(shouldAttemptHeal({ ...base, enabled: true })).toBe(false);
+    expect(shouldAttemptHeal({ ...base, supported: false })).toBe(false);
+  });
+});
+
+describe("shouldGate", () => {
+  const base = {
+    permission: "granted" as const,
+    enabled: null,
+    healFailure: null,
+    supported: true,
+    production: true,
+  };
+
+  it("gates immediately when permission has not been granted", () => {
+    expect(shouldGate({ ...base, permission: "default" })).toBe(true);
+    expect(shouldGate({ ...base, permission: "denied" })).toBe(true);
+    // ...regardless of whether the async status check has finished.
+    expect(shouldGate({ ...base, permission: "default", enabled: false })).toBe(true);
+  });
+
+  it("does not gate a granted device while its status is unknown or being repaired", () => {
+    expect(shouldGate(base)).toBe(false);
+    expect(shouldGate({ ...base, enabled: false })).toBe(false);
+  });
+
+  it("does not gate a fully enabled device", () => {
+    expect(shouldGate({ ...base, enabled: true })).toBe(false);
+    expect(
+      shouldGate({
+        ...base,
+        enabled: true,
+        healFailure: { reason: "server-rejected" },
+      }),
+    ).toBe(false);
+  });
+
+  it("gates a granted device once the automatic repair has failed", () => {
+    expect(
+      shouldGate({
+        ...base,
+        enabled: false,
+        healFailure: { reason: "subscribe-failed", detail: "AbortError" },
+      }),
+    ).toBe(true);
+  });
+
+  it("never gates in development or where push is unsupported", () => {
+    expect(shouldGate({ ...base, permission: "default", production: false })).toBe(false);
+    expect(shouldGate({ ...base, permission: "default", supported: false })).toBe(false);
+    expect(shouldGate({ ...base, permission: "unsupported" })).toBe(false);
   });
 });

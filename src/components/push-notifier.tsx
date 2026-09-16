@@ -1,45 +1,17 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { Bell, X } from "lucide-react";
-import { enablePush, pushSupported, syncPushSubscription } from "@/lib/push-client";
-
-const PUSH_DISMISSED_KEY = "nizek-push-dismissed-at";
-const PUSH_DISMISS_DAYS = 14;
+import { useEffect, useState } from "react";
+import { pushSupported, syncPushSubscription } from "@/lib/push-client";
 
 /**
- * Registers the push service worker and, when notifications haven't been
- * decided yet, prompts the user to enable them with a bottom banner. App
- * updates are handled separately by <UpdateNotifier />.
+ * Registers the push service worker and keeps this device's subscription in
+ * sync with the server. It renders nothing: prompting the user to enable
+ * notifications is owned by <NotificationGate /> (mandatory, not dismissable),
+ * and app updates by <UpdateNotifier />.
  */
 export function PushNotifier() {
-  const [showEnablePush, setShowEnablePush] = useState(false);
   const [registration, setRegistration] =
     useState<ServiceWorkerRegistration | null>(null);
-
-  // enablePush() must be called straight from this click handler: iOS ignores
-  // Notification.requestPermission() outside a user gesture (silently returns
-  // "denied"), and Android demotes it to a quiet prompt nobody sees.
-  const handleEnablePush = useCallback(() => {
-    setShowEnablePush(false);
-    void enablePush().then((result) => {
-      // Back off on refusal only. A failure we can recover from (service worker
-      // not ready, server rejected) shouldn't cost the user 14 days of silence
-      // — the Account page surfaces the real reason and a retry.
-      if (
-        !result.ok &&
-        (result.reason === "permission-denied" ||
-          result.reason === "permission-dismissed")
-      ) {
-        localStorage.setItem(PUSH_DISMISSED_KEY, String(Date.now()));
-      }
-    });
-  }, []);
-
-  const handleDismissPush = useCallback(() => {
-    setShowEnablePush(false);
-    localStorage.setItem(PUSH_DISMISSED_KEY, String(Date.now()));
-  }, []);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -57,18 +29,8 @@ export function PushNotifier() {
       .register("/sw.js")
       .then((r) => {
         setRegistration(r);
-
-        if (!pushSupported()) return;
-
-        if (Notification.permission === "granted") {
+        if (pushSupported() && Notification.permission === "granted") {
           void syncPushSubscription(r);
-        } else if (Notification.permission === "default") {
-          const dismissedAt = Number(
-            localStorage.getItem(PUSH_DISMISSED_KEY) ?? 0,
-          );
-          const askAgainAfter =
-            dismissedAt + PUSH_DISMISS_DAYS * 24 * 60 * 60 * 1000;
-          if (Date.now() > askAgainAfter) setShowEnablePush(true);
         }
       })
       .catch(() => {});
@@ -89,29 +51,5 @@ export function PushNotifier() {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [registration]);
 
-  if (!showEnablePush) return null;
-
-  return (
-    <div className="fixed inset-x-3 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] z-[9999] flex justify-center animate-in slide-in-from-bottom-4 fade-in duration-300 sm:inset-x-0">
-      <div className="flex w-full max-w-sm items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-foreground shadow-2xl">
-        <Bell className="h-5 w-5 shrink-0 text-primary" />
-        <span className="min-w-0 flex-1 text-s font-medium">
-          Get notified about new messages
-        </span>
-        <button
-          onClick={handleEnablePush}
-          className="flex h-9 shrink-0 items-center rounded-xl bg-primary px-4 text-s font-bold text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          Enable
-        </button>
-        <button
-          onClick={handleDismissPush}
-          aria-label="Dismiss"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
-  );
+  return null;
 }

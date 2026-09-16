@@ -8,11 +8,9 @@ import {
   NOTIFICATION_SOUND_EVENT,
 } from "@/lib/channels";
 import { getActiveNotificationSoundUrl } from "@/actions/notification-sound-settings";
-import { getMyNotificationPreferences } from "@/actions/notification-preferences";
 import {
   primeNotificationAudio,
   setCustomNotificationSound,
-  setNotificationSoundEnabled,
 } from "@/lib/notification-sound";
 
 interface Props {
@@ -40,11 +38,6 @@ export function NotificationSound({ soundUrl }: Props) {
   const refresh = useCallback(() => {
     getActiveNotificationSoundUrl()
       .then((url) => setCustomNotificationSound(url))
-      .catch(() => {});
-    // Server-stored sound preference follows the user across devices; mirror it
-    // into the localStorage fast-path used by playNotificationSound.
-    getMyNotificationPreferences()
-      .then((prefs) => setNotificationSoundEnabled(prefs.soundEnabled))
       .catch(() => {});
   }, []);
 

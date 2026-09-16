@@ -1,24 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { Calendar, Camera, Loader2, Volume2 } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
+import { Calendar, Camera, Loader2 } from "lucide-react";
 import { ConnectGoogleCalendarButton } from "@/components/auth/connect-google-calendar";
-import { Switch } from "@/components/ui/switch";
 import { updateMyAvatar, updateMyName } from "@/actions/account";
 import { useCurrentUser } from "@/components/current-user-provider";
 import { NotificationSetup } from "@/components/notification-setup";
 import { PageHeader, PageBackButton, PageName } from "@/components/page-header";
 import { PageBody } from "@/components/page-body";
-import {
-  isNotificationSoundEnabled,
-  setNotificationSoundEnabled,
-  playNotificationSound,
-} from "@/lib/notification-sound";
-import {
-  getMyNotificationPreferences,
-  updateMyNotificationPreferences,
-} from "@/actions/notification-preferences";
-import { NotificationPreferencesSection } from "@/components/notification-preferences-section";
 import { NotificationDiagnostics } from "@/components/notification-diagnostics";
 
 export function AccountClient({
@@ -45,28 +34,6 @@ export function AccountClient({
   const [uploading, setUploading] = useState(false);
   const [, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
-
-  // In-app notification sound. Server-stored (follows the user across
-  // devices); localStorage mirrors it as the synchronous fast-path.
-  const [soundOn, setSoundOn] = useState(true);
-
-  useEffect(() => {
-    setSoundOn(isNotificationSoundEnabled());
-    getMyNotificationPreferences()
-      .then((p) => {
-        setSoundOn(p.soundEnabled);
-        setNotificationSoundEnabled(p.soundEnabled);
-      })
-      .catch(() => {});
-  }, []);
-
-  const toggleSound = (next: boolean) => {
-    setNotificationSoundEnabled(next);
-    setSoundOn(next);
-    void updateMyNotificationPreferences({ soundEnabled: next }).catch(() => {});
-    // Preview the chime when turning it on so the choice is audible.
-    if (next) playNotificationSound(true);
-  };
 
   const initials =
     (savedName || email)
@@ -236,29 +203,9 @@ export function AccountClient({
         </section>
       )}
 
-      {/* Notifications (toggle + per-platform recovery steps) */}
+      {/* Notifications are mandatory: status + per-platform recovery steps.
+          No off switch, no sound toggle, no per-type opt-outs. */}
       <NotificationSetup />
-
-      {/* Notification sound */}
-      <section className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card p-4">
-        <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted/40 text-foreground">
-          <Volume2 className="h-4.5 w-4.5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-s font-semibold">Notification sound</div>
-          <div className="mt-0.5 text-s text-muted-foreground">
-            Play a sound when a new notification arrives while the app is open.
-          </div>
-        </div>
-        <Switch
-          checked={soundOn}
-          onCheckedChange={toggleSound}
-          aria-label="Toggle notification sound"
-        />
-      </section>
-
-      {/* Per-type notification preferences (server-stored, all devices) */}
-      <NotificationPreferencesSection />
 
       {/* Troubleshooting: device/server health checks + test notification */}
       <NotificationDiagnostics />

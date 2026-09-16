@@ -29,24 +29,25 @@ beforeEach(() => {
   window.localStorage.removeItem("nizek-notification-sound");
 });
 
-describe("sound preference storage", () => {
-  it("defaults to ON", async () => {
+describe("sound preference (mandatory notifications)", () => {
+  it("is always ON", async () => {
     const lib = await freshModule();
     expect(lib.isNotificationSoundEnabled()).toBe(true);
   });
 
-  it("round-trips off/on", async () => {
+  it("cannot be turned off any more", async () => {
     const lib = await freshModule();
     lib.setNotificationSoundEnabled(false);
-    expect(lib.isNotificationSoundEnabled()).toBe(false);
-    lib.setNotificationSoundEnabled(true);
     expect(lib.isNotificationSoundEnabled()).toBe(true);
   });
 
-  it("survives corrupted storage values", async () => {
+  it("ignores a legacy stored 'off' value from the removed toggle", async () => {
     const lib = await freshModule();
-    window.localStorage.setItem("nizek-notification-sound", "garbage");
-    expect(lib.isNotificationSoundEnabled()).toBe(true); // only exact "off" disables
+    window.localStorage.setItem("nizek-notification-sound", "off");
+    expect(lib.isNotificationSoundEnabled()).toBe(true);
+    // Setting (either way) clears the legacy key so old builds also chime.
+    lib.setNotificationSoundEnabled(true);
+    expect(window.localStorage.getItem("nizek-notification-sound")).toBeNull();
   });
 });
 
@@ -80,7 +81,7 @@ describe("playNotificationSound", () => {
     expect(() => lib.playNotificationSound(true)).not.toThrow();
   });
 
-  it("skips playback when disabled and not forced", async () => {
+  it("plays even after a (no-op) attempt to disable", async () => {
     const lib = await freshModule();
     lib.setNotificationSoundEnabled(false);
 
@@ -90,10 +91,10 @@ describe("playNotificationSound", () => {
 
     lib.setCustomNotificationSound("https://cdn.example.com/notification_sound/x.mp3");
     lib.playNotificationSound();
-    expect(play).not.toHaveBeenCalled();
-
-    lib.playNotificationSound(true); // forced preview plays despite pref
     expect(play).toHaveBeenCalledTimes(1);
+
+    lib.playNotificationSound(true);
+    expect(play).toHaveBeenCalledTimes(2);
 
     vi.unstubAllGlobals();
   });

@@ -1,55 +1,12 @@
 "use server";
 
+// Notifications are mandatory. The per-type / sound preference actions that
+// used to live here were removed together with the settings UI so there is no
+// remaining path (UI or callable server action) to opt out. Per-thread mutes
+// are the one opt-out that stays.
+
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import {
-  DEFAULT_PREFERENCES,
-  type PreferenceFlags,
-} from "@/lib/notification-prefs";
-
-export type NotificationPreferencesDTO = PreferenceFlags;
-
-export async function getMyNotificationPreferences(): Promise<NotificationPreferencesDTO> {
-  const user = await requireUser();
-  const row = await prisma.notificationPreference.findUnique({
-    where: { userId: user.id },
-  });
-  if (!row) return { ...DEFAULT_PREFERENCES };
-  return {
-    notifyMessages: row.notifyMessages,
-    notifyMentions: row.notifyMentions,
-    notifyRejections: row.notifyRejections,
-    notifyDeadlines: row.notifyDeadlines,
-    soundEnabled: row.soundEnabled,
-  };
-}
-
-export async function updateMyNotificationPreferences(
-  patch: Partial<NotificationPreferencesDTO>,
-): Promise<NotificationPreferencesDTO> {
-  const user = await requireUser();
-
-  const data: Partial<NotificationPreferencesDTO> = {};
-  if (typeof patch.notifyMessages === "boolean") data.notifyMessages = patch.notifyMessages;
-  if (typeof patch.notifyMentions === "boolean") data.notifyMentions = patch.notifyMentions;
-  if (typeof patch.notifyRejections === "boolean") data.notifyRejections = patch.notifyRejections;
-  if (typeof patch.notifyDeadlines === "boolean") data.notifyDeadlines = patch.notifyDeadlines;
-  if (typeof patch.soundEnabled === "boolean") data.soundEnabled = patch.soundEnabled;
-
-  const row = await prisma.notificationPreference.upsert({
-    where: { userId: user.id },
-    create: { userId: user.id, ...data },
-    update: data,
-  });
-
-  return {
-    notifyMessages: row.notifyMessages,
-    notifyMentions: row.notifyMentions,
-    notifyRejections: row.notifyRejections,
-    notifyDeadlines: row.notifyDeadlines,
-    soundEnabled: row.soundEnabled,
-  };
-}
 
 /** threadKey: "task-{id}" | "conv-{id}" | "project-{id}" */
 export async function setThreadMuted(

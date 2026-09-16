@@ -182,6 +182,57 @@ export function decodeVapidKey(base64String: string): Uint8Array {
   return outputArray;
 }
 
+// ─── Gate / self-heal decisions ─────────────────────────────────────────────
+// Kept pure so the "spinner forever" and "heal loop" regressions have tests.
+
+/** Minimum gap between automatic (non-gesture) subscription repair attempts. */
+export const HEAL_COOLDOWN_MS = 60_000;
+
+export type PushEnableFailure = { reason: PushEnableReason; detail?: string };
+
+/**
+ * Whether the hook should try `syncPushSubscription()` on its own right now.
+ * Only when the OS already granted permission (otherwise a gesture is needed),
+ * the device is not fully enabled, and we have not tried recently. The cooldown
+ * is what prevents "heal fails -> refresh -> heal fails" from looping forever.
+ */
+export function shouldAttemptHeal(input: {
+  permission: NotificationPermission | "unsupported";
+  /** null = status check timed out or has not run. */
+  enabled: boolean | null;
+  supported: boolean;
+  lastHealAt: number;
+  now: number;
+}): boolean {
+  if (input.permission !== "granted") return false;
+  if (!input.supported) return false;
+  if (input.enabled === true) return false;
+  return input.now - input.lastHealAt >= HEAL_COOLDOWN_MS;
+}
+
+/**
+ * Whether the full-screen gate must block the app.
+ *
+ * - Permission `default`/`denied`: gate immediately. This is synchronous
+ *   browser state, so we never wait on a network check (and never hide the
+ *   gate behind a `checking` flag that can stay true forever).
+ * - Permission `granted`: only gate once the status check says the device is
+ *   NOT enabled AND an automatic repair already failed. While the repair is in
+ *   flight the user keeps working.
+ */
+export function shouldGate(input: {
+  permission: NotificationPermission | "unsupported";
+  enabled: boolean | null;
+  healFailure: PushEnableFailure | null;
+  supported: boolean;
+  production: boolean;
+}): boolean {
+  if (!input.production || !input.supported) return false;
+  if (input.permission === "unsupported") return false;
+  if (input.permission !== "granted") return true;
+  return input.enabled === false && input.healFailure !== null;
+}
+
 export interface PushFailureGuidance {
   title: string;
   steps: string[];

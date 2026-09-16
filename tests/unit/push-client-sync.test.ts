@@ -248,7 +248,9 @@ describe("syncPushSubscription", () => {
     const lib = await freshModule();
 
     const pending = lib.syncPushSubscription();
-    await vi.advanceTimersByTimeAsync(11_000);
+    // resolveRegistration waits SW_READY_TIMEOUT_MS (8s), then unregisters and
+    // re-registers once and waits again, so the total ceiling is 16s.
+    await vi.advanceTimersByTimeAsync(17_000);
     expect(await pending).toMatchObject({ ok: false, reason: "no-service-worker" });
   });
 

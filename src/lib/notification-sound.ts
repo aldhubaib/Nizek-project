@@ -1,22 +1,23 @@
 "use client";
 
-// Per-device preference (matches the app's localStorage pattern). Sound is ON
-// unless the user explicitly turns it off.
+// Notifications are mandatory in this app, and that includes the in-app chime:
+// there is no user-facing off switch any more. The stored per-device value
+// from the old toggle is deliberately ignored so users who turned it off
+// before the policy change hear notifications again.
 const SOUND_PREF_KEY = "nizek-notification-sound";
 
 export function isNotificationSoundEnabled(): boolean {
-  if (typeof window === "undefined") return true;
-  try {
-    return window.localStorage.getItem(SOUND_PREF_KEY) !== "off";
-  } catch {
-    return true;
-  }
+  return true;
 }
 
-export function setNotificationSoundEnabled(enabled: boolean): void {
+/**
+ * Kept for call-site compatibility; the preference no longer affects playback.
+ * Clears any legacy "off" value so old builds that still read it also chime.
+ */
+export function setNotificationSoundEnabled(_enabled: boolean): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(SOUND_PREF_KEY, enabled ? "on" : "off");
+    window.localStorage.removeItem(SOUND_PREF_KEY);
   } catch {
     /* ignore quota / privacy-mode errors */
   }
@@ -128,8 +129,7 @@ function playChime(): void {
 /**
  * Plays the notification sound: the admin-uploaded custom audio if configured,
  * otherwise a short two-tone chime via the Web Audio API (no asset needed).
- * Respects the user's per-device preference unless `force` is true (used for the
- * settings preview so the user can hear it even before toggling on).
+ * `force` is kept for previews/diagnostics; sound is always enabled now.
  *
  * Browsers start audio "suspended" until a user gesture, so we resume/unlock
  * first (see primeNotificationAudio) and fall back to the chime if the custom

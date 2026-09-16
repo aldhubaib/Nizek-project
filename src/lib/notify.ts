@@ -50,9 +50,15 @@ export type CreatedNotification = {
 };
 
 /**
- * Loads stored preferences + thread mutes and returns only the recipients who
- * should be notified. Callers MUST use this filtered list for push too, so a
- * muted user gets no row, no push, and no chime anywhere.
+ * Returns only the recipients who should be notified. Callers MUST use this
+ * filtered list for push too, so a muted user gets no row, no push, and no
+ * chime anywhere.
+ *
+ * Notifications are mandatory: the per-type opt-outs that used to live in
+ * NotificationPreference (messages / mentions / declines / deadlines) are no
+ * longer consulted, so every type is delivered to everyone regardless of any
+ * value still stored from the removed settings UI. Per-thread mutes remain
+ * the only opt-out.
  */
 export async function resolveNotifiableRecipients(input: {
   recipientIds: string[];
@@ -61,32 +67,13 @@ export async function resolveNotifiableRecipients(input: {
 }): Promise<string[]> {
   const unique = [...new Set(input.recipientIds)].filter(Boolean);
   if (unique.length === 0) return [];
+  if (!input.threadKey) return unique;
 
   try {
-    const [prefRows, muteRows] = await Promise.all([
-      prisma.notificationPreference.findMany({
-        where: { userId: { in: unique } },
-      }),
-      input.threadKey
-        ? prisma.mutedThread.findMany({
-            where: { userId: { in: unique }, threadKey: input.threadKey },
-            select: { userId: true, threadKey: true },
-          })
-        : Promise.resolve([]),
-    ]);
-
-    const prefsByUser = new Map<string, PreferenceFlags>(
-      prefRows.map((p) => [
-        p.userId,
-        {
-          notifyMessages: p.notifyMessages,
-          notifyMentions: p.notifyMentions,
-          notifyRejections: p.notifyRejections,
-          notifyDeadlines: p.notifyDeadlines,
-          soundEnabled: p.soundEnabled,
-        },
-      ]),
-    );
+    const muteRows = await prisma.mutedThread.findMany({
+      where: { userId: { in: unique }, threadKey: input.threadKey },
+      select: { userId: true, threadKey: true },
+    });
     const mutedPairs = new Set(
       muteRows.map((m) => `${m.userId}:${m.threadKey}`),
     );
@@ -95,13 +82,14 @@ export async function resolveNotifiableRecipients(input: {
       recipientIds: unique,
       type: input.type,
       threadKey: input.threadKey,
-      prefsByUser,
+      // Empty map => everyone gets DEFAULT_PREFERENCES (all types on).
+      prefsByUser: new Map<string, PreferenceFlags>(),
       mutedPairs,
     });
   } catch (err) {
-    // Preferences are an opt-out layer; never let a lookup failure block delivery.
+    // Mutes are an opt-out layer; never let a lookup failure block delivery.
     console.error(
-      "[notify] preference lookup failed — notifying all recipients:",
+      "[notify] mute lookup failed — notifying all recipients:",
       err instanceof Error ? err.message : err,
     );
     return unique;

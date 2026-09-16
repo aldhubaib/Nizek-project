@@ -1,42 +1,29 @@
 "use client";
 
-// The notifications toggle plus the recovery steps for whatever went wrong.
-// Replaces a bare Switch that silently did nothing when permission was
-// blocked, when the service worker never started, or when the subscription
-// never reached the server.
-//
-// Disabling notifications is blocked: the user gets a dialog explaining that
-// notifications are required to use the system.
+// Notifications status on the Account page plus the recovery steps for
+// whatever went wrong. Notifications are mandatory: there is no off switch.
+// The row either confirms this device is on, or offers the single action that
+// turns it on (with platform-specific guidance when that action can't work).
 
 import { useCallback, useState } from "react";
-import { Bell, Loader2, RefreshCw } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Bell, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
 import {
   enablePush,
   pushPlatform,
   showLocalTestBanner,
 } from "@/lib/push-client";
-import { describePushFailure, type PushEnableReason } from "@/lib/push-enable";
+import {
+  describePushFailure,
+  type PushEnableFailure,
+  type PushEnableReason,
+} from "@/lib/push-enable";
 import { usePushStatus } from "@/lib/use-push-status";
 
 export function NotificationSetup({ compact = false }: { compact?: boolean }) {
-  const { status, checking, refresh } = usePushStatus();
+  const { status, checking, healing, healFailure, refresh } = usePushStatus();
   const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<{
-    reason: PushEnableReason;
-    detail?: string;
-  } | null>(null);
+  const [failure, setFailure] = useState<PushEnableFailure | null>(null);
   const [confirmed, setConfirmed] = useState<"banner" | "quiet" | null>(null);
-  const [showRequiredDialog, setShowRequiredDialog] = useState(false);
 
   // requestPermission() MUST be the very first await in this handler so the
   // user-gesture token is still active. iOS silently returns "denied" and
@@ -78,11 +65,14 @@ export function NotificationSetup({ compact = false }: { compact?: boolean }) {
   const support = status?.support;
   const supported = support?.ok !== false;
   const permissionDenied = status?.permission === "denied";
+  const enabled = status?.enabled === true;
 
-  // Show guidance for the last failed attempt, or up front for a state we
-  // already know blocks delivery (iOS browser tab, previously blocked site).
-  const shownReason: PushEnableReason | null = failure
-    ? failure.reason
+  // Show guidance for the last failed attempt (the user's own, or the
+  // background repair's), or up front for a state we already know blocks
+  // delivery (iOS browser tab, previously blocked site).
+  const effectiveFailure = failure ?? (enabled ? null : healFailure);
+  const shownReason: PushEnableReason | null = effectiveFailure
+    ? effectiveFailure.reason
     : support && !support.ok
       ? support.reason
       : permissionDenied
@@ -92,7 +82,13 @@ export function NotificationSetup({ compact = false }: { compact?: boolean }) {
   const guidance = shownReason
     ? describePushFailure(shownReason, pushPlatform())
     : null;
-  const detail = failure?.detail ?? (support && !support.ok ? support.detail : undefined);
+  const detail =
+    effectiveFailure?.detail ??
+    (support && !support.ok ? support.detail : undefined);
+
+  // The initial check (status === null) is the only time we don't yet know
+  // which control to show. Later background checks never hide the control.
+  const initialising = status === null && checking;
 
   return (
     <section
@@ -118,27 +114,38 @@ export function NotificationSetup({ compact = false }: { compact?: boolean }) {
             <div
               className={`mt-0.5 text-muted-foreground ${compact ? "text-xs" : "text-s"}`}
             >
-              {status?.enabled
-                ? "On for this device."
-                : "Get alerts for new messages, mentions, and updates."}
+              {enabled
+                ? "On for this device. Required to use the app."
+                : "Required to use the app — turn them on for this device."}
             </div>
           )}
         </div>
-        {busy || checking ? (
+
+        {initialising || healing ? (
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+        ) : enabled ? (
+          <span className="flex shrink-0 items-center gap-1.5 text-s font-semibold text-success">
+            <CheckCircle2 className="h-4 w-4" />
+            On
+          </span>
+        ) : supported && !guidance ? (
+          // No switch: notifications can't be turned off. This is the one way
+          // to turn them on for a device that isn't subscribed yet. When there
+          // is guidance, its own retry button (if any) is the action instead.
+          <button
+            type="button"
+            onClick={() => void attemptEnable()}
+            disabled={busy}
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-s font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+          >
+            {busy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Bell className="h-3.5 w-3.5" />
+            )}
+            Enable
+          </button>
         ) : null}
-        {/* A switch that cannot work is worse than no switch — when the device
-            can't subscribe at all, the steps below are the only useful control. */}
-        {supported && (
-          <Switch
-            checked={status?.enabled ?? false}
-            onCheckedChange={(next) =>
-              void (next ? attemptEnable() : setShowRequiredDialog(true))
-            }
-            disabled={busy || checking || permissionDenied}
-            aria-label="Toggle notifications"
-          />
-        )}
       </div>
 
       {confirmed && (
@@ -149,7 +156,7 @@ export function NotificationSetup({ compact = false }: { compact?: boolean }) {
         </p>
       )}
 
-      {guidance && (
+      {guidance && !enabled && (
         <div className="mt-3 rounded-lg border border-border/60 bg-muted/20 p-3">
           <div className="text-s font-semibold">{guidance.title}</div>
           <ol
@@ -188,22 +195,6 @@ export function NotificationSetup({ compact = false }: { compact?: boolean }) {
           </div>
         </div>
       )}
-
-      <Dialog open={showRequiredDialog} onOpenChange={setShowRequiredDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Notifications Required</DialogTitle>
-            <DialogDescription>
-              You must keep notifications enabled in order to use the system.
-              This ensures you never miss important messages, mentions, and
-              updates.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button onClick={() => setShowRequiredDialog(false)}>Got it</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </section>
   );
 }

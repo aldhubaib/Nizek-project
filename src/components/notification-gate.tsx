@@ -10,20 +10,22 @@
  * root cause of the infinite-loop reports on mobile.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import { Bell, Loader2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { enablePush, pushSupported, pushPlatform } from "@/lib/push-client";
-import { describePushFailure, type PushEnableReason } from "@/lib/push-enable";
+import {
+  describePushFailure,
+  shouldGate,
+  type PushEnableFailure,
+  type PushEnableReason,
+} from "@/lib/push-enable";
 import { usePushStatus } from "@/lib/use-push-status";
 
 export function NotificationGate({ children }: { children: React.ReactNode }) {
-  const { status, checking, refresh } = usePushStatus();
+  const { status, healFailure, refresh } = usePushStatus();
   const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<{
-    reason: PushEnableReason;
-    detail?: string;
-  } | null>(null);
+  const [failure, setFailure] = useState<PushEnableFailure | null>(null);
 
   const attemptEnable = useCallback(async () => {
     if (busy) return;
@@ -58,26 +60,31 @@ export function NotificationGate({ children }: { children: React.ReactNode }) {
     }
   }, [busy, refresh]);
 
-  // Sync fast-path: if the browser already reports permission as granted we can
-  // skip the overlay while the full async status check runs. This eliminates
-  // the flash users see on slow mobile connections (3-16s round-trip) when they
-  // already have permission.
-  const permissionGranted =
-    typeof Notification !== "undefined" &&
-    Notification.permission === "granted";
+  // Server render and the hydration pass must agree, and neither can read
+  // Notification.permission — gate only after mount.
+  const mounted = useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
 
-  // Decide whether to show the blocking overlay. The gate is invisible when:
-  //  - the OS already reports permission as granted (sync fast-path)
-  //  - still running the initial/refresh status check (no flash)
-  //  - notifications are fully enabled
-  //  - push isn't supported (old browser, dev mode) — don't lock the app
+  // The decision is driven by the SYNCHRONOUS browser permission, not by the
+  // async status check. Permission "default"/"denied" gates instantly (nothing
+  // to wait for); "granted" only gates once the device is confirmed not
+  // enabled AND the automatic repair has already failed — never while a check
+  // is merely in flight, which is what used to hide the gate forever.
   const gated =
-    !checking &&
-    !permissionGranted &&
-    status != null &&
-    !status.enabled &&
-    pushSupported() &&
-    process.env.NODE_ENV === "production";
+    mounted &&
+    shouldGate({
+      permission:
+        typeof Notification !== "undefined"
+          ? Notification.permission
+          : "unsupported",
+      enabled: status ? status.enabled : null,
+      healFailure,
+      supported: pushSupported(),
+      production: process.env.NODE_ENV === "production",
+    });
 
   return (
     <>
@@ -85,14 +92,17 @@ export function NotificationGate({ children }: { children: React.ReactNode }) {
       {gated && (
         <GateOverlay
           status={status}
-          failure={failure}
+          failure={failure ?? healFailure}
           busy={busy}
-          checking={checking}
           onEnable={attemptEnable}
         />
       )}
     </>
   );
+}
+
+function subscribeNoop(): () => void {
+  return () => {};
 }
 
 // ---------------------------------------------------------------------------
@@ -103,13 +113,11 @@ function GateOverlay({
   status,
   failure,
   busy,
-  checking,
   onEnable,
 }: {
   status: import("@/lib/push-client").PushStatus | null;
-  failure: { reason: PushEnableReason; detail?: string } | null;
+  failure: PushEnableFailure | null;
   busy: boolean;
-  checking: boolean;
   onEnable: () => void;
 }) {
   const shownReason: PushEnableReason | null = failure
@@ -170,13 +178,10 @@ function GateOverlay({
         )}
 
         {/* Action button */}
-        <Button
-          className="w-full"
-          size="lg"
-          onClick={onEnable}
-          disabled={busy || checking}
-        >
-          {busy || checking ? (
+        {/* Only the user's own attempt disables the button — a background
+            status check must never lock them out of retrying. */}
+        <Button className="w-full" size="lg" onClick={onEnable} disabled={busy}>
+          {busy ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <Bell className="h-4 w-4" />
