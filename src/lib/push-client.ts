@@ -70,6 +70,7 @@ export function pushSupportStatus(): PushEnableResult {
     vapidConfigured: Boolean(VAPID_PUBLIC_KEY),
     platform: pushPlatform(),
     standalone: isStandaloneDisplayMode(),
+    userAgent: navigator.userAgent,
   });
 }
 

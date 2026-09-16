@@ -12,10 +12,15 @@ import {
   decodeVapidKey,
   describePushFailure,
   detectPushPlatform,
+  isIosNonSafari,
 } from "@/lib/push-enable";
 
 const IOS_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
+const IOS_CHROME_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/124.0.6367.88 Mobile/15E148 Safari/604.1";
+const IOS_FIREFOX_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/124.0 Mobile/15E148 Safari/604.1";
 const ANDROID_UA =
   "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
 const MAC_UA =
@@ -43,17 +48,47 @@ describe("detectPushPlatform", () => {
   });
 });
 
+describe("isIosNonSafari", () => {
+  it("detects Chrome on iOS (CriOS)", () => {
+    expect(isIosNonSafari(IOS_CHROME_UA)).toBe(true);
+  });
+
+  it("detects Firefox on iOS (FxiOS)", () => {
+    expect(isIosNonSafari(IOS_FIREFOX_UA)).toBe(true);
+  });
+
+  it("does not flag Safari on iOS", () => {
+    expect(isIosNonSafari(IOS_UA)).toBe(false);
+  });
+
+  it("does not flag Chrome on desktop/Android", () => {
+    expect(isIosNonSafari(ANDROID_UA)).toBe(false);
+    expect(isIosNonSafari(MAC_UA)).toBe(false);
+  });
+});
+
 describe("classifySupport", () => {
   it("passes a fully capable browser", () => {
     expect(classifySupport(FULL_SUPPORT)).toEqual({ ok: true });
   });
 
-  it("tells an iOS browser tab to install rather than giving up", () => {
+  it("tells iOS Chrome users to open in Safari", () => {
+    const result = classifySupport({
+      ...FULL_SUPPORT,
+      platform: "ios",
+      standalone: false,
+      userAgent: IOS_CHROME_UA,
+    });
+    expect(result).toEqual({ ok: false, reason: "needs-safari-install" });
+  });
+
+  it("tells an iOS Safari browser tab to install rather than giving up", () => {
     const result = classifySupport({
       ...FULL_SUPPORT,
       hasPushManager: false,
       platform: "ios",
       standalone: false,
+      userAgent: IOS_UA,
     });
     expect(result).toEqual({ ok: false, reason: "needs-install" });
   });
@@ -206,6 +241,7 @@ describe("describePushFailure", () => {
 
   it("never offers a retry for states a retry cannot change", () => {
     expect(describePushFailure("needs-install", "ios").retryLabel).toBeNull();
+    expect(describePushFailure("needs-safari-install", "ios").retryLabel).toBeNull();
     expect(describePushFailure("unsupported", "desktop").retryLabel).toBeNull();
     expect(describePushFailure("impersonating", "desktop").retryLabel).toBeNull();
   });
@@ -226,10 +262,17 @@ describe("describePushFailure", () => {
     expect(guidance.steps.join(" ")).toMatch(/Add to Home Screen/i);
   });
 
+  it("tells iOS non-Safari users to open in Safari", () => {
+    const guidance = describePushFailure("needs-safari-install", "ios");
+    expect(guidance.steps.join(" ")).toMatch(/Safari/i);
+    expect(guidance.retryLabel).toBeNull();
+  });
+
   it("always returns non-empty guidance", () => {
     for (const reason of [
       "unsupported",
       "needs-install",
+      "needs-safari-install",
       "permission-denied",
       "permission-dismissed",
       "no-service-worker",

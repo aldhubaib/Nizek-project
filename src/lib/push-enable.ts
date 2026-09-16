@@ -13,6 +13,8 @@ export type PushEnableReason =
   | "unsupported"
   /** iOS in a browser tab: push only exists for home-screen installs. */
   | "needs-install"
+  /** iOS but using Chrome/Firefox/etc.: must use Safari to install the PWA. */
+  | "needs-safari-install"
   /** Permission is blocked; only OS/browser settings can undo it. */
   | "permission-denied"
   /** The user closed the prompt without choosing; retrying is fine. */
@@ -64,6 +66,18 @@ export function classifyPermission(
 }
 
 /**
+ * Detects whether the current iOS browser is Safari. On iOS all browsers use
+ * WebKit, but only Safari (and standalone PWAs opened from Safari) can install
+ * a proper PWA with service worker + push support. Chrome, Firefox, Edge etc.
+ * on iOS report "CriOS", "FxiOS", "EdgiOS" in the UA string.
+ *
+ * Nothing here may touch window/navigator — the UA string is passed in.
+ */
+export function isIosNonSafari(ua: string): boolean {
+  return /CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser|UCBrowser|SamsungBrowser/i.test(ua);
+}
+
+/**
  * Decides whether a device can subscribe at all, before any prompt is shown.
  * `hasPushManager` is false in an iOS browser tab, where installing to the home
  * screen is the fix rather than a dead end.
@@ -75,10 +89,24 @@ export function classifySupport(input: {
   vapidConfigured: boolean;
   platform: PushPlatform;
   standalone: boolean;
+  userAgent?: string;
 }): PushEnableResult {
   if (!input.vapidConfigured) {
     return pushFailure("unsupported", "Push keys are not configured on the server.");
   }
+
+  // iOS + non-Safari browser (Chrome, Firefox, Edge…): these cannot create a
+  // working PWA even if "Add to Home Screen" is used. The user must open the
+  // site in Safari first, then install from there.
+  if (
+    input.platform === "ios" &&
+    !input.standalone &&
+    input.userAgent &&
+    isIosNonSafari(input.userAgent)
+  ) {
+    return pushFailure("needs-safari-install");
+  }
+
   if (input.hasNotification && input.hasServiceWorker && input.hasPushManager) {
     return { ok: true };
   }
@@ -169,6 +197,19 @@ export function describePushFailure(
   platform: PushPlatform,
 ): PushFailureGuidance {
   switch (reason) {
+    case "needs-safari-install":
+      return {
+        title: "Open in Safari to install",
+        steps: [
+          "Notifications only work from the Safari version of the app.",
+          "Open this site in Safari (not Chrome or other browsers).",
+          "Tap the Share button, then choose \"Add to Home Screen\".",
+          "Open the app from your home screen to enable notifications.",
+        ],
+        retryLabel: null,
+        showDiagnostics: false,
+      };
+
     case "needs-install":
       return {
         title: "Install the app first",
