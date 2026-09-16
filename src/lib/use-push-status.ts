@@ -14,9 +14,14 @@
 // expired or when the browser-level permission changed since the last check.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getPushStatus, type PushStatus } from "@/lib/push-client";
+import { getPushStatus, syncPushSubscription, type PushStatus } from "@/lib/push-client";
 
 const MIN_REFRESH_INTERVAL_MS = 3_000;
+
+// On iOS PWA, getPushStatus() can hang forever when the service worker is in a
+// zombie state after a cold start (pushManager.getSubscription() or fetch never
+// settle). This timeout ensures the spinner always stops.
+const STATUS_TIMEOUT_MS = 15_000;
 
 // ─── localStorage cache ─────────────────────────────────────────────────────
 
@@ -104,10 +109,31 @@ export function usePushStatus() {
       lastRefreshAtRef.current = now;
       setChecking(true);
       try {
-        const next = await getPushStatus();
+        // Race against a timeout so the spinner always stops, even when iOS
+        // hangs on pushManager.getSubscription() or a fetch() never settles.
+        const next = await Promise.race([
+          getPushStatus(),
+          new Promise<null>((r) => setTimeout(() => r(null), STATUS_TIMEOUT_MS)),
+        ]);
         if (runId === runIdRef.current) {
-          setStatus(next);
-          writeCachedStatus(next);
+          if (next) {
+            setStatus(next);
+            writeCachedStatus(next);
+          }
+
+          // Self-heal: permission is granted but getPushStatus() timed out or
+          // came back with no subscription. Re-register the SW + subscription
+          // in the background so push delivery resumes without the user having
+          // to manually re-toggle.
+          if (
+            !next &&
+            typeof Notification !== "undefined" &&
+            Notification.permission === "granted"
+          ) {
+            syncPushSubscription()
+              .then(() => refresh({ force: true }))
+              .catch(() => {});
+          }
         }
       } finally {
         if (runId === runIdRef.current) {

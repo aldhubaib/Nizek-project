@@ -38,19 +38,32 @@ export function NotificationSetup({ compact = false }: { compact?: boolean }) {
   const [confirmed, setConfirmed] = useState<"banner" | "quiet" | null>(null);
   const [showRequiredDialog, setShowRequiredDialog] = useState(false);
 
-  // enablePush() must be reached directly from the click/change handler: iOS
-  // only honours the permission prompt while the user gesture is still active.
+  // requestPermission() MUST be the very first await in this handler so the
+  // user-gesture token is still active. iOS silently returns "denied" and
+  // Android demotes to the quiet mini-infobar if any other async work
+  // (setState, SW resolution) runs before this call.
   const attemptEnable = useCallback(async () => {
     if (busy) return;
-    setBusy(true);
     setFailure(null);
     setConfirmed(null);
+
+    // 1. Request permission FIRST — must be in user gesture call stack.
+    let perm: NotificationPermission;
+    try {
+      perm = await Notification.requestPermission();
+    } catch {
+      perm = Notification.permission;
+    }
+    if (perm !== "granted") {
+      await refresh({ force: true });
+      return;
+    }
+
+    // 2. Permission granted — now do the slower SW + subscription work.
+    setBusy(true);
     try {
       const result = await enablePush();
       if (result.ok) {
-        // Prove it works right now. A server-sent test would be suppressed by
-        // the service worker while the app is focused, so this forces the same
-        // display path the real banners use.
         const shown = await showLocalTestBanner();
         setConfirmed(shown ? "banner" : "quiet");
       } else {
@@ -58,7 +71,7 @@ export function NotificationSetup({ compact = false }: { compact?: boolean }) {
       }
     } finally {
       setBusy(false);
-      await refresh();
+      await refresh({ force: true });
     }
   }, [busy, refresh]);
 
