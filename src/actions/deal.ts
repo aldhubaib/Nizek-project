@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireContactsAccess } from "@/lib/contacts-access";
+import { requireFlowAction } from "@/lib/workflow-access";
+import {
+  canModifyNative,
+  pickWritableFieldValues,
+} from "@/lib/workflow-permissions";
 import { getCustomFieldValues, saveCustomFieldValues } from "@/actions/custom-field";
 import { customFieldIsFilled } from "@/lib/fields/validate";
 import {
@@ -370,6 +375,7 @@ export async function createDeal(
     const data = await cleanInput(input, "create");
 
     const flowId = data.flowId ?? (await firstFlowId());
+    await requireFlowAction(flowId, "createRecord");
     const created = await prisma.$transaction(async (tx) => {
       const recordNumber = await takeNextRecordNumber(tx, "deal");
       return tx.deal.create({
@@ -413,13 +419,37 @@ export async function updateDeal(
     const user = await requireContactsAccess();
     const before = await getDeal(id);
     if (!before) throw new Error("That deal no longer exists");
+    const context = await requireFlowAction(before.flowId, "editRecord");
     const data = await cleanInput(input, "edit");
+    const titleField = data.layoutFields.find((field) => field.binding === "title");
+    const valueField = data.layoutFields.find((field) => field.binding === "value");
+    const nextTitle = canModifyNative(
+      context.permissions,
+      before.stageId,
+      "title",
+      titleField?.id,
+    )
+      ? data.title
+      : before.title;
+    const nextValue = canModifyNative(
+      context.permissions,
+      before.stageId,
+      "value",
+      valueField?.id,
+    )
+      ? data.value
+      : before.value;
+    const writableValues = pickWritableFieldValues(
+      context.permissions,
+      before.stageId,
+      data.fieldValues,
+    );
 
     const updated = await prisma.deal.update({
       where: { id },
       data: {
-        title: data.title,
-        value: data.value,
+        title: nextTitle,
+        value: nextValue,
         // Editing never moves the deal between columns: the board is where
         // that happens. Stage is only written on create.
         contacts: {
@@ -437,9 +467,10 @@ export async function updateDeal(
     await saveCustomFieldValues({
       entityType: "deal",
       recordId: id,
-      values: data.fieldValues,
+      values: writableValues,
       layoutId: data.layoutId,
     });
+    const afterValues = { ...before.fieldValues, ...writableValues };
     await logRecordChanges({
       entityType: "deal",
       recordId: id,
@@ -452,17 +483,17 @@ export async function updateDeal(
         fieldValues: before.fieldValues,
       },
       after: {
-        title: data.title,
-        value: data.value,
+        title: nextTitle,
+        value: nextValue ?? null,
         contactIds: data.contactIds,
         companyIds: data.companyIds,
-        fieldValues: data.fieldValues,
+        fieldValues: afterValues,
       },
       fields: data.layoutFields,
     });
 
     revalidatePath("/dashboard/deals");
-    return toDTO(updated, data.fieldValues);
+    return toDTO(updated, afterValues);
   });
 }
 
@@ -471,6 +502,12 @@ export async function deleteDeal(
 ): Promise<ActionResult<{ id: string }>> {
   return dealAction("delete", async () => {
     await requireContactsAccess();
+    const existing = await prisma.deal.findUnique({
+      where: { id },
+      select: { workflowId: true },
+    });
+    if (!existing) throw new Error("That deal no longer exists");
+    await requireFlowAction(existing.workflowId, "deleteRecord");
     await deleteRecordHistory("deal", id);
     await prisma.deal.delete({ where: { id } });
     revalidatePath("/dashboard/deals");

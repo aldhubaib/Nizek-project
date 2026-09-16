@@ -14,6 +14,7 @@ import {
   EMPTY_RELATED_CATALOG,
   type RelatedRecordCatalog,
 } from "@/lib/fields/relations";
+import type { WorkflowPermissions } from "@/lib/workflow-permissions";
 
 export function DealsPageClient({
   flows,
@@ -26,6 +27,7 @@ export function DealsPageClient({
   contacts,
   companies,
   related = EMPTY_RELATED_CATALOG,
+  permissions,
 }: {
   flows: DealFlowDTO[];
   flowId: string | null;
@@ -37,6 +39,7 @@ export function DealsPageClient({
   contacts: ContactOption[];
   companies: CompanyOption[];
   related?: RelatedRecordCatalog;
+  permissions?: WorkflowPermissions;
 }) {
   return (
     <ModulePipelinePage
@@ -52,6 +55,7 @@ export function DealsPageClient({
       companies={companies}
       related={related}
       onMove={moveDealToStage}
+      permissions={permissions}
     />
   );
 }

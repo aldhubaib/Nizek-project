@@ -52,6 +52,13 @@ import { moduleSurface } from "@/lib/modules/registry";
 import { applyTextScript } from "@/lib/fields/text-config";
 import type { WorkflowEntityType } from "@/lib/workflow/types";
 import { cn } from "@/lib/utils";
+import {
+  FULL_WORKFLOW_PERMISSIONS,
+  canModifyField,
+  canModifyNative,
+  canWorkflow,
+  type WorkflowPermissions,
+} from "@/lib/workflow-permissions";
 import { RecordHistoryDialog } from "@/components/modules/record-history-dialog";
 import { RecordCommentSection } from "@/components/modules/record-comment-section";
 
@@ -67,6 +74,7 @@ export function ModuleRecordForm({
   catalogs,
   users,
   related = EMPTY_RELATED_CATALOG,
+  permissions = FULL_WORKFLOW_PERMISSIONS,
 }: {
   entityType: WorkflowEntityType;
   projectId?: string;
@@ -79,6 +87,7 @@ export function ModuleRecordForm({
   catalogs: Record<string, CustomFieldCatalogDTO>;
   users: WorkflowUserOption[];
   related?: RelatedRecordCatalog;
+  permissions?: WorkflowPermissions;
 }) {
   const router = useRouter();
   const surface = moduleSurface(entityType, projectId);
@@ -119,7 +128,11 @@ export function ModuleRecordForm({
     ...catalog.sections.flatMap((section) => section.fields),
     ...catalog.unsectioned,
   ];
-  const canSave = allFields
+  const statusId = record?.stageId ?? defaultStageId ?? null;
+  const canCreate = canWorkflow(permissions, "createRecord");
+  const canEdit = canWorkflow(permissions, "editRecord");
+  const canDelete = canWorkflow(permissions, "deleteRecord");
+  const canSave = (record ? canEdit : canCreate) && allFields
     .filter((field) => fieldShowsOnForm(field, mode, fieldValues, allFields))
     .every((field) =>
       requiredLayoutFieldIsFilled(field, {
@@ -224,6 +237,7 @@ export function ModuleRecordForm({
             <History className="h-4 w-4" />
             <span className="flex-1">History</span>
           </DropdownMenuItem>
+          {canDelete ? (
           <DropdownMenuItem
             variant="destructive"
             disabled={busy}
@@ -232,6 +246,7 @@ export function ModuleRecordForm({
             <Trash2 className="h-4 w-4" />
             <span className="flex-1">Delete {surface.recordWord}</span>
           </DropdownMenuItem>
+          ) : null}
         </PageOverflowItems>
       )}
 
@@ -297,12 +312,20 @@ export function ModuleRecordForm({
             </div>
             <div className="space-y-1.5">
               <Label className="text-s">Assignee</Label>
-              <UserField
-                multiple={false}
-                users={users}
-                value={assigneeId}
-                onChange={setAssigneeId}
-              />
+              <div
+                className={
+                  canModifyNative(permissions, statusId, "assignee")
+                    ? undefined
+                    : "pointer-events-none opacity-70"
+                }
+              >
+                <UserField
+                  multiple={false}
+                  users={users}
+                  value={assigneeId}
+                  onChange={setAssigneeId}
+                />
+              </div>
             </div>
           </FormSection>
         )}
@@ -332,6 +355,16 @@ export function ModuleRecordForm({
                   related={related}
                   excludeDealId={record?.id}
                   projectId={projectId}
+                  locked={
+                    field.binding
+                      ? !canModifyNative(
+                          permissions,
+                          statusId,
+                          field.binding,
+                          field.id,
+                        )
+                      : !canModifyField(permissions, statusId, field.id)
+                  }
                   onTitle={setTitle}
                   onValue={setValue}
                   onField={(next) =>
@@ -366,6 +399,16 @@ export function ModuleRecordForm({
                   related={related}
                   excludeDealId={record?.id}
                   projectId={projectId}
+                  locked={
+                    field.binding
+                      ? !canModifyNative(
+                          permissions,
+                          statusId,
+                          field.binding,
+                          field.id,
+                        )
+                      : !canModifyField(permissions, statusId, field.id)
+                  }
                   onTitle={setTitle}
                   onValue={setValue}
                   onField={(next) =>
@@ -466,6 +509,7 @@ function CatalogField({
   related = EMPTY_RELATED_CATALOG,
   excludeDealId,
   projectId,
+  locked,
   onTitle,
   onValue,
   onField,
@@ -479,6 +523,7 @@ function CatalogField({
   related?: RelatedRecordCatalog;
   excludeDealId?: string;
   projectId?: string;
+  locked?: boolean;
   onTitle: (next: string) => void;
   onValue: (next: string) => void;
   onField: (next: string) => void;
@@ -497,6 +542,7 @@ function CatalogField({
         </Label>
         <Input
           value={title}
+          disabled={locked}
           lang={field.script === "arabic" ? "ar" : undefined}
           dir={field.script === "arabic" ? "rtl" : undefined}
           onChange={(e) => onTitle(applyTextScript(e.target.value, field.script))}
@@ -514,6 +560,7 @@ function CatalogField({
         </Label>
         <Input
           value={value}
+          disabled={locked}
           onChange={(e) => onValue(e.target.value)}
           placeholder="12,500"
           inputMode="decimal"
@@ -530,6 +577,7 @@ function CatalogField({
         related={related}
         excludeDealId={excludeDealId}
         projectId={projectId}
+        locked={locked}
         preview={
           field.type === "formula"
             ? joinFormulaParts(

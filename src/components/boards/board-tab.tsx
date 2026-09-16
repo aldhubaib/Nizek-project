@@ -76,6 +76,7 @@ export function BoardTab({
         setLoading(true);
         void reload(flowId);
       }}
+      permissions={board.permissions}
     />
     </>
   );

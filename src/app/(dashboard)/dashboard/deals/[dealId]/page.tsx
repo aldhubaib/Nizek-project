@@ -9,6 +9,7 @@ import { getAllLayoutCatalogs } from "@/actions/custom-field";
 import { listWorkflowUsers } from "@/actions/workflow";
 import { listRelatedRecordOptions } from "@/actions/related-records";
 import { DealForm } from "@/components/deals/deal-form";
+import { getFlowPermissions } from "@/lib/workflow-access";
 
 interface Props {
   params: Promise<{ dealId: string }>;
@@ -40,6 +41,7 @@ export default async function DealPage({ params }: Props) {
       catalogs={catalogs}
       users={users}
       related={related}
+      permissions={await getFlowPermissions(deal.flowId)}
     />
   );
 }

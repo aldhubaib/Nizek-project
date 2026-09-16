@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LayoutGrid, List, Search, Settings2, X } from "lucide-react";
+import { LayoutGrid, List, Search, Settings2, Shield, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { AddButton } from "@/components/add-button";
 import { PageHeader, PageName } from "@/components/page-header";
@@ -51,7 +51,15 @@ import {
   type RelatedRecordCatalog,
 } from "@/lib/fields/relations";
 import { TransitionDialog } from "@/components/workflow/transition-dialog";
+import { MovePermissionDialog } from "@/components/workflow/move-permission-dialog";
 import type { DuringPayload } from "@/lib/workflow/types";
+import {
+  FULL_WORKFLOW_PERMISSIONS,
+  canTakeTransition,
+  canWorkflow,
+  isMovePermissionError,
+  type WorkflowPermissions,
+} from "@/lib/workflow-permissions";
 import {
   createDealStage,
   deleteDealStage,
@@ -103,6 +111,7 @@ export function ModulePipelinePage({
   related = EMPTY_RELATED_CATALOG,
   onMove,
   onFlowChange,
+  permissions = FULL_WORKFLOW_PERMISSIONS,
 }: {
   surface: ModuleSurface;
   flows: DealFlowDTO[];
@@ -121,6 +130,7 @@ export function ModulePipelinePage({
     payload?: DuringPayload,
   ) => Promise<{ ok: true; data: unknown } | { ok: false; error: string }>;
   onFlowChange?: (flowId: string) => void;
+  permissions?: WorkflowPermissions;
 }) {
   const router = useRouter();
   const viewKey = `module-view:${surface.entityType}:${surface.projectId ?? ""}`;
@@ -145,6 +155,7 @@ export function ModulePipelinePage({
   const [query, setQuery] = useState("");
   const [fieldFilters, setFieldFilters] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [permissionDenied, setPermissionDenied] = useState(false);
   const [pendingMove, setPendingMove] = useState<{
     deal: DealDTO;
     stageId: string;
@@ -275,6 +286,10 @@ export function ModulePipelinePage({
       const result = await run();
       if (!result.ok) {
         rollback();
+        if (isMovePermissionError(result.error)) {
+          setPermissionDenied(true);
+          return null;
+        }
         setError(result.error);
         return null;
       }
@@ -282,7 +297,12 @@ export function ModulePipelinePage({
       return result.data;
     } catch (err) {
       rollback();
-      setError((err as Error).message || "Something went wrong");
+      const message = (err as Error).message || "Something went wrong";
+      if (isMovePermissionError(message)) {
+        setPermissionDenied(true);
+        return null;
+      }
+      setError(message);
       return null;
     } finally {
       pending.current -= 1;
@@ -323,6 +343,10 @@ export function ModulePipelinePage({
     });
     if (!allowed) {
       setError("The blueprint does not allow that move");
+      return;
+    }
+    if (!canTakeTransition(permissions, record.stageId, stageId)) {
+      setPermissionDenied(true);
       return;
     }
 
@@ -454,12 +478,12 @@ export function ModulePipelinePage({
       ? `/dashboard/projects/${surface.projectId}/board/${id}`
       : `${surface.basePath}/${id}`;
 
-  const addControl = (
+  const addControl = canWorkflow(permissions, "createRecord") ? (
     <AddButton
       label={`Add ${surface.recordWord}`}
       onClick={() => router.push(newHref)}
     />
-  );
+  ) : null;
 
   function changeView(next: "kanban" | "list") {
     setView(next);
@@ -525,6 +549,14 @@ export function ModulePipelinePage({
       }
     >
       <PageOverflowItems id={`${surface.entityType}-settings`} order={90}>
+        {surface.entityType !== "board" ? (
+          <DropdownMenuItem
+            onClick={() => router.push(`${surface.settingsPath}/roles`)}
+          >
+            <Shield className="h-4 w-4" />
+            <span className="flex-1">Roles</span>
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem onClick={() => router.push(surface.settingsPath)}>
           <Settings2 className="h-4 w-4" />
           <span className="flex-1">Task flow settings</span>
@@ -627,11 +659,14 @@ export function ModulePipelinePage({
             blueprintEnabled={
               flows.find((f) => f.id === flowId)?.blueprintEnabled
             }
+            permissions={permissions}
             onMoveDeal={moveRecord}
             onReorderStages={reorderStages}
             onAddStage={addStage}
             onRenameStage={renameStage}
             onDeleteStage={removeStage}
+            canMoveDeals
+            canManageStages={canWorkflow(permissions, "editBlueprint")}
             onOpenDeal={(record) => router.push(openHref(record.id))}
           />
         )}
@@ -657,6 +692,11 @@ export function ModulePipelinePage({
           }}
         />
       )}
+
+      <MovePermissionDialog
+        open={permissionDenied}
+        onOpenChange={setPermissionDenied}
+      />
     </div>
   );
 }

@@ -43,9 +43,16 @@ interface CardListProps {
   emptyLabel: string;
   onOpenDeal: (deal: DealDTO) => void;
   cardDisplay?: DealCardDisplay;
+  canMoveCards?: boolean;
 }
 
-function CardList({ deals, emptyLabel, onOpenDeal, cardDisplay }: CardListProps) {
+function CardList({
+  deals,
+  emptyLabel,
+  onOpenDeal,
+  cardDisplay,
+  canMoveCards = true,
+}: CardListProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-y-contain p-2">
       {deals.map((deal) => (
@@ -54,6 +61,7 @@ function CardList({ deals, emptyLabel, onOpenDeal, cardDisplay }: CardListProps)
           deal={deal}
           onOpen={onOpenDeal}
           display={cardDisplay}
+          draggable={canMoveCards}
         />
       ))}
       {deals.length === 0 && (
@@ -73,6 +81,7 @@ interface ColumnProps extends CardListProps {
   ) => Promise<void>;
   onDelete: (stage: DealStageDTO) => void;
   reorderable: boolean;
+  canManage?: boolean;
   dropHint?: ColumnDropHint | null;
   draggingKind?: "deal" | "column" | null;
 }
@@ -83,9 +92,11 @@ export function DealStageColumn({
   onOpenDeal,
   emptyLabel,
   cardDisplay,
+  canMoveCards = true,
   onRename,
   onDelete,
   reorderable,
+  canManage = true,
   dropHint = null,
   draggingKind = null,
 }: ColumnProps) {
@@ -123,7 +134,9 @@ export function DealStageColumn({
         COLUMN_SHELL,
         dropHint === "allowed" && ALLOWED_SHELL,
         dropHint === "blocked" && "opacity-35",
+        dropHint === "denied" && "opacity-60",
         dropHint === "allowed" && isOver && "ring-primary bg-primary/15",
+        dropHint === "denied" && isOver && "ring-2 ring-destructive/40 bg-destructive/5",
         dropHint === null && isOver && OVER_SHELL,
         isDragging && "z-10 opacity-60 shadow-2xl",
       )}
@@ -147,6 +160,7 @@ export function DealStageColumn({
           </span>
         </div>
 
+        {canManage ? (
         <Popover open={editorOpen} onOpenChange={setEditorOpen}>
           <PopoverTrigger
             aria-label={`Edit ${stage.name}`}
@@ -172,6 +186,7 @@ export function DealStageColumn({
             />
           </PopoverContent>
         </Popover>
+        ) : null}
       </div>
 
       <CardList
@@ -179,6 +194,7 @@ export function DealStageColumn({
         emptyLabel={emptyLabel}
         onOpenDeal={onOpenDeal}
         cardDisplay={cardDisplay}
+        canMoveCards={canMoveCards}
       />
     </div>
   );
@@ -189,6 +205,7 @@ export function UnassignedColumn({
   onOpenDeal,
   emptyLabel,
   cardDisplay,
+  canMoveCards = true,
   dropHint = null,
   draggingKind = null,
 }: CardListProps & {
@@ -209,7 +226,9 @@ export function UnassignedColumn({
         "border-dashed",
         dropHint === "allowed" && ALLOWED_SHELL,
         dropHint === "blocked" && "opacity-35",
+        dropHint === "denied" && "opacity-60",
         dropHint === "allowed" && isOver && "ring-primary bg-primary/15",
+        dropHint === "denied" && isOver && "ring-2 ring-destructive/40 bg-destructive/5",
         dropHint === null && isOver && OVER_SHELL,
       )}
     >
@@ -226,6 +245,7 @@ export function UnassignedColumn({
         emptyLabel={emptyLabel}
         onOpenDeal={onOpenDeal}
         cardDisplay={cardDisplay}
+        canMoveCards={canMoveCards}
       />
     </div>
   );

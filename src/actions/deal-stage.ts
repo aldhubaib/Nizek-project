@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireContactsAccess } from "@/lib/contacts-access";
+import { requireFlowTransition } from "@/lib/workflow-access";
 import { createAndPublishNotifications } from "@/lib/notify";
 import { dispatchSendInviteActions } from "@/lib/calendar-invite-send";
 import { saveCustomFieldValues } from "@/actions/custom-field";
@@ -168,6 +169,7 @@ export async function moveDealToStage(
   try {
     const user = await requireContactsAccess();
     const loaded = await dealSnapshot(dealId);
+    await requireFlowTransition(loaded.workflowId, loaded.statusId, stageId);
 
     if (stageId) {
       const target = await prisma.workflowStatus.findUnique({

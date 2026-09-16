@@ -193,6 +193,8 @@ model User {
   overviewSnoozes      OverviewSnooze[]           @relation("UserOverviewSnoozes")
 
   boardMemberships     BoardMember[]              @relation("BoardMemberUser")
+  workflowMemberships  WorkflowMember[]           @relation("WorkflowMemberUser")
+  moduleRoleMemberships ModuleRoleMember[]        @relation("ModuleRoleMemberUser")
   boardCardsAssigned   BoardCard[]                @relation("BoardCardAssignee")
   boardCardsCreated    BoardCard[]                @relation("BoardCardCreator")
   boardRecordsCreated  BoardRecord[]              @relation("BoardRecordCreator")
@@ -2988,12 +2990,131 @@ model Workflow {
   boardRecords BoardRecord[]
   contacts     Contact[]
   companies    Company[]
+  roles        WorkflowRole[]
+  members      WorkflowMember[]
+  moduleRoles  ModuleRole[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([entityType, projectId, name])
   @@index([entityType, projectId, position])
+}
+
+/// What somebody can do on this task flow, and nothing else.
+///
+/// Kept separate from ProjectRole (sprint stages) and BoardRole (legacy
+/// kanban). Those tables are not consulted here. Roles live on the flow, so
+/// the same person can be a writer on flow 1 and a viewer on flow 2.
+model WorkflowRole {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  name String
+
+  /// Exactly one fallback per flow, for a project member who was never given
+  /// a role on this flow. Enforced by a partial unique index in the migration.
+  isDefault Boolean @default(false)
+
+  /// Everything on this flow, including its roles and blueprint. Not a
+  /// system admin and not a sprint admin.
+  isAdmin Boolean @default(false)
+
+  canCreateRecord  Boolean @default(false)
+  canEditRecord    Boolean @default(false)
+  canDeleteRecord  Boolean @default(false)
+  canMoveRecord    Boolean @default(false)
+  canManageRoles   Boolean @default(false)
+  canEditBlueprint Boolean @default(false)
+
+  /// JSON `{ [fromStatusId]: toStatusId[] }`. Null means every blueprint
+  /// arrow, when canMoveRecord is on.
+  allowedTransitions String?
+
+  /// JSON `{ [statusId]: fieldId[] | "*" }`. Null means every field in
+  /// every column, when canEditRecord is on.
+  modifyFields String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members WorkflowMember[]
+
+  @@unique([workflowId, name])
+  @@index([workflowId])
+}
+
+/// Which role a person holds on a task flow. Membership is drawn from the
+/// project (or contacts access on a global module) — there is no second roster.
+model WorkflowMember {
+  id         String @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("WorkflowMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  roleId String
+  role   WorkflowRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([workflowId, userId])
+  @@index([workflowId])
+  @@index([roleId])
+  @@index([userId])
+}
+
+/// Named roles for one task flow. Used on that flow's blueprint: each
+/// status says which roles may edit which fields, and each arrow says
+/// which roles may take the move. Sprint ProjectRole is unrelated.
+model ModuleRole {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  entityType String
+  /// Empty for deals / contacts / companies. Project id for a project board.
+  projectId  String   @default("")
+
+  name      String
+  isDefault Boolean @default(false)
+  isAdmin   Boolean @default(false)
+
+  canCreateRecord  Boolean @default(false)
+  canEditRecord    Boolean @default(false)
+  canDeleteRecord  Boolean @default(false)
+  canMoveRecord    Boolean @default(false)
+  canManageRoles   Boolean @default(false)
+  canEditBlueprint Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members ModuleRoleMember[]
+
+  @@unique([workflowId, name])
+  @@index([workflowId])
+  @@index([entityType, projectId])
+}
+
+model ModuleRoleMember {
+  id         String @id @default(cuid())
+  entityType String
+  projectId  String @default("")
+
+  userId String
+  user   User   @relation("ModuleRoleMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  roleId String
+  role   ModuleRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([roleId, userId])
+  @@index([entityType, projectId])
+  @@index([roleId])
+  @@index([userId])
 }
 
 /// A status on a workflow — a kanban column and a canvas node.
@@ -3026,6 +3147,11 @@ model WorkflowStatus {
   transitionsOut WorkflowTransition[] @relation("WorkflowTransitionFrom")
   transitionsIn  WorkflowTransition[] @relation("WorkflowTransitionTo")
 
+  /// JSON `{ [moduleRoleId]: fieldId[] | "*" }`. Null means the role's own
+  /// edit flag applies. Once any role is listed, only those roles may edit
+  /// here, and only those fields.
+  modifyByRole String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -3052,6 +3178,10 @@ model WorkflowTransition {
 
   canvasX Float?
   canvasY Float?
+
+  /// JSON `moduleRoleId[]`. Null means the role's own move flag applies.
+  /// An empty list means nobody but a flow admin may take this arrow.
+  moveRoleIds String?
 
   actions WorkflowAction[]
 

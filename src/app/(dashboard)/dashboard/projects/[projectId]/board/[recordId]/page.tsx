@@ -5,6 +5,7 @@ import { isProjectAccessError } from "@/lib/project-access";
 import { listWorkflows, listWorkflowUsers } from "@/actions/workflow";
 import { getAllLayoutCatalogs } from "@/actions/custom-field";
 import { ensureProjectBoard, getBoardRecord } from "@/actions/board-record";
+import { getFlowPermissions } from "@/lib/workflow-access";
 import { listRelatedRecordOptions } from "@/actions/related-records";
 import { ModuleRecordForm } from "@/components/modules/module-record-form";
 import { EMPTY_RELATED_CATALOG } from "@/lib/fields/relations";
@@ -72,6 +73,7 @@ export default async function BoardRecordPage({
       catalogs={catalogs}
       users={users}
       related={related}
+      permissions={await getFlowPermissions(record.flowId)}
     />
   );
 }

@@ -8,6 +8,7 @@ import type { DealFlowDTO } from "@/actions/deal-flow";
 import type { CustomFieldCatalogDTO } from "@/actions/custom-field";
 import type { WorkflowUserOption } from "@/actions/workflow";
 import type { RelatedRecordCatalog } from "@/lib/fields/relations";
+import type { WorkflowPermissions } from "@/lib/workflow-permissions";
 
 export function DealForm(
   props: {
@@ -20,6 +21,7 @@ export function DealForm(
     catalogs: Record<string, CustomFieldCatalogDTO>;
     users: WorkflowUserOption[];
     related?: RelatedRecordCatalog;
+    permissions?: WorkflowPermissions;
   },
 ) {
   return (
@@ -34,6 +36,7 @@ export function DealForm(
       catalogs={props.catalogs}
       users={props.users}
       related={props.related}
+      permissions={props.permissions}
     />
   );
 }

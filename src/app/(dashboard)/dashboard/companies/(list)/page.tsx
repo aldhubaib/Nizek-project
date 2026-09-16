@@ -35,6 +35,7 @@ export default async function CompaniesPage({ searchParams }: Props) {
       contacts={contacts}
       companies={companies}
       related={related}
+      permissions={pipeline.permissions}
     />
   );
 }

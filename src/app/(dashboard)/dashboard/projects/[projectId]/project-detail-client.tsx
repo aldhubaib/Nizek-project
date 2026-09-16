@@ -26,7 +26,7 @@ import { listSprints, type SprintDTO } from "@/actions/sprint";
 
 import type { TaskQuestion } from "@/components/kanban/question-field";
 import { useKanbanStore, type KanbanTask } from "@/store/kanban";
-import { Users, KeyRound, Settings, Loader2, Check } from "lucide-react";
+import { Users, KeyRound, Settings, Loader2, Check, Shield } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -535,6 +535,14 @@ export function ProjectDetailClient({
         </PageOverflowItems>
       )}
       <PageOverflowItems id="project-settings" order={100}>
+        <DropdownMenuItem
+          onClick={() =>
+            router.push(`/dashboard/projects/${project.id}/board/settings/roles`)
+          }
+        >
+          <Shield className="h-4 w-4" />
+          <span className="flex-1">Board roles</span>
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={handleOpenSettings}>
           <Settings className="h-4 w-4" />
           <span className="flex-1">Settings</span>

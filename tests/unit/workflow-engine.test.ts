@@ -13,6 +13,7 @@ import {
   unfilledFieldIds,
   validateDuring,
 } from "../../src/lib/workflow/engine";
+import { statusKindsForEntity } from "../../src/lib/workflow/types";
 import type { FieldSnapshot, WorkflowActionDef, WorkflowTransitionDef } from "../../src/lib/workflow/types";
 
 const filled: FieldSnapshot = {
@@ -131,6 +132,26 @@ describe("columnDropHint", () => {
     expect(
       columnDropHint("todo", { fromStatusId: "todo", transitions: arrows }),
     ).toBe("home");
+  });
+
+  it("dims a column the person's roles may not take", () => {
+    expect(
+      columnDropHint("review", {
+        fromStatusId: "todo",
+        transitions: arrows,
+        permissions: {
+          isAdmin: false,
+          canCreateRecord: true,
+          canEditRecord: true,
+          canDeleteRecord: true,
+          canMoveRecord: true,
+          canManageRoles: true,
+          canEditBlueprint: true,
+          allowedTransitions: { todo: [] },
+          modifyFields: null,
+        },
+      }),
+    ).toBe("denied");
   });
 });
 
@@ -393,5 +414,12 @@ describe("snapshotFieldIsFilled", () => {
         fields,
       ),
     ).toEqual(["fld_notes"]);
+  });
+});
+
+describe("statusKindsForEntity", () => {
+  it("offers open/closed on a board and open/won/lost on CRM", () => {
+    expect(statusKindsForEntity("board")).toEqual(["open", "closed"]);
+    expect(statusKindsForEntity("deal")).toEqual(["open", "won", "lost"]);
   });
 });

@@ -5,6 +5,7 @@ import { isProjectAccessError } from "@/lib/project-access";
 import { listWorkflows, listWorkflowUsers } from "@/actions/workflow";
 import { getAllLayoutCatalogs } from "@/actions/custom-field";
 import { ensureProjectBoard } from "@/actions/board-record";
+import { getFlowPermissions } from "@/lib/workflow-access";
 import { listRelatedRecordOptions } from "@/actions/related-records";
 import { ModuleRecordForm } from "@/components/modules/module-record-form";
 import { EMPTY_RELATED_CATALOG } from "@/lib/fields/relations";
@@ -51,6 +52,8 @@ export default async function NewBoardRecordPage({
     layoutId: row.layoutId,
     blueprintEnabled: row.blueprintEnabled,
   }));
+  const flowId = flow ?? flows[0]?.id ?? null;
+  const permissions = flowId ? await getFlowPermissions(flowId) : undefined;
 
   return (
     <ModuleRecordForm
@@ -58,11 +61,12 @@ export default async function NewBoardRecordPage({
       projectId={projectId}
       record={null}
       flows={flows}
-      defaultFlowId={flow ?? flows[0]?.id ?? null}
+      defaultFlowId={flowId}
       defaultStageId={stage ?? null}
       catalogs={catalogs}
       users={users}
       related={related}
+      permissions={permissions}
     />
   );
 }

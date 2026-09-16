@@ -36,6 +36,7 @@ export function FieldControl({
   excludeDealId,
   preview,
   projectId,
+  locked,
 }: {
   field: CustomFieldDTO;
   value: string;
@@ -45,6 +46,7 @@ export function FieldControl({
   excludeDealId?: string;
   preview?: string;
   projectId?: string;
+  locked?: boolean;
 }) {
   if (field.type === "relation") {
     return (

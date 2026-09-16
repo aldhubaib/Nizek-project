@@ -6,8 +6,21 @@ export const WORKFLOW_ENTITY_TYPES = [
 ] as const;
 export type WorkflowEntityType = (typeof WORKFLOW_ENTITY_TYPES)[number];
 
-export const WORKFLOW_STATUS_KINDS = ["open", "won", "lost"] as const;
+export const BOARD_STATUS_KINDS = ["open", "closed"] as const;
+export const CRM_STATUS_KINDS = ["open", "won", "lost"] as const;
+export const WORKFLOW_STATUS_KINDS = [
+  "open",
+  "closed",
+  "won",
+  "lost",
+] as const;
 export type WorkflowStatusKind = (typeof WORKFLOW_STATUS_KINDS)[number];
+
+export function statusKindsForEntity(
+  entityType: string,
+): readonly WorkflowStatusKind[] {
+  return entityType === "board" ? BOARD_STATUS_KINDS : CRM_STATUS_KINDS;
+}
 
 export const WORKFLOW_HOOKS = [
   "before",
@@ -73,6 +86,8 @@ export type WorkflowTransitionDef = {
   /// Encoded target connector: 1 top, 2 right, 3 bottom, 4 left.
   canvasY: number | null;
   actions: WorkflowActionDef[];
+  /// JSON-parsed `moduleRoleId[]`. Null / omitted means the role's move flag applies.
+  moveRoleIds?: string[] | null;
 };
 
 export type NativeFieldSnapshot = {

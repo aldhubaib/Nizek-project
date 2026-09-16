@@ -24,6 +24,10 @@ import type {
   WorkflowActionDef,
   WorkflowTransitionDef,
 } from "./types";
+import {
+  canTakeTransition,
+  type WorkflowPermissions,
+} from "@/lib/workflow-permissions";
 
 /**
  * Whether a drop is legal on this workflow.
@@ -63,7 +67,7 @@ export function allowedDestinations(
   return [...ids];
 }
 
-export type ColumnDropHint = "allowed" | "home" | "blocked";
+export type ColumnDropHint = "allowed" | "home" | "blocked" | "denied";
 
 /**
  * How a column should look while a card is mid-drag. Null means the blueprint
@@ -75,6 +79,7 @@ export function columnDropHint(
     fromStatusId: string | null;
     transitions: Pick<WorkflowTransitionDef, "fromStatusId" | "toStatusId">[];
     enabled?: boolean;
+    permissions?: WorkflowPermissions;
   },
 ): ColumnDropHint | null {
   if (input.enabled === false || input.transitions.length === 0) return null;
@@ -86,7 +91,14 @@ export function columnDropHint(
     allowedToIds: allowedDestinations(input.fromStatusId, input.transitions),
     enabled: input.enabled,
   });
-  return allowed ? "allowed" : "blocked";
+  if (!allowed) return "blocked";
+  if (
+    input.permissions &&
+    !canTakeTransition(input.permissions, input.fromStatusId, stageId)
+  ) {
+    return "denied";
+  }
+  return "allowed";
 }
 
 export function findTransition(

@@ -31,6 +31,7 @@ import {
 import type { DealDTO } from "@/actions/deal";
 import type { DealStageDTO } from "@/actions/deal-stage";
 import { columnDropHint } from "@/lib/workflow/engine";
+import type { WorkflowPermissions } from "@/lib/workflow-permissions";
 import type { WorkflowTransitionDTO } from "@/actions/workflow";
 
 const BOARD_ROW =
@@ -52,6 +53,9 @@ interface Props {
   cardDisplay?: DealCardDisplay;
   transitions?: WorkflowTransitionDTO[];
   blueprintEnabled?: boolean;
+  permissions?: WorkflowPermissions;
+  canMoveDeals?: boolean;
+  canManageStages?: boolean;
 }
 
 export function DealBoard({
@@ -67,6 +71,9 @@ export function DealBoard({
   cardDisplay,
   transitions = [],
   blueprintEnabled,
+  permissions,
+  canMoveDeals = true,
+  canManageStages = true,
 }: Props) {
   const [active, setActive] = useState<{
     id: string;
@@ -122,6 +129,7 @@ export function DealBoard({
           fromStatusId: activeDeal?.stageId ?? null,
           transitions,
           enabled: blueprintEnabled,
+          permissions,
         })
       : null;
 
@@ -143,6 +151,7 @@ export function DealBoard({
     if (activeDragId === overId) return;
 
     if (event.active.data.current?.type === "column") {
+      if (!canManageStages) return;
       const from = stages.findIndex((s) => s.id === activeDragId);
       const to = stages.findIndex((s) => s.id === overId);
       if (from === -1 || to === -1) return;
@@ -151,7 +160,7 @@ export function DealBoard({
     }
 
     const deal = deals.find((d) => d.id === activeDragId);
-    if (!deal) return;
+    if (!deal || !canMoveDeals) return;
 
     const dropped = stageIdFromDrop(overId);
     const targetStageId =
@@ -183,6 +192,7 @@ export function DealBoard({
             cardDisplay={cardDisplay}
             dropHint={hintFor(null)}
             draggingKind={active?.type ?? null}
+            canMoveCards={canMoveDeals}
           />
         )}
 
@@ -192,19 +202,21 @@ export function DealBoard({
               key={stage.id}
               stage={stage}
               deals={byStage.map.get(stage.id) ?? []}
-              reorderable={stages.length > 1}
+              reorderable={canManageStages && stages.length > 1}
               onOpenDeal={onOpenDeal}
               emptyLabel={emptyLabel}
               cardDisplay={cardDisplay}
               onRename={onRenameStage}
               onDelete={onDeleteStage}
+              canManage={canManageStages}
+              canMoveCards={canMoveDeals}
               dropHint={hintFor(stage.id)}
               draggingKind={active?.type ?? null}
             />
           ))}
         </SortableContext>
 
-        <AddStageColumn onAdd={onAddStage} />
+        {canManageStages ? <AddStageColumn onAdd={onAddStage} /> : null}
       </div>
 
       <DragOverlay dropAnimation={null}>

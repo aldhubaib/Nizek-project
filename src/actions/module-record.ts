@@ -3,6 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireContactsAccess } from "@/lib/contacts-access";
+import {
+  getFlowPermissions,
+  requireFlowAction,
+  requireFlowTransition,
+  seedWorkflowRolesIfMissing,
+} from "@/lib/workflow-access";
+import type { WorkflowPermissions } from "@/lib/workflow-permissions";
+import {
+  canModifyNative,
+  pickWritableFieldValues,
+} from "@/lib/workflow-permissions";
 import { getModule } from "@/lib/modules/registry";
 import { applyLayoutTextScripts } from "@/lib/fields/text-config";
 import { customFieldIsFilled } from "@/lib/fields/validate";
@@ -80,6 +91,7 @@ export type ModulePipelineDTO = {
   transitions: WorkflowTransitionDTO[];
   fields: CustomFieldDTO[];
   users: WorkflowUserOption[];
+  permissions: WorkflowPermissions;
 };
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -211,6 +223,7 @@ export async function ensureDirectoryWorkflow(entityType: DirectoryEntity) {
       select: { id: true, layoutId: true },
     });
   }
+  await seedWorkflowRolesIfMissing(workflow.id, { existing: true });
 
   const statusCount = await prisma.workflowStatus.count({
     where: { workflowId: workflow.id },
@@ -474,12 +487,13 @@ export async function getDirectoryPipeline(
     ensured.workflowId;
   const layoutId =
     flows.find((flow) => flow.id === selected)?.layoutId ?? ensured.layoutId;
-  const [stages, records, transitions, users, fields] = await Promise.all([
+  const [stages, records, transitions, users, fields, permissions] = await Promise.all([
     listDealStages(selected),
     listDirectoryRecords(entityType, selected, layoutId),
     listWorkflowTransitions(selected),
     listWorkflowUsers(),
     listCustomFields(entityType, layoutId),
+    getFlowPermissions(selected),
   ]);
   return {
     entityType,
@@ -490,6 +504,7 @@ export async function getDirectoryPipeline(
     transitions,
     fields,
     users,
+    permissions,
   };
 }
 
@@ -631,6 +646,7 @@ export async function createDirectoryRecord(
     const user = await requireContactsAccess();
     await ensureDirectoryWorkflow(entityType);
     const data = await cleanInput(entityType, input, "create");
+    await requireFlowAction(data.flowId, "createRecord");
     const statusId = data.stageId ?? (await firstStageId(data.flowId));
 
     if (entityType === "contact") {
@@ -715,25 +731,41 @@ export async function updateDirectoryRecord(
     const user = await requireContactsAccess();
     const before = await getDirectoryRecord(entityType, id);
     if (!before) throw new Error("That record no longer exists");
+    const context = await requireFlowAction(before.flowId, "editRecord");
     const data = await cleanInput(entityType, input, "edit");
+    const titleField = data.layoutFields.find((field) => field.binding === "title");
+    const nextTitle = canModifyNative(
+      context.permissions,
+      before.stageId,
+      "title",
+      titleField?.id,
+    )
+      ? data.title
+      : before.title;
+    const writableValues = pickWritableFieldValues(
+      context.permissions,
+      before.stageId,
+      data.fieldValues,
+    );
 
     if (entityType === "contact") {
-      const names = namesFromTitle(data.title);
+      const names = namesFromTitle(nextTitle);
       const updated = await prisma.contact.update({
         where: { id },
         data: {
-          title: data.title,
+          title: nextTitle,
           firstName: names.firstName,
           lastName: names.lastName,
-          ...nativeContactPatch(data.layoutFields, data.fieldValues),
+          ...nativeContactPatch(data.layoutFields, writableValues),
         },
       });
       await saveCustomFieldValues({
         entityType,
         recordId: id,
-        values: data.fieldValues,
+        values: writableValues,
         layoutId: data.layoutId,
       });
+      const afterValues = { ...before.fieldValues, ...writableValues };
       await logRecordChanges({
         entityType,
         recordId: id,
@@ -743,33 +775,34 @@ export async function updateDirectoryRecord(
           fieldValues: before.fieldValues,
         },
         after: {
-          title: data.title,
-          fieldValues: data.fieldValues,
+          title: nextTitle,
+          fieldValues: afterValues,
         },
         fields: data.layoutFields,
       });
       revalidateModule(entityType);
-      return toRecord(updated, data.fieldValues);
+      return toRecord(updated, afterValues);
     }
 
     const clash = await prisma.company.findFirst({
-      where: { nameEn: data.title, id: { not: id } },
+      where: { nameEn: nextTitle, id: { not: id } },
       select: { id: true },
     });
-    if (clash) throw new Error(`“${data.title}” is already in the list`);
+    if (clash) throw new Error(`“${nextTitle}” is already in the list`);
     const updated = await prisma.company.update({
       where: { id },
       data: {
-        nameEn: data.title,
-        ...nativeCompanyPatch(data.layoutFields, data.fieldValues),
+        nameEn: nextTitle,
+        ...nativeCompanyPatch(data.layoutFields, writableValues),
       },
     });
     await saveCustomFieldValues({
       entityType,
       recordId: id,
-      values: data.fieldValues,
+      values: writableValues,
       layoutId: data.layoutId,
     });
+    const afterCompanyValues = { ...before.fieldValues, ...writableValues };
     await logRecordChanges({
       entityType,
       recordId: id,
@@ -779,13 +812,13 @@ export async function updateDirectoryRecord(
         fieldValues: before.fieldValues,
       },
       after: {
-        title: data.title,
-        fieldValues: data.fieldValues,
+        title: nextTitle,
+        fieldValues: afterCompanyValues,
       },
       fields: data.layoutFields,
     });
     revalidateModule(entityType);
-    return toRecord({ ...updated, title: updated.nameEn }, data.fieldValues);
+    return toRecord({ ...updated, title: updated.nameEn }, afterCompanyValues);
   });
 }
 
@@ -795,6 +828,18 @@ export async function deleteDirectoryRecord(
 ): Promise<ActionResult<{ id: string }>> {
   return recordAction("delete", async () => {
     await requireContactsAccess();
+    const existing =
+      entityType === "contact"
+        ? await prisma.contact.findUnique({
+            where: { id },
+            select: { workflowId: true },
+          })
+        : await prisma.company.findUnique({
+            where: { id },
+            select: { workflowId: true },
+          });
+    if (!existing) throw new Error("That record no longer exists");
+    await requireFlowAction(existing.workflowId, "deleteRecord");
     await deleteRecordHistory(entityType, id);
     if (entityType === "contact") {
       await prisma.contact.delete({ where: { id } });
@@ -871,6 +916,7 @@ export async function moveDirectoryRecord(
   try {
     const user = await requireContactsAccess();
     const loaded = await directorySnapshot(entityType, recordId);
+    await requireFlowTransition(loaded.workflowId, loaded.statusId, stageId);
 
     if (stageId) {
       const target = await prisma.workflowStatus.findUnique({

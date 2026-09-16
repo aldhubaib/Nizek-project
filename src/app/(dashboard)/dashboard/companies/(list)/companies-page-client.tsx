@@ -11,6 +11,7 @@ import type { CompanyOption } from "@/actions/company";
 import type { WorkflowTransitionDTO, WorkflowUserOption } from "@/actions/workflow";
 import type { DealStageDTO } from "@/actions/deal-stage";
 import type { RelatedRecordCatalog } from "@/lib/fields/relations";
+import type { WorkflowPermissions } from "@/lib/workflow-permissions";
 
 export function CompaniesPageClient(props: {
   flows: DealFlowDTO[];
@@ -23,6 +24,7 @@ export function CompaniesPageClient(props: {
   contacts: ContactOption[];
   companies: CompanyOption[];
   related?: RelatedRecordCatalog;
+  permissions?: WorkflowPermissions;
 }) {
   return (
     <ModulePipelinePage
@@ -40,6 +42,7 @@ export function CompaniesPageClient(props: {
       onMove={(id, stageId, payload) =>
         moveDirectoryRecord("company", id, stageId, payload)
       }
+      permissions={props.permissions}
     />
   );
 }

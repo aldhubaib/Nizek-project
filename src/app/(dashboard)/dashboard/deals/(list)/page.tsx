@@ -10,6 +10,7 @@ import { listContactOptions } from "@/actions/contact";
 import { listCompanyOptions } from "@/actions/company";
 import { listRelatedRecordOptions } from "@/actions/related-records";
 import { EMPTY_RELATED_CATALOG } from "@/lib/fields/relations";
+import { getFlowPermissions } from "@/lib/workflow-access";
 import { DealsPageClient } from "./deals-page-client";
 
 interface Props {
@@ -24,7 +25,7 @@ export default async function DealsPage({ searchParams }: Props) {
   const flows = await listDealFlows();
   const flow = flows.find((f) => f.id === requested) ?? flows[0] ?? null;
 
-  const [deals, stages, transitions, fields, users, contacts, companies, related] =
+  const [deals, stages, transitions, fields, users, contacts, companies, related, permissions] =
     flow
       ? await Promise.all([
           listDeals(flow.id),
@@ -35,8 +36,9 @@ export default async function DealsPage({ searchParams }: Props) {
           listContactOptions(),
           listCompanyOptions(),
           listRelatedRecordOptions(),
+          getFlowPermissions(flow.id),
         ])
-      : [[], [], [], [], [], [], [], EMPTY_RELATED_CATALOG];
+      : [[], [], [], [], [], [], [], EMPTY_RELATED_CATALOG, undefined];
 
   return (
     <DealsPageClient
@@ -50,6 +52,7 @@ export default async function DealsPage({ searchParams }: Props) {
       contacts={contacts}
       companies={companies}
       related={related}
+      permissions={permissions}
     />
   );
 }

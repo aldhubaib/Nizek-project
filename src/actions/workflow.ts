@@ -5,6 +5,13 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireContactsAccess } from "@/lib/contacts-access";
 import { requireProjectMember, requireUser } from "@/lib/auth";
+import { requireFlowAction, seedWorkflowRolesIfMissing } from "@/lib/workflow-access";
+import {
+  parseModifyByRole,
+  parseMoveRoleIds,
+  stringifyModifyByRole,
+  stringifyMoveRoleIds,
+} from "@/lib/workflow-permissions";
 import { getModule, projectBoardPaths } from "@/lib/modules/registry";
 import { isBoardColor, DEFAULT_BOARD_COLOR } from "@/lib/board-palette";
 import { planReorder, positionBetween } from "@/lib/board-order";
@@ -50,6 +57,7 @@ export type WorkflowStatusDTO = {
   canvasX: number | null;
   canvasY: number | null;
   actions: WorkflowActionDTO[];
+  modifyByRole: Record<string, string[] | "*"> | null;
 };
 
 export type WorkflowTransitionDTO = WorkflowTransitionDef;
@@ -137,6 +145,7 @@ function toStatusDTO(row: {
   position: number;
   canvasX: number | null;
   canvasY: number | null;
+  modifyByRole?: string | null;
   actions?: { id: string; hook: string; type: string; config: string; position: number }[];
 }): WorkflowStatusDTO {
   return {
@@ -148,6 +157,7 @@ function toStatusDTO(row: {
     position: row.position,
     canvasX: row.canvasX,
     canvasY: row.canvasY,
+    modifyByRole: parseModifyByRole(row.modifyByRole ?? null),
     actions: (row.actions ?? [])
       .slice()
       .sort((a, b) => a.position - b.position)
@@ -163,6 +173,7 @@ function toTransitionDTO(row: {
   toStatusId: string;
   canvasX: number | null;
   canvasY: number | null;
+  moveRoleIds?: string | null;
   actions?: { id: string; hook: string; type: string; config: string; position: number }[];
 }): WorkflowTransitionDTO {
   return {
@@ -173,6 +184,7 @@ function toTransitionDTO(row: {
     toStatusId: row.toStatusId,
     canvasX: row.canvasX,
     canvasY: row.canvasY,
+    moveRoleIds: parseMoveRoleIds(row.moveRoleIds ?? null),
     actions: (row.actions ?? [])
       .slice()
       .sort((a, b) => a.position - b.position)
@@ -417,6 +429,8 @@ export async function createWorkflow(input: {
         layoutId: layout?.id ?? null,
       },
     });
+    const actor = await requireUser();
+    await seedWorkflowRolesIfMissing(created.id, { creatorUserId: actor.id });
 
     revalidateWorkflow(entityType, projectId);
     return toWorkflowDTO(created, layout ?? undefined, {
@@ -436,6 +450,7 @@ export async function updateWorkflow(
 ): Promise<ActionResult<WorkflowDTO>> {
   return wfAction("update", async () => {
     const existing = await requireDealWorkflow(id);
+    await requireFlowAction(id, "editBlueprint");
     const data: {
       name?: string;
       layoutId?: string | null;
@@ -562,6 +577,7 @@ export async function deleteWorkflow(
 ): Promise<ActionResult<{ id: string }>> {
   return wfAction("delete", async () => {
     const existing = await requireDealWorkflow(id);
+    await requireFlowAction(id, "editBlueprint");
     const counts = await prisma.workflow.findUnique({
       where: { id },
       select: {
@@ -601,6 +617,7 @@ export async function createWorkflowStatus(input: {
 }): Promise<ActionResult<WorkflowStatusDTO>> {
   return wfAction("status-create", async () => {
     const workflow = await requireDealWorkflow(input.workflowId);
+    await requireFlowAction(input.workflowId, "editBlueprint");
     const name = cleanName(input.name, "Status name");
 
     const clash = await prisma.workflowStatus.findFirst({
@@ -656,6 +673,7 @@ export async function updateWorkflowStatus(
     });
     if (!existing) throw new Error("That status no longer exists");
     await requireDealWorkflow(existing.workflowId);
+    await requireFlowAction(existing.workflowId, "editBlueprint");
 
     const data: {
       name?: string;
@@ -705,6 +723,7 @@ export async function deleteWorkflowStatus(
     });
     if (!existing) throw new Error("That status no longer exists");
     await requireDealWorkflow(existing.workflowId);
+    await requireFlowAction(existing.workflowId, "editBlueprint");
 
     await prisma.workflowStatus.delete({ where: { id } });
     revalidateWorkflow(existing.workflow.entityType, existing.workflow.projectId);
@@ -725,6 +744,7 @@ export async function reorderWorkflowStatuses(
 ): Promise<ActionResult<WorkflowStatusDTO[]>> {
   return wfAction("status-reorder", async () => {
     const workflow = await requireDealWorkflow(workflowId);
+    await requireFlowAction(workflowId, "editBlueprint");
     const existing = await prisma.workflowStatus.findMany({
       where: { workflowId },
       select: { id: true },
@@ -762,6 +782,7 @@ export async function createWorkflowTransition(input: {
 }): Promise<ActionResult<WorkflowTransitionDTO>> {
   return wfAction("transition-create", async () => {
     const workflow = await requireDealWorkflow(input.workflowId);
+    await requireFlowAction(input.workflowId, "editBlueprint");
     const name = cleanName(input.name, "Transition name");
 
     if (input.fromStatusId === input.toStatusId) {
@@ -822,6 +843,7 @@ export async function updateWorkflowTransition(
     });
     if (!existing) throw new Error("That transition no longer exists");
     await requireDealWorkflow(existing.workflowId);
+    await requireFlowAction(existing.workflowId, "editBlueprint");
 
     const data: {
       name?: string;
@@ -860,6 +882,7 @@ export async function deleteWorkflowTransition(
     });
     if (!existing) throw new Error("That transition no longer exists");
     await requireDealWorkflow(existing.workflowId);
+    await requireFlowAction(existing.workflowId, "editBlueprint");
     await prisma.workflowTransition.delete({ where: { id } });
     revalidateWorkflow(existing.workflow.entityType, existing.workflow.projectId);
     return { id };
@@ -890,6 +913,7 @@ export async function addWorkflowAction(input: {
       });
       if (!transition) throw new Error("That transition no longer exists");
       await requireDealWorkflow(transition.workflowId);
+      await requireFlowAction(transition.workflowId, "editBlueprint");
       entityType = transition.workflow.entityType;
       projectId = transition.workflow.projectId;
     } else if (input.statusId) {
@@ -902,6 +926,7 @@ export async function addWorkflowAction(input: {
       });
       if (!status) throw new Error("That status no longer exists");
       await requireDealWorkflow(status.workflowId);
+      await requireFlowAction(status.workflowId, "editBlueprint");
       entityType = status.workflow.entityType;
       projectId = status.workflow.projectId;
     } else {
@@ -956,7 +981,10 @@ export async function updateWorkflowAction(
     });
     if (!existing) throw new Error("That action no longer exists");
     const parent = existing.transition ?? existing.status;
-    if (parent) await requireDealWorkflow(parent.workflowId);
+    if (parent) {
+      await requireDealWorkflow(parent.workflowId);
+      await requireFlowAction(parent.workflowId, "editBlueprint");
+    }
 
     const type = input.type
       ? isWorkflowActionType(input.type)
@@ -1017,6 +1045,7 @@ export async function saveWorkflowBlueprint(
 > {
   return wfAction("blueprint-save", async () => {
     const workflow = await requireDealWorkflow(workflowId);
+    await requireFlowAction(workflowId, "editBlueprint");
     const names = draft.statuses.map((s) => cleanName(s.name, "Status name"));
     const unique = new Set(names.map((n) => n.toLowerCase()));
     if (unique.size !== names.length) {
@@ -1080,6 +1109,7 @@ export async function saveWorkflowBlueprint(
               position: status.position || positionBetween(null, null),
               canvasX: status.canvasX,
               canvasY: status.canvasY,
+              modifyByRole: stringifyModifyByRole(status.modifyByRole ?? null),
             },
           });
           idMap[status.id] = created.id;
@@ -1093,6 +1123,7 @@ export async function saveWorkflowBlueprint(
               position: status.position,
               canvasX: status.canvasX,
               canvasY: status.canvasY,
+              modifyByRole: stringifyModifyByRole(status.modifyByRole ?? null),
             },
           });
         }
@@ -1114,6 +1145,7 @@ export async function saveWorkflowBlueprint(
               toStatusId,
               canvasX: transition.canvasX,
               canvasY: transition.canvasY,
+              moveRoleIds: stringifyMoveRoleIds(transition.moveRoleIds ?? null),
             },
           });
           idMap[transition.id] = created.id;
@@ -1126,6 +1158,7 @@ export async function saveWorkflowBlueprint(
               toStatusId,
               canvasX: transition.canvasX,
               canvasY: transition.canvasY,
+              moveRoleIds: stringifyMoveRoleIds(transition.moveRoleIds ?? null),
             },
           });
         }
@@ -1226,7 +1259,10 @@ export async function deleteWorkflowAction(
     });
     if (!existing) throw new Error("That action no longer exists");
     const parent = existing.transition ?? existing.status;
-    if (parent) await requireDealWorkflow(parent.workflowId);
+    if (parent) {
+      await requireDealWorkflow(parent.workflowId);
+      await requireFlowAction(parent.workflowId, "editBlueprint");
+    }
     await prisma.workflowAction.delete({ where: { id } });
     const entityType =
       existing.transition?.workflow.entityType ??

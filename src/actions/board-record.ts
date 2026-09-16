@@ -10,6 +10,17 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
+import {
+  getFlowPermissions,
+  requireFlowAction,
+  requireFlowTransition,
+  seedWorkflowRolesIfMissing,
+} from "@/lib/workflow-access";
+import {
+  canModifyNative,
+  pickWritableFieldValues,
+  type WorkflowPermissions,
+} from "@/lib/workflow-permissions";
 import { getModule, projectBoardPaths } from "@/lib/modules/registry";
 import { customFieldIsFilled } from "@/lib/fields/validate";
 import {
@@ -106,6 +117,7 @@ export type ProjectBoardDTO = {
   transitions: WorkflowTransitionDTO[];
   fields: CustomFieldDTO[];
   users: WorkflowUserOption[];
+  permissions: WorkflowPermissions;
 };
 
 type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -217,7 +229,7 @@ async function seedTitleField(layoutId: string) {
 }
 
 export async function ensureProjectBoard(projectId: string) {
-  await requireProjectMember(projectId);
+  const { user } = await requireProjectMember(projectId);
 
   let layout = await prisma.formLayout.findFirst({
     where: { entityType: "board", projectId },
@@ -253,6 +265,7 @@ export async function ensureProjectBoard(projectId: string) {
       },
       select: { id: true, layoutId: true },
     });
+    await seedWorkflowRolesIfMissing(workflow.id, { creatorUserId: user.id });
   } else if (!workflow.layoutId) {
     workflow = await prisma.workflow.update({
       where: { id: workflow.id },
@@ -260,6 +273,7 @@ export async function ensureProjectBoard(projectId: string) {
       select: { id: true, layoutId: true },
     });
   }
+  await seedWorkflowRolesIfMissing(workflow.id, { existing: true });
 
   const statusCount = await prisma.workflowStatus.count({
     where: { workflowId: workflow.id },
@@ -289,7 +303,7 @@ export async function ensureProjectBoard(projectId: string) {
           workflowId: workflow.id,
           name: "Done",
           color: "emerald",
-          kind: "open",
+          kind: "closed",
           position: 3072,
           canvasX: 560,
           canvasY: 80,
@@ -465,12 +479,13 @@ export async function getProjectBoard(
 
   const layoutId =
     flows.find((flow) => flow.id === selected)?.layoutId ?? ensured.layoutId;
-  const [stages, cards, transitions, users, fields] = await Promise.all([
+  const [stages, cards, transitions, users, fields, permissions] = await Promise.all([
     listDealStages(selected),
     listBoardRecords(projectId, selected),
     listWorkflowTransitions(selected),
     listWorkflowUsers(projectId),
     listCustomFields("board", layoutId, projectId),
+    getFlowPermissions(selected),
   ]);
 
   return {
@@ -482,6 +497,7 @@ export async function getProjectBoard(
     transitions,
     fields,
     users,
+    permissions,
   };
 }
 
@@ -535,6 +551,7 @@ export async function createBoardRecord(
     const { user } = await requireProjectMember(projectId);
     await ensureProjectBoard(projectId);
     const data = await cleanInput(projectId, input, "create");
+    await requireFlowAction(data.flowId, "createRecord");
     const created = await prisma.$transaction(async (tx) => {
       const recordNumber = await takeNextRecordNumber(tx, "board", projectId);
       return tx.boardRecord.create({
@@ -613,12 +630,34 @@ export async function updateBoardRecord(
     const { user } = await requireProjectMember(projectId);
     const before = await getBoardRecord(projectId, id);
     if (!before) throw new Error("That card no longer exists");
+    const context = await requireFlowAction(before.flowId, "editRecord");
     const data = await cleanInput(projectId, input, "edit");
+    const titleField = data.layoutFields.find((field) => field.binding === "title");
+    const nextTitle = canModifyNative(
+      context.permissions,
+      before.stageId,
+      "title",
+      titleField?.id,
+    )
+      ? data.title
+      : before.title;
+    const nextAssigneeId = canModifyNative(
+      context.permissions,
+      before.stageId,
+      "assignee",
+    )
+      ? data.assigneeId
+      : undefined;
+    const writableValues = pickWritableFieldValues(
+      context.permissions,
+      before.stageId,
+      data.fieldValues,
+    );
     const updated = await prisma.boardRecord.update({
       where: { id },
       data: {
-        title: data.title,
-        ...(data.assigneeId !== undefined ? { assigneeId: data.assigneeId } : {}),
+        title: nextTitle,
+        ...(nextAssigneeId !== undefined ? { assigneeId: nextAssigneeId } : {}),
       },
       include: {
         createdBy: { select: PERSON_SELECT },
@@ -628,9 +667,10 @@ export async function updateBoardRecord(
     await saveCustomFieldValues({
       entityType: "board",
       recordId: id,
-      values: data.fieldValues,
+      values: writableValues,
       layoutId: data.layoutId,
     });
+    const afterValues = { ...before.fieldValues, ...writableValues };
     await logRecordChanges({
       entityType: "board",
       recordId: id,
@@ -641,14 +681,14 @@ export async function updateBoardRecord(
         fieldValues: before.fieldValues,
       },
       after: {
-        title: data.title,
+        title: nextTitle,
         assigneeId: updated.assignee?.id ?? null,
-        fieldValues: data.fieldValues,
+        fieldValues: afterValues,
       },
       fields: data.layoutFields,
     });
     revalidateBoard(projectId);
-    return toDTO(updated, data.fieldValues);
+    return toDTO(updated, afterValues);
   });
 }
 
@@ -660,9 +700,10 @@ export async function deleteBoardRecord(
     await requireProjectMember(projectId);
     const existing = await prisma.boardRecord.findFirst({
       where: { id, projectId },
-      select: { id: true },
+      select: { id: true, workflowId: true },
     });
     if (!existing) throw new Error("That card no longer exists");
+    await requireFlowAction(existing.workflowId, "deleteRecord");
     await deleteRecordHistory("board", id);
     await prisma.recordComment.deleteMany({
       where: { entityType: "board", recordId: id },
@@ -715,6 +756,7 @@ export async function moveBoardRecordToStage(
   try {
     const { user } = await requireProjectMember(projectId);
     const loaded = await boardSnapshot(projectId, recordId);
+    await requireFlowTransition(loaded.workflowId, loaded.statusId, stageId);
 
     if (stageId) {
       const target = await prisma.workflowStatus.findUnique({

@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { canAccessContacts } from "@/lib/contacts-access";
 import { getWorkflowSettings, listWorkflowUsers, listWorkflows } from "@/actions/workflow";
+import { listModuleRoles } from "@/actions/workflow-role";
 import {
   getAllLayoutCatalogs,
   getCustomFieldCatalog,
@@ -13,6 +14,7 @@ import { DealSettingsHub } from "@/app/(dashboard)/dashboard/deals/settings/deal
 import { DealSettingsClient } from "@/app/(dashboard)/dashboard/deals/settings/deal-settings-client";
 import { DealFlowsClient } from "@/app/(dashboard)/dashboard/deals/settings/flows/deal-flows-client";
 import { DealLayoutEditorClient } from "@/app/(dashboard)/dashboard/deals/settings/layout/[layoutId]/deal-layout-editor-client";
+import { WorkflowRolesManager } from "@/components/workflow/workflow-roles-manager";
 
 async function requireDirectory(entityType: DirectoryEntity) {
   const user = await requireUser();
@@ -72,18 +74,36 @@ export async function ModuleSettingsBlueprintPage({
   flow?: string;
 }) {
   const mod = await requireDirectory(entityType);
-  const [settings, catalogs, users] = await Promise.all([
+  const [settings, catalogs, users, roles] = await Promise.all([
     getWorkflowSettings(entityType),
     getAllLayoutCatalogs(entityType),
     listWorkflowUsers(),
+    listModuleRoles(entityType),
   ]);
   return (
     <DealSettingsClient
       initial={settings}
       catalogs={catalogs}
       users={users}
+      roles={roles}
       initialFlowId={flow}
       basePath={mod.settingsPath}
+    />
+  );
+}
+
+export async function ModuleSettingsRolesPage({
+  entityType,
+}: {
+  entityType: DirectoryEntity;
+}) {
+  const mod = await requireDirectory(entityType);
+  return (
+    <WorkflowRolesManager
+      entityType={entityType}
+      backHref={mod.settingsPath}
+      backLabel="Back to settings"
+      title={`${mod.label} roles`}
     />
   );
 }

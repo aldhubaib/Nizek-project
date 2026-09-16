@@ -18,23 +18,38 @@ import {
 } from "@/lib/workflow/actions";
 import {
   WORKFLOW_STATUS_KINDS,
+  statusKindsForEntity,
   type WorkflowHook,
   type WorkflowStatusKind,
 } from "@/lib/workflow/types";
 import type { CustomFieldDTO } from "@/actions/custom-field";
+import type { ModuleRoleOption } from "@/actions/workflow-role";
 import type {
   WorkflowActionDTO,
   WorkflowStatusDTO,
   WorkflowTransitionDTO,
   WorkflowUserOption,
 } from "@/actions/workflow";
+import { ALL_FIELDS, type ModifyByRoleMap } from "@/lib/workflow-permissions";
+
+function kindOptions(
+  entityType: string,
+  current: WorkflowStatusKind,
+): readonly WorkflowStatusKind[] {
+  const kinds = statusKindsForEntity(entityType);
+  if ((kinds as readonly string[]).includes(current)) return kinds;
+  return [...kinds, current];
+}
 
 export function ActionInspector({
   status,
   outgoing,
   fields,
   users,
+  roles,
+  entityType = "deal",
   onUpdateStatus,
+  onUpdateTransition,
   onDeleteStatus,
   onDeleteTransition,
   onAddAction,
@@ -45,9 +60,20 @@ export function ActionInspector({
   outgoing: { transition: WorkflowTransitionDTO; toName: string }[];
   fields: CustomFieldDTO[];
   users: WorkflowUserOption[];
+  roles: ModuleRoleOption[];
+  entityType?: string;
   onUpdateStatus: (
     id: string,
-    input: { name?: string; color?: string; kind?: WorkflowStatusKind },
+    input: {
+      name?: string;
+      color?: string;
+      kind?: WorkflowStatusKind;
+      modifyByRole?: ModifyByRoleMap | null;
+    },
+  ) => void;
+  onUpdateTransition: (
+    id: string,
+    input: { moveRoleIds?: string[] | null },
   ) => void;
   onDeleteStatus: (id: string) => void;
   onDeleteTransition: (id: string) => void;
@@ -104,13 +130,26 @@ export function ActionInspector({
           }}
           className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-s"
         >
-          {WORKFLOW_STATUS_KINDS.map((kind) => (
+          {kindOptions(entityType, status.kind).map((kind) => (
             <option key={kind} value={kind}>
               {kind}
             </option>
           ))}
         </select>
+        <p className="text-xs text-muted-foreground">
+          {entityType === "board"
+            ? "Used later in task reports. Open is still in play; closed is finished."
+            : "Used later in pipeline reports. Open is still in play; won and lost are outcomes."}
+        </p>
       </div>
+      <WhoCanEdit
+        status={status}
+        roles={roles}
+        fields={fields}
+        onChange={(modifyByRole) =>
+          onUpdateStatus(status.id, { modifyByRole })
+        }
+      />
       <div className="space-y-2">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           When a task leaves or arrives
@@ -151,17 +190,17 @@ export function ActionInspector({
         />
       </div>
       {outgoing.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Moves from here
           </p>
-          <div className="flex flex-wrap gap-2">
-            {outgoing.map(({ transition, toName }) => (
-              <span
-                key={transition.id}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs"
-              >
-                {toName}
+          {outgoing.map(({ transition, toName }) => (
+            <div
+              key={transition.id}
+              className="space-y-2 rounded-md border border-border/70 p-2"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-s font-medium">{toName}</span>
                 <button
                   type="button"
                   className="text-muted-foreground hover:text-destructive"
@@ -174,9 +213,16 @@ export function ActionInspector({
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>
-              </span>
-            ))}
-          </div>
+              </div>
+              <WhoCanMove
+                roles={roles}
+                moveRoleIds={transition.moveRoleIds ?? null}
+                onChange={(moveRoleIds) =>
+                  onUpdateTransition(transition.id, { moveRoleIds })
+                }
+              />
+            </div>
+          ))}
         </div>
       )}
       <Button
@@ -415,6 +461,160 @@ function ActionRow({
           {action.type === "associate_contacts" ? "contacts" : "companies"}.
         </p>
       )}
+    </div>
+  );
+}
+
+function WhoCanEdit({
+  status,
+  roles,
+  fields,
+  onChange,
+}: {
+  status: WorkflowStatusDTO;
+  roles: ModuleRoleOption[];
+  fields: CustomFieldDTO[];
+  onChange: (next: ModifyByRoleMap | null) => void;
+}) {
+  const map = status.modifyByRole;
+  const restricted = map !== null;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Who can edit here
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Turn a role on to say which fields they may change while a card
+        is in {status.name}. Leave every role off and anyone on the
+        project can still edit here.
+      </p>
+      {roles.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Add board roles from the ⋯ menu first.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {roles.map((role) => {
+            const current = map?.[role.id];
+            const enabled = current !== undefined;
+            const all = current === ALL_FIELDS;
+            return (
+              <div
+                key={role.id}
+                className="rounded-md border border-border/70 p-2"
+              >
+                <label className="flex items-center gap-2 text-s">
+                  <input
+                    type="checkbox"
+                    checked={enabled}
+                    onChange={(event) => {
+                      if (!event.target.checked) {
+                        if (!map) {
+                          onChange(null);
+                          return;
+                        }
+                        const next = { ...map };
+                        delete next[role.id];
+                        onChange(Object.keys(next).length === 0 ? null : next);
+                        return;
+                      }
+                      onChange({ ...(map ?? {}), [role.id]: ALL_FIELDS });
+                    }}
+                  />
+                  <span className="flex-1">{role.name}</span>
+                </label>
+                {enabled ? (
+                  <div className="mt-2 space-y-1.5 ps-6">
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={all}
+                        onChange={(event) => {
+                          const next = { ...(map ?? {}) };
+                          next[role.id] = event.target.checked
+                            ? ALL_FIELDS
+                            : [];
+                          onChange(next);
+                        }}
+                      />
+                      All fields
+                    </label>
+                    {!all ? (
+                      <FieldChecks
+                        selected={Array.isArray(current) ? current : []}
+                        catalog={fields.map((field) => ({
+                          id: field.id,
+                          label: field.label,
+                        }))}
+                        onChange={(next) =>
+                          onChange({ ...(map ?? {}), [role.id]: next })
+                        }
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+          {restricted ? (
+            <p className="text-xs text-muted-foreground">
+              Roles that are not listed cannot edit a card in this column.
+            </p>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WhoCanMove({
+  roles,
+  moveRoleIds,
+  onChange,
+}: {
+  roles: ModuleRoleOption[];
+  moveRoleIds: string[] | null;
+  onChange: (next: string[] | null) => void;
+}) {
+  const restricted = moveRoleIds !== null;
+  const selected = new Set(moveRoleIds ?? []);
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs text-muted-foreground">
+        Who can take this move
+      </p>
+      {roles.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Add board roles from the ⋯ menu first.
+        </p>
+      ) : (
+        roles.map((role) => (
+          <label key={role.id} className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={restricted && selected.has(role.id)}
+              onChange={() => {
+                if (!restricted) {
+                  onChange([role.id]);
+                  return;
+                }
+                const next = selected.has(role.id)
+                  ? moveRoleIds!.filter((id) => id !== role.id)
+                  : [...moveRoleIds!, role.id];
+                onChange(next.length === 0 ? null : next);
+              }}
+            />
+            {role.name}
+          </label>
+        ))
+      )}
+      {!restricted ? (
+        <p className="text-xs text-muted-foreground">
+          Anyone on the project can take this arrow.
+        </p>
+      ) : null}
     </div>
   );
 }

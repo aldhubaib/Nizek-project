@@ -21,6 +21,7 @@ import {
   type WorkflowUserOption,
 } from "@/actions/workflow";
 import type { CustomFieldCatalogDTO, CustomFieldDTO } from "@/actions/custom-field";
+import type { ModuleRoleOption } from "@/actions/workflow-role";
 import { cleanActionConfig, isWorkflowActionType } from "@/lib/workflow/actions";
 import type { WorkflowActionDef, WorkflowHook } from "@/lib/workflow/types";
 import { DEFAULT_BOARD_COLOR } from "@/lib/board-palette";
@@ -29,12 +30,14 @@ export function DealSettingsClient({
   initial,
   catalogs,
   users,
+  roles = [],
   initialFlowId,
   basePath = "/dashboard/deals/settings",
 }: {
   initial: WorkflowSettingsDTO;
   catalogs: Record<string, CustomFieldCatalogDTO>;
   users: WorkflowUserOption[];
+  roles?: ModuleRoleOption[];
   initialFlowId?: string;
   basePath?: string;
 }) {
@@ -72,6 +75,10 @@ export function DealSettingsClient({
     ...catalog.sections.flatMap((s) => s.fields),
   ];
 
+  const flowRoles = useMemo(
+    () => roles.filter((role) => role.workflowId === flow?.id),
+    [roles, flow?.id],
+  );
   const selectedStatus =
     statuses.find((s) => s.id === selectedStatusId) ?? null;
   const outgoing = selectedStatus
@@ -118,6 +125,7 @@ export function DealSettingsClient({
       canvasX: statuses.length * 280,
       canvasY: 80,
       actions: [],
+      modifyByRole: null,
     };
     edit((prev) => ({
       ...prev,
@@ -367,6 +375,7 @@ export function DealSettingsClient({
                         canvasX,
                         canvasY,
                         actions: [],
+                        moveRoleIds: null,
                       },
                     ],
                   }));
@@ -412,11 +421,21 @@ export function DealSettingsClient({
                 outgoing={outgoing}
                 fields={fields}
                 users={users}
+                roles={flowRoles}
+                entityType={flow.entityType}
                 onUpdateStatus={(id, input) =>
                   edit((prev) => ({
                     ...prev,
                     statuses: prev.statuses.map((s) =>
                       s.id === id ? { ...s, ...input } : s,
+                    ),
+                  }))
+                }
+                onUpdateTransition={(id, input) =>
+                  edit((prev) => ({
+                    ...prev,
+                    transitions: prev.transitions.map((t) =>
+                      t.id === id ? { ...t, ...input } : t,
                     ),
                   }))
                 }
