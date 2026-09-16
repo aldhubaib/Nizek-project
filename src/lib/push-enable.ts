@@ -297,7 +297,9 @@ export function describePushFailure(
             ? [
                 "Open the iPhone Settings app.",
                 "Tap Notifications, then find Nizek in the list.",
-                "Turn on \"Allow Notifications\", then come back and check again.",
+                "Turn on \"Allow Notifications\" (if it's already on, turn it off and on again).",
+                "Fully close Nizek: swipe up to the app switcher and swipe it away. iOS only applies the change after a restart.",
+                "Reopen Nizek from your home screen and tap the button below.",
               ]
             : platform === "android"
               ? [
