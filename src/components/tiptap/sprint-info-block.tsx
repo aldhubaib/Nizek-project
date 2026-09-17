@@ -7,13 +7,17 @@ import { CheckCircle2, MoreVertical, Pencil, Play } from "lucide-react";
 import { completeSprint, getSprintPlanningTasks, getSprintReviewTasks, startSprint, updateSprint } from "@/actions/sprint";
 import { Button } from "@/components/ui/button";
 import { SprintDocHeaderLeft } from "@/components/project/note-slide-over";
+import { SprintMissingCounter } from "@/components/project/sprint-doc-dashboard";
 import { StartSprintDialog } from "@/components/project/start-sprint-dialog";
 import { ConfirmCompleteSprintDialog } from "@/components/project/confirm-complete-sprint-dialog";
 import { useKanbanStore } from "@/store/kanban";
 import {
   formatPlanningDate,
   normalizeSprintPlanningInfo,
+  sprintEndGaps,
   sprintStartBlockedReason,
+  sprintStartGaps,
+  SPRINT_DATE_RANGE_ERROR,
   type SprintPlanningInfo,
   type SprintPlanningTask,
 } from "@/lib/sprint-planning-doc";
@@ -30,7 +34,7 @@ import { useChannel } from "@/components/realtime/hooks";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { projectChannel } from "@/lib/channels";
 
-const DATE_RANGE_ERROR = "End date must be on or after the start date";
+const DATE_RANGE_ERROR = SPRINT_DATE_RANGE_ERROR;
 
 const cellInputClass =
   "w-full bg-transparent text-s text-foreground outline-none placeholder:text-muted-foreground/40 read-only:cursor-default disabled:cursor-default disabled:opacity-70";
@@ -60,9 +64,13 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
   const [ending, setEnding] = useState(false);
   const [endReasons, setEndReasons] = useState<Record<string, string>>({});
   const [tasks, setTasks] = useState<SprintPlanningTask[]>([]);
-  const [docIncomplete, setDocIncomplete] = useState(false);
-  const [missingEstimates, setMissingEstimates] = useState(false);
-  const [missingAssignees, setMissingAssignees] = useState(false);
+  const [fieldGaps, setFieldGaps] = useState({
+    estimates: 0,
+    assignees: 0,
+    decisions: 0,
+    risks: 0,
+    incompleteReasons: 0,
+  });
   const [activeSprintName, setActiveSprintName] = useState<string | null>(null);
   const tasksRef = useRef<SprintPlanningTask[]>([]);
   const [, startTransition] = useTransition();
@@ -138,9 +146,11 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
 
   useEffect(() => {
     function scan() {
-      let missing = false;
-      let missingEst = false;
-      let missingAsg = false;
+      let estimates = 0;
+      let assignees = 0;
+      let decisions = 0;
+      let risks = 0;
+      let incompleteReasons = 0;
       const review = showOutcome;
 
       // Index the document by task, then walk the sprint. Walking the document
@@ -162,7 +172,7 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
         if (review) {
           const variant = attrs?.variant ?? (live.stage === "DONE" ? "completed" : "incomplete");
           if (variant === "incomplete" && !String(attrs?.incompleteReason ?? "").trim()) {
-            missing = true;
+            incompleteReasons += 1;
           }
           continue;
         }
@@ -170,14 +180,13 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
         // what has been typed since the last save, so either counts as filled.
         const decision = String(attrs?.decision ?? live.decision ?? "").trim();
         const risk = String(attrs?.risk ?? live.risk ?? "").trim();
-        if (!decision || !risk) missing = true;
-        if (!live.estimatedMinutes) missingEst = true;
-        if (!live.assignee) missingAsg = true;
+        if (!decision) decisions += 1;
+        if (!risk) risks += 1;
+        if (!live.estimatedMinutes) estimates += 1;
+        if (!live.assignee) assignees += 1;
       }
 
-      setDocIncomplete(missing);
-      setMissingEstimates(missingEst);
-      setMissingAssignees(missingAsg);
+      setFieldGaps({ estimates, assignees, decisions, risks, incompleteReasons });
     }
     scan();
     editor.on("update", scan);
@@ -220,30 +229,37 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
   const endEmpty = !info.endIso;
   const workingDaysEmpty =
     info.workingDays === "" || info.workingDays == null || Number(info.workingDays) < 1;
-  const infoIncomplete = documentDateEmpty || startEmpty || endEmpty || workingDaysEmpty;
+  const emptyInfoFields = [
+    documentDateEmpty,
+    startEmpty,
+    endEmpty,
+    workingDaysEmpty,
+  ].filter(Boolean).length;
+  const infoIncomplete = emptyInfoFields > 0;
   const datesInvalid = Boolean(info.startIso && info.endIso && info.endIso < info.startIso);
-  const startBlockedReason = !canStart
-    ? null
-    : datesInvalid
-      ? DATE_RANGE_ERROR
-      : sprintStartBlockedReason({
-          activeSprintName,
-          infoIncomplete,
-          missingEstimates,
-          missingAssignees,
-          docIncomplete,
-        });
+  const startGaps = canStart
+    ? sprintStartGaps({
+        activeSprintName,
+        datesInvalid,
+        emptyInfoFields,
+        missingEstimates: fieldGaps.estimates,
+        missingAssignees: fieldGaps.assignees,
+        missingDecisions: fieldGaps.decisions,
+        missingRisks: fieldGaps.risks,
+      })
+    : { total: 0, items: [], reason: null };
+  const startBlockedReason = startGaps.reason;
   const startBlocked = Boolean(startBlockedReason);
   const startButtonError = canStart
     ? (error ?? (datesInvalid ? DATE_RANGE_ERROR : null))
     : null;
-  const endBlockedReason = !canEnd
-    ? null
-    : infoIncomplete || reviewDateEmpty
-      ? "Fill in every Sprint Information field."
-      : docIncomplete
-        ? "Add a reason for every incomplete item."
-        : null;
+  const endGaps = canEnd
+    ? sprintEndGaps({
+        emptyInfoFields: emptyInfoFields + (reviewDateEmpty ? 1 : 0),
+        missingIncompleteReasons: fieldGaps.incompleteReasons,
+      })
+    : { total: 0, items: [], reason: null };
+  const endBlockedReason = endGaps.reason;
   const endBlocked = Boolean(endBlockedReason);
 
   function persistDates(startIso: string, endIso: string) {
@@ -474,7 +490,9 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
       {canStart ? (
         <SprintDocHeaderLeft>
           <div className="flex items-center gap-2">
-            {startButtonError ? (
+            {startGaps.total > 0 || startGaps.reason ? (
+              <SprintMissingCounter gaps={startGaps} compact />
+            ) : startButtonError ? (
               <p className="max-w-[16rem] text-end text-xs leading-tight text-destructive">
                 {startButtonError}
               </p>
@@ -495,16 +513,25 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
       ) : null}
       {canEnd ? (
         <SprintDocHeaderLeft>
-          <Button
-            type="button"
-            size="sm"
-            onClick={requestEnd}
-            disabled={ending || endBlocked}
-            title={endBlockedReason ?? "End sprint"}
-          >
-            <CheckCircle2 className="size-3.5" />
-            {ending ? "Ending…" : "End sprint"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {endGaps.total > 0 || endGaps.reason ? (
+              <SprintMissingCounter gaps={endGaps} compact />
+            ) : error ? (
+              <p className="max-w-[16rem] text-end text-xs leading-tight text-destructive">
+                {error}
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              onClick={requestEnd}
+              disabled={ending || endBlocked}
+              title={endBlockedReason ?? "End sprint"}
+            >
+              <CheckCircle2 className="size-3.5" />
+              {ending ? "Ending…" : "End sprint"}
+            </Button>
+          </div>
         </SprintDocHeaderLeft>
       ) : null}
       {canEditDates ? (

@@ -536,6 +536,174 @@ export function sprintPlanningTasksMissingRequired(html: string): boolean {
   return tags.some((tag) => attrMissing(tag, "decision") || attrMissing(tag, "risk"));
 }
 
+export const SPRINT_DATE_RANGE_ERROR = "End date must be on or after the start date";
+
+export type SprintGapItem = {
+  key: string;
+  count: number;
+  label: string;
+};
+
+export type SprintGaps = {
+  /** How many required fields still need a value. Zero when the blocker is not missing data. */
+  total: number;
+  items: SprintGapItem[];
+  /** Why start/end is unavailable. Null only when nothing is blocking. */
+  reason: string | null;
+};
+
+function pluralCount(count: number, one: string, many: string) {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+export function emptySprintInfoFieldCount(
+  info: Partial<SprintPlanningInfo> | null | undefined,
+  opts?: { includeReviewDate?: boolean },
+): number {
+  if (!info) return 0;
+  const empty = [
+    !info.documentDateIso,
+    !info.startIso,
+    !info.endIso,
+    info.workingDays === "" || info.workingDays == null || Number(info.workingDays) < 1,
+  ];
+  if (opts?.includeReviewDate) empty.push(!info.reviewDateIso);
+  return empty.filter(Boolean).length;
+}
+
+export function countSprintTaskFieldGaps(
+  tasks: {
+    estimatedMinutes?: number | null;
+    assignee?: unknown;
+    decision?: string;
+    risk?: string;
+  }[],
+) {
+  let estimates = 0;
+  let assignees = 0;
+  let decisions = 0;
+  let risks = 0;
+  for (const task of tasks) {
+    if (!task.estimatedMinutes) estimates += 1;
+    if (!task.assignee) assignees += 1;
+    if (!String(task.decision ?? "").trim()) decisions += 1;
+    if (!String(task.risk ?? "").trim()) risks += 1;
+  }
+  return { estimates, assignees, decisions, risks };
+}
+
+function gapItemsFromCounts(opts: {
+  emptyInfoFields?: number;
+  missingEstimates?: number;
+  missingAssignees?: number;
+  missingDecisions?: number;
+  missingRisks?: number;
+  missingIncompleteReasons?: number;
+}): SprintGapItem[] {
+  const items: SprintGapItem[] = [];
+  if ((opts.emptyInfoFields ?? 0) > 0) {
+    items.push({
+      key: "info",
+      count: opts.emptyInfoFields!,
+      label: pluralCount(opts.emptyInfoFields!, "sprint information field", "sprint information fields"),
+    });
+  }
+  if ((opts.missingEstimates ?? 0) > 0) {
+    items.push({
+      key: "estimate",
+      count: opts.missingEstimates!,
+      label: pluralCount(opts.missingEstimates!, "estimate", "estimates"),
+    });
+  }
+  if ((opts.missingAssignees ?? 0) > 0) {
+    items.push({
+      key: "assignee",
+      count: opts.missingAssignees!,
+      label: pluralCount(opts.missingAssignees!, "assignee", "assignees"),
+    });
+  }
+  if ((opts.missingDecisions ?? 0) > 0) {
+    items.push({
+      key: "decision",
+      count: opts.missingDecisions!,
+      label: pluralCount(opts.missingDecisions!, "decision", "decisions"),
+    });
+  }
+  if ((opts.missingRisks ?? 0) > 0) {
+    items.push({
+      key: "risk",
+      count: opts.missingRisks!,
+      label: pluralCount(opts.missingRisks!, "risk", "risks"),
+    });
+  }
+  if ((opts.missingIncompleteReasons ?? 0) > 0) {
+    items.push({
+      key: "reason",
+      count: opts.missingIncompleteReasons!,
+      label: pluralCount(opts.missingIncompleteReasons!, "incomplete reason", "incomplete reasons"),
+    });
+  }
+  return items;
+}
+
+function firstGapReason(items: SprintGapItem[], fallback: string): string {
+  const first = items[0];
+  if (!first) return fallback;
+  if (first.key === "info") return "Fill in every Sprint Information field.";
+  if (first.key === "estimate") return "Add an estimate to every task.";
+  if (first.key === "assignee") return "Assign every task.";
+  if (first.key === "decision" || first.key === "risk") {
+    return "Fill in Decision and Risk for every task.";
+  }
+  if (first.key === "reason") return "Add a reason for every incomplete item.";
+  return fallback;
+}
+
+/**
+ * Everything that keeps Start sprint inactive, with a count per missing field
+ * so the document can say what to fill rather than only that the button is off.
+ */
+export function sprintStartGaps(opts: {
+  activeSprintName?: string | null;
+  datesInvalid?: boolean;
+  emptyInfoFields: number;
+  missingEstimates: number;
+  missingAssignees: number;
+  missingDecisions: number;
+  missingRisks: number;
+}): SprintGaps {
+  if (opts.activeSprintName) {
+    return {
+      total: 0,
+      items: [],
+      reason: `Finish "${opts.activeSprintName}" before starting this sprint.`,
+    };
+  }
+  if (opts.datesInvalid) {
+    return { total: 0, items: [], reason: SPRINT_DATE_RANGE_ERROR };
+  }
+  const items = gapItemsFromCounts(opts);
+  const total = items.reduce((sum, item) => sum + item.count, 0);
+  return {
+    total,
+    items,
+    reason: total === 0 ? null : firstGapReason(items, "Fill in the missing sprint data."),
+  };
+}
+
+export function sprintEndGaps(opts: {
+  emptyInfoFields: number;
+  missingIncompleteReasons: number;
+}): SprintGaps {
+  const items = gapItemsFromCounts(opts);
+  const total = items.reduce((sum, item) => sum + item.count, 0);
+  return {
+    total,
+    items,
+    reason: total === 0 ? null : firstGapReason(items, "Fill in the missing sprint data."),
+  };
+}
+
 export function sprintStartBlockedReason(opts: {
   activeSprintName?: string | null;
   infoIncomplete: boolean;
@@ -543,14 +711,14 @@ export function sprintStartBlockedReason(opts: {
   missingAssignees: boolean;
   docIncomplete: boolean;
 }): string | null {
-  if (opts.activeSprintName) {
-    return `Finish "${opts.activeSprintName}" before starting this sprint.`;
-  }
-  if (opts.infoIncomplete) return "Fill in every Sprint Information field.";
-  if (opts.missingEstimates) return "Add an estimate to every task.";
-  if (opts.missingAssignees) return "Assign every task.";
-  if (opts.docIncomplete) return "Fill in Decision and Risk for every task.";
-  return null;
+  return sprintStartGaps({
+    activeSprintName: opts.activeSprintName,
+    emptyInfoFields: opts.infoIncomplete ? 1 : 0,
+    missingEstimates: opts.missingEstimates ? 1 : 0,
+    missingAssignees: opts.missingAssignees ? 1 : 0,
+    missingDecisions: opts.docIncomplete ? 1 : 0,
+    missingRisks: 0,
+  }).reason;
 }
 
 export function sprintPlanningTasksMissingRisk(html: string): boolean {

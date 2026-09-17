@@ -257,14 +257,22 @@ export const RoadmapTaskRow = forwardRef<HTMLElement, Omit<SprintTaskRowProps, "
   },
 );
 
-export function EstimateBadge({ minutes }: { minutes: number | null | undefined }) {
+export function EstimateBadge({
+  minutes,
+  missing = false,
+}: {
+  minutes: number | null | undefined;
+  missing?: boolean;
+}) {
   return (
     <span
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold tabular-nums",
         minutes
           ? "border-success/30 text-success"
-          : "border-dashed border-muted-foreground/40 text-muted-foreground/50",
+          : missing
+            ? "border-dashed border-destructive/50 text-destructive"
+            : "border-dashed border-muted-foreground/40 text-muted-foreground/50",
       )}
     >
       <Clock className="size-3.5" />

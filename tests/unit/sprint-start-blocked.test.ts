@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  countSprintTaskFieldGaps,
+  emptySprintInfoFieldCount,
+  sprintEndGaps,
   sprintStartBlockedReason,
+  sprintStartGaps,
   syncPlanningDocTasks,
   planningTaskIdsFromHtml,
   sprintPlanningDocHtml,
@@ -43,6 +47,38 @@ describe("sprintStartBlockedReason", () => {
     expect(sprintStartBlockedReason(ready)).toBeNull();
   });
 
+  it("counts every missing field so the document can show why start is off", () => {
+    const gaps = sprintStartGaps({
+      emptyInfoFields: 2,
+      missingEstimates: 1,
+      missingAssignees: 1,
+      missingDecisions: 1,
+      missingRisks: 1,
+    });
+    expect(gaps.total).toBe(6);
+    expect(gaps.items.map((item) => item.label)).toEqual([
+      "2 sprint information fields",
+      "1 estimate",
+      "1 assignee",
+      "1 decision",
+      "1 risk",
+    ]);
+    expect(gaps.reason).toBe("Fill in every Sprint Information field.");
+  });
+
+  it("does not count missing data when another sprint is already running", () => {
+    const gaps = sprintStartGaps({
+      activeSprintName: "Sprint 15",
+      emptyInfoFields: 2,
+      missingEstimates: 3,
+      missingAssignees: 0,
+      missingDecisions: 0,
+      missingRisks: 0,
+    });
+    expect(gaps.total).toBe(0);
+    expect(gaps.reason).toBe('Finish "Sprint 15" before starting this sprint.');
+  });
+
   // The gate is computed from the sprint's own task list now. A row for a task
   // that has left the sprint used to set all three flags at once, so the button
   // stayed disabled and named work nobody could find to fix.
@@ -58,6 +94,54 @@ describe("sprintStartBlockedReason", () => {
         docIncomplete: live.some((t) => !t.decision.trim() || !t.risk.trim()),
       }),
     ).toBeNull();
+  });
+});
+
+describe("sprintEndGaps", () => {
+  it("counts incomplete reasons and empty information fields", () => {
+    const gaps = sprintEndGaps({ emptyInfoFields: 1, missingIncompleteReasons: 2 });
+    expect(gaps.total).toBe(3);
+    expect(gaps.items.map((item) => item.label)).toEqual([
+      "1 sprint information field",
+      "2 incomplete reasons",
+    ]);
+    expect(gaps.reason).toBe("Fill in every Sprint Information field.");
+  });
+
+  it("asks for incomplete reasons when the schedule is filled", () => {
+    expect(sprintEndGaps({ emptyInfoFields: 0, missingIncompleteReasons: 1 })).toEqual({
+      total: 1,
+      items: [{ key: "reason", count: 1, label: "1 incomplete reason" }],
+      reason: "Add a reason for every incomplete item.",
+    });
+  });
+});
+
+describe("countSprintTaskFieldGaps", () => {
+  it("counts each missing estimate, assignee, decision and risk", () => {
+    expect(
+      countSprintTaskFieldGaps([
+        { estimatedMinutes: null, assignee: null, decision: "", risk: "" },
+        { estimatedMinutes: 30, assignee: { name: "Ada" }, decision: "Ship", risk: "None" },
+      ]),
+    ).toEqual({ estimates: 1, assignees: 1, decisions: 1, risks: 1 });
+  });
+});
+
+describe("emptySprintInfoFieldCount", () => {
+  it("is zero when the document has not been read yet", () => {
+    expect(emptySprintInfoFieldCount(null)).toBe(0);
+  });
+
+  it("counts blank schedule fields", () => {
+    expect(
+      emptySprintInfoFieldCount({
+        documentDateIso: "",
+        startIso: "2026-09-17",
+        endIso: "",
+        workingDays: "",
+      }),
+    ).toBe(3);
   });
 });
 

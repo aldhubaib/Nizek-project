@@ -21,6 +21,7 @@ import {
   blankPlanningSchedule,
   documentDateIsoFromPlanningHtml,
   overlayPlanningTaskAssignees,
+  planningInfoFromHtml,
   syncPlanningDocTasks,
   type SprintPlanningTask,
   type SprintTaskProof,
@@ -37,6 +38,7 @@ import {
 } from "@/lib/sprint-doc";
 import { SprintRemovedPanel } from "@/components/project/sprint-scope-changes";
 import { isClosedSprint, isUnstartedSprint } from "@/lib/sprint-status";
+import { incompleteReasonsFromReviewHtml } from "@/lib/sprint-review-doc";
 import { canEditSprintDoc as canEditSprintDocFor } from "@/lib/sprint-doc-access";
 import { useCollaboration } from "@/components/realtime/use-collaboration";
 import { useChannel } from "@/components/realtime/hooks";
@@ -91,6 +93,7 @@ export function NoteFullScreenCreate({
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState("");
   const [sprintTasks, setSprintTasks] = useState<SprintPlanningTask[]>([]);
+  const [activeSprintName, setActiveSprintName] = useState<string | null>(null);
   // Why each departed task left. Not on the tasks themselves: a departed task
   // is read out of the frozen plan, which predates it leaving.
   const [removed, setRemoved] = useState<SprintRemovedTask[]>([]);
@@ -166,6 +169,7 @@ export function NoteFullScreenCreate({
         ]);
         if (cancelled) return;
         setSprintStatus(planning.status);
+        setActiveSprintName(planning.activeSprintName ?? null);
         const docTitle = sprintDocName(
           existing?.title || initialTitle || planning.sprintName,
         );
@@ -296,6 +300,7 @@ export function NoteFullScreenCreate({
           setSprintTasks(data.tasks);
           setRemoved(data.removed);
           setSprintProof(data.proof);
+          setActiveSprintName(data.activeSprintName ?? null);
         })
         .catch(() => {});
     }
@@ -315,6 +320,7 @@ export function NoteFullScreenCreate({
         setSprintTasks(data.tasks);
         setRemoved(data.removed);
         setSprintProof(data.proof);
+        setActiveSprintName(data.activeSprintName ?? null);
       })
       .catch(() => {});
   };
@@ -341,6 +347,12 @@ export function NoteFullScreenCreate({
     () => (showScopeChanges ? sprintScopeChanges(content, sprintTasks).added.length : 0),
     [showScopeChanges, content, sprintTasks],
   );
+  const planningInfo = useMemo(() => planningInfoFromHtml(content), [content]);
+  const missingIncompleteReasons = useMemo(() => {
+    if (!showScopeChanges) return 0;
+    const reasons = incompleteReasonsFromReviewHtml(content);
+    return sprintTasks.filter((task) => task.stage !== "DONE" && !reasons[task.id]).length;
+  }, [showScopeChanges, content, sprintTasks]);
 
   async function handleSave() {
     if (!noteType) { setTypeError(true); return; }
@@ -458,6 +470,10 @@ export function NoteFullScreenCreate({
               review={showScopeChanges}
               added={addedCount}
               removed={removed.length}
+              hideAssignees={hideAssignees}
+              activeSprintName={activeSprintName}
+              info={planningInfo}
+              missingIncompleteReasons={missingIncompleteReasons}
             />
           ) : null}
 

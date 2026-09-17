@@ -20,7 +20,7 @@ function AssigneeAvatar({
   className?: string;
 }) {
   if (!assignee) {
-    return <EmptyAssigneeIcon className={className} />;
+    return <EmptyAssigneeIcon className={cn("border-destructive text-destructive", className)} />;
   }
   if (assignee.imageUrl) {
     return (
@@ -142,7 +142,7 @@ export function PlanningEstimateInput({
         "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold tabular-nums transition-colors",
         local
           ? "border-success/30 text-success hover:border-success/50"
-          : "border-dashed border-muted-foreground/40 text-muted-foreground/50 hover:border-foreground/40 hover:text-muted-foreground",
+          : "border-dashed border-destructive/50 text-destructive hover:border-destructive hover:text-destructive",
         disabled && "cursor-default",
       )}
     >

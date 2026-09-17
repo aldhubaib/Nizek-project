@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from "@tiptap/react";
 import { ImagePlus, Loader2, X } from "lucide-react";
 import { SprintTaskBlockSchema } from "@/lib/tiptap-schema";
-import { EstimateBadge, SprintTaskRow } from "@/components/project/sprint-task-row";
+import { EmptyAssigneeIcon, EstimateBadge, SprintTaskRow } from "@/components/project/sprint-task-row";
 import { PlanningAssigneePicker, PlanningEstimateInput } from "@/components/project/planning-task-controls";
 import { updateSprintTaskPlan } from "@/actions/sprint";
 import { uploadFileToR2 } from "@/lib/upload";
@@ -67,6 +67,7 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
 
   function savePlan(patch: { decision?: string; risk?: string }) {
     pending.current = { ...pending.current, ...patch };
+    if (task) options.onTasksPatched?.(task.id, patch);
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(flushPlan, PLAN_SAVE_DELAY_MS);
   }
@@ -153,17 +154,19 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
               onSaved={(estimatedMinutes) => patchTask({ estimatedMinutes })}
             />
           ) : (
-            <EstimateBadge minutes={rowTask.estimatedMinutes} />
+            <EstimateBadge minutes={rowTask.estimatedMinutes} missing />
           )
         }
         assigneeSlot={
-          !hideAssignee && canEditFields && projectId ? (
+          hideAssignee ? undefined : canEditFields && projectId ? (
             <PlanningAssigneePicker
               projectId={projectId}
               taskId={task.id}
               assignee={rowTask.assignee}
               onSaved={(assignee) => patchTask({ assignee })}
             />
+          ) : !rowTask.assignee ? (
+            <EmptyAssigneeIcon className="border-destructive text-destructive" />
           ) : undefined
         }
         onMouseDown={(e) => e.stopPropagation()}

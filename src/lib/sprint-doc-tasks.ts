@@ -10,6 +10,8 @@ import { isUnstartedSprint } from "@/lib/sprint-status";
 export type SprintDocTasks = {
   tasks: SprintPlanningTask[];
   status: string;
+  /** Name of a different sprint that is already running, if any. */
+  activeSprintName: string | null;
   /**
    * The work that left the sprint after it started. Empty while the sprint is
    * still being planned, where nothing has been committed to and so nothing can
@@ -31,7 +33,13 @@ export type SprintDocTasks = {
 export async function loadSprintDocTasks(sprintId: string): Promise<SprintDocTasks> {
   const planning = await getSprintPlanningTasks(sprintId);
   if (isUnstartedSprint(planning.status)) {
-    return { tasks: planning.tasks, status: planning.status, removed: [], proof: {} };
+    return {
+      tasks: planning.tasks,
+      status: planning.status,
+      activeSprintName: planning.activeSprintName ?? null,
+      removed: [],
+      proof: {},
+    };
   }
   const [review, proof] = await Promise.all([
     getSprintReviewTasks(sprintId),
@@ -40,6 +48,7 @@ export async function loadSprintDocTasks(sprintId: string): Promise<SprintDocTas
   return {
     tasks: [...review.completed, ...review.incomplete],
     status: review.status,
+    activeSprintName: planning.activeSprintName ?? null,
     removed: review.removed,
     proof,
   };

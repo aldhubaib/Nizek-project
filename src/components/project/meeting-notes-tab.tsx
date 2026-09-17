@@ -14,13 +14,14 @@ import { OverflowTabBar } from "@/components/overflow-tab-bar";
 import { updateMeetingNote, deleteMeetingNote, toggleDeadlineComplete, getMeetingNote } from "@/actions/meeting-note";
 import { loadSprintDocTasks } from "@/lib/sprint-doc-tasks";
 import { useNoteAutosave } from "@/components/project/use-note-autosave";
-import { documentDateIsoFromPlanningHtml, sprintIdFromPlanningHtml, sprintPlanningIsLocked, type SprintPlanningTask, type SprintTaskProof } from "@/lib/sprint-planning-doc";
+import { documentDateIsoFromPlanningHtml, planningInfoFromHtml, sprintIdFromPlanningHtml, sprintPlanningIsLocked, type SprintPlanningTask, type SprintTaskProof } from "@/lib/sprint-planning-doc";
 import {
   foldSprintItemList,
   sprintScopeChanges,
   type SprintRemovedTask,
 } from "@/lib/sprint-doc";
 import { isClosedSprint, isUnstartedSprint } from "@/lib/sprint-status";
+import { incompleteReasonsFromReviewHtml } from "@/lib/sprint-review-doc";
 import { SprintRemovedPanel } from "@/components/project/sprint-scope-changes";
 import { getNoteCommentThreads } from "@/actions/note-comment";
 import { testDeadlineReminder } from "@/actions/deadline-reminder";
@@ -635,6 +636,7 @@ export function NoteFullScreenDetail({
   const [title, setTitle] = useState(note.title);
   const [content, setContent] = useState(note.content);
   const [sprintTasks, setSprintTasks] = useState<SprintPlanningTask[]>([]);
+  const [activeSprintName, setActiveSprintName] = useState<string | null>(null);
   const [sprintStatus, setSprintStatus] = useState("");
   // The work that left the sprint. Read from its departure records rather than
   // from the document, which was written before anybody knew it would leave.
@@ -753,6 +755,12 @@ export function NoteFullScreenDetail({
     () => (showScopeChanges ? sprintScopeChanges(content, sprintTasks).added.length : 0),
     [showScopeChanges, content, sprintTasks],
   );
+  const planningInfo = useMemo(() => planningInfoFromHtml(content), [content]);
+  const missingIncompleteReasons = useMemo(() => {
+    if (!showScopeChanges) return 0;
+    const reasons = incompleteReasonsFromReviewHtml(content);
+    return sprintTasks.filter((task) => task.stage !== "DONE" && !reasons[task.id]).length;
+  }, [showScopeChanges, content, sprintTasks]);
   // Whoever owns the phase the document is in writes it: the plan before the
   // sprint starts, the outcome while it runs, nobody once it closes.
   const liveEdit =
@@ -785,6 +793,7 @@ export function NoteFullScreenDetail({
           setSprintStatus(data.status);
           setRemoved(data.removed);
           setSprintProof(data.proof);
+          setActiveSprintName(data.activeSprintName ?? null);
         })
         .catch(() => {});
     }
@@ -807,6 +816,7 @@ export function NoteFullScreenDetail({
         setSprintStatus(data.status);
         setRemoved(data.removed);
         setSprintProof(data.proof);
+        setActiveSprintName(data.activeSprintName ?? null);
       })
       .catch(() => {});
   };
@@ -1336,6 +1346,9 @@ export function NoteFullScreenDetail({
                 review={sprintStarted}
                 added={addedCount}
                 removed={removed.length}
+                activeSprintName={activeSprintName}
+                info={planningInfo}
+                missingIncompleteReasons={missingIncompleteReasons}
               />
             ) : null}
             {isSprintDoc && (workingDaysError || autoSaveError) ? (
