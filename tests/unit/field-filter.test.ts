@@ -24,6 +24,7 @@ function field(partial: Partial<CustomFieldDTO> & { id: string }): CustomFieldDT
     required: false,
     showOn: "both",
     filterable: true,
+    unique: false,
     visibility: null,
     userMultiple: false,
     countryMultiple: false,
