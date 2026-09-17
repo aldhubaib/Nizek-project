@@ -3342,6 +3342,8 @@ model CustomField {
   showOn     String  @default("both")
   /// When true, this field is offered as a filter on the board and list.
   filterable Boolean @default(false)
+  /// When true, every value stored for this field must be unique across records in the same layout.
+  unique     Boolean @default(false)
   /// JSON `{ dependsOn: fieldId, values: string[] }` — show only when that sibling matches.
   visibility String?
 

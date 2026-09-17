@@ -645,6 +645,7 @@ function FieldProperties({
     required?: boolean;
     showOn?: string;
     filterable?: boolean;
+    unique?: boolean;
     visibility?: FieldVisibility | null;
     sectionId?: string | null;
   }) => void;
@@ -747,6 +748,20 @@ function FieldProperties({
           On the board and list
         </span>
       </label>
+      {(field.type === "phone" || field.type === "email") && (
+        <label className="flex items-center gap-2 text-s">
+          <input
+            type="checkbox"
+            checked={field.unique}
+            disabled={pending}
+            onChange={(e) => onUpdate({ unique: e.target.checked })}
+          />
+          Unique
+          <span className="text-xs text-muted-foreground">
+            No duplicates allowed
+          </span>
+        </label>
+      )}
       {field.type === "formula" && !field.binding && (
         <FormulaPartsEditor
           field={field}

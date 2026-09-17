@@ -64,6 +64,7 @@ export type CustomFieldDTO = {
   required: boolean;
   showOn: FieldShowOn;
   filterable: boolean;
+  unique: boolean;
   visibility: FieldVisibility | null;
   userMultiple: boolean;
   countryMultiple: boolean;
@@ -263,6 +264,7 @@ function toFieldDTO(row: {
   required: boolean;
   showOn: string;
   filterable?: boolean;
+  unique?: boolean;
   visibility?: string | null;
   sectionId: string | null;
   position: number;
@@ -286,6 +288,7 @@ function toFieldDTO(row: {
     required: row.required,
     showOn: isFieldShowOn(row.showOn) ? row.showOn : "both",
     filterable: row.filterable === true,
+    unique: row.unique === true,
     visibility: parseFieldVisibility(row.visibility),
     sectionId: row.sectionId,
     position: row.position,
@@ -752,6 +755,7 @@ export async function updateCustomField(
     required?: boolean;
     showOn?: string;
     filterable?: boolean;
+    unique?: boolean;
     visibility?: FieldVisibility | null;
     sectionId?: string | null;
   },
@@ -774,6 +778,7 @@ export async function updateCustomField(
       required?: boolean;
       showOn?: string;
       filterable?: boolean;
+      unique?: boolean;
       visibility?: string | null;
       sectionId?: string | null;
     } = {};
@@ -832,6 +837,9 @@ export async function updateCustomField(
     }
     if (input.filterable !== undefined) {
       data.filterable = input.filterable;
+    }
+    if (input.unique !== undefined) {
+      data.unique = input.unique;
     }
     if (input.visibility !== undefined) {
       data.visibility = stringifyFieldVisibility(input.visibility);
@@ -937,7 +945,7 @@ export async function saveCustomFieldValues(input: {
     where: input.layoutId
       ? { layoutId: input.layoutId }
       : { entityType: input.entityType },
-    select: { id: true, binding: true, type: true, options: true },
+    select: { id: true, binding: true, type: true, options: true, unique: true, label: true },
   });
   const allowed = new Set(
     fields
@@ -952,6 +960,27 @@ export async function saveCustomFieldValues(input: {
         field?.type === "text" ? parseTextConfig(field.options).script : null;
       return [fieldId, applyTextScript(value, script)] as const;
     });
+
+  const uniqueFields = fields.filter((f) => f.unique);
+  for (const uf of uniqueFields) {
+    const entry = entries.find(([id]) => id === uf.id);
+    if (!entry) continue;
+    const [, value] = entry;
+    if (!value.trim()) continue;
+    const clash = await prisma.customFieldValue.findFirst({
+      where: {
+        fieldId: uf.id,
+        value,
+        recordId: { not: input.recordId },
+      },
+      select: { id: true },
+    });
+    if (clash) {
+      throw new Error(
+        `"${uf.label}" must be unique — another record already has this value`,
+      );
+    }
+  }
 
   await prisma.$transaction(
     entries.map(([fieldId, value]) =>
