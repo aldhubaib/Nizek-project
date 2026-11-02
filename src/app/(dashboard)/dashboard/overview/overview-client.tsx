@@ -9,6 +9,7 @@ import {
   BellOff,
   CalendarClock,
   CheckCircle2,
+  FileText,
   LayoutGrid,
   ListChecks,
 } from "lucide-react";
@@ -41,9 +42,15 @@ import {
   snoozeOverviewSignal,
   type ManagerOverview,
   type OpenSprint,
+  type OverviewContract,
   type OverviewTrends,
   type PortfolioRow,
 } from "@/actions/overview";
+import {
+  CONTRACT_TYPE_LABELS,
+  type ContractWindowStatus,
+} from "@/lib/contract-rules";
+import type { ContractType } from "@/generated/prisma/client";
 import {
   ProgressBar,
   ReliabilityChart,
@@ -465,6 +472,246 @@ function UnfinishedSprints({
   );
 }
 
+/* ── contracts ── */
+
+const CONTRACT_STATUS_FILTERS = [
+  { id: "all", label: "All statuses" },
+  { id: "active", label: "Active" },
+  { id: "upcoming", label: "Upcoming" },
+  { id: "expired", label: "Expired" },
+] as const;
+
+const CONTRACT_TYPE_FILTERS: { id: "all" | ContractType; label: string }[] = [
+  { id: "all", label: "All types" },
+  ...(Object.entries(CONTRACT_TYPE_LABELS) as [ContractType, string][]).map(
+    ([id, label]) => ({ id, label }),
+  ),
+];
+
+const NO_TEAM = "__none__";
+
+const CONTRACT_STATUS_BADGE: Record<
+  ContractWindowStatus,
+  { label: string; color: string; border: string }
+> = {
+  active: { label: "Active", color: "text-success", border: "border-success/30" },
+  upcoming: { label: "Upcoming", color: "text-primary", border: "border-primary/30" },
+  expired: {
+    label: "Expired",
+    color: "text-destructive",
+    border: "border-destructive/30",
+  },
+};
+
+function contractDaysCopy(row: OverviewContract): string {
+  if (row.status === "upcoming") {
+    return row.daysLeft === 1 ? "1d left" : `${row.daysLeft}d left`;
+  }
+  if (row.daysLeft < 0) return `${Math.abs(row.daysLeft)}d overdue`;
+  if (row.daysLeft === 0) return "Ends today";
+  if (row.daysLeft === 1) return "1d left";
+  return `${row.daysLeft}d left`;
+}
+
+function contractDaysTone(row: OverviewContract): string {
+  if (row.status === "expired" || row.daysLeft < 0) return "text-destructive";
+  if (row.status === "upcoming") return "text-muted-foreground";
+  if (row.daysLeft <= 7) return "text-destructive";
+  if (row.daysLeft <= 14) return "text-orange";
+  return "text-success";
+}
+
+function ContractsPanel({ contracts }: { contracts: OverviewContract[] }) {
+  const [statusFilter, setStatusFilter] = useState<string>("active");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [teamFilter, setTeamFilter] = useState<string>("all");
+
+  const teamOptions = useMemo(() => {
+    const names = new Set<string>();
+    let hasNone = false;
+    for (const row of contracts) {
+      if (row.teamName) names.add(row.teamName);
+      else hasNone = true;
+    }
+    return {
+      names: [...names].sort((a, b) => a.localeCompare(b)),
+      hasNone,
+    };
+  }, [contracts]);
+
+  const filtered = useMemo(() => {
+    return contracts.filter((row) => {
+      if (statusFilter !== "all" && row.status !== statusFilter) return false;
+      if (typeFilter !== "all" && row.contractType !== typeFilter) return false;
+      if (teamFilter === NO_TEAM) return row.teamName === null;
+      if (teamFilter !== "all" && row.teamName !== teamFilter) return false;
+      return true;
+    });
+  }, [contracts, statusFilter, typeFilter, teamFilter]);
+
+  const filtering =
+    statusFilter !== "all" || typeFilter !== "all" || teamFilter !== "all";
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <PanelHead
+          icon={FileText}
+          title="Project contracts"
+          subtitle="name, type, team and time left"
+          value={filtered.length}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger size="sm" className="w-[140px] shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              {CONTRACT_STATUS_FILTERS.map((option) => (
+                <SelectItem key={option.id} value={option.id}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger size="sm" className="w-[140px] shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              {CONTRACT_TYPE_FILTERS.map((option) => (
+                <SelectItem key={option.id} value={option.id}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={teamFilter} onValueChange={setTeamFilter}>
+            <SelectTrigger size="sm" className="w-[150px] shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="all">All teams</SelectItem>
+              {teamOptions.names.map((name) => (
+                <SelectItem key={name} value={name}>
+                  {name}
+                </SelectItem>
+              ))}
+              {teamOptions.hasNone && (
+                <SelectItem value={NO_TEAM}>No team</SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="py-10 text-center">
+          <FileText className="mx-auto mb-2 size-6 text-muted-foreground/30" />
+          <p className="text-xs text-muted-foreground">
+            {contracts.length === 0
+              ? "No contracts in scope"
+              : "No contracts match these filters"}
+          </p>
+          {filtering && contracts.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setStatusFilter("all");
+                setTypeFilter("all");
+                setTeamFilter("all");
+              }}
+              className="mt-2 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <div className="min-w-[560px]">
+            <div
+              className={cn(
+                "grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 border-b border-border/50 pb-2",
+                UPPER,
+                "text-muted-foreground/60",
+              )}
+            >
+              <span>Project</span>
+              <span>Type</span>
+              <span>Team</span>
+              <span className="text-right">Days left</span>
+            </div>
+
+            {filtered.map((row) => {
+              const status = CONTRACT_STATUS_BADGE[row.status];
+              return (
+                <Link
+                  key={row.id}
+                  href={`/dashboard/projects/${row.projectId}`}
+                  className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-3 rounded-lg py-2.5 transition-colors hover:bg-accent/40"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-s font-medium text-foreground">
+                      {row.projectName}
+                    </span>
+                    {row.label && (
+                      <span className="block truncate text-xs text-muted-foreground/70">
+                        {row.label}
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <StatusBadge
+                      size="xs"
+                      config={outlineBadge(
+                        CONTRACT_TYPE_LABELS[row.contractType],
+                        "text-muted-foreground",
+                        "border-border",
+                      )}
+                    />
+                    {row.latePayment && (
+                      <StatusBadge
+                        size="xs"
+                        config={outlineBadge(
+                          "Late",
+                          "text-destructive",
+                          "border-destructive/30",
+                        )}
+                      />
+                    )}
+                    {statusFilter === "all" && (
+                      <StatusBadge
+                        size="xs"
+                        config={outlineBadge(
+                          status.label,
+                          status.color,
+                          status.border,
+                        )}
+                      />
+                    )}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {row.teamName ?? "No team"}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-right text-xs font-medium tabular-nums",
+                      contractDaysTone(row),
+                    )}
+                  >
+                    {contractDaysCopy(row)}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* ── portfolio ── */
 
 function PortfolioTable({ rows }: { rows: PortfolioRow[] }) {
@@ -873,6 +1120,8 @@ export function DeliverySection({ overview }: Props) {
           </Select>
         )}
       </div>
+
+      <ContractsPanel contracts={overview.contracts} />
 
       {overview.projects.length === 0 ? (
         <Card className="py-14 text-center">

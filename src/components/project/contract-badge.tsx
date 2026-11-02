@@ -3,14 +3,7 @@
 import { format, isFuture, isWithinInterval } from "date-fns";
 import { StatusBadge, type BadgeConfig } from "@/components/ui/status-badge";
 import { outlineBadge } from "@/lib/task-label";
-
-const CONTRACT_TYPE_LABELS: Record<string, string> = {
-  FULL_TEAM: "Full Team",
-  PART_TEAM: "Part Team",
-  FIXED: "Fixed",
-  MAINTENANCE: "Maintenance",
-  STARTUP: "Startup",
-};
+import { CONTRACT_TYPE_LABELS } from "@/lib/contract-rules";
 
 const STATUS_CONFIG: Record<string, BadgeConfig> = {
   active: outlineBadge("Active", "text-success", "border-success/30"),

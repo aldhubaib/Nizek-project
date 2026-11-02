@@ -5,7 +5,13 @@ import { prisma } from "@/lib/prisma";
 import { getAuditAccess } from "@/actions/audit";
 import { activeProjectFilter } from "@/lib/project-filters";
 import { ACTIVE_STAGES, CLIENT_INPUT_WAIT_MS } from "@/lib/audit-flags";
-import { getActiveContract } from "@/lib/contract-rules";
+import {
+  contractDaysLeft,
+  contractWindowStatus,
+  getActiveContract,
+  type ContractWindowStatus,
+} from "@/lib/contract-rules";
+import type { ContractType } from "@/generated/prisma/client";
 import {
   DAY_MS,
   MAX_SNOOZE_DAYS,
@@ -147,6 +153,22 @@ export interface ThroughputWeek {
   count: number;
 }
 
+/** One dated contract on a project the viewer may oversee. */
+export interface OverviewContract {
+  id: string;
+  projectId: string;
+  projectName: string;
+  teamName: string | null;
+  contractType: ContractType;
+  label: string | null;
+  latePayment: boolean;
+  startDate: string;
+  endDate: string;
+  /** Whole days until the last day ends. Negative once it has. */
+  daysLeft: number;
+  status: ContractWindowStatus;
+}
+
 export interface ManagerOverview {
   projects: OverviewProject[];
   /** Everything in scope, for the filter — not just what is being shown. */
@@ -158,6 +180,11 @@ export interface ManagerOverview {
   openSprints: OpenSprint[];
   portfolio: PortfolioRow[];
   throughputWeeks: ThroughputWeek[];
+  /**
+   * Dated contracts in audit scope. Not limited to live windows — expired and
+   * upcoming rows are included so the contracts panel can filter them.
+   */
+  contracts: OverviewContract[];
   /** The viewer's own plate. Not scoped to the projects above — these are theirs
    *  wherever they sit, so the count matches the personal dashboard. */
   nowIso: string;
@@ -217,6 +244,46 @@ const EMPTY_TRENDS: OverviewTrends = {
 
 function snoozeKey(projectId: string, signalType: string): string {
   return `${projectId}:${signalType}`;
+}
+
+const CONTRACT_STATUS_ORDER: Record<ContractWindowStatus, number> = {
+  active: 0,
+  upcoming: 1,
+  expired: 2,
+};
+
+function toOverviewContract(
+  row: {
+    id: string;
+    contractType: ContractType;
+    label: string | null;
+    latePayment: boolean;
+    startDate: Date | null;
+    endDate: Date | null;
+    project: { id: string; name: string; team: { name: string } | null };
+  },
+  now: Date,
+): OverviewContract | null {
+  if (!row.startDate || !row.endDate) return null;
+  return {
+    id: row.id,
+    projectId: row.project.id,
+    projectName: row.project.name,
+    teamName: row.project.team?.name ?? null,
+    contractType: row.contractType,
+    label: row.label,
+    latePayment: row.latePayment,
+    startDate: row.startDate.toISOString(),
+    endDate: row.endDate.toISOString(),
+    daysLeft: contractDaysLeft(row.endDate, now),
+    status: contractWindowStatus(row.startDate, row.endDate, now),
+  };
+}
+
+function sortOverviewContracts(a: OverviewContract, b: OverviewContract): number {
+  const byStatus = CONTRACT_STATUS_ORDER[a.status] - CONTRACT_STATUS_ORDER[b.status];
+  if (byStatus !== 0) return byStatus;
+  return a.daysLeft - b.daysLeft;
 }
 
 /**
@@ -300,7 +367,16 @@ export async function getManagerOverview(
     ? { AND: [scopeWhere, { id: projectId }] }
     : scopeWhere;
 
-  const [projectOptions, projects] = await Promise.all([
+  // Contracts are scoped to the audit teams, not to live windows — expired
+  // and upcoming rows would otherwise vanish behind `activeProjectFilter()`.
+  const contractProjectWhere = {
+    ...(access.isAdmin
+      ? {}
+      : { teamId: { in: access.teams.map((t) => t.id) } }),
+    ...(projectId ? { id: projectId } : {}),
+  };
+
+  const [projectOptions, projects, contractRows] = await Promise.all([
     prisma.project.findMany({
       where: scopeWhere,
       select: { id: true, name: true },
@@ -347,7 +423,35 @@ export async function getManagerOverview(
       },
     }),
 
+    prisma.contract.findMany({
+      where: {
+        startDate: { not: null },
+        endDate: { not: null },
+        project: contractProjectWhere,
+      },
+      select: {
+        id: true,
+        contractType: true,
+        label: true,
+        latePayment: true,
+        startDate: true,
+        endDate: true,
+        project: {
+          select: {
+            id: true,
+            name: true,
+            team: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { endDate: "asc" },
+    }),
   ]);
+
+  const contracts = contractRows
+    .map((row) => toOverviewContract(row, now))
+    .filter((row): row is OverviewContract => row !== null)
+    .sort(sortOverviewContracts);
 
 
   const selectedProjectId =
@@ -365,6 +469,7 @@ export async function getManagerOverview(
       openSprints: [],
       portfolio: [],
       throughputWeeks: [],
+      contracts,
       nowIso: now.toISOString(),
       healthyCount: 0,
       snoozedCount: 0,
@@ -861,6 +966,7 @@ export async function getManagerOverview(
     openSprints,
     portfolio,
     throughputWeeks,
+    contracts,
     nowIso: now.toISOString(),
     healthyCount: rows.filter((r) => r.signals.length === 0).length,
     snoozedCount,

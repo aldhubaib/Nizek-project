@@ -1,5 +1,15 @@
 import type { ContractType, TaskType } from "@/generated/prisma/client";
 
+export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
+  FULL_TEAM: "Full Team",
+  PART_TEAM: "Part Team",
+  FIXED: "Fixed",
+  MAINTENANCE: "Maintenance",
+  STARTUP: "Startup",
+};
+
+export type ContractWindowStatus = "active" | "upcoming" | "expired";
+
 export function isContractActiveOnDate(
   startDate: Date | string | null,
   endDate: Date | string | null,
@@ -9,6 +19,26 @@ export function isContractActiveOnDate(
   const end = new Date(endDate);
   end.setHours(23, 59, 59, 999);
   return new Date(startDate) <= now && end >= now;
+}
+
+/** Whole days until the contract's last day ends. Negative means it already has. */
+export function contractDaysLeft(
+  endDate: Date | string,
+  now = new Date(),
+): number {
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+  return Math.ceil((end.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+export function contractWindowStatus(
+  startDate: Date | string | null,
+  endDate: Date | string | null,
+  now = new Date(),
+): ContractWindowStatus {
+  if (isContractActiveOnDate(startDate, endDate, now)) return "active";
+  if (startDate && new Date(startDate) > now) return "upcoming";
+  return "expired";
 }
 
 const ALL_TASK_TYPES: TaskType[] = ["FEATURE", "ENHANCEMENT", "BUG", "REPORTED_BUG", "DESIGN"];
