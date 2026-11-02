@@ -38,7 +38,12 @@ export function ContractBadge({ contract }: { contract: Contract }) {
     status = "expired";
   }
 
-  const typeLabel = CONTRACT_TYPE_LABELS[contract.contractType];
+  const typeLabel =
+    contract.contractType in CONTRACT_TYPE_LABELS
+      ? CONTRACT_TYPE_LABELS[
+          contract.contractType as keyof typeof CONTRACT_TYPE_LABELS
+        ]
+      : undefined;
 
   return (
     <div className="flex items-center gap-2">

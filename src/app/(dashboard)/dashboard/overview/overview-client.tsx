@@ -490,6 +490,12 @@ const CONTRACT_TYPE_FILTERS: { id: "all" | ContractType; label: string }[] = [
 
 const NO_TEAM = "__none__";
 
+function pickFilter(set: (value: string) => void) {
+  return (value: string | null) => {
+    if (value) set(value);
+  };
+}
+
 const CONTRACT_STATUS_BADGE: Record<
   ContractWindowStatus,
   { label: string; color: string; border: string }
@@ -562,7 +568,7 @@ function ContractsPanel({ contracts }: { contracts: OverviewContract[] }) {
           value={filtered.length}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={statusFilter} onValueChange={pickFilter(setStatusFilter)}>
             <SelectTrigger size="sm" className="w-[140px] shrink-0">
               <SelectValue />
             </SelectTrigger>
@@ -574,7 +580,7 @@ function ContractsPanel({ contracts }: { contracts: OverviewContract[] }) {
               ))}
             </SelectContent>
           </Select>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <Select value={typeFilter} onValueChange={pickFilter(setTypeFilter)}>
             <SelectTrigger size="sm" className="w-[140px] shrink-0">
               <SelectValue />
             </SelectTrigger>
@@ -586,7 +592,7 @@ function ContractsPanel({ contracts }: { contracts: OverviewContract[] }) {
               ))}
             </SelectContent>
           </Select>
-          <Select value={teamFilter} onValueChange={setTeamFilter}>
+          <Select value={teamFilter} onValueChange={pickFilter(setTeamFilter)}>
             <SelectTrigger size="sm" className="w-[150px] shrink-0">
               <SelectValue />
             </SelectTrigger>
