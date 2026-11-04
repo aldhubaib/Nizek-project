@@ -25,6 +25,8 @@ const BACKGROUND_GRACE_MS = 30_000;
 
 type MessageHandler = (data: unknown) => void;
 type StaleHandler = () => void;
+/** `recovered` is false when Centrifugo could not replay the missed publications. */
+type ReconnectHandler = (ctx: { recovered: boolean }) => void;
 
 type CentrifugoContextValue = {
   connected: boolean;
@@ -36,11 +38,14 @@ type CentrifugoContextValue = {
    * `onStale` fires when the channel resubscribed after a gap but history
    * recovery FAILED — publications were missed and will never be replayed, so
    * the subscriber must refetch its data from the server.
+   * `onReconnect` fires on EVERY resubscribe after a gap (recovered or not),
+   * for subscribers with a cheap server-side "changes since" to run.
    */
   subscribe: (
     channel: string,
     onMessage: MessageHandler,
     onStale?: StaleHandler,
+    onReconnect?: ReconnectHandler,
   ) => () => void;
   /** Publish an ephemeral event (e.g. typing) to a channel. */
   publish: (channel: string, data: unknown) => void;
@@ -85,6 +90,7 @@ export function CentrifugoProvider({
         sub: Subscription;
         handlers: Set<MessageHandler>;
         staleHandlers: Set<StaleHandler>;
+        reconnectHandlers: Set<ReconnectHandler>;
       }
     >
   >(new Map());
@@ -234,6 +240,7 @@ export function CentrifugoProvider({
     }
     const handlers = new Set<MessageHandler>();
     const staleHandlers = new Set<StaleHandler>();
+    const reconnectHandlers = new Set<ReconnectHandler>();
     sub.on("publication", (ctx) => {
       handlers.forEach((h) => {
         try {
@@ -246,13 +253,19 @@ export function CentrifugoProvider({
     // events published meanwhile are gone for good. Tell subscribers so they
     // refetch instead of silently showing a stale view until a manual refresh.
     sub.on("subscribed", (ctx) => {
-      if (ctx.wasRecovering && !ctx.recovered) {
+      if (!ctx.wasRecovering) return;
+      if (!ctx.recovered) {
         staleHandlers.forEach((h) => {
           try {
             h();
           } catch {}
         });
       }
+      reconnectHandlers.forEach((h) => {
+        try {
+          h({ recovered: Boolean(ctx.recovered) });
+        } catch {}
+      });
     });
     sub.on("error", (ctx) => {
       console.warn(`[realtime] subscription error (${channel}):`, ctx.error?.message ?? ctx);
@@ -265,7 +278,7 @@ export function CentrifugoProvider({
         } catch {}
       }, 2000);
     });
-    entry = { sub, handlers, staleHandlers };
+    entry = { sub, handlers, staleHandlers, reconnectHandlers };
     subsRef.current.set(channel, entry);
     sub.subscribe();
     return entry;
@@ -273,14 +286,21 @@ export function CentrifugoProvider({
   ensureSubRef.current = ensureSub;
 
   const subscribe = useCallback(
-    (channel: string, onMessage: MessageHandler, onStale?: StaleHandler) => {
+    (
+      channel: string,
+      onMessage: MessageHandler,
+      onStale?: StaleHandler,
+      onReconnect?: ReconnectHandler,
+    ) => {
       const entry = ensureSub(channel);
       if (!entry) return () => {};
       entry.handlers.add(onMessage);
       if (onStale) entry.staleHandlers.add(onStale);
+      if (onReconnect) entry.reconnectHandlers.add(onReconnect);
       return () => {
         entry.handlers.delete(onMessage);
         if (onStale) entry.staleHandlers.delete(onStale);
+        if (onReconnect) entry.reconnectHandlers.delete(onReconnect);
         if (entry.handlers.size === 0 && !pinnedRef.current.has(channel)) {
           try {
             entry.sub.unsubscribe();

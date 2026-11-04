@@ -16,7 +16,7 @@
 
 import { useMemo, useSyncExternalStore } from "react";
 import { sendMessage, type MessageDTO } from "@/actions/messages";
-import { uploadFileToR2, type UploadedFile } from "@/lib/upload";
+import { abandonUpload, uploadFileToR2, type UploadedFile } from "@/lib/upload";
 
 export type OutboxTarget = {
   taskId?: string | null;
@@ -32,6 +32,8 @@ export type OutboxFile = {
   previewUrl: string | null;
   progress: number;
   status: "uploading" | "done" | "error";
+  /** What the upload is doing right now, e.g. "Resuming part 7 of 19". */
+  statusText?: string | null;
   /** Set once the file is in R2 — retries skip files that already have it. */
   uploaded?: UploadedFile;
 };
@@ -167,10 +169,17 @@ function startUploads(tempId: string) {
 
 async function uploadOne(tempId: string, fileKey: string, file: File) {
   try {
-    const uploaded = await uploadFileToR2(file, (pct) =>
-      patchFile(tempId, fileKey, { progress: pct }),
+    const uploaded = await uploadFileToR2(
+      file,
+      (pct) => patchFile(tempId, fileKey, { progress: pct }),
+      (statusText) => patchFile(tempId, fileKey, { statusText }),
     );
-    patchFile(tempId, fileKey, { status: "done", progress: 100, uploaded });
+    patchFile(tempId, fileKey, {
+      status: "done",
+      progress: 100,
+      statusText: null,
+      uploaded,
+    });
     maybeDeliver(tempId);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Upload failed";
@@ -179,6 +188,8 @@ async function uploadOne(tempId: string, fileKey: string, file: File) {
     patchFile(tempId, fileKey, { status: "error" });
     patchEntry(tempId, { status: "error", errorMessage: message });
     reportUploadFailure(file, message);
+    const entryNow = entries.find((o) => o.tempId === tempId);
+    if (entryNow) reportSendFailure(entryNow, "upload", message);
   }
 }
 
@@ -218,16 +229,18 @@ function deliver(tempId: string) {
         const subs = deliveredListeners.get(entry.threadKey);
         if (subs) for (const cb of subs) cb(res.data, entry.replyToId);
       } else {
-        patchEntry(tempId, {
-          status: "error",
-          errorMessage: res.error || "Failed to send",
-        });
+        const errorMessage = res.error || "Failed to send";
+        patchEntry(tempId, { status: "error", errorMessage });
+        // The action ran and refused — the server already logged it with the
+        // sizes; this adds the device side (user agent, online state).
+        reportSendFailure(entry, "action-rejected", errorMessage);
       }
     } catch (err) {
-      patchEntry(tempId, {
-        status: "error",
-        errorMessage: err instanceof Error ? err.message : "Failed to send",
-      });
+      const errorMessage = err instanceof Error ? err.message : "Failed to send";
+      patchEntry(tempId, { status: "error", errorMessage });
+      // Never reached the action (network, timeout, body too large for the
+      // transport) — the only record of this failure is the one we ship now.
+      reportSendFailure(entry, "action-unreachable", errorMessage);
     }
   })();
 }
@@ -256,6 +269,8 @@ export function discardOutboxEntry(tempId: string): void {
   if (!entry) return;
   for (const f of entry.files) {
     if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+    // A big file that never finished has parts sitting in R2 — drop them.
+    if (!f.uploaded) void abandonUpload(f.file);
   }
   setEntries(entries.filter((o) => o.tempId !== tempId));
 }
@@ -320,6 +335,37 @@ function reportUploadFailure(file: File, reason: string) {
     });
     navigator.sendBeacon?.(
       "/api/upload/failure",
+      new Blob([payload], { type: "application/json" }),
+    );
+  } catch {
+    // Diagnostics only.
+  }
+}
+
+/**
+ * One line per failed send with the sizes involved (body length, attachment
+ * count and bytes), the stage it died at and the device's online state. Pairs
+ * with the server's "[send-failure]" log so a complaint like "long messages
+ * cannot be sent" can be matched to a cause.
+ */
+function reportSendFailure(
+  entry: OutboxEntry,
+  stage: "upload" | "action-rejected" | "action-unreachable",
+  reason: string,
+) {
+  try {
+    const payload = JSON.stringify({
+      threadKey: entry.threadKey,
+      stage,
+      bodyLength: entry.body.length,
+      attachmentCount: entry.files.length,
+      attachmentBytes: entry.files.reduce((sum, f) => sum + f.file.size, 0),
+      reason,
+      online: navigator.onLine,
+      userAgent: navigator.userAgent,
+    });
+    navigator.sendBeacon?.(
+      "/api/messages/failure",
       new Blob([payload], { type: "application/json" }),
     );
   } catch {

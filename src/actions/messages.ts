@@ -1,10 +1,15 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth";
+import type { Prisma } from "@/generated/prisma/client";
+import { isImpersonating, requireUser } from "@/lib/auth";
 import { hasProjectAccess } from "@/lib/project-access";
 import { getActiveContract } from "@/lib/contract-rules";
-import { fanOutMessageSideEffects } from "@/lib/message-fanout";
+import {
+  dispatchMessageEvents,
+  writeMessageEvent,
+} from "@/lib/message-events";
+import type { MessageEventPublish } from "@/lib/message-events-core";
 import { unreadCountsFor } from "@/lib/notify";
 import { resolveProjectMentionIds } from "@/lib/project-mentions";
 import {
@@ -48,7 +53,6 @@ import {
   type ProofBypassPayload,
 } from "@/lib/proof-bypass-payload";
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
 import { plainTextExcerpt } from "@/lib/html-annotate";
 import { ALL_MENTION_ID, ALL_MENTION_NAME } from "@/lib/mentions";
 import {
@@ -67,6 +71,7 @@ import {
   TYPING_EVENT,
 } from "@/lib/channels";
 import { threadPushTag } from "@/lib/notification-read";
+import { MAX_MESSAGE_CHARS, messageTooLongError } from "@/lib/message-limits";
 import {
   countInboxMessageUnreads,
   sumInboxMessageUnreads,
@@ -487,6 +492,7 @@ async function resolveThreadUnreadCursor(
   const unreadCount = await prisma.message.count({
     where: {
       ...messageWhere,
+      deletedAt: null,
       authorId: { not: userId },
       createdAt: { gt: lastReadAt },
     },
@@ -528,19 +534,43 @@ export type ThreadMessagesPage = {
   unreadCount: number;
 };
 
-export async function getThreadMessages(input: {
-  taskId?: string | null;
-  projectId?: string | null;
+type ThreadWhere = {
+  taskId?: string;
+  projectId?: string;
   conversationId?: string | null;
-  cursorId?: string;
-}): Promise<ThreadMessagesPage> {
-  const user = await requireUser();
+};
 
-  let where: {
-    taskId?: string;
-    projectId?: string;
+type ThreadScope = {
+  where: ThreadWhere;
+  aliasProjectId: string | null;
+  isClientRoom: boolean;
+};
+
+const THREAD_MESSAGE_INCLUDE = {
+  author: { select: { id: true, name: true, email: true, imageUrl: true } },
+  reactions: {
+    select: { emoji: true, memberId: true },
+    orderBy: { createdAt: "asc" },
+  },
+  attachments: {
+    select: { id: true, filename: true, url: true, fileSize: true, mimeType: true },
+    orderBy: { createdAt: "asc" },
+  },
+  task: { select: { id: true, taskNumber: true, title: true, projectId: true } },
+} satisfies Prisma.MessageInclude;
+
+type ThreadMessageRow = Prisma.MessageGetPayload<{ include: typeof THREAD_MESSAGE_INCLUDE }>;
+
+/** Permission check + the Message filter for one thread. Throws when the viewer may not read it. */
+async function resolveThreadScope(
+  user: Awaited<ReturnType<typeof requireUser>>,
+  input: {
+    taskId?: string | null;
+    projectId?: string | null;
     conversationId?: string | null;
-  };
+  },
+): Promise<ThreadScope> {
+  let where: ThreadWhere;
   let aliasProjectId: string | null = null;
   let isClientRoom = false;
   if (input.conversationId) {
@@ -586,29 +616,17 @@ export async function getThreadMessages(input: {
   } else {
     throw new Error("No thread specified");
   }
+  return { where, aliasProjectId, isClientRoom };
+}
 
-  const rows = await prisma.message.findMany({
-    where,
-    include: {
-      author: { select: { id: true, name: true, email: true, imageUrl: true } },
-      reactions: {
-        select: { emoji: true, memberId: true },
-        orderBy: { createdAt: "asc" },
-      },
-      attachments: {
-        select: { id: true, filename: true, url: true, fileSize: true, mimeType: true },
-        orderBy: { createdAt: "asc" },
-      },
-      task: { select: { id: true, taskNumber: true, title: true, projectId: true } },
-    },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: THREAD_PAGE_SIZE + 1,
-    ...(input.cursorId ? { cursor: { id: input.cursorId }, skip: 1 } : {}),
-  });
-
-  const hasMore = rows.length > THREAD_PAGE_SIZE;
-  const page = rows.slice(0, THREAD_PAGE_SIZE).reverse();
-
+/** Rows (oldest → newest) to the wire shape, masked for this viewer. */
+async function toThreadMessages(
+  user: Awaited<ReturnType<typeof requireUser>>,
+  page: ThreadMessageRow[],
+  scope: ThreadScope,
+): Promise<ThreadMessage[]> {
+  if (page.length === 0) return [];
+  const { aliasProjectId, isClientRoom } = scope;
   const importantRows = await prisma.importantMessage.findMany({
     where: {
       userId: user.id,
@@ -627,8 +645,7 @@ export async function getThreadMessages(input: {
       byEmoji.set(r.emoji, list);
     }
     const mapped = mapDeadlineReminderMessage(c, aliasMap, { isClientRoom });
-    const edited =
-      c.updatedAt.getTime() - c.createdAt.getTime() > 2000;
+    const edited = c.editedAt !== null;
     return {
       id: c.id,
       authorId: mapped.authorId,
@@ -699,12 +716,101 @@ export async function getThreadMessages(input: {
       }
     }
   }
+  return messages;
+}
+
+export async function getThreadMessages(input: {
+  taskId?: string | null;
+  projectId?: string | null;
+  conversationId?: string | null;
+  cursorId?: string;
+}): Promise<ThreadMessagesPage> {
+  const user = await requireUser();
+  const scope = await resolveThreadScope(user, input);
+  const { where } = scope;
+
+  const rows = await prisma.message.findMany({
+    where: { ...where, deletedAt: null },
+    include: THREAD_MESSAGE_INCLUDE,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: THREAD_PAGE_SIZE + 1,
+    ...(input.cursorId ? { cursor: { id: input.cursorId }, skip: 1 } : {}),
+  });
+
+  const hasMore = rows.length > THREAD_PAGE_SIZE;
+  const page = rows.slice(0, THREAD_PAGE_SIZE).reverse();
+  const messages = await toThreadMessages(user, page, scope);
 
   const unread = input.cursorId
     ? { lastReadAt: null, unreadCount: 0 }
     : await resolveThreadUnreadCursor(user.id, input, where);
 
   return { messages, hasMore, lastReadAt: unread.lastReadAt, unreadCount: unread.unreadCount };
+}
+
+// ─── Thread catch-up ─────────────────────────────────────────────────────────
+
+/** More changes than this in one gap → the client reloads the newest page instead. */
+const THREAD_CHANGES_CAP = 200;
+
+export type ThreadChanges = {
+  /** Created or changed (edit, reaction) after `since`, oldest → newest. */
+  messages: ThreadMessage[];
+  /** Deleted after `since`. */
+  deletedIds: string[];
+  /** Pass back as the next `since`. */
+  serverTime: string;
+  /** The change set was cut at THREAD_CHANGES_CAP; reload the newest page. */
+  truncated: boolean;
+};
+
+/**
+ * Everything that happened in a thread after `sinceIso` — new messages, edits,
+ * reactions and deletions — so a client whose socket was asleep can reconcile
+ * without reloading. `Message.updatedAt` moves on every one of those, which is
+ * what makes a single column the cursor.
+ */
+export async function getThreadChangesSince(
+  input: {
+    taskId?: string | null;
+    projectId?: string | null;
+    conversationId?: string | null;
+  },
+  sinceIso: string,
+): Promise<ThreadChanges> {
+  const user = await requireUser();
+  const since = new Date(sinceIso);
+  if (Number.isNaN(since.getTime())) throw new Error("Invalid cursor");
+  const scope = await resolveThreadScope(user, input);
+  const { where } = scope;
+  const serverTime = new Date();
+
+  const [rows, deleted] = await Promise.all([
+    prisma.message.findMany({
+      where: { ...where, deletedAt: null, updatedAt: { gt: since } },
+      include: THREAD_MESSAGE_INCLUDE,
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      take: THREAD_CHANGES_CAP + 1,
+    }),
+    prisma.message.findMany({
+      where: { ...where, deletedAt: { gt: since } },
+      select: { id: true },
+      orderBy: { deletedAt: "desc" },
+      take: THREAD_CHANGES_CAP,
+    }),
+  ]);
+  const truncated = rows.length > THREAD_CHANGES_CAP;
+  const page = rows
+    .slice(0, THREAD_CHANGES_CAP)
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : 1));
+  const messages = await toThreadMessages(user, page, scope);
+
+  return {
+    messages,
+    deletedIds: deleted.map((d) => d.id),
+    serverTime: serverTime.toISOString(),
+    truncated,
+  };
 }
 
 export type ImportantMessageDTO = {
@@ -768,8 +874,8 @@ export async function toggleImportantMessage(
 ): Promise<{ ok: true; important: boolean } | { ok: false; error: string }> {
   try {
     const user = await requireUser();
-    const message = await prisma.message.findUnique({
-      where: { id: messageId },
+    const message = await prisma.message.findFirst({
+      where: { id: messageId, deletedAt: null },
       select: {
         id: true,
         conversationId: true,
@@ -822,7 +928,7 @@ export async function listImportantMessages(target?: {
   const rows = await prisma.importantMessage.findMany({
     where: {
       userId: user.id,
-      ...(threadFilter ? { message: threadFilter } : {}),
+      message: { ...(threadFilter ?? {}), deletedAt: null },
     },
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -1014,13 +1120,16 @@ export async function getProjectTaskRefs(
 export async function sendMessage(
   input: SendMessageInput,
 ): Promise<ActionResult<MessageDTO>> {
-  return safeAction("Send Message", async () => {
+  const result = await safeAction("Send Message", async () => {
     const user = await requireUser();
 
     const body = input.body.trim();
     const attachmentsInput = input.attachments ?? [];
     if (!body && attachmentsInput.length === 0) {
       throw new Error("Message is empty");
+    }
+    if (body.length > MAX_MESSAGE_CHARS) {
+      throw new Error(messageTooLongError(body.length));
     }
 
     let taskId = input.taskId ?? null;
@@ -1059,7 +1168,7 @@ export async function sendMessage(
         if (!canReadAnnouncements(user)) throw new Error("Conversation not found");
         if (input.replyToId) {
           const parent = await prisma.message.findFirst({
-            where: { id: input.replyToId, conversationId },
+            where: { id: input.replyToId, conversationId, deletedAt: null },
             select: { id: true, authorId: true },
           });
           if (!parent) throw new Error("You can only reply inside this channel");
@@ -1230,242 +1339,301 @@ export async function sendMessage(
       );
     }
 
-    const message = await prisma.message.create({
-      data: {
+    const { dto, event } = await prisma.$transaction(async (tx) => {
+      const message = await tx.message.create({
+        data: {
+          taskId,
+          projectId,
+          conversationId,
+          replyToId: input.replyToId ?? null,
+          authorId: user.id,
+          body,
+          kind: input.kind ?? "message",
+          mentions: mentionedIds.length
+            ? { create: mentionedIds.map((id) => ({ memberId: id })) }
+            : undefined,
+          attachments: attachmentsInput.length
+            ? {
+                create: attachmentsInput.map((a) => ({
+                  filename: a.filename,
+                  url: a.url,
+                  fileSize: a.fileSize ?? null,
+                  mimeType: a.mimeType ?? null,
+                })),
+              }
+            : undefined,
+        },
+        include: {
+          author: { select: { id: true, name: true, email: true, imageUrl: true } },
+          attachments: {
+            select: { id: true, filename: true, url: true, fileSize: true, mimeType: true },
+          },
+        },
+      });
+
+      const attachments: MessageAttachment[] = message.attachments.map((a) => ({
+        id: a.id,
+        name: a.filename,
+        url: a.url,
+        contentType: a.mimeType,
+        sizeBytes: a.fileSize,
+        isImage: isImageType(a.mimeType),
+      }));
+
+      const authorName = message.author.name ?? message.author.email ?? "Someone";
+      const noteCommentPayload = isNoteCommentMessage(message.kind)
+        ? decodeNoteCommentPayload(body)
+        : null;
+      const taskCommentPayload = isTaskCommentMessage(message.kind)
+        ? decodeTaskCommentPayload(body)
+        : null;
+      const noteActivityPayload = isNoteActivityMessage(message.kind)
+        ? decodeNoteActivityPayload(body)
+        : null;
+      const proofBypassPayload = isProofBypassMessage(message.kind)
+        ? decodeProofBypassPayload(body)
+        : null;
+      const highlightPayload = noteCommentPayload ?? taskCommentPayload;
+      const display = highlightPayload
+        ? highlightPayload.comment
+        : noteActivityPayload
+          ? noteActivityPreview(noteActivityPayload)
+          : proofBypassPayload
+            ? proofBypassPreview(proofBypassPayload)
+            : toDisplayBody(body);
+      const previewText =
+        (noteCommentPayload
+          ? noteCommentPreview(noteCommentPayload)
+          : taskCommentPayload
+            ? taskCommentPreview(taskCommentPayload)
+            : noteActivityPayload
+              ? noteActivityPreview(noteActivityPayload)
+              : proofBypassPayload
+                ? proofBypassPreview(proofBypassPayload)
+                : display) || (attachments.length > 0 ? `📎 ${attachments[0].name}` : "");
+      const preview =
+        previewText.length > 80 ? previewText.slice(0, 80) + "…" : previewText;
+
+      if (noteCommentThreadId) {
+        await tx.noteComment.create({
+          data: {
+            threadId: noteCommentThreadId,
+            userId: user.id,
+            content: display,
+            messageId: message.id,
+            ...(mentionedIds.length
+              ? {
+                  mentions: {
+                    create: mentionedIds.map((id) => ({ userId: id })),
+                  },
+                }
+              : {}),
+          },
+        });
+      }
+
+      if (taskHighlightThreadId) {
+        await tx.taskHighlightComment.create({
+          data: {
+            threadId: taskHighlightThreadId,
+            userId: user.id,
+            content: display,
+            messageId: message.id,
+            ...(mentionedIds.length
+              ? {
+                  mentions: {
+                    create: mentionedIds.map((id) => ({ userId: id })),
+                  },
+                }
+              : {}),
+          },
+        });
+      }
+
+      const dto: MessageDTO = {
+        id: message.id,
         taskId,
         projectId,
         conversationId,
-        replyToId: input.replyToId ?? null,
+        kind: message.kind,
         authorId: user.id,
-        body,
-        kind: input.kind ?? "message",
-        mentions: mentionedIds.length
-          ? { create: mentionedIds.map((id) => ({ memberId: id })) }
-          : undefined,
-        attachments: attachmentsInput.length
-          ? {
-              create: attachmentsInput.map((a) => ({
-                filename: a.filename,
-                url: a.url,
-                fileSize: a.fileSize ?? null,
-                mimeType: a.mimeType ?? null,
-              })),
-            }
-          : undefined,
-      },
-      include: {
-        author: { select: { id: true, name: true, email: true, imageUrl: true } },
-        attachments: {
-          select: { id: true, filename: true, url: true, fileSize: true, mimeType: true },
-        },
-      },
-    });
-
-    const attachments: MessageAttachment[] = message.attachments.map((a) => ({
-      id: a.id,
-      name: a.filename,
-      url: a.url,
-      contentType: a.mimeType,
-      sizeBytes: a.fileSize,
-      isImage: isImageType(a.mimeType),
-    }));
-
-    const authorName = message.author.name ?? message.author.email ?? "Someone";
-    const noteCommentPayload = isNoteCommentMessage(message.kind)
-      ? decodeNoteCommentPayload(body)
-      : null;
-    const taskCommentPayload = isTaskCommentMessage(message.kind)
-      ? decodeTaskCommentPayload(body)
-      : null;
-    const noteActivityPayload = isNoteActivityMessage(message.kind)
-      ? decodeNoteActivityPayload(body)
-      : null;
-    const proofBypassPayload = isProofBypassMessage(message.kind)
-      ? decodeProofBypassPayload(body)
-      : null;
-    const highlightPayload = noteCommentPayload ?? taskCommentPayload;
-    const display = highlightPayload
-      ? highlightPayload.comment
-      : noteActivityPayload
-        ? noteActivityPreview(noteActivityPayload)
-        : proofBypassPayload
-          ? proofBypassPreview(proofBypassPayload)
-          : toDisplayBody(body);
-    const previewText =
-      (noteCommentPayload
-        ? noteCommentPreview(noteCommentPayload)
-        : taskCommentPayload
-          ? taskCommentPreview(taskCommentPayload)
-          : noteActivityPayload
-            ? noteActivityPreview(noteActivityPayload)
-            : proofBypassPayload
-              ? proofBypassPreview(proofBypassPayload)
-              : display) || (attachments.length > 0 ? `📎 ${attachments[0].name}` : "");
-    const preview =
-      previewText.length > 80 ? previewText.slice(0, 80) + "…" : previewText;
-
-    if (noteCommentThreadId) {
-      await prisma.noteComment.create({
-        data: {
-          threadId: noteCommentThreadId,
-          userId: user.id,
-          content: display,
-          messageId: message.id,
-          ...(mentionedIds.length
-            ? {
-                mentions: {
-                  create: mentionedIds.map((id) => ({ userId: id })),
-                },
-              }
-            : {}),
-        },
-      });
-    }
-
-    if (taskHighlightThreadId) {
-      await prisma.taskHighlightComment.create({
-        data: {
-          threadId: taskHighlightThreadId,
-          userId: user.id,
-          content: display,
-          messageId: message.id,
-          ...(mentionedIds.length
-            ? {
-                mentions: {
-                  create: mentionedIds.map((id) => ({ userId: id })),
-                },
-              }
-            : {}),
-        },
-      });
-    }
-
-    const dto: MessageDTO = {
-      id: message.id,
-      taskId,
-      projectId,
-      conversationId,
-      kind: message.kind,
-      authorId: user.id,
-      authorName,
-      authorImageUrl: message.author.imageUrl ?? null,
-      body: display,
-      createdAt: message.createdAt.toISOString(),
-      attachments,
-      replyToId: input.replyToId ?? null,
-      task:
-        taskId && projectId
-          ? { id: taskId, projectId, number: taskNumber, title: taskTitle }
-          : null,
-      mentions: parseMentionNames(body),
-      noteComment: noteCommentPayload,
-      taskComment: taskCommentPayload,
-      noteActivity: noteActivityPayload,
-      proofBypass: proofBypassPayload,
-    };
-
-    // Recipients + notification (mention-driven; DMs notify all participants).
-    let url: string;
-    let threadId: string;
-    let recipients: string[];
-    if (conversationId) {
-      url = `/dashboard/messages/conv-${conversationId}`;
-      threadId = `conv-${conversationId}`;
-      recipients = announcementReplyAuthorId
-        ? [...new Set([announcementReplyAuthorId, ...mentionedIds])].filter(
-            (id) => id !== user.id,
-          )
-        : participantIds.filter((id) => id !== user.id);
-    } else if (taskId) {
-      url = `/dashboard/projects/${projectId}/tasks/${taskId}`;
-      threadId = `task-${taskId}`;
-      recipients = mentionedIds.filter((id) => id !== user.id);
-    } else {
-      url = `/dashboard/messages/project-${projectId}`;
-      threadId = `project-${projectId}`;
-      recipients = mentionedIds.filter((id) => id !== user.id);
-    }
-
-    const notifyType =
-      input.kind === "rejection"
-        ? "rejection"
-        : conversationId
-          ? "message"
-          : "mention";
-    // Where the message came from, right in the OS banner: the group name, an
-    // explicit "Direct message", or the task's project. Kept short — iOS
-    // truncates banner titles around 30 characters, so anything appended after
-    // "mentioned you in …" was never visible. Author first, context right
-    // after, and the task name moves into the body (which gets two lines).
-    const title = conversationId
-      ? `${authorName} · ${groupName || "Direct message"}`
-      : input.kind === "rejection"
-        ? `${authorName} declined "${taskTitle}"`
-        : `${authorName} · ${projectName}`;
-    const notifBody =
-      taskTitle && input.kind !== "rejection"
-        ? `"${taskTitle}" — ${preview}`
-        : preview;
-    // DMs and groups show the sender's face; project threads show the project
-    // logo. The service worker falls back to the app icon when neither exists.
-    // This is the staff-facing icon — notifyAndPush substitutes the alias photo
-    // for any client recipient.
-    const notifIcon =
-      (isClientRoom
-        ? (projectLogoUrl ?? message.author.imageUrl)
-        : conversationId
-          ? message.author.imageUrl
-          : (projectLogoUrl ?? message.author.imageUrl)) ?? undefined;
-
-    const uniqueRecipients = [...new Set(recipients)];
-
-    // Live delivery first so the sender sees their own bubble without waiting
-    // on notifications / unread cursors.
-    const threadChannels: string[] = [];
-    if (taskId) threadChannels.push(taskChannel(taskId));
-    if (projectId && !conversationId) threadChannels.push(projectChannel(projectId));
-    if (conversationId) threadChannels.push(conversationChannel(conversationId));
-    void broadcast(threadChannels, { type: "message.new", message: dto });
-
-    // Clients read a separate channel carrying the aliased payload, so the real
-    // name is never published anywhere a client can subscribe. Always publish,
-    // even with no aliases assigned, or client chat would go silent.
-    if (conversationId) {
-      const aliasMap = await getAliasMap(projectId);
-      void publish(conversationClientChannel(conversationId), {
-        type: "message.new",
-        message: maskMessageDTO(dto, aliasMap),
-      });
-    }
-
-    after(() => {
-      void fanOutMessageSideEffects({
-        conversationId,
-        projectId,
-        taskId,
-        userId: user.id,
-        isClientRoom,
-        participantIds,
-        uniqueRecipients,
-        notifyType,
-        title,
-        notifBody,
-        url,
-        threadId,
         authorName,
-        preview,
-        notifIcon,
-        messageCreatedAt: message.createdAt,
-      }).catch((err) => {
-        console.error("[Send Message] fan-out failed", err);
+        authorImageUrl: message.author.imageUrl ?? null,
+        body: display,
+        createdAt: message.createdAt.toISOString(),
+        attachments,
+        replyToId: input.replyToId ?? null,
+        task:
+          taskId && projectId
+            ? { id: taskId, projectId, number: taskNumber, title: taskTitle }
+            : null,
+        mentions: parseMentionNames(body),
+        noteComment: noteCommentPayload,
+        taskComment: taskCommentPayload,
+        noteActivity: noteActivityPayload,
+        proofBypass: proofBypassPayload,
+      };
+
+      // Recipients + notification (mention-driven; DMs notify all participants).
+      let url: string;
+      let threadId: string;
+      // Candidates for a notification. The per-thread level filter (in
+      // notify.ts) decides who actually gets one: "all" / "mentions" / "none",
+      // defaulting to every message in conversations and mentions only in
+      // project and task threads. Project and task candidates are therefore
+      // every non-client member, not just the mentioned ones, so a member who
+      // chose "every message" for a thread really gets every message.
+      let recipients: string[];
+      /** Who this message names — what level "mentions" keys on. */
+      let namedIds: string[] = mentionedIds;
+      if (conversationId) {
+        url = `/dashboard/messages/conv-${conversationId}`;
+        threadId = `conv-${conversationId}`;
+        if (announcementReplyAuthorId) {
+          namedIds = [...new Set([announcementReplyAuthorId, ...mentionedIds])];
+          recipients = namedIds.filter((id) => id !== user.id);
+        } else {
+          recipients = participantIds.filter((id) => id !== user.id);
+        }
+      } else {
+        url = taskId
+          ? `/dashboard/projects/${projectId}/tasks/${taskId}`
+          : `/dashboard/messages/project-${projectId}`;
+        threadId = taskId ? `task-${taskId}` : `project-${projectId}`;
+        const members = projectId
+          ? await prisma.projectMember.findMany({
+              where: { projectId, user: { systemRole: { not: "CLIENT" } } },
+              select: { userId: true },
+            })
+          : [];
+        recipients = [
+          ...new Set([...members.map((m) => m.userId), ...mentionedIds]),
+        ].filter((id) => id !== user.id);
+      }
+
+      const notifyType =
+        input.kind === "rejection"
+          ? "rejection"
+          : conversationId || mentionedIds.length === 0
+            ? "message"
+            : "mention";
+      // Where the message came from, right in the OS banner: the group name, an
+      // explicit "Direct message", or the task's project. Kept short — iOS
+      // truncates banner titles around 30 characters, so anything appended after
+      // "mentioned you in …" was never visible. Author first, context right
+      // after, and the task name moves into the body (which gets two lines).
+      const title = conversationId
+        ? `${authorName} · ${groupName || "Direct message"}`
+        : input.kind === "rejection"
+          ? `${authorName} declined "${taskTitle}"`
+          : `${authorName} · ${projectName}`;
+      const notifBody =
+        taskTitle && input.kind !== "rejection"
+          ? `"${taskTitle}" — ${preview}`
+          : preview;
+      // DMs and groups show the sender's face; project threads show the project
+      // logo. The service worker falls back to the app icon when neither exists.
+      // This is the staff-facing icon — notifyAndPush substitutes the alias photo
+      // for any client recipient.
+      const notifIcon =
+        (isClientRoom
+          ? (projectLogoUrl ?? message.author.imageUrl)
+          : conversationId
+            ? message.author.imageUrl
+            : (projectLogoUrl ?? message.author.imageUrl)) ?? undefined;
+
+      const uniqueRecipients = [...new Set(recipients)];
+
+      // Everything that must happen now that the message exists — the live
+      // broadcast and the notification fan-out — is recorded as ONE event row in
+      // this same transaction. The worker delivers it and retries, so a
+      // Centrifugo hiccup or a replica restart during a deploy can no longer
+      // lose it. The sender still sees their own bubble at once from the client
+      // outbox, and the message itself is already in Postgres.
+      const threadChannels: string[] = [];
+      if (taskId) threadChannels.push(taskChannel(taskId));
+      if (projectId && !conversationId) threadChannels.push(projectChannel(projectId));
+      if (conversationId) threadChannels.push(conversationChannel(conversationId));
+      const publishes: MessageEventPublish[] = [
+        { channels: threadChannels, data: { type: "message.new", message: dto } },
+      ];
+
+      // Clients read a separate channel carrying the aliased payload, so the real
+      // name is never published anywhere a client can subscribe. Always publish,
+      // even with no aliases assigned, or client chat would go silent.
+      if (conversationId) {
+        const aliasMap = await getAliasMap(projectId);
+        publishes.push({
+          channels: [conversationClientChannel(conversationId)],
+          data: { type: "message.new", message: maskMessageDTO(dto, aliasMap) },
+        });
+      }
+
+      const event = await writeMessageEvent(tx, {
+        kind: "message.new",
+        messageId: message.id,
+        payload: {
+          v: 1,
+          publishes,
+          fanOut: {
+            conversationId,
+            projectId,
+            taskId,
+            userId: user.id,
+            isClientRoom,
+            participantIds,
+            uniqueRecipients,
+            mentionedIds: namedIds.filter((id) => id !== user.id),
+            notifyType,
+            title,
+            notifBody,
+            url,
+            threadId,
+            authorName,
+            preview,
+            notifIcon,
+            messageCreatedAt: message.createdAt.toISOString(),
+          },
+        },
       });
+
+      return { dto, event };
     });
+
+    // After commit. If Redis is down this logs and returns; the worker's
+    // 20s sweep picks the row up as soon as the queue is reachable again.
+    await dispatchMessageEvents([event]);
 
     if (isClientUser(user)) {
       return maskMessageDTO(dto, await getAliasMap(projectId));
     }
     return dto;
   });
+  if (!result.ok) {
+    // One structured line per failed send, with the sizes involved, so "long
+    // messages cannot be sent" can be answered from the logs instead of guessed.
+    console.error(
+      "[send-failure]",
+      JSON.stringify({
+        error: result.error,
+        bodyLength: input.body?.length ?? 0,
+        attachmentCount: input.attachments?.length ?? 0,
+        attachmentBytes: (input.attachments ?? []).reduce(
+          (sum, a) => sum + (typeof a.fileSize === "number" ? a.fileSize : 0),
+          0,
+        ),
+        kind: input.kind ?? "message",
+        thread: input.conversationId
+          ? `conv-${input.conversationId}`
+          : input.taskId
+            ? `task-${input.taskId}`
+            : input.projectId
+              ? `project-${input.projectId}`
+              : null,
+      }),
+    );
+  }
+  return result;
 }
 
 /**
@@ -1583,6 +1751,14 @@ export async function markThreadRead(target: {
         : null;
   if (!linkUrl) return;
 
+  // An admin on "view as" reads with the other person's identity. Marking
+  // anything read here would clear THEIR unread badges on all of THEIR devices
+  // ("someone else read my notification"). Look, don't touch.
+  if (await isImpersonating()) {
+    console.info(`[read-state] view-as: skipped markThreadRead for ${user.id} on ${linkUrl}`);
+    return;
+  }
+
   const now = new Date();
 
   const inboxThreadId = target.conversationId
@@ -1672,7 +1848,7 @@ export async function editMessage(
     if (!trimmed) throw new Error("Message cannot be empty");
 
     const message = await prisma.message.findFirst({
-      where: { id: messageId },
+      where: { id: messageId, deletedAt: null },
       select: {
         id: true,
         authorId: true,
@@ -1702,40 +1878,59 @@ export async function editMessage(
       }
     }
 
-    const updated = await prisma.message.update({
-      where: { id: message.id },
-      data: { body: trimmed },
-      select: { id: true, body: true, updatedAt: true },
-    });
-
-    const channels: string[] = [];
-    if (message.taskId) channels.push(taskChannel(message.taskId));
-    if (message.projectId) channels.push(projectChannel(message.projectId));
-    if (message.conversationId)
-      channels.push(conversationChannel(message.conversationId));
-    void broadcast(channels, {
-      type: "message.updated",
-      messageId: updated.id,
-      body: toDisplayBody(updated.body),
-      updatedAt: updated.updatedAt.toISOString(),
-      edited: true,
-    });
-
     // The edited body may name someone, so the client channel gets its own copy.
-    let clientBody: string | null = null;
-    if (message.conversationId) {
-      const aliasMap = await getAliasMap(
-        message.conversation?.projectId ?? message.projectId,
-      );
-      clientBody = toDisplayBody(maskBody(updated.body, aliasMap));
-      void publish(conversationClientChannel(message.conversationId), {
-        type: "message.updated",
-        messageId: updated.id,
-        body: clientBody,
-        updatedAt: updated.updatedAt.toISOString(),
-        edited: true,
+    const aliasMap = message.conversationId
+      ? await getAliasMap(message.conversation?.projectId ?? message.projectId)
+      : null;
+
+    const { updated, event, clientBody } = await prisma.$transaction(async (tx) => {
+      const updated = await tx.message.update({
+        where: { id: message.id },
+        data: { body: trimmed, editedAt: new Date() },
+        select: { id: true, body: true, updatedAt: true },
       });
-    }
+
+      const channels: string[] = [];
+      if (message.taskId) channels.push(taskChannel(message.taskId));
+      if (message.projectId) channels.push(projectChannel(message.projectId));
+      if (message.conversationId)
+        channels.push(conversationChannel(message.conversationId));
+      const publishes: MessageEventPublish[] = [
+        {
+          channels,
+          data: {
+            type: "message.updated",
+            messageId: updated.id,
+            body: toDisplayBody(updated.body),
+            updatedAt: updated.updatedAt.toISOString(),
+            edited: true,
+          },
+        },
+      ];
+
+      let clientBody: string | null = null;
+      if (message.conversationId && aliasMap) {
+        clientBody = toDisplayBody(maskBody(updated.body, aliasMap));
+        publishes.push({
+          channels: [conversationClientChannel(message.conversationId)],
+          data: {
+            type: "message.updated",
+            messageId: updated.id,
+            body: clientBody,
+            updatedAt: updated.updatedAt.toISOString(),
+            edited: true,
+          },
+        });
+      }
+
+      const event = await writeMessageEvent(tx, {
+        kind: "message.updated",
+        messageId: updated.id,
+        payload: { v: 1, publishes },
+      });
+      return { updated, event, clientBody };
+    });
+    await dispatchMessageEvents([event]);
 
     // The editor reads this response straight back into their own bubble, so a
     // client has to be handed the same copy their channel just received.
@@ -1762,7 +1957,7 @@ export async function toggleReaction(
     if (!ALLOWED_EMOJIS.includes(emoji)) throw new Error("Invalid reaction");
 
     const message = await prisma.message.findFirst({
-      where: { id: messageId },
+      where: { id: messageId, deletedAt: null },
       select: { id: true, taskId: true, projectId: true, conversationId: true },
     });
     if (!message) throw new Error("Message not found");
@@ -1795,41 +1990,62 @@ export async function toggleReaction(
       throw new Error("Permission denied");
     }
 
-    const existing = await prisma.messageReaction.findUnique({
-      where: {
-        messageId_memberId_emoji: { messageId, memberId: user.id, emoji },
-      },
-      select: { id: true },
-    });
-    if (existing) {
-      await prisma.messageReaction.delete({ where: { id: existing.id } });
-    } else {
-      await prisma.messageReaction.create({
-        data: { messageId, memberId: user.id, emoji },
+    const { reactions, event } = await prisma.$transaction(async (tx) => {
+      const existing = await tx.messageReaction.findUnique({
+        where: {
+          messageId_memberId_emoji: { messageId, memberId: user.id, emoji },
+        },
+        select: { id: true },
       });
-    }
+      if (existing) {
+        await tx.messageReaction.delete({ where: { id: existing.id } });
+      } else {
+        await tx.messageReaction.create({
+          data: { messageId, memberId: user.id, emoji },
+        });
+      }
 
-    const all = await prisma.messageReaction.findMany({
-      where: { messageId },
-      select: { emoji: true, memberId: true },
-      orderBy: { createdAt: "asc" },
+      // The reaction lives on its own table; touching the message moves its
+      // updatedAt so an offline client's "changes since" picks this up.
+      await tx.message.update({
+        where: { id: messageId },
+        data: { updatedAt: new Date() },
+        select: { id: true },
+      });
+
+      const all = await tx.messageReaction.findMany({
+        where: { messageId },
+        select: { emoji: true, memberId: true },
+        orderBy: { createdAt: "asc" },
+      });
+      const byEmoji = new Map<string, string[]>();
+      for (const r of all) {
+        const list = byEmoji.get(r.emoji) ?? [];
+        list.push(r.memberId);
+        byEmoji.set(r.emoji, list);
+      }
+      const reactions: ReactionSummary[] = [...byEmoji.entries()].map(
+        ([e, memberIds]) => ({ emoji: e, memberIds }),
+      );
+
+      const channels: string[] = [];
+      if (message.taskId) channels.push(taskChannel(message.taskId));
+      if (message.projectId) channels.push(projectChannel(message.projectId));
+      if (message.conversationId)
+        channels.push(...conversationChannelsFor(message.conversationId));
+      const event = await writeMessageEvent(tx, {
+        kind: "reaction.updated",
+        messageId,
+        payload: {
+          v: 1,
+          publishes: [
+            { channels, data: { type: "reaction.updated", messageId, reactions } },
+          ],
+        },
+      });
+      return { reactions, event };
     });
-    const byEmoji = new Map<string, string[]>();
-    for (const r of all) {
-      const list = byEmoji.get(r.emoji) ?? [];
-      list.push(r.memberId);
-      byEmoji.set(r.emoji, list);
-    }
-    const reactions: ReactionSummary[] = [...byEmoji.entries()].map(
-      ([e, memberIds]) => ({ emoji: e, memberIds }),
-    );
-
-    const channels: string[] = [];
-    if (message.taskId) channels.push(taskChannel(message.taskId));
-    if (message.projectId) channels.push(projectChannel(message.projectId));
-    if (message.conversationId)
-      channels.push(...conversationChannelsFor(message.conversationId));
-    void broadcast(channels, { type: "reaction.updated", messageId, reactions });
+    await dispatchMessageEvents([event]);
 
     return { messageId, reactions };
   });
@@ -1842,7 +2058,7 @@ export async function deleteMessage(
     const user = await requireUser();
 
     const message = await prisma.message.findFirst({
-      where: { id: messageId },
+      where: { id: messageId, deletedAt: null },
       select: {
         id: true,
         authorId: true,
@@ -1864,14 +2080,33 @@ export async function deleteMessage(
       }
     }
 
-    await prisma.message.delete({ where: { id: message.id } });
-
     const channels: string[] = [];
     if (message.taskId) channels.push(taskChannel(message.taskId));
     if (message.projectId) channels.push(projectChannel(message.projectId));
     if (message.conversationId)
       channels.push(...conversationChannelsFor(message.conversationId));
-    void broadcast(channels, { type: "message.deleted", messageId: message.id });
+
+    const event = await prisma.$transaction(async (tx) => {
+      // Tombstone, not a hard delete: a client that was offline learns about
+      // the removal through getThreadChangesSince. Readers filter deletedAt.
+      await tx.message.update({
+        where: { id: message.id },
+        data: { deletedAt: new Date() },
+        select: { id: true },
+      });
+      await tx.importantMessage.deleteMany({ where: { messageId: message.id } });
+      return writeMessageEvent(tx, {
+        kind: "message.deleted",
+        messageId: message.id,
+        payload: {
+          v: 1,
+          publishes: [
+            { channels, data: { type: "message.deleted", messageId: message.id } },
+          ],
+        },
+      });
+    });
+    await dispatchMessageEvents([event]);
   });
 }
 
@@ -1926,6 +2161,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
             },
           },
           messages: {
+            where: { deletedAt: null },
             orderBy: { createdAt: "desc" },
             take: 1,
             include: { author: { select: { id: true, name: true, email: true } } },
@@ -1982,7 +2218,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         logoUrl: true,
         contracts: { select: CONTRACT_SELECT },
         messages: {
-          where: { conversationId: null },
+          where: { conversationId: null, deletedAt: null },
           orderBy: { createdAt: "desc" },
           take: 1,
           include: { author: { select: { id: true, name: true, email: true } } },
@@ -2014,6 +2250,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
           select: { id: true },
         },
         messages: {
+          where: { deletedAt: null },
           orderBy: { createdAt: "desc" },
           take: 1,
           include: { author: { select: { id: true, name: true, email: true } } },
@@ -2053,6 +2290,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
           },
         },
         messages: {
+          where: { deletedAt: null },
           orderBy: { createdAt: "desc" },
           take: 1,
           include: { author: { select: { id: true, name: true, email: true } } },
@@ -2075,6 +2313,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       take: 100,
       include: {
         messages: {
+          where: { deletedAt: null },
           orderBy: { createdAt: "desc" },
           take: 1,
           include: { author: { select: { id: true, name: true, email: true } } },
@@ -2239,13 +2478,73 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
   return [await buildAnnouncementsThread(unreadMap), ...sorted];
 }
 
+export type InboxChanges = {
+  /** Pass back as the next `since`. */
+  serverTime: string;
+  /** Fresh list when something the viewer can see changed; null = nothing did. */
+  threads: InboxThread[] | null;
+};
+
+/**
+ * Inbox catch-up for a tab coming back to the foreground. Three index probes
+ * decide whether anything visible to this person changed after `sinceIso` —
+ * a message written, edited, reacted to or deleted in one of their threads, a
+ * thread read on another device, or a conversation they were added to. Only
+ * then is the full list rebuilt; the common "nothing happened" case costs no
+ * scan and no re-render.
+ */
+export async function getInboxChangesSince(sinceIso: string): Promise<InboxChanges> {
+  const user = await requireUser();
+  const since = new Date(sinceIso);
+  if (Number.isNaN(since.getTime())) throw new Error("Invalid cursor");
+  const serverTime = new Date().toISOString();
+
+  const visible: Prisma.MessageWhereInput[] = isClientUser(user)
+    ? [
+        {
+          conversation: {
+            kind: CLIENT_CONVERSATION_KIND,
+            participants: { some: { memberId: user.id } },
+          },
+        },
+      ]
+    : [
+        { conversationId: null, project: { members: { some: { userId: user.id } } } },
+        { conversation: { participants: { some: { memberId: user.id } } } },
+        {
+          conversation: {
+            kind: CLIENT_CONVERSATION_KIND,
+            project: { members: { some: { userId: user.id } } },
+          },
+        },
+        { conversationId: ANNOUNCEMENTS_CONVERSATION_ID },
+      ];
+
+  const [message, cursor, joined] = await Promise.all([
+    prisma.message.findFirst({
+      where: { updatedAt: { gt: since }, OR: visible },
+      select: { id: true },
+    }),
+    prisma.chatReadCursor.findFirst({
+      where: { userId: user.id, updatedAt: { gt: since } },
+      select: { threadId: true },
+    }),
+    prisma.conversationParticipant.findFirst({
+      where: { memberId: user.id, createdAt: { gt: since } },
+      select: { id: true },
+    }),
+  ]);
+  if (!message && !cursor && !joined) return { serverTime, threads: null };
+  return { serverTime, threads: await getInboxThreads() };
+}
+
 async function buildAnnouncementsThread(
   unreadMap: Map<string, number>,
 ): Promise<InboxThread> {
   const [, last] = await Promise.all([
     getOrCreateAnnouncementsConversation(),
     prisma.message.findFirst({
-      where: { conversationId: ANNOUNCEMENTS_CONVERSATION_ID },
+      where: { conversationId: ANNOUNCEMENTS_CONVERSATION_ID, deletedAt: null },
       orderBy: { createdAt: "desc" },
       select: {
         body: true,

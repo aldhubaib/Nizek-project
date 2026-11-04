@@ -85,19 +85,30 @@ async function mockApi(page: Page, opts: { registered: boolean }) {
   };
 }
 
-test("permission default: gated on first paint with an enabled action button", async ({ page }) => {
+test("permission default: dismissible banner, never the blocking gate; Not now snoozes it", async ({ page }) => {
   await forceBrowserState(page, "default");
   await mockApi(page, { registered: false });
   await page.goto("/gate.html");
 
-  const gate = page.getByTestId("notification-gate");
-  await expect(gate).toBeVisible();
-  await expect(gate).toHaveAttribute("data-view", "prompt");
-  await expect(page.getByTestId("notification-gate-action")).toBeEnabled();
-  await expect(page.getByTestId("notification-gate-action")).toHaveText(/Enable Notifications/);
+  const banner = page.getByTestId("notification-prompt-banner");
+  await expect(banner).toBeVisible();
+  await expect(banner).toHaveAttribute("data-view", "prompt");
+  await expect(page.getByTestId("notification-prompt-action")).toBeEnabled();
+  await expect(page.getByTestId("notification-prompt-action")).toHaveText(/Enable notifications/);
+  await expect(page.getByTestId("notification-gate")).toHaveCount(0);
 
-  // The app is still mounted underneath (overlay, not a conditional return).
-  await expect(page.getByTestId("app")).toBeAttached();
+  // The app is usable underneath (banner, not a modal).
+  await expect(page.getByTestId("app")).toBeVisible();
+
+  await page.getByTestId("notification-prompt-dismiss").click();
+  await expect(banner).toHaveCount(0);
+
+  // The snooze survives a reload (seven days in localStorage).
+  await page.reload();
+  await expect(page.getByTestId("app")).toBeVisible();
+  await page.waitForTimeout(1_500);
+  await expect(page.getByTestId("notification-prompt-banner")).toHaveCount(0);
+  await expect(page.getByTestId("notification-gate")).toHaveCount(0);
 });
 
 test("permission granted + registered: never gated, no spinner, one status round-trip", async ({ page }) => {

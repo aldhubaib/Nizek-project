@@ -38,7 +38,7 @@ export type ThreadCacheSnapshot = {
   allowedTaskTypes: string[];
   activeContractType: string | null;
   projectName?: string;
-  peerLastReadAt: string | null;
+  peerReads: Record<string, string>;
   lastReadAt: string | null;
   unreadCount: number;
   isClientRoom: boolean;
@@ -114,7 +114,7 @@ function emptySnapshot(threadId: string): ThreadCacheSnapshot {
     canCreateTask: false,
     allowedTaskTypes: [],
     activeContractType: null,
-    peerLastReadAt: null,
+    peerReads: {},
     lastReadAt: null,
     unreadCount: 0,
     isClientRoom: false,
@@ -185,7 +185,7 @@ export function snapshotFromInboxThread(
     canCreateTask: false,
     allowedTaskTypes: [],
     activeContractType: null,
-    peerLastReadAt: null,
+    peerReads: {},
     lastReadAt: null,
     unreadCount: thread.unread,
     isClientRoom: thread.kind === "client",

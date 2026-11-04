@@ -1,0 +1,16 @@
+{
+  // Used by tsx when running worker.ts outside Next (see start-worker.sh and
+  // the `worker` scripts). Two things Next normally provides:
+  //   - the `@/*` import alias used throughout src/lib
+  //   - the `server-only` marker module, which only exists to break client
+  //     bundles at build time; in a plain Node process it resolves to a stub.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "server-only": ["./tests/stubs/server-only.ts"]
+    }
+  },
+  "include": ["worker.ts", "src/lib/**/*.ts", "src/generated/prisma/**/*.ts", "tests/stubs/*.ts"],
+  "exclude": ["node_modules"]
+}

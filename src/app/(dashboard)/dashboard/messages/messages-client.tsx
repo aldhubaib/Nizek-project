@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useLayoutEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Search,
@@ -17,10 +17,12 @@ import { Input } from "@/components/ui/input";
 import { OverflowTabBar, type OverflowTabItem } from "@/components/overflow-tab-bar";
 import { cn } from "@/lib/utils";
 import {
+  getInboxChangesSince,
   listImportantMessages,
   type InboxThread,
   type ImportantMessageDTO,
 } from "@/actions/messages";
+import { nextSyncCursor } from "@/lib/thread-changes";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { usePresence } from "@/components/realtime/hooks";
 import { globalPresenceChannel } from "@/lib/channels";
@@ -213,6 +215,33 @@ export function ThreadSidebar({
     replaceInboxThreads(threads, activeThreadId);
   }, [threads, activeThreadId, replaceInboxThreads]);
 
+  // Coming back to the tab: ask the server whether anything in the inbox
+  // changed since the last sync and swap the list only if it did. This used
+  // to be a router.refresh() — a full RSC re-render plus an unread scan on
+  // every focus, even when nothing had happened.
+  const activeThreadIdRef = useRef(activeThreadId);
+  activeThreadIdRef.current = activeThreadId;
+  // The server-rendered list has no timestamp; start a minute back so a
+  // client clock slightly ahead of the server cannot hide a change.
+  const inboxSyncRef = useRef(nextSyncCursor(new Date().toISOString(), 60_000));
+  const inboxSyncingRef = useRef(false);
+  const syncInbox = useCallback(async () => {
+    if (inboxSyncingRef.current) return;
+    inboxSyncingRef.current = true;
+    try {
+      const res = await getInboxChangesSince(inboxSyncRef.current);
+      inboxSyncRef.current = nextSyncCursor(res.serverTime);
+      if (res.threads) {
+        setLiveThreads(res.threads);
+        replaceInboxThreads(res.threads, activeThreadIdRef.current);
+      }
+    } catch {
+      // Best-effort; realtime events and the next navigation reconcile.
+    } finally {
+      inboxSyncingRef.current = false;
+    }
+  }, [replaceInboxThreads]);
+
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === "hidden") {
@@ -220,13 +249,13 @@ export function ThreadSidebar({
         return;
       }
       if (hiddenAtRef.current && Date.now() - hiddenAtRef.current > 10_000) {
-        router.refresh();
+        void syncInbox();
       }
       hiddenAtRef.current = null;
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [router]);
+  }, [syncInbox]);
 
   useEffect(() => {
     if (!lastInboxThreadId) return;

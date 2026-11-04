@@ -10,31 +10,16 @@ importScripts("/sw-lib.js", "/sw-cache.js");
 
 /**
  * Shared push-display path for real pushes and simulated ones (diagnostics /
- * E2E). WhatsApp behavior: show the OS banner (with the OS sound) unless the
- * app is focused AND visible on this device — the in-app chime covers that case.
+ * E2E). Every push shows a banner, always: iOS treats a push that renders no
+ * notification as "silent" and revokes the site's permission after a few of
+ * them, which is how installs went quiet. "Don't buzz the device that is
+ * already reading this thread" is decided server-side instead — the worker
+ * never sends to a device whose open thread matches (see push-core.ts).
  */
-async function handlePushData(data, opts) {
-  const force = opts && opts.forceShow === true;
-
-  let show = true;
-  if (!force) {
-    const windowClients = await self.clients.matchAll({
-      type: "window",
-      includeUncontrolled: true,
-    });
-    const infos = windowClients.map((c) => ({
-      focused: c.focused,
-      visibilityState: c.visibilityState,
-    }));
-    show = NizekSwLib.shouldShowPushNotification(infos);
-  }
-
-  const jobs = [];
-  if (show) {
-    jobs.push(
-      self.registration.showNotification(data.title, NizekSwLib.notificationOptionsFor(data)),
-    );
-  }
+async function handlePushData(data) {
+  const jobs = [
+    self.registration.showNotification(data.title, NizekSwLib.notificationOptionsFor(data)),
+  ];
   if (data.badge != null && navigator.setAppBadge) {
     jobs.push(navigator.setAppBadge(data.badge).catch(() => {}));
   }
@@ -51,7 +36,7 @@ self.addEventListener("push", (event) => {
       const raw = event.data ? event.data.text() : null;
       const data = raw ? NizekSwLib.parsePushPayload(raw) : null;
       if (data) {
-        await handlePushData(data, {});
+        await handlePushData(data);
       } else {
         await self.registration.showNotification("Nizek Project", {
           body: "You have a new notification",
@@ -69,14 +54,15 @@ self.addEventListener("push", (event) => {
 });
 
 // Simulated push from the page (account card confirmation + E2E tests).
-// Runs the exact same display path as a real push event.
+// Runs the exact same display path as a real push event. (`forceShow` is still
+// accepted from older bundles; it changes nothing now that every push shows.)
 self.addEventListener("message", (event) => {
   const msg = event.data;
   if (!msg || typeof msg !== "object") return;
   if (msg.type === "simulate-push") {
     const data = NizekSwLib.parsePushPayload(JSON.stringify(msg.data ?? {}));
     if (!data) return;
-    event.waitUntil(handlePushData(data, { forceShow: msg.forceShow === true }));
+    event.waitUntil(handlePushData(data));
   }
 });
 

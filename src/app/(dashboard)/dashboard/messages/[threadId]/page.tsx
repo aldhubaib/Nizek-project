@@ -75,7 +75,9 @@ export default async function ThreadPage({
   let allowedTaskTypes: string[] = [];
   let activeContractType: string | null = null;
   let projectName: string | undefined;
-  let peerLastReadAt: string | null = null;
+  // Per-member read cursors (never the viewer's own) so groups can say who has
+  // seen a message instead of flipping to "Seen" when any one person opens it.
+  const peerReads: Record<string, string> = {};
   let contractsForPerms: Parameters<typeof getActiveContract>[0] = [];
 
   if (threadId.startsWith("task-")) {
@@ -286,11 +288,10 @@ export default async function ThreadPage({
           : "Direct message";
       }
 
-      const peerReads = convo.participants
-        .filter((p) => p.memberId !== user.id && p.lastReadAt)
-        .map((p) => p.lastReadAt!.getTime());
-      if (peerReads.length > 0) {
-        peerLastReadAt = new Date(Math.max(...peerReads)).toISOString();
+      for (const p of convo.participants) {
+        if (p.memberId !== user.id && p.lastReadAt) {
+          peerReads[p.memberId] = p.lastReadAt.toISOString();
+        }
       }
     }
   } else {
@@ -376,7 +377,7 @@ export default async function ThreadPage({
       allowedTaskTypes={allowedTaskTypes}
       activeContractType={activeContractType}
       projectName={projectName}
-      peerLastReadAt={peerLastReadAt}
+      peerReads={peerReads}
       lastReadAt={page.lastReadAt}
       unreadCount={page.unreadCount}
       isClientRoom={isClientRoom}

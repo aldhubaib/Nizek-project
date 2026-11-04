@@ -114,7 +114,22 @@ async function ensureKeepAliveDispatcher(): Promise<void> {
   }
 }
 
-async function apiCall(method: string, params: unknown): Promise<void> {
+/**
+ * Options for publishes that must not be lost.
+ * - `idempotencyKey`: Centrifugo remembers the key for a few minutes and
+ *   ignores a repeat publish with the same key, so the worker can retry a
+ *   whole event without subscribers seeing the message twice.
+ * - `strict`: throw on HTTP/network failure instead of logging. Request-path
+ *   callers keep the default best-effort behaviour; the worker uses strict so
+ *   BullMQ retries.
+ */
+export type PublishOptions = { idempotencyKey?: string; strict?: boolean };
+
+async function apiCall(
+  method: string,
+  params: unknown,
+  opts: PublishOptions = {},
+): Promise<void> {
   if (!isCentrifugoConfigured()) {
     if (!warnedNotConfigured) {
       warnedNotConfigured = true;
@@ -137,11 +152,12 @@ async function apiCall(method: string, params: unknown): Promise<void> {
       cache: "no-store",
     });
     if (!res.ok) {
-      console.error(
-        `[centrifugo] ${method} failed: HTTP ${res.status} ${await res.text().catch(() => "")}`,
-      );
+      const detail = `${method} failed: HTTP ${res.status} ${await res.text().catch(() => "")}`;
+      if (opts.strict) throw new Error(`[centrifugo] ${detail}`);
+      console.error(`[centrifugo] ${detail}`);
     }
   } catch (err) {
+    if (opts.strict) throw err;
     // Best-effort: realtime is a delivery optimization, not source of truth.
     console.error(
       `[centrifugo] ${method} failed:`,
@@ -150,8 +166,20 @@ async function apiCall(method: string, params: unknown): Promise<void> {
   }
 }
 
-export async function publish(channel: string, data: unknown): Promise<void> {
-  await apiCall("publish", { channel, data });
+export async function publish(
+  channel: string,
+  data: unknown,
+  opts: PublishOptions = {},
+): Promise<void> {
+  await apiCall(
+    "publish",
+    {
+      channel,
+      data,
+      ...(opts.idempotencyKey ? { idempotency_key: opts.idempotencyKey } : {}),
+    },
+    opts,
+  );
 }
 
 /** Same as publish/broadcast but never written to channel history (typing). */
@@ -198,10 +226,19 @@ export async function broadcastTaskEvent(
 export async function broadcast(
   channels: string[],
   data: unknown,
+  opts: PublishOptions = {},
 ): Promise<void> {
   const unique = [...new Set(channels)].filter(Boolean);
   if (unique.length === 0) return;
-  await apiCall("broadcast", { channels: unique, data });
+  await apiCall(
+    "broadcast",
+    {
+      channels: unique,
+      data,
+      ...(opts.idempotencyKey ? { idempotency_key: opts.idempotencyKey } : {}),
+    },
+    opts,
+  );
 }
 
 /**

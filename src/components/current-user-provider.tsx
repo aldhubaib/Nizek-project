@@ -10,21 +10,32 @@ export interface CurrentUser {
 }
 
 const CurrentUserContext = createContext<CurrentUser | null>(null);
+// True while an admin is on "view as". Read-state writes (mark thread read,
+// close banners) are skipped client-side so the admin's browsing never looks
+// like the viewed person reading their own messages.
+const ImpersonationContext = createContext<boolean>(false);
 
 export function CurrentUserProvider({
   user,
+  impersonating = false,
   children,
 }: {
   user: CurrentUser | null;
+  impersonating?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <CurrentUserContext value={user}>
-      {children}
+      <ImpersonationContext value={impersonating}>{children}</ImpersonationContext>
     </CurrentUserContext>
   );
 }
 
 export function useCurrentUser(): CurrentUser | null {
   return useContext(CurrentUserContext);
+}
+
+/** Whether the shell is in admin "view as" mode (see ImpersonationBanner). */
+export function useIsImpersonating(): boolean {
+  return useContext(ImpersonationContext);
 }

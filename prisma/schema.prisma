@@ -166,7 +166,7 @@ model User {
   pushDeliveryLogs  PushDeliveryLog[]         @relation("PushDeliveryLogRecipient")
   pushDevices       PushDevice[]              @relation("PushDeviceUser")
   notificationPreference NotificationPreference? @relation("UserNotificationPreference")
-  mutedThreads      MutedThread[]             @relation("UserMutedThreads")
+  threadNotifPrefs  ThreadNotificationPref[]  @relation("UserThreadNotificationPrefs")
   auditPermissions  AuditPermission[]         @relation("UserAuditPermissions")
   equityPermission  EquityPermission?         @relation("UserEquityPermission")
   vaultPermissions  VaultPermission[]         @relation("UserVaultPermissions")
@@ -1887,7 +1887,13 @@ model Message {
   body           String
   kind           String        @default("message")
   createdAt      DateTime      @default(now())
+  /// Bumped by edits, reactions and deletes — the "changes since" cursor.
   updatedAt      DateTime      @updatedAt
+  /// Set when the author changed the body (updatedAt alone also moves on reactions).
+  editedAt       DateTime?
+  /// Soft delete: the tombstone lets clients that were offline learn about
+  /// the removal. Every reader filters `deletedAt: null`.
+  deletedAt      DateTime?
 
   mentions    MessageMention[]
   reactions   MessageReaction[]
@@ -1897,6 +1903,10 @@ model Message {
   @@index([taskId, createdAt])
   @@index([projectId, createdAt])
   @@index([conversationId, createdAt])
+  @@index([taskId, updatedAt])
+  @@index([projectId, updatedAt])
+  @@index([conversationId, updatedAt])
+  @@index([updatedAt])
   @@index([authorId])
 }
 
@@ -2047,6 +2057,28 @@ model PushOutbox {
   @@index([dispatchedAt, createdAt])
 }
 
+// Transactional outbox for chat events. Written in the same transaction as the
+// message row it describes, so a committed message can never lose its live
+// broadcast or its notifications to a Centrifugo hiccup or a replica restart.
+// The worker publishes to Centrifugo (publishedAt), creates notifications
+// (notifiedAt), runs the remaining idempotent side effects, then stamps
+// processedAt. A 20s sweep re-enqueues rows that never got there.
+model MessageEvent {
+  id          String    @id @default(cuid())
+  /// message.new | message.updated | message.deleted | reaction.updated
+  kind        String
+  messageId   String
+  payload     Json
+  attempts    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+  notifiedAt  DateTime?
+  processedAt DateTime?
+  lastError   String?
+
+  @@index([processedAt, createdAt])
+}
+
 // Audit trail for every web-push send attempt. Powers the admin push-health
 // dashboard and lets us answer "did this employee's device actually get the
 // push?" instead of silently swallowing failures. Pruned after 30 days by cron.
@@ -2086,17 +2118,22 @@ model NotificationPreference {
   updatedAt DateTime @updatedAt
 }
 
-// A muted thread produces no notification row, no push, and no chime for this
-// user on any device. threadKey: "task-{id}" | "conv-{id}" | "project-{id}".
-model MutedThread {
-  id        String   @id @default(cuid())
+// Per-thread notification level, chosen by each person for themselves.
+//   all      — every message notifies (row + push + chime + email fallback)
+//   mentions — only when they are @mentioned / replied to
+//   none     — never (no row, no push, no chime, no email)
+// No row means the thread's default: direct, group and client rooms are "all";
+// project and task threads are "mentions". threadKey: "task-{id}" |
+// "conv-{id}" | "project-{id}". The thread itself always updates live.
+model ThreadNotificationPref {
   userId    String
-  user      User     @relation("UserMutedThreads", fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserThreadNotificationPrefs", fields: [userId], references: [id], onDelete: Cascade)
   threadKey String
-  createdAt DateTime @default(now())
+  level     String
+  updatedAt DateTime @updatedAt
 
-  @@unique([userId, threadKey])
-  @@index([userId])
+  @@id([userId, threadKey])
+  @@index([threadKey])
 }
 
 // ─── Task Audit module ──────────────────────────────────

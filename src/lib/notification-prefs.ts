@@ -44,23 +44,80 @@ export function typeAllowedByPreferences(
   }
 }
 
+// ─── Per-thread notification level ───────────────────────────────────────────
+
+/**
+ * all      — every message in the thread notifies
+ * mentions — only messages that name the person (@mention, @all, a reply to them)
+ * none     — nothing from this thread, ever (no row, no push, no chime, no email)
+ */
+export type ThreadNotificationLevel = "all" | "mentions" | "none";
+
+export const THREAD_NOTIFICATION_LEVELS: readonly ThreadNotificationLevel[] = [
+  "all",
+  "mentions",
+  "none",
+];
+
+export function isThreadNotificationLevel(v: unknown): v is ThreadNotificationLevel {
+  return typeof v === "string" && (THREAD_NOTIFICATION_LEVELS as string[]).includes(v);
+}
+
+/**
+ * What a thread does when the person never chose a level. Direct, group and
+ * client rooms are conversations with you, so every message counts; project
+ * and task threads are busy shared rooms, so only mentions do (Slack's
+ * default for channels).
+ */
+export function defaultThreadLevel(
+  threadKey: string | null | undefined,
+): ThreadNotificationLevel {
+  if (!threadKey) return "all";
+  return threadKey.startsWith("conv-") ? "all" : "mentions";
+}
+
+export function effectiveThreadLevel(
+  threadKey: string | null | undefined,
+  stored: ThreadNotificationLevel | null | undefined,
+): ThreadNotificationLevel {
+  return stored ?? defaultThreadLevel(threadKey);
+}
+
+/**
+ * Notification types that are about the recipient personally. They count as a
+ * "mention" even without an @ in the body: a declined task, an explicit
+ * mention type from comments.
+ */
+const DIRECTED_TYPES = new Set(["mention", "rejection"]);
+
 /**
  * Filters recipients down to those who should receive a notification of the
  * given type in the given thread, according to their stored preferences and
- * thread mutes. Missing preference rows mean "all defaults" (everything on).
+ * their per-thread level. Missing preference rows mean "all defaults"
+ * (everything on); a missing level means the thread's default level.
  */
 export function filterRecipientsByPreferences(input: {
   recipientIds: string[];
   type: string;
   threadKey?: string | null;
   prefsByUser: Map<string, PreferenceFlags>;
-  mutedPairs: Set<string>; // entries: `${userId}:${threadKey}`
+  /** Stored level per user for `threadKey`; absent = thread default. */
+  levelsByUser?: Map<string, ThreadNotificationLevel>;
+  /** Who this message names (@mention, @all expansion, reply target). */
+  mentionedIds?: Iterable<string>;
 }): string[] {
-  const { recipientIds, type, threadKey, prefsByUser, mutedPairs } = input;
+  const { recipientIds, type, threadKey, prefsByUser } = input;
+  const levels = input.levelsByUser ?? new Map<string, ThreadNotificationLevel>();
+  const mentioned = new Set(input.mentionedIds ?? []);
+  const directedType = DIRECTED_TYPES.has(type);
   return recipientIds.filter((rid) => {
     const prefs = prefsByUser.get(rid) ?? DEFAULT_PREFERENCES;
     if (!typeAllowedByPreferences(type, prefs)) return false;
-    if (threadKey && mutedPairs.has(`${rid}:${threadKey}`)) return false;
+    // Levels are per thread; events with no thread (deadlines) are unaffected.
+    if (!threadKey) return true;
+    const level = effectiveThreadLevel(threadKey, levels.get(rid));
+    if (level === "none") return false;
+    if (level === "mentions") return mentioned.has(rid) || directedType;
     return true;
   });
 }

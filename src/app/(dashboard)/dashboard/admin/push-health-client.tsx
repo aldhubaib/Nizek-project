@@ -105,6 +105,11 @@ export function PushHealthClient() {
       Date.now() - new Date(data.queue.lastCompletedAt).getTime() > 2 * 60 * 1000);
   const outboxStuck =
     data.queue.outboxPending > 0 && (data.queue.outboxOldestAgeMs ?? 0) > 2 * 60 * 1000;
+  // Chat events wait at most a sweep cycle (20s) plus retries; two minutes
+  // means the worker is down or failing on them.
+  const eventsStuck =
+    data.messageEvents.stuck > 0 ||
+    (data.messageEvents.pending > 0 && (data.messageEvents.oldestAgeMs ?? 0) > 2 * 60 * 1000);
 
   const fleet = onlyProblems ? data.fleet.filter((d) => !d.enabled) : data.fleet;
 
@@ -174,6 +179,23 @@ export function PushHealthClient() {
           tone={outboxStuck ? "bad" : data.queue.outboxPending === 0 ? "good" : undefined}
         />
         <Stat label="Last job completed" value={ago(data.queue.lastCompletedAt)} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat
+          label="Chat events pending"
+          value={`${data.messageEvents.pending}${
+            data.messageEvents.oldestAgeMs !== null
+              ? ` (oldest ${Math.round(data.messageEvents.oldestAgeMs / 1000)}s)`
+              : ""
+          }`}
+          tone={eventsStuck ? "bad" : data.messageEvents.pending === 0 ? "good" : undefined}
+        />
+        <Stat
+          label="Chat events stuck (>24h)"
+          value={String(data.messageEvents.stuck)}
+          tone={data.messageEvents.stuck > 0 ? "bad" : "good"}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

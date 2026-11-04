@@ -67,20 +67,22 @@ export function derivePushView(input: PushViewInput): PushView {
 }
 
 /**
- * Whether the full-screen gate must block the app. Driven by the view, so the
- * gate can never be hidden by a stuck "checking" flag, and never shown while
- * the runtime is still doing its job (verifying/repairing).
+ * Whether the full-screen gate must block the app. Only the states a button
+ * on our side cannot fix: permission blocked at the OS, or an iPhone that has
+ * not installed the app (push needs the home-screen install). Driven by the
+ * view, so the gate can never be hidden by a stuck "checking" flag, and never
+ * shown while the runtime is still doing its job (verifying/repairing).
  */
 export function shouldGate(view: PushView, opts: { production: boolean }): boolean {
   if (!opts.production) return false;
   switch (view) {
     case "install":
     case "safari-install":
+    case "denied":
+      return true;
     case "pre-prompt":
     case "prompt":
-    case "denied":
     case "repair-failed":
-      return true;
     case "enabled":
     case "repairing":
     case "verifying":
@@ -88,6 +90,34 @@ export function shouldGate(view: PushView, opts: { production: boolean }): boole
     case "impersonating":
       return false;
   }
+}
+
+/**
+ * States where one tap can finish the job (permission not asked yet, or a
+ * retryable failure). These get a dismissible banner instead of the gate; the
+ * user can keep working and come back to it.
+ */
+export function shouldPrompt(view: PushView, opts: { production: boolean }): boolean {
+  if (!opts.production) return false;
+  return view === "pre-prompt" || view === "prompt" || view === "repair-failed";
+}
+
+/** How long "Not now" hides the banner. */
+export const PROMPT_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+export const PROMPT_SNOOZE_KEY = "nizek-push-prompt-snoozed-until";
+
+/** Value to store when the user dismisses the banner. */
+export function promptSnoozeUntil(now: number): string {
+  return new Date(now + PROMPT_SNOOZE_MS).toISOString();
+}
+
+/** Whether a stored snooze (ISO string, or whatever localStorage held) still applies. */
+export function isPromptSnoozed(stored: string | null | undefined, now: number): boolean {
+  if (!stored) return false;
+  const until = Date.parse(stored);
+  if (!Number.isFinite(until)) return false;
+  // Clamp: a clock jump or hand-edited value must not hide the banner forever.
+  return until > now && until - now <= PROMPT_SNOOZE_MS;
 }
 
 /** Minimum gap between automatic (non-gesture) subscription repair attempts. */

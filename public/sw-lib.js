@@ -34,22 +34,11 @@
     };
   }
 
-  /**
-   * WhatsApp behavior: suppress the OS banner only when the user is actively
-   * looking at the app on THIS device — i.e. some window client is focused AND
-   * visible. Backgrounded/minimized tabs still get the OS banner (with the OS
-   * notification sound).
-   */
-  function shouldShowPushNotification(clientInfos) {
-    if (!Array.isArray(clientInfos)) return true;
-    for (var i = 0; i < clientInfos.length; i++) {
-      var c = clientInfos[i];
-      if (c && c.focused === true && c.visibilityState === "visible") {
-        return false;
-      }
-    }
-    return true;
-  }
+  // NOTE: there is deliberately no "should this push show?" decision here any
+  // more. A push that renders no notification counts as silent on iOS and gets
+  // the site's permission revoked after a few occurrences. The worker already
+  // skips the one device that is actively reading the thread (push-core.ts),
+  // so by the time a push reaches this worker it must be shown.
 
   /** Options object for registration.showNotification(). */
   function notificationOptionsFor(data) {
@@ -243,7 +232,6 @@
   var api = {
     CACHE_NAMES: CACHE_NAMES,
     parsePushPayload: parsePushPayload,
-    shouldShowPushNotification: shouldShowPushNotification,
     notificationOptionsFor: notificationOptionsFor,
     subscriptionChangeBody: subscriptionChangeBody,
     classifyRequest: classifyRequest,

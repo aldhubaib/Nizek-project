@@ -20,19 +20,22 @@ the notification pipeline.
 
 - **Bell + chime (in-app):** Postgres `Notification` rows + Centrifugo
   `notification.new` events. Chime policy: `src/lib/notification-sound-policy.ts`.
-- **OS banners:** Web Push (VAPID) → `public/sw.js`. The server **always
-  sends** to every registered device; each device's service worker suppresses
-  the banner only when a tab is focused AND visible there
-  (`public/sw-lib.js: shouldShowPushNotification`).
+- **OS banners:** Web Push (VAPID) → `public/sw.js`. The worker sends to
+  every registered device except the one actively reading that thread
+  (`/api/presence/active` heartbeat → Redis). The service worker never
+  suppresses a push it receives (iOS drops silent pushes), so every delivered
+  push renders a banner.
 - **Push pipeline** (outbox → BullMQ → worker → APNs/FCM), device states, and
   the runbook: `docs/push-architecture.md`. Scenario matrix for
   reinstall / fresh install / update: `docs/push-qa-scenarios.md`.
 - **Delivery audit:** every send attempt is recorded in `PushDeliveryLog`; the
   last reported state of every device is in `PushDevice`
   (admin → Settings → Member Notifications → Push health).
-- **Mutes:** `MutedThread` is the only opt-out, enforced server-side in
-  `src/lib/notify.ts` before rows/pushes are created. Old
-  `NotificationPreference` values are ignored.
+- **Per-thread level:** `ThreadNotificationPref` (every message / mentions
+  only / off) is the only opt-out, enforced server-side in `src/lib/notify.ts`
+  before rows/pushes are created. No row means the thread default: direct,
+  group and client rooms notify on every message; project and task threads on
+  mentions only. Old `NotificationPreference` values are ignored.
 
 ## Automated coverage (runs in CI on every push)
 

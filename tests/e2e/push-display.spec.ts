@@ -1,6 +1,6 @@
 // End-to-end banner behavior through the REAL service worker push path:
-// display, focused-tab suppression, thread-tag replacement, and cross-device
-// dismissal.
+// display (including on a focused tab), thread-tag replacement, and
+// cross-device dismissal.
 //
 // Engine coverage: headless Firefox honors granted notification permission, so
 // these run there on every test run. Headless Chromium/WebKit report
@@ -64,7 +64,11 @@ test("push shows an OS banner with the thread tag", async ({ page, context }) =>
   ]);
 });
 
-test("push is SUPPRESSED while the app tab is focused and visible", async ({
+// A push that renders nothing counts as "silent" on iOS and costs the install
+// its push permission after a few occurrences. The worker already skips the
+// one device that is reading the thread, so the SW must show every push it
+// receives — even on a focused, visible tab.
+test("push still shows while the app tab is focused and visible", async ({
   page,
   context,
 }) => {
@@ -80,15 +84,14 @@ test("push is SUPPRESSED while the app tab is focused and visible", async ({
   const shown = await simulate(
     page,
     { title: "Ali", body: "hi", tag: "thread-conv-2" },
-    false, // real path: SW checks its window clients
+    false, // real path, no force flag
   );
-  expect(shown).toEqual([]);
+  expect(shown).toEqual([{ title: "Ali", body: "hi", tag: "thread-conv-2" }]);
 });
 
 // The banner showLocalTestBanner() sends the moment a user turns notifications
-// on. It has to appear even though the app is necessarily focused at that point
-// — the same condition the test above proves suppresses ordinary pushes — or
-// enabling notifications gives no visible proof that it worked.
+// on. It has to appear even though the app is necessarily focused at that point,
+// or enabling notifications gives no visible proof that it worked.
 test("the setup confirmation banner shows even while the app is focused", async ({
   page,
   context,
@@ -110,7 +113,7 @@ test("the setup confirmation banner shows even while the app is focused", async 
       url: "/dashboard",
       tag: "push-setup-confirmation",
     },
-    true, // forceShow: bypasses the focused-client suppression
+    true, // forceShow: accepted for older bundles; display no longer depends on it
   );
   expect(shown).toEqual([
     {

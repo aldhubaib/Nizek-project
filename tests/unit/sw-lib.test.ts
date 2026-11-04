@@ -16,9 +16,6 @@ const swLib = require("../../public/sw-lib.js") as {
     tag: string | null;
     icon: string | null;
   } | null;
-  shouldShowPushNotification: (
-    clients: { focused?: boolean; visibilityState?: string }[] | null,
-  ) => boolean;
   notificationOptionsFor: (data: Record<string, unknown>) => Record<string, unknown>;
   classifyRequest: (
     req: {
@@ -99,46 +96,12 @@ describe("parsePushPayload", () => {
   });
 });
 
-describe("shouldShowPushNotification (WhatsApp behavior)", () => {
-  it("shows when there are no clients (app closed)", () => {
-    expect(swLib.shouldShowPushNotification([])).toBe(true);
-  });
-
-  it("shows when a tab exists but is hidden (backgrounded/minimized)", () => {
-    expect(
-      swLib.shouldShowPushNotification([
-        { focused: false, visibilityState: "hidden" },
-      ]),
-    ).toBe(true);
-  });
-
-  it("shows when a tab is visible but NOT focused (app behind another window)", () => {
-    expect(
-      swLib.shouldShowPushNotification([
-        { focused: false, visibilityState: "visible" },
-      ]),
-    ).toBe(true);
-  });
-
-  it("suppresses ONLY when a tab is focused and visible (user is looking)", () => {
-    expect(
-      swLib.shouldShowPushNotification([
-        { focused: true, visibilityState: "visible" },
-      ]),
-    ).toBe(false);
-  });
-
-  it("suppresses when any of several tabs is focused-visible", () => {
-    expect(
-      swLib.shouldShowPushNotification([
-        { focused: false, visibilityState: "hidden" },
-        { focused: true, visibilityState: "visible" },
-      ]),
-    ).toBe(false);
-  });
-
-  it("shows on malformed input (fail open — never lose a notification)", () => {
-    expect(swLib.shouldShowPushNotification(null)).toBe(true);
+describe("push display policy", () => {
+  it("has no client-side suppression hook — every push must render a banner", () => {
+    // iOS revokes push permission after a few pushes that show nothing, so the
+    // "already looking at this thread" decision moved to the worker
+    // (partitionByActiveThread in push-core.ts). Guard against it creeping back.
+    expect("shouldShowPushNotification" in swLib).toBe(false);
   });
 });
 

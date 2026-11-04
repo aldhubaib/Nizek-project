@@ -76,6 +76,16 @@ export async function requireUser() {
 }
 
 /**
+ * True while an admin is using "view as". `requireUser()` resolves to the
+ * person being viewed, so anything that WRITES on their behalf — read cursors,
+ * notification read flags, push registrations — must check this first, or an
+ * admin opening a chat silently clears that person's unread state everywhere.
+ */
+export async function isImpersonating(): Promise<boolean> {
+  return (await getImpersonation()) !== null;
+}
+
+/**
  * A read that only staff may make.
  *
  * Server actions are callable by any signed-in user who knows the action id, so

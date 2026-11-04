@@ -10,6 +10,8 @@ import { useChannel } from "@/components/realtime/hooks";
 import { taskChannel } from "@/lib/channels";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
+import { useFinePointer } from "@/hooks/use-fine-pointer";
+import { shouldSendOnEnter } from "@/lib/composer-keys";
 
 interface MentionUser {
   id: string;
@@ -76,6 +78,7 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
   const [uploading, setUploading] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   useScrollLock(Boolean(lightboxUrl));
+  const finePointer = useFinePointer();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mentionListRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -195,6 +198,26 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
         insertMention(filteredMembers[mentionIndex]);
       } else if (e.key === "Escape") {
         setShowMentions(false);
+      }
+      return;
+    }
+    // Desktop: Enter sends, Shift+Enter breaks the line (same as the chat).
+    if (
+      shouldSendOnEnter(
+        {
+          key: e.key,
+          shiftKey: e.shiftKey,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+          altKey: e.altKey,
+          isComposing: e.nativeEvent.isComposing,
+        },
+        finePointer,
+      )
+    ) {
+      e.preventDefault();
+      if ((input.trim() || pendingFiles.length > 0) && !submitting) {
+        void handleSubmit();
       }
     }
   }
@@ -535,7 +558,9 @@ export function CommentSection({ taskId, projectId, refreshKey = 0 }: Props) {
         <p className="text-xs text-muted-foreground/40 mt-1">
           {uploading
             ? "Uploading files..."
-            : "Paste a screenshot to attach"}
+            : finePointer
+              ? "Paste a screenshot to attach · Enter to send, Shift+Enter for a new line"
+              : "Paste a screenshot to attach"}
         </p>
       </div>
 

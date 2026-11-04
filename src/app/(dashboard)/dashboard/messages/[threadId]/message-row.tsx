@@ -17,6 +17,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { receiptFor, type PeerReads } from "@/lib/read-receipts";
 import { shouldCommitSwipeReply } from "@/lib/swipe-reply";
 import { firstUrl } from "@/lib/link-preview";
 import { formatUnreadSeparator } from "@/lib/chat-unread";
@@ -199,20 +200,22 @@ function MessageMeta({
   edited,
   mine,
   blue,
-  peerLastReadAt,
+  peerReads,
+  peerCount = 0,
   important,
 }: {
   createdAt: string;
   edited?: boolean;
   mine: boolean;
   blue: boolean;
-  peerLastReadAt?: string | null;
+  peerReads?: PeerReads;
+  peerCount?: number;
   important?: boolean;
 }) {
-  const read =
-    mine &&
-    peerLastReadAt != null &&
-    new Date(createdAt).getTime() <= new Date(peerLastReadAt).getTime();
+  // Double tick only once EVERY other member has read (1:1 → the one peer);
+  // a faded double tick while only some of a group have. The exact names are
+  // on the "Seen by" line under the newest read message.
+  const receipt = mine ? receiptFor(peerReads ?? {}, createdAt, peerCount) : "sent";
   return (
     <span
       className={cn(
@@ -229,8 +232,10 @@ function MessageMeta({
       {edited && <span className="italic opacity-80">edited</span>}
       <span>{formatTime(createdAt)}</span>
       {mine &&
-        (read ? (
+        (receipt === "all" ? (
           <CheckCheck className="h-3 w-3" aria-label="Read" />
+        ) : receipt === "some" ? (
+          <CheckCheck className="h-3 w-3 opacity-50" aria-label="Read by some" />
         ) : (
           <Check className="h-3 w-3" aria-label="Sent" />
         ))}
@@ -249,7 +254,9 @@ export const MessageRow = memo(function MessageRow({
   replied,
   showTaskCard,
   currentMemberId,
-  peerLastReadAt,
+  peerReads,
+  peerCount = 0,
+  seenBy = null,
   canCreateTask,
   selected,
   onSelect,
@@ -284,7 +291,12 @@ export const MessageRow = memo(function MessageRow({
   replied: ChatMessage | null | undefined;
   showTaskCard: boolean;
   currentMemberId: string;
-  peerLastReadAt?: string | null;
+  /** Other members' last-read times (conversations only). */
+  peerReads?: PeerReads;
+  /** How many other people are in the thread (drives the tick state). */
+  peerCount?: number;
+  /** "Seen by Ali, Sara" — only set on the newest read own message in groups. */
+  seenBy?: string | null;
   canCreateTask?: boolean;
   /** Mobile selection mode (WhatsApp-style). */
   selected: boolean;
@@ -828,7 +840,8 @@ export const MessageRow = memo(function MessageRow({
                         edited={m.edited}
                         mine={mine}
                         blue={blue}
-                        peerLastReadAt={peerLastReadAt}
+                        peerReads={peerReads}
+                        peerCount={peerCount}
                         important={m.important}
                       />
                     </div>
@@ -890,7 +903,8 @@ export const MessageRow = memo(function MessageRow({
                     edited={m.edited}
                     mine={mine}
                     blue={false}
-                    peerLastReadAt={peerLastReadAt}
+                    peerReads={peerReads}
+                    peerCount={peerCount}
                     important={m.important}
                   />
                 )}
@@ -981,7 +995,8 @@ export const MessageRow = memo(function MessageRow({
                 edited={m.edited}
                 mine={mine}
                 blue={false}
-                peerLastReadAt={peerLastReadAt}
+                peerReads={peerReads}
+                peerCount={peerCount}
                 important={m.important}
               />
             </div>
@@ -994,6 +1009,14 @@ export const MessageRow = memo(function MessageRow({
               memberNames={memberNames}
               onToggle={readOnly ? undefined : toggleReaction}
             />
+          )}
+          {mine && seenBy && (
+            <span
+              className="self-end px-1 text-xs leading-none text-muted-foreground"
+              data-testid="seen-by"
+            >
+              {seenBy}
+            </span>
           )}
         </div>
       </div>

@@ -87,6 +87,7 @@ export default async function DashboardLayout({
             }
           : null
       }
+      impersonating={Boolean(impersonation)}
     >
       {isClient ? (
         <ClientShell

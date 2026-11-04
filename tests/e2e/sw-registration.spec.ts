@@ -19,7 +19,6 @@ test("sw-lib decision logic behaves identically in this engine", async ({
   const results = await page.evaluate(async () => {
     type SwLib = {
       parsePushPayload: (raw: string) => unknown;
-      shouldShowPushNotification: (clients: unknown) => boolean;
       notificationOptionsFor: (data: unknown) => Record<string, unknown>;
     };
     // Load the real shipped file into the page context.
@@ -32,22 +31,15 @@ test("sw-lib decision logic behaves identically in this engine", async ({
         JSON.stringify({ title: "T", tag: "thread-conv-1" }),
       ),
       parsedGarbage: lib.parsePushPayload("{{nope"),
-      showWhenClosed: lib.shouldShowPushNotification([]),
-      showWhenHidden: lib.shouldShowPushNotification([
-        { focused: false, visibilityState: "hidden" },
-      ]),
-      suppressWhenFocused: lib.shouldShowPushNotification([
-        { focused: true, visibilityState: "visible" },
-      ]),
+      // The focused-tab suppression hook must stay gone (iOS silent-push revocation).
+      hasSuppressionHook: "shouldShowPushNotification" in lib,
       options: lib.notificationOptionsFor({ body: "b", tag: "t1" }),
     };
   });
 
   expect(results.parsedOk).toMatchObject({ title: "T", tag: "thread-conv-1" });
   expect(results.parsedGarbage).toBeNull();
-  expect(results.showWhenClosed).toBe(true);
-  expect(results.showWhenHidden).toBe(true);
-  expect(results.suppressWhenFocused).toBe(false);
+  expect(results.hasSuppressionHook).toBe(false);
   expect(results.options).toMatchObject({
     tag: "t1",
     renotify: true,

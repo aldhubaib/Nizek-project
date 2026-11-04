@@ -15,6 +15,62 @@ export interface PushPayload {
 /** How long the push service should retain an undelivered push (seconds). */
 export const PUSH_TTL_SECONDS = 60 * 60 * 24; // 24h — matches chat relevance
 
+// ─── Active-thread suppression ───────────────────────────────────────────────
+// The service worker always shows a banner (iOS revokes push permission after
+// a few pushes that render nothing). "Don't buzz the person already reading
+// this thread" is therefore decided server-side: the open thread heartbeats
+// its key per device into Redis, and the worker skips that one device.
+
+/** Heartbeat cadence from the open thread (ms). */
+export const ACTIVE_THREAD_HEARTBEAT_MS = 20_000;
+/** Redis TTL for one heartbeat; a missed beat or a closed tab expires it. */
+export const ACTIVE_THREAD_TTL_SECONDS = 45;
+/** Prefix shared by every chat push tag ("thread-conv-…", "thread-task-…"). */
+export const THREAD_PUSH_TAG_PREFIX = "thread-";
+
+/** Redis key holding the thread a device is currently looking at. */
+export function activeThreadRedisKey(userId: string, deviceId: string): string {
+  return `active:${userId}:${deviceId}`;
+}
+
+/** "thread-conv-123" -> "conv-123"; null for non-thread tags. */
+export function threadKeyFromPushTag(tag: string | null | undefined): string | null {
+  if (!tag || !tag.startsWith(THREAD_PUSH_TAG_PREFIX)) return null;
+  const key = tag.slice(THREAD_PUSH_TAG_PREFIX.length);
+  return key || null;
+}
+
+/** Accepts only the "conv-…" / "project-…" / "task-…" keys the client sends. */
+export function isValidThreadKey(value: unknown): value is string {
+  return typeof value === "string" && /^(conv|project|task)-[\w-]{1,64}$/.test(value);
+}
+
+/**
+ * Splits a push job's subscriptions into the ones to send and the devices to
+ * skip because they are actively viewing `threadKey`. `activeByDevice` maps
+ * `${memberId}:${deviceId}` to the thread key that device last reported.
+ * Devices without an id, or without a fresh heartbeat, always receive the push.
+ */
+export function partitionByActiveThread<
+  T extends { memberId: string; deviceId?: string | null },
+>(
+  subscriptions: T[],
+  threadKey: string | null,
+  activeByDevice: Map<string, string | null>,
+): { send: T[]; suppressed: T[] } {
+  if (!threadKey) return { send: subscriptions, suppressed: [] };
+  const send: T[] = [];
+  const suppressed: T[] = [];
+  for (const sub of subscriptions) {
+    const active = sub.deviceId
+      ? activeByDevice.get(`${sub.memberId}:${sub.deviceId}`)
+      : null;
+    if (active && active === threadKey) suppressed.push(sub);
+    else send.push(sub);
+  }
+  return { send, suppressed };
+}
+
 /** Serialized notification body handed to the service worker. */
 export function buildPushBody(
   payload: PushPayload,

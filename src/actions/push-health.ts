@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { isPushConfigured } from "@/lib/push";
 import { isCentrifugoConfigured } from "@/lib/centrifugo";
 import { getPushQueueHealth } from "@/lib/push-queue";
+import { getMessageEventBacklog } from "@/lib/message-events";
 
 export type PushFleetDevice = {
   id: string;
@@ -43,6 +44,12 @@ export type PushHealthDTO = {
     lastCompletedAt: Date | null;
     outboxPending: number;
     outboxOldestAgeMs: number | null;
+  };
+  /** Chat event outbox (live broadcast + notification fan-out) the worker drains. */
+  messageEvents: {
+    pending: number;
+    oldestAgeMs: number | null;
+    stuck: number;
   };
   lastHour: {
     attempts: number;
@@ -98,6 +105,7 @@ export async function getPushHealth(): Promise<PushHealthDTO> {
     hourLogs,
     fleetRaw,
     queue,
+    messageEvents,
   ] = await Promise.all([
     prisma.user.findMany({
       where: { blocked: false },
@@ -135,6 +143,7 @@ export async function getPushHealth(): Promise<PushHealthDTO> {
       take: 500,
     }),
     getPushQueueHealth(),
+    getMessageEventBacklog(),
   ]);
 
   const usersWithoutPush = users
@@ -167,6 +176,7 @@ export async function getPushHealth(): Promise<PushHealthDTO> {
       outboxPending: queue.outboxPending,
       outboxOldestAgeMs: queue.outboxOldestAgeMs,
     },
+    messageEvents,
     lastHour: {
       attempts: hourLogs.length,
       delivered: hourLogs.filter((l) => l.ok).length,

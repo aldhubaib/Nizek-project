@@ -11,10 +11,16 @@ COPY prisma.config.ts ./
 COPY package.json package-lock.json .npmrc ./
 RUN npm install --omit=dev
 
-COPY worker.ts ./
-COPY src/lib/push-core.ts ./src/lib/
-COPY src/lib/push/delivery.ts src/lib/push/outbox-core.ts ./src/lib/push/
-COPY src/generated ./src/generated
+COPY worker.ts tsconfig.json tsconfig.worker.json ./
+# The message-events fan-out runs the same src/lib modules as the web app
+# (prisma, notify, centrifugo, alias masking, ...), so the whole lib comes
+# along; only what worker.ts imports is actually loaded.
+COPY src/lib ./src/lib
+# The Prisma client (src/generated/prisma) is gitignored and NOT copied: the
+# `npm install` above already generated it inside the image via postinstall,
+# from the schema copied earlier. Copying it from the build context would fail
+# on any clean checkout (GitHub trigger or `railway up`, which honours .gitignore).
+COPY tests/stubs/server-only.ts ./tests/stubs/server-only.ts
 COPY start-worker.sh ./
 RUN chmod +x start-worker.sh
 

@@ -41,6 +41,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -55,6 +58,25 @@ import {
   unmountThreadProjectOverlay,
 } from "@/components/messages/thread-project-overlay";
 import { cn } from "@/lib/utils";
+import { shouldSendOnEnter } from "@/lib/composer-keys";
+import {
+  MAX_MESSAGE_CHARS,
+  MESSAGE_COUNTER_FROM,
+  messageTooLongError,
+} from "@/lib/message-limits";
+import { useFinePointer } from "@/hooks/use-fine-pointer";
+import {
+  defaultThreadLevel,
+  isThreadNotificationLevel,
+  type ThreadNotificationLevel,
+} from "@/lib/notification-prefs";
+import {
+  applyPeerRead,
+  readersOf,
+  seenByLabel,
+  seenByMessageId,
+  type PeerReads,
+} from "@/lib/read-receipts";
 import { ClientChatPeopleManager } from "@/components/messages/client-chat-people";
 import { ClientIssueSlideOver } from "@/components/messages/client-issue-slide-over";
 import {
@@ -77,8 +99,8 @@ import {
 import { useVisualViewportFrame } from "@/hooks/use-visual-viewport-frame";
 import { usePasteFiles } from "@/hooks/use-paste-files";
 import {
-  isThreadMuted,
-  setThreadMuted,
+  getThreadNotificationLevel,
+  setThreadNotificationLevel,
 } from "@/actions/notification-preferences";
 import { usePresence, useTyping } from "@/components/realtime/hooks";
 import {
@@ -206,7 +228,7 @@ export function ThreadChat({
   allowedTaskTypes = [],
   activeContractType = null,
   projectName,
-  peerLastReadAt: initialPeerLastReadAt = null,
+  peerReads: initialPeerReads,
   lastReadAt: initialLastReadAt = null,
   unreadCount: initialUnreadCount = 0,
   isClientRoom = false,
@@ -236,7 +258,8 @@ export function ThreadChat({
   allowedTaskTypes?: string[];
   activeContractType?: string | null;
   projectName?: string;
-  peerLastReadAt?: string | null;
+  /** Other members' last-read times, per member (conversations only). */
+  peerReads?: PeerReads;
   /** Viewer's last-read cursor at open — frozen for the unread separator. */
   lastReadAt?: string | null;
   unreadCount?: number;
@@ -341,9 +364,17 @@ export function ThreadChat({
   const [importantList, setImportantList] = useState<ImportantMessageDTO[]>([]);
   const [importantLoading, setImportantLoading] = useState(false);
   const pendingFocusRef = useRef<string | null>(focusMessageId ?? null);
-  const [peerLastReadAt, setPeerLastReadAt] = useState<string | null>(
-    initialPeerLastReadAt,
+  const [peerReads, setPeerReads] = useState<PeerReads>(
+    () => initialPeerReads ?? {},
   );
+  const finePointer = useFinePointer();
+  /** Reason the last send was refused locally (e.g. over the length cap). */
+  const [composerError, setComposerError] = useState<string | null>(null);
+  const draftTooLong = draft.length > MAX_MESSAGE_CHARS;
+  const showCounter = draft.length >= MESSAGE_COUNTER_FROM;
+  // Other people in the thread; groups show "Seen by …" instead of a bare tick.
+  const peerCount = peerMemberIds.length || Object.keys(peerReads).length;
+  const isGroupThread = peerCount > 1;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   /** Mobile WhatsApp-style selection — replaces the thread header with actions. */
@@ -353,21 +384,30 @@ export function ThreadChat({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const photosInputRef = useRef<HTMLInputElement>(null);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Thread mute: server-stored, all devices. Muted threads produce no
-  // notification row, push, or chime — the thread itself still updates live.
   // This thread's pending sends, held by the app-wide outbox manager.
   const outbox = useThreadOutbox(threadKey);
-  const [muted, setMuted] = useState(false);
+  // Notification level for this thread: server-stored, all devices. "none"
+  // produces no notification row, push, chime or email — the thread itself
+  // still updates live. Until the server answers, show the thread's default.
+  const [notifLevel, setNotifLevel] = useState<ThreadNotificationLevel>(() =>
+    defaultThreadLevel(threadKey),
+  );
   useEffect(() => {
     if (!threadKey) return;
-    isThreadMuted(threadKey).then(setMuted).catch(() => {});
+    getThreadNotificationLevel(threadKey)
+      .then((s) => setNotifLevel(s.level))
+      .catch(() => {});
   }, [threadKey]);
-  const toggleMute = useCallback(() => {
-    if (!threadKey) return;
-    const next = !muted;
-    setMuted(next);
-    void setThreadMuted(threadKey, next).catch(() => setMuted(!next));
-  }, [threadKey, muted]);
+  const chooseNotifLevel = useCallback(
+    (level: ThreadNotificationLevel) => {
+      if (!threadKey) return;
+      const previous = notifLevel;
+      setNotifLevel(level);
+      void setThreadNotificationLevel(threadKey, level).catch(() => setNotifLevel(previous));
+    },
+    [threadKey, notifLevel],
+  );
+  const muted = notifLevel === "none";
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   const scrollToMessage = useCallback((id: string, opts?: { flash?: boolean }) => {
@@ -496,10 +536,19 @@ export function ThreadChat({
     setHasMore(!reachedOldestRef.current && (hasMore || hasMoreOlder));
   }
 
-  const [prevPeerRead, setPrevPeerRead] = useState(initialPeerLastReadAt);
-  if (prevPeerRead !== initialPeerLastReadAt) {
-    setPrevPeerRead(initialPeerLastReadAt);
-    setPeerLastReadAt(initialPeerLastReadAt);
+  // A fresh server render carries newer cursors; merge rather than replace so
+  // a live `thread.read` that beat the render is not rolled back.
+  const [prevPeerReads, setPrevPeerReads] = useState(initialPeerReads);
+  if (prevPeerReads !== initialPeerReads) {
+    setPrevPeerReads(initialPeerReads);
+    if (initialPeerReads) {
+      setPeerReads((prev) =>
+        Object.entries(initialPeerReads).reduce(
+          (acc, [id, at]) => applyPeerRead(acc, id, at),
+          prev,
+        ),
+      );
+    }
   }
 
   // Restore composer draft for this thread from sessionStorage.
@@ -551,7 +600,7 @@ export function ThreadChat({
     allowedTaskTypes,
     activeContractType,
     projectName,
-    peerLastReadAt,
+    peerReads,
     lastReadAt: openLastReadAt,
     unreadCount: openUnreadCount,
     isClientRoom,
@@ -654,11 +703,19 @@ export function ThreadChat({
     target,
     threadKey,
     currentMemberId,
+    messagesRef,
     setMessages,
     setNewBelow,
-    setPeerLastReadAt,
+    setPeerReads,
     nearBottomRef,
+    reconcileOnMount: restoreFromCache,
   });
+
+  // Groups: the newest own message someone has read carries a "Seen by" line.
+  const seenById = useMemo(
+    () => (isGroupThread ? seenByMessageId(messages, peerReads, currentMemberId) : null),
+    [isGroupThread, messages, peerReads, currentMemberId],
+  );
 
 
   // Track whether the user is near the bottom of the scroller.
@@ -1023,6 +1080,14 @@ export function ThreadChat({
     for (const m of sortedMentions) {
       text = text.split(`@${m.name}`).join(`@[${m.name}](${m.id})`);
     }
+    // Same cap the server enforces, checked on the stored form (mention tokens
+    // included) so the draft is kept and the reason is readable, not a
+    // generic "Failed to send" bubble.
+    if (text.length > MAX_MESSAGE_CHARS) {
+      setComposerError(messageTooLongError(text.length));
+      return;
+    }
+    setComposerError(null);
     const files = [...pending];
     const replyId = replyTo;
     const taskRefId = pendingTaskRef?.id ?? null;
@@ -1705,14 +1770,26 @@ export function ThreadChat({
             {threadKey ? (
               <>
                 <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={toggleMute}>
-                {muted ? (
-                  <Bell className="h-4 w-4" />
-                ) : (
-                  <BellOff className="h-4 w-4" />
-                )}
-                <span className="flex-1">{muted ? "Unmute" : "Mute"}</span>
-              </DropdownMenuItem>
+                <DropdownMenuLabel className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+                  {muted ? <BellOff className="h-3.5 w-3.5" /> : <Bell className="h-3.5 w-3.5" />}
+                  Notify me about
+                </DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={notifLevel}
+                  onValueChange={(v) => {
+                    if (isThreadNotificationLevel(v)) chooseNotifLevel(v);
+                  }}
+                >
+                  <DropdownMenuRadioItem value="all">
+                    <span className="flex-1">Every message</span>
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="mentions">
+                    <span className="flex-1">Mentions only</span>
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="none">
+                    <span className="flex-1">Off</span>
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
               </>
             ) : null}
             {/* Clients have no sidebar, so their account lives here. */}
@@ -1806,7 +1883,13 @@ export function ThreadChat({
                   replied={m.replyToId ? byId.get(m.replyToId) : null}
                   showTaskCard={!target.taskId}
                   currentMemberId={currentMemberId}
-                  peerLastReadAt={peerLastReadAt}
+                  peerReads={peerReads}
+                  peerCount={peerCount}
+                  seenBy={
+                    m.id === seenById
+                      ? seenByLabel(readersOf(peerReads, m.createdAt), peopleNames)
+                      : null
+                  }
                   canCreateTask={
                     canCreateTask && !!target.projectId && !inactive
                   }
@@ -2064,6 +2147,34 @@ export function ThreadChat({
               {recordError}
             </div>
           )}
+          {composerError && (
+            <div
+              role="alert"
+              className="mb-2 flex items-start justify-between gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-s text-destructive"
+            >
+              <span>{composerError}</span>
+              <button
+                type="button"
+                className="shrink-0 opacity-70 hover:opacity-100"
+                onClick={() => setComposerError(null)}
+                aria-label="Dismiss"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          {showCounter && !recording && (
+            <div
+              data-testid="composer-counter"
+              className={cn(
+                "mb-1 text-end text-xs tabular-nums",
+                draftTooLong ? "font-medium text-destructive" : "text-muted-foreground",
+              )}
+            >
+              {draft.length.toLocaleString()} / {MAX_MESSAGE_CHARS.toLocaleString()}
+              {draftTooLong ? " — too long to send" : ""}
+            </div>
+          )}
           {fileError && (
             <div className="mb-2 flex items-start justify-between gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-s text-destructive">
               <span>{fileError}</span>
@@ -2312,6 +2423,24 @@ export function ThreadChat({
                 if (e.key === "Escape" && replyTo) {
                   e.preventDefault();
                   setReplyTo(null);
+                }
+                // Desktop: Enter sends, Shift+Enter breaks the line. Touch
+                // keeps Enter as a newline; the Send button sends there.
+                if (
+                  shouldSendOnEnter(
+                    {
+                      key: e.key,
+                      shiftKey: e.shiftKey,
+                      ctrlKey: e.ctrlKey,
+                      metaKey: e.metaKey,
+                      altKey: e.altKey,
+                      isComposing: e.nativeEvent.isComposing,
+                    },
+                    finePointer,
+                  )
+                ) {
+                  e.preventDefault();
+                  send();
                 }
               }}
               placeholder={replyingTo ? "Reply…" : "Message"}

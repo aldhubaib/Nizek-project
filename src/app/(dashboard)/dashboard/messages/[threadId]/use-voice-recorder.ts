@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MAX_VOICE_NOTE_MS, VOICE_NOTE_BITS_PER_SECOND } from "@/lib/message-limits";
 
 /**
  * WhatsApp-style hold-to-record voice notes. Owns the MediaRecorder, the
@@ -78,9 +79,14 @@ export function useVoiceRecorder({ onSend }: { onSend: (file: File) => void }) {
       const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(
         (t) => MediaRecorder.isTypeSupported(t),
       );
+      // Speech-grade bitrate: a 10-minute note stays a few MB instead of the
+      // browser default (often 128 kbps+), which made long notes fail upload.
+      const recOptions: MediaRecorderOptions = {
+        audioBitsPerSecond: VOICE_NOTE_BITS_PER_SECOND,
+      };
       const rec = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
+        ? new MediaRecorder(stream, { ...recOptions, mimeType })
+        : new MediaRecorder(stream, recOptions);
       recordChunksRef.current = [];
       discardRecordingRef.current = false;
       recordAccumulatedRef.current = 0;
@@ -125,7 +131,17 @@ export function useVoiceRecorder({ onSend }: { onSend: (file: File) => void }) {
         const running = recordStartedAtRef.current
           ? Date.now() - recordStartedAtRef.current
           : 0;
-        setRecordSecs(Math.floor((recordAccumulatedRef.current + running) / 1000));
+        const elapsedMs = recordAccumulatedRef.current + running;
+        setRecordSecs(Math.floor(elapsedMs / 1000));
+        // Hard cap: stop and SEND what was recorded rather than let a note grow
+        // past what the upload path can reliably carry from a phone.
+        if (elapsedMs >= MAX_VOICE_NOTE_MS && recorderRef.current === rec) {
+          stopRecording(true);
+          setRecordError(
+            `Voice messages stop at ${Math.round(MAX_VOICE_NOTE_MS / 60_000)} minutes — this one was sent.`,
+          );
+          setTimeout(() => setRecordError(null), 5000);
+        }
       }, 250);
       if (holdEndedRef.current.ended) {
         stopRecording(!holdEndedRef.current.cancel);

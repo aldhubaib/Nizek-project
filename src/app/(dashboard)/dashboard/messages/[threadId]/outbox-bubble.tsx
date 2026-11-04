@@ -57,6 +57,11 @@ export const OutboxBubble = memo(function OutboxBubble({
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50">
             <Loader2 className="h-6 w-6 animate-spin text-white" />
             <span className="text-s font-semibold text-white">{pct}%</span>
+            {f.statusText && (
+              <span className="px-2 text-center text-xs text-white/90">
+                {f.statusText}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -70,21 +75,32 @@ export const OutboxBubble = memo(function OutboxBubble({
           <div className="flex max-w-full flex-col gap-xs">
             {otherFiles.map((f) => {
               const pct = f.status === "done" ? 100 : f.progress;
+              const uploading = entry.status === "uploading" && !failed;
               return (
                 <div
                   key={f.key}
-                  className="flex items-center gap-s rounded-xl border border-primary-foreground/20 bg-primary/80 px-3 py-2 text-s text-primary-foreground"
+                  className="flex flex-col gap-0.5 rounded-xl border border-primary-foreground/20 bg-primary/80 px-3 py-2 text-s text-primary-foreground"
                 >
-                  {entry.status === "uploading" && !failed ? (
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-                  ) : (
-                    <FileText className="h-4 w-4 shrink-0 opacity-80" />
-                  )}
-                  <span className="max-w-[200px] truncate font-medium">
-                    {f.name}
-                  </span>
-                  {entry.status === "uploading" && !failed && (
-                    <span className="shrink-0 text-xs opacity-80">{pct}%</span>
+                  <div className="flex items-center gap-s">
+                    {uploading ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4 shrink-0 opacity-80" />
+                    )}
+                    <span className="max-w-[200px] truncate font-medium">
+                      {f.name}
+                    </span>
+                    {uploading && (
+                      <span className="shrink-0 text-xs opacity-80">{pct}%</span>
+                    )}
+                  </div>
+                  {uploading && f.statusText && (
+                    <span
+                      className="ps-6 text-xs opacity-80"
+                      data-testid="upload-status"
+                    >
+                      {f.statusText}
+                    </span>
                   )}
                 </div>
               );

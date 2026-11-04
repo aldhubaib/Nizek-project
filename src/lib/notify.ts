@@ -4,7 +4,9 @@ import { batchPublish } from "@/lib/centrifugo";
 import { userChannel, NOTIFICATION_NEW } from "@/lib/channels";
 import {
   filterRecipientsByPreferences,
+  isThreadNotificationLevel,
   type PreferenceFlags,
+  type ThreadNotificationLevel,
 } from "@/lib/notification-prefs";
 import { dispatchOutbox, writePushOutbox } from "@/lib/push-queue";
 import type { PushPayload } from "@/lib/push-core";
@@ -20,8 +22,13 @@ type NotifyInput = {
   linkUrl?: string | null;
   /** Web-push tag (thread-scoped) — stored on the row for cross-device banner dismissal. */
   tag?: string | null;
-  /** Thread identity ("task-{id}" | "conv-{id}" | "project-{id}") for mute filtering. */
+  /** Thread identity ("task-{id}" | "conv-{id}" | "project-{id}") for level filtering. */
   threadKey?: string | null;
+  /**
+   * Who the message names (@mention, @all, reply target). Recipients whose
+   * level for the thread is "mentions" are notified only if listed here.
+   */
+  mentionedIds?: string[] | null;
   /** Message author — forwarded on `notification.new` so clients can skip self-chimes. */
   authorId?: string | null;
   /**
@@ -49,50 +56,66 @@ export type CreatedNotification = {
   createdAt: Date;
 };
 
+/** Stored per-thread levels for these users (absent = thread default). */
+export async function loadThreadLevels(
+  userIds: string[],
+  threadKey: string,
+): Promise<Map<string, ThreadNotificationLevel>> {
+  const rows = await prisma.threadNotificationPref.findMany({
+    where: { userId: { in: userIds }, threadKey },
+    select: { userId: true, level: true },
+  });
+  const map = new Map<string, ThreadNotificationLevel>();
+  for (const r of rows) if (isThreadNotificationLevel(r.level)) map.set(r.userId, r.level);
+  return map;
+}
+
 /**
  * Returns only the recipients who should be notified. Callers MUST use this
- * filtered list for push too, so a muted user gets no row, no push, and no
- * chime anywhere.
+ * filtered list for push too, so a person at level "none" gets no row, no
+ * push, and no chime anywhere.
  *
  * Notifications are mandatory: the per-type opt-outs that used to live in
  * NotificationPreference (messages / mentions / declines / deadlines) are no
  * longer consulted, so every type is delivered to everyone regardless of any
- * value still stored from the removed settings UI. Per-thread mutes remain
- * the only opt-out.
+ * value still stored from the removed settings UI. The per-thread level
+ * (all / mentions / none) is the one opt-out.
  */
 export async function resolveNotifiableRecipients(input: {
   recipientIds: string[];
   type: string;
   threadKey?: string | null;
+  mentionedIds?: string[] | null;
 }): Promise<string[]> {
   const unique = [...new Set(input.recipientIds)].filter(Boolean);
   if (unique.length === 0) return [];
   if (!input.threadKey) return unique;
 
   try {
-    const muteRows = await prisma.mutedThread.findMany({
-      where: { userId: { in: unique }, threadKey: input.threadKey },
-      select: { userId: true, threadKey: true },
-    });
-    const mutedPairs = new Set(
-      muteRows.map((m) => `${m.userId}:${m.threadKey}`),
-    );
-
+    const levelsByUser = await loadThreadLevels(unique, input.threadKey);
     return filterRecipientsByPreferences({
       recipientIds: unique,
       type: input.type,
       threadKey: input.threadKey,
       // Empty map => everyone gets DEFAULT_PREFERENCES (all types on).
       prefsByUser: new Map<string, PreferenceFlags>(),
-      mutedPairs,
+      levelsByUser,
+      mentionedIds: input.mentionedIds ?? [],
     });
   } catch (err) {
-    // Mutes are an opt-out layer; never let a lookup failure block delivery.
+    // Levels are an opt-out layer; never let a lookup failure block delivery
+    // of what the thread default would send.
     console.error(
-      "[notify] mute lookup failed — notifying all recipients:",
+      "[notify] level lookup failed — using thread defaults:",
       err instanceof Error ? err.message : err,
     );
-    return unique;
+    return filterRecipientsByPreferences({
+      recipientIds: unique,
+      type: input.type,
+      threadKey: input.threadKey,
+      prefsByUser: new Map<string, PreferenceFlags>(),
+      mentionedIds: input.mentionedIds ?? [],
+    });
   }
 }
 
@@ -141,6 +164,7 @@ async function createNotifications(
     recipientIds: input.recipientIds,
     type: input.type,
     threadKey: input.threadKey,
+    mentionedIds: input.mentionedIds,
   });
   if (recipients.length === 0) return [];
 

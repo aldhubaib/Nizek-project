@@ -1,11 +1,15 @@
 # Web Push — architecture, states, runbook
 
 Web push (VAPID) delivers OS banners to desktop browsers, Android, and iOS
-installed PWAs. Notifications are **mandatory**: a signed-in user whose device
-cannot receive push is blocked by a full-screen gate until it can. This doc is
-the map of how a push gets from `notifyAndPush()` to a phone, what state a
-device can be in, and what to look at when someone says "I don't get
-notifications".
+installed PWAs. A signed-in user whose device cannot receive push sees one of
+two things: a full-screen gate for the states a button of ours cannot fix
+(permission denied, iPhone not installed), or a dismissible top banner for the
+states one tap finishes (permission not asked yet, a retryable failure). "Not
+now" on the banner snoozes it for seven days (`localStorage`
+`nizek-push-prompt-snoozed-until`). Email digests (`src/lib/email-digest.ts`)
+cover anyone who keeps postponing. This doc is the map of how a push gets from
+`notifyAndPush()` to a phone, what state a device can be in, and what to look
+at when someone says "I don't get notifications".
 
 Sized for ~1,000 users / ~50k pushes per day (0.6 push/s average, 100 push/s
 design burst). `npm run test:push-load` proves one worker replica does >1,000
@@ -132,7 +136,7 @@ One runtime, one store. Nothing else touches `pushManager` or `/api/push`.
 | --- | --- |
 | `env.ts` | Synchronous browser probes: platform, standalone, permission, support, VAPID key, build id. |
 | `support.ts` | Pure classification: platform detection, iOS non-Safari, permission → reason, sync response → reason, VAPID key compare/hash. |
-| `state.ts` | Pure state machine: `derivePushView()`, `shouldGate()`, `shouldAttemptHeal()` (60s cooldown), and all user-facing guidance text. |
+| `state.ts` | Pure state machine: `derivePushView()`, `shouldGate()`, `shouldPrompt()` + the snooze helpers, `shouldAttemptHeal()` (60s cooldown), and all user-facing guidance text. |
 | `registration.ts` | Register `sw.js` once; `ready` with 8s timeout; **never unregisters a registration that holds a subscription**. |
 | `subscription.ts` | `pushManager` I/O: read, subscribe (re-subscribe on VAPID key mismatch), `POST /api/push` with `oldEndpoint`, `GET /api/push/status`, permission request from a gesture. All calls have timeouts. |
 | `telemetry.ts` | `POST /api/push/device`, throttled (10s min, same state at most every 5 min), `keepalive`. |
@@ -145,23 +149,24 @@ from `derivePushView()`.
 
 ### Views (`PushView`)
 
-| View | Meaning | Gated in production? |
+| View | Meaning | In production |
 | --- | --- | --- |
-| `enabled` | permission granted, subscribed, server confirmed | no |
-| `verifying` | granted; first check not finished | no |
-| `repairing` | granted; store is (re)subscribing | no |
-| `repair-failed` | automatic repair failed; shows the concrete reason + Retry | yes |
-| `prompt` | permission `default`; show Enable | yes |
-| `pre-prompt` | iOS PWA, permission `default`: explain the one-shot prompt, then Continue | yes |
-| `denied` | blocked at OS/browser level; iOS shows two recovery paths | yes |
-| `install` | iOS Safari tab: Add to Home Screen | yes |
-| `safari-install` | iOS Chrome/Firefox tab: open in Safari, then install | yes |
-| `unsupported` | no push and no install path | no |
-| `impersonating` | admin viewing as user | no |
+| `enabled` | permission granted, subscribed, server confirmed | nothing |
+| `verifying` | granted; first check not finished | nothing |
+| `repairing` | granted; store is (re)subscribing | nothing |
+| `repair-failed` | automatic repair failed; shows the concrete reason + Retry | banner (`shouldPrompt`) |
+| `prompt` | permission `default`; show Enable | banner (`shouldPrompt`) |
+| `pre-prompt` | iOS PWA, permission `default`: explain the one-shot prompt, then Continue | banner (`shouldPrompt`) |
+| `denied` | blocked at OS/browser level; iOS shows two recovery paths | gate (`shouldGate`) |
+| `install` | iOS Safari tab: Add to Home Screen | gate (`shouldGate`) |
+| `safari-install` | iOS Chrome/Firefox tab: open in Safari, then install | gate (`shouldGate`) |
+| `unsupported` | no push and no install path | nothing |
+| `impersonating` | admin viewing as user | nothing |
 
-The gate is never shown because of a "checking" flag, and never while the
-runtime is still working (`verifying`/`repairing`). In development
-(`NODE_ENV !== "production"`) it is never shown.
+Neither the gate nor the banner is shown because of a "checking" flag, and
+never while the runtime is still working (`verifying`/`repairing`). In
+development (`NODE_ENV !== "production"`) neither is shown. The banner stays
+hidden while its seven-day snooze is active; the gate has no snooze.
 
 ### Service worker (`public/`)
 
@@ -171,8 +176,11 @@ runtime is still working (`verifying`/`repairing`). In development
   two. Carries the `// @BUILD_VERSION` stamp Railway rewrites at build so every
   deploy changes the file bytes and browsers pick up the update.
 - `sw-cache.js` — install/activate + caching strategies (unchanged behaviour).
-- `sw-lib.js` — pure, unit-tested decision logic (`shouldShowPushNotification`,
-  `subscriptionChangeBody`, `classifyRequest`, …).
+- `sw-lib.js` — pure, unit-tested decision logic (`parsePushPayload`,
+  `notificationOptionsFor`, `subscriptionChangeBody`, `classifyRequest`, …).
+  There is deliberately no client-side suppression: every push renders a
+  banner (iOS drops silent pushes). The worker skips the device that is
+  actively reading the thread instead (`/api/presence/active` heartbeat).
 
 ## Environment
 

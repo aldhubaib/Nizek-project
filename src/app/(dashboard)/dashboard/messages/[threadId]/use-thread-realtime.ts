@@ -2,15 +2,21 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import {
+  getThreadChangesSince,
   getThreadMessages,
   markThreadRead,
   type MessageDTO,
   type ReactionSummary,
 } from "@/actions/messages";
 import { useChannel } from "@/components/realtime/hooks";
+import { useIsImpersonating } from "@/components/current-user-provider";
 import { subscribeDelivered } from "@/lib/message-outbox";
+import { mergeThreadMessages } from "@/lib/merge-thread-messages";
+import { applyThreadChanges, threadSyncCursor } from "@/lib/thread-changes";
+import { startActiveThreadHeartbeat } from "@/lib/active-thread-client";
 import { closePushBannersByTags } from "@/lib/close-push-banners";
 import { threadPushTag } from "@/lib/notification-read";
+import { applyPeerRead, type PeerReads } from "@/lib/read-receipts";
 import { updateAppBadge } from "@/lib/app-badge";
 import { useNotificationStore } from "@/store/notifications";
 import type { ChatMessage, ThreadTarget } from "./thread-shared";
@@ -25,19 +31,25 @@ export function useThreadRealtime({
   target,
   threadKey,
   currentMemberId,
+  messagesRef,
   setMessages,
   setNewBelow,
-  setPeerLastReadAt,
+  setPeerReads,
   nearBottomRef,
+  reconcileOnMount = false,
 }: {
   channel: string;
   target: ThreadTarget;
   threadKey: string | null;
   currentMemberId: string;
+  /** Always the rendered list — the "since" cursor is read from it. */
+  messagesRef: React.RefObject<ChatMessage[]>;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setNewBelow: React.Dispatch<React.SetStateAction<number>>;
-  setPeerLastReadAt: React.Dispatch<React.SetStateAction<string | null>>;
+  setPeerReads: React.Dispatch<React.SetStateAction<PeerReads>>;
   nearBottomRef: React.RefObject<boolean>;
+  /** True when the initial list came from the local cache rather than the server. */
+  reconcileOnMount?: boolean;
 }) {
   // When the outbox manager finishes delivering one of this thread's messages,
   // append the server-confirmed message (no refetch). If the user is on
@@ -77,42 +89,80 @@ export function useThreadRealtime({
     });
   }, [threadKey]);
 
-  // Reconcile with the server after a gap in realtime coverage — failed
-  // history recovery on the channel, or coming back from a long background —
-  // by fetching the newest page and appending whatever we don't have. This is
-  // what used to require a manual refresh: a DM sent while the phone was
-  // locked reconnected to a channel whose replay window had passed, and
-  // nothing ever refetched.
+  // Tell the push worker this device is reading the thread (while visible), so
+  // it skips this device and the service worker can show every other push.
+  useEffect(() => {
+    if (!threadKey) return;
+    return startActiveThreadHeartbeat(threadKey);
+  }, [threadKey]);
+
+  // Reconcile with the server after a gap in realtime coverage — the socket
+  // reconnected, or the tab came back from a long background. Ask for
+  // everything that changed since the newest timestamp we hold (new messages,
+  // edits, reactions, deletions) and upsert/remove accordingly. Only when we
+  // hold nothing, or the gap was too large to express as a delta, fall back
+  // to the newest page. This is what used to require a manual refresh: a DM
+  // sent while the phone was locked reconnected to a channel whose replay
+  // window had passed, and nothing ever refetched — and edits or deletes
+  // missed meanwhile were never fixed at all.
   const refreshingRef = useRef(false);
+  const pendingRefreshRef = useRef(false);
   const refreshLatest = useCallback(async () => {
-    if (refreshingRef.current) return;
+    if (refreshingRef.current) {
+      // A second trigger while one runs (reconnect + visibility together)
+      // queues exactly one more pass so nothing between the two is missed.
+      pendingRefreshRef.current = true;
+      return;
+    }
     refreshingRef.current = true;
     try {
-      const page = await getThreadMessages(target);
-      setMessages((prev) => {
-        const seen = new Set(prev.map((m) => m.id));
-        const fresh = page.messages.filter((m) => !seen.has(m.id));
-        if (fresh.length === 0) return prev;
-        return [...prev, ...fresh].sort(
-          (a, b) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      const since = threadSyncCursor(messagesRef.current);
+      let fallback = since === null;
+      if (since !== null) {
+        const changes = await getThreadChangesSince(target, since);
+        setMessages((prev) =>
+          applyThreadChanges(prev, {
+            messages: changes.messages,
+            deletedIds: changes.deletedIds,
+          }),
         );
-      });
+        fallback = changes.truncated;
+      }
+      if (fallback) {
+        const page = await getThreadMessages(target);
+        setMessages((prev) => mergeThreadMessages(prev, page.messages));
+      }
     } catch {
       // Best-effort — the next navigation reconciles.
     } finally {
       refreshingRef.current = false;
+      if (pendingRefreshRef.current) {
+        pendingRefreshRef.current = false;
+        void refreshLatest();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target.taskId, target.projectId, target.conversationId]);
+
+  // A list restored from the local cache may hold messages that were edited
+  // or deleted while we were on another page — reconcile once on mount.
+  useEffect(() => {
+    if (reconcileOnMount) void refreshLatest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Mark this thread's notifications read — but only while someone is actually
   // looking at it. The server component deliberately no longer marks anything
   // (link prefetch was silently marking threads read), so read-state is owned
   // here: on open in a visible tab, whenever the tab becomes visible again,
   // and (debounced) when messages arrive while the user is watching.
+  // Admin "view as": reading here must not count as the viewed person reading.
+  // The server refuses the write too (isImpersonating); skipping client-side
+  // also keeps their badges and OS banners untouched on this browser.
+  const impersonating = useIsImpersonating();
   const markRead = useCallback(() => {
     if (document.visibilityState !== "visible") return;
+    if (impersonating) return;
     if (threadKey) {
       useNotificationStore.getState().clearThreadUnread(threadKey);
     }
@@ -127,7 +177,7 @@ export function useThreadRealtime({
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.taskId, target.projectId, target.conversationId, threadKey]);
+  }, [target.taskId, target.projectId, target.conversationId, threadKey, impersonating]);
 
   const hiddenAtRef = useRef<number | null>(null);
   useEffect(() => {
@@ -232,13 +282,10 @@ export function useThreadRealtime({
         ),
       );
     } else if (d.type === "thread.read" && d.memberId && d.memberId !== currentMemberId) {
+      // Per member: one person reading must not flip the whole group to "Seen".
       if (d.lastReadAt) {
-        setPeerLastReadAt((prev) => {
-          if (!prev) return d.lastReadAt!;
-          return new Date(d.lastReadAt!).getTime() > new Date(prev).getTime()
-            ? d.lastReadAt!
-            : prev;
-        });
+        const { memberId, lastReadAt } = d;
+        setPeerReads((prev) => applyPeerRead(prev, memberId, lastReadAt));
       }
     } else if (d.type === "reaction.updated" && d.messageId) {
       const { messageId, reactions } = d;
@@ -251,8 +298,13 @@ export function useThreadRealtime({
       const { messageId } = d;
       setMessages((prev) => prev.filter((x) => x.id !== messageId));
     }
-    // Reconnected but the missed events couldn't be replayed — refetch.
-  }, () => void refreshLatest());
+  },
+  // Reconnected but the missed events couldn't be replayed — covered by the
+  // reconnect handler below, which runs on every resubscribe after a gap:
+  // even a successful replay only carries publications, so edits made while
+  // the thread was unsubscribed are cheaper to confirm than to trust.
+  undefined,
+  () => void refreshLatest());
 
   return { markRead, requestMarkRead, refreshLatest };
 }

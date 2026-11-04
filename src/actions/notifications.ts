@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth";
+import { isImpersonating, requireUser } from "@/lib/auth";
 import { publish, userChannel } from "@/lib/centrifugo";
 import { NOTIFICATION_READ, NOTIFICATION_READ_ALL } from "@/lib/channels";
 import { unreadCountsFor } from "@/lib/notify";
@@ -36,6 +36,12 @@ export async function getUnreadCount(): Promise<number> {
 
 export async function markNotificationRead(id: string): Promise<number> {
   const user = await requireUser();
+  // "View as" must never clear the viewed person's notifications (see
+  // isImpersonating). Report the count, change nothing.
+  if (await isImpersonating()) {
+    console.info(`[read-state] view-as: skipped markNotificationRead ${id} for ${user.id}`);
+    return (await unreadCountsFor(user.id)).unread;
+  }
   const row = await prisma.notification.findFirst({
     where: { id, recipientId: user.id },
     select: { tag: true, read: true, linkUrl: true },
@@ -62,6 +68,10 @@ export async function markNotificationRead(id: string): Promise<number> {
 
 export async function markAllNotificationsRead(): Promise<number> {
   const user = await requireUser();
+  if (await isImpersonating()) {
+    console.info(`[read-state] view-as: skipped markAllNotificationsRead for ${user.id}`);
+    return (await unreadCountsFor(user.id)).unread;
+  }
   const unreadRows = await prisma.notification.findMany({
     where: { recipientId: user.id, read: false },
     select: { tag: true, linkUrl: true },

@@ -12,6 +12,10 @@ import {
   describeView,
   shouldAttemptHeal,
   shouldGate,
+  shouldPrompt,
+  isPromptSnoozed,
+  promptSnoozeUntil,
+  PROMPT_SNOOZE_MS,
   type PushViewInput,
 } from "@/lib/push/state";
 import { pushFailure } from "@/lib/push/support";
@@ -50,19 +54,21 @@ describe("S2 — fresh install", () => {
     expect(g?.steps.join(" ")).toMatch(/Safari/);
   });
 
-  it("iOS standalone, permission default: pre-prompt explainer with Continue", () => {
+  it("iOS standalone, permission default: pre-prompt explainer with Continue, banner not gate", () => {
     const view = derivePushView(input({ permission: "default" }));
     expect(view).toBe("pre-prompt");
-    expect(shouldGate(view, PROD)).toBe(true);
+    expect(shouldGate(view, PROD)).toBe(false);
+    expect(shouldPrompt(view, PROD)).toBe(true);
     const g = describeView(view, "ios", null);
     expect(g?.actionLabel).toBe("Continue");
     expect(g?.steps.join(" ")).toMatch(/Don't Allow/);
   });
 
-  it("desktop, permission default: plain Enable prompt", () => {
+  it("desktop, permission default: plain Enable prompt as a dismissible banner", () => {
     const view = derivePushView(input({ platform: "desktop", standalone: false, permission: "default" }));
     expect(view).toBe("prompt");
-    expect(shouldGate(view, PROD)).toBe(true);
+    expect(shouldGate(view, PROD)).toBe(false);
+    expect(shouldPrompt(view, PROD)).toBe(true);
     expect(describeView(view, "desktop", null)).toBeNull();
   });
 
@@ -80,12 +86,13 @@ describe("S2 — fresh install", () => {
     expect(shouldGate(enabled, PROD)).toBe(false);
   });
 
-  it("granted, repair failed once: repair-failed with the concrete reason, gated, retry offered", () => {
+  it("granted, repair failed once: repair-failed with the concrete reason, banner with retry", () => {
     const view = derivePushView(
       input({ enabled: false, lastFailure: { reason: "no-service-worker" } }),
     );
     expect(view).toBe("repair-failed");
-    expect(shouldGate(view, PROD)).toBe(true);
+    expect(shouldGate(view, PROD)).toBe(false);
+    expect(shouldPrompt(view, PROD)).toBe(true);
     const g = describeView(view, "ios", { reason: "no-service-worker" });
     expect(g?.title).toMatch(/isn't ready/);
     expect(g?.actionLabel).toBe("Try again");
@@ -185,9 +192,36 @@ describe("S3 — existing user, app updated", () => {
 });
 
 describe("gate policy", () => {
-  it("never gates in development", () => {
+  it("never gates or prompts in development", () => {
     expect(shouldGate("prompt", { production: false })).toBe(false);
     expect(shouldGate("denied", { production: false })).toBe(false);
+    expect(shouldPrompt("prompt", { production: false })).toBe(false);
+  });
+
+  it("blocks only what a tap cannot fix: denied and iOS not installed", () => {
+    expect(shouldGate("denied", PROD)).toBe(true);
+    expect(shouldGate("install", PROD)).toBe(true);
+    expect(shouldGate("safari-install", PROD)).toBe(true);
+    for (const v of ["prompt", "pre-prompt", "repair-failed"] as const) {
+      expect(shouldGate(v, PROD)).toBe(false);
+      expect(shouldPrompt(v, PROD)).toBe(true);
+    }
+    for (const v of ["enabled", "verifying", "repairing", "unsupported", "impersonating", "denied", "install"] as const) {
+      expect(shouldPrompt(v, PROD)).toBe(false);
+    }
+  });
+
+  it("the banner snooze lasts seven days and ignores garbage or far-future values", () => {
+    const now = Date.UTC(2026, 0, 1);
+    const until = promptSnoozeUntil(now);
+    expect(Date.parse(until) - now).toBe(PROMPT_SNOOZE_MS);
+    expect(isPromptSnoozed(until, now)).toBe(true);
+    expect(isPromptSnoozed(until, now + PROMPT_SNOOZE_MS - 1)).toBe(true);
+    expect(isPromptSnoozed(until, now + PROMPT_SNOOZE_MS)).toBe(false);
+    expect(isPromptSnoozed(null, now)).toBe(false);
+    expect(isPromptSnoozed("not a date", now)).toBe(false);
+    // A value further out than one snooze (clock jump, hand edit) does not hide it forever.
+    expect(isPromptSnoozed(new Date(now + 2 * PROMPT_SNOOZE_MS).toISOString(), now)).toBe(false);
   });
 
   it("never gates unsupported browsers with no fix, or impersonating admins", () => {
