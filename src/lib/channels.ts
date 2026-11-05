@@ -16,35 +16,8 @@ export function conversationChannel(conversationId: string): string {
 }
 
 /**
- * Client-facing twin of a conversation channel. A single channel cannot carry
- * both real and aliased names, so clients subscribe here instead and the server
- * publishes the masked payload. Same `conv` namespace, so Centrifugo config is
- * unchanged; the token route is what keeps each audience off the other's feed.
- */
-export const CLIENT_CHANNEL_SUFFIX = "-client";
-
-export function conversationClientChannel(conversationId: string): string {
-  return `conv:${conversationId}${CLIENT_CHANNEL_SUFFIX}`;
-}
-
-/**
- * Splits the `conv:` channel body into the conversation it belongs to and the
- * audience it serves. Returns null for an empty id so a bare `conv:` or
- * `conv:-client` can never resolve to a real conversation.
- */
-export function parseConversationChannel(
-  rest: string,
-): { conversationId: string; forClient: boolean } | null {
-  const forClient = rest.endsWith(CLIENT_CHANNEL_SUFFIX);
-  const conversationId = forClient
-    ? rest.slice(0, -CLIENT_CHANNEL_SUFFIX.length)
-    : rest;
-  if (!conversationId) return null;
-  return { conversationId, forClient };
-}
-/**
- * Namespaces whose payloads carry real staff names and photos — task and
- * project feeds are written for the team and are never masked.
+ * Namespaces written for the team: task and project feeds carry the board and
+ * the internal project thread.
  *
  * A client is a project member like anyone else, so a membership check alone
  * would let them subscribe. No client screen asks for these channels (the

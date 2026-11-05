@@ -62,14 +62,9 @@ import {
   taskChannel,
   projectChannel,
   conversationChannel,
-  conversationClientChannel,
   userChannel,
 } from "@/lib/centrifugo";
-import {
-  CLIENT_CHANNEL_SUFFIX,
-  NOTIFICATION_READ,
-  TYPING_EVENT,
-} from "@/lib/channels";
+import { NOTIFICATION_READ, TYPING_EVENT } from "@/lib/channels";
 import { threadPushTag } from "@/lib/notification-read";
 import { MAX_MESSAGE_CHARS, messageTooLongError } from "@/lib/message-limits";
 import {
@@ -83,17 +78,6 @@ import {
   ensureClientInbox,
   isClientUser,
 } from "@/lib/client-chat";
-import {
-  getAliasMap,
-  getAliasMapsForProjects,
-  maskBody,
-  maskImage,
-  maskName,
-  maskNoteActivity,
-  maskPlainNames,
-  NO_MASK,
-  type AliasIdentity,
-} from "@/lib/alias";
 import {
   ANNOUNCEMENTS_CONVERSATION_ID,
   ANNOUNCEMENTS_CONVERSATION_KIND,
@@ -153,90 +137,6 @@ function toDisplayBody(body: string): string {
   return body.replace(MENTION_RE, "@$1");
 }
 
-/**
- * The alias map to apply for this viewer. Employees get an empty map (no
- * masking); clients get the aliases for the project they're looking at.
- */
-async function viewerAliasMap(
-  user: { systemRole: string },
-  projectId: string | null | undefined,
-): Promise<Map<string, AliasIdentity>> {
-  if (!isClientUser(user)) return NO_MASK;
-  return getAliasMap(projectId);
-}
-
-/** Proof-bypass payloads embed rendered names, so they need scrubbing too. */
-function maskProofBypass(
-  payload: ProofBypassPayload | null,
-  map: Map<string, AliasIdentity>,
-): ProofBypassPayload | null {
-  if (!payload || map.size === 0) return payload;
-  return {
-    ...payload,
-    requesterName: maskName(payload.requesterId, payload.requesterName, map),
-    decidedByName: payload.decidedByName
-      ? maskPlainNames(payload.decidedByName, map)
-      : payload.decidedByName,
-  };
-}
-
-/**
- * Both audience channels for a conversation. Payloads that carry only ids
- * (reactions, deletes, read receipts) can go to both as-is; anything with a
- * name must be published per channel.
- */
-function conversationChannelsFor(conversationId: string): string[] {
-  return [
-    conversationChannel(conversationId),
-    conversationClientChannel(conversationId),
-  ];
-}
-
-/**
- * Client-facing copy of a message DTO. The body here is already rendered
- * ("@Name", quoted comments), so names are matched textually rather than by id.
- */
-function maskMessageDTO(
-  dto: MessageDTO,
-  map: Map<string, AliasIdentity>,
-): MessageDTO {
-  if (map.size === 0) return dto;
-  return {
-    ...dto,
-    authorName: maskName(dto.authorId, dto.authorName, map),
-    authorImageUrl: maskImage(dto.authorId, dto.authorImageUrl, map),
-    body: maskPlainNames(dto.body, map),
-    mentions: dto.mentions?.map((n) => maskPlainNames(n, map)),
-    noteComment: dto.noteComment
-      ? {
-          ...dto.noteComment,
-          comment: maskPlainNames(dto.noteComment.comment, map),
-          quoteText: maskPlainNames(dto.noteComment.quoteText, map),
-        }
-      : dto.noteComment,
-    taskComment: dto.taskComment
-      ? {
-          ...dto.taskComment,
-          comment: maskPlainNames(dto.taskComment.comment, map),
-          ...(dto.taskComment.quoteText
-            ? { quoteText: maskPlainNames(dto.taskComment.quoteText, map) }
-            : {}),
-        }
-      : dto.taskComment,
-    noteActivity: maskNoteActivity(dto.noteActivity ?? null, map),
-    clientIssue: dto.clientIssue
-      ? {
-          ...dto.clientIssue,
-          title: maskPlainNames(dto.clientIssue.title, map),
-          ...(dto.clientIssue.excerpt
-            ? { excerpt: maskPlainNames(dto.clientIssue.excerpt, map) }
-            : {}),
-        }
-      : dto.clientIssue,
-    proofBypass: maskProofBypass(dto.proofBypass ?? null, map),
-  };
-}
-
 function inboxPreview(body: string): string {
   const activity = decodeNoteActivityPayload(body);
   if (activity) return noteActivityPreview(activity);
@@ -253,12 +153,9 @@ function inboxPreview(body: string): string {
 
 function mapDeadlineReminderMessage<T extends { kind: string; body: string; authorId: string; author: { name: string | null; email: string; imageUrl: string | null } }>(
   c: T,
-  aliasMap: Map<string, AliasIdentity> = NO_MASK,
   options: { isClientRoom?: boolean } = {},
 ) {
-  // Mask before decoding so mention tokens in the header and any real name
-  // quoted inside a comment payload are both rewritten.
-  const body = maskBody(c.body, aliasMap);
+  const body = c.body;
   const payload = decodeDeadlineReminderPayload(body);
   const noteActivity = isNoteActivityMessage(c.kind)
     ? decodeNoteActivityPayload(body)
@@ -279,19 +176,14 @@ function mapDeadlineReminderMessage<T extends { kind: string; body: string; auth
   const clientIssue = isClientIssueMessage(c.kind)
     ? decodeClientIssuePayload(body)
     : null;
-  const proofBypass = maskProofBypass(
-    isProofBypassMessage(c.kind) ? decodeProofBypassPayload(body) : null,
-    aliasMap,
-  );
+  const proofBypass = isProofBypassMessage(c.kind)
+    ? decodeProofBypassPayload(body)
+    : null;
   const highlight = noteComment ?? taskComment;
   return {
     authorId: isBot ? NIZEK_BOT_AUTHOR_ID : c.authorId,
-    authorName: isBot
-      ? NIZEK_BOT_NAME
-      : maskName(c.authorId, c.author.name ?? c.author.email, aliasMap),
-    authorImageUrl: isBot
-      ? null
-      : maskImage(c.authorId, c.author.imageUrl ?? null, aliasMap),
+    authorName: isBot ? NIZEK_BOT_NAME : (c.author.name ?? c.author.email),
+    authorImageUrl: isBot ? null : (c.author.imageUrl ?? null),
     body:
       isBot && payload
         ? `@${ALL_MENTION_NAME}`
@@ -320,15 +212,12 @@ function inboxLastAuthor(
     body: string;
     author: { id: string; name: string | null; email: string };
   },
-  options: { clientRoom?: boolean; aliasMap?: Map<string, AliasIdentity> } = {},
+  options: { clientRoom?: boolean } = {},
 ): string {
   if (options.clientRoom && isClientSprintBotMessage(last.kind, last.body)) {
     return NIZEK_BOT_NAME;
   }
-  const name = last.author.name ?? last.author.email;
-  return options.aliasMap
-    ? maskName(last.author.id, name, options.aliasMap)
-    : name;
+  return last.author.name ?? last.author.email;
 }
 
 /** Names mentioned in a body — the client highlights "@Name" runs as chips. */
@@ -542,7 +431,6 @@ type ThreadWhere = {
 
 type ThreadScope = {
   where: ThreadWhere;
-  aliasProjectId: string | null;
   isClientRoom: boolean;
 };
 
@@ -571,15 +459,13 @@ async function resolveThreadScope(
   },
 ): Promise<ThreadScope> {
   let where: ThreadWhere;
-  let aliasProjectId: string | null = null;
   let isClientRoom = false;
   if (input.conversationId) {
     const convoMeta = await prisma.conversation.findUnique({
       where: { id: input.conversationId },
-      select: { id: true, kind: true, projectId: true },
+      select: { id: true, kind: true },
     });
     if (!convoMeta) throw new Error("Permission denied");
-    aliasProjectId = convoMeta.projectId;
     if (convoMeta.kind === ANNOUNCEMENTS_CONVERSATION_KIND) {
       if (!canReadAnnouncements(user)) throw new Error("Permission denied");
     } else if (convoMeta.kind === CLIENT_CONVERSATION_KIND) {
@@ -616,17 +502,17 @@ async function resolveThreadScope(
   } else {
     throw new Error("No thread specified");
   }
-  return { where, aliasProjectId, isClientRoom };
+  return { where, isClientRoom };
 }
 
-/** Rows (oldest → newest) to the wire shape, masked for this viewer. */
+/** Rows (oldest → newest) to the wire shape. */
 async function toThreadMessages(
   user: Awaited<ReturnType<typeof requireUser>>,
   page: ThreadMessageRow[],
   scope: ThreadScope,
 ): Promise<ThreadMessage[]> {
   if (page.length === 0) return [];
-  const { aliasProjectId, isClientRoom } = scope;
+  const { isClientRoom } = scope;
   const importantRows = await prisma.importantMessage.findMany({
     where: {
       userId: user.id,
@@ -635,7 +521,6 @@ async function toThreadMessages(
     select: { messageId: true },
   });
   const importantIds = new Set(importantRows.map((r) => r.messageId));
-  const aliasMap = await viewerAliasMap(user, aliasProjectId);
 
   const messages: ThreadMessage[] = page.map((c) => {
     const byEmoji = new Map<string, string[]>();
@@ -644,7 +529,7 @@ async function toThreadMessages(
       list.push(r.memberId);
       byEmoji.set(r.emoji, list);
     }
-    const mapped = mapDeadlineReminderMessage(c, aliasMap, { isClientRoom });
+    const mapped = mapDeadlineReminderMessage(c, { isClientRoom });
     const edited = c.editedAt !== null;
     return {
       id: c.id,
@@ -700,10 +585,8 @@ async function toThreadMessages(
       where: { id: { in: missingExcerptIds } },
       select: { id: true, content: true },
     });
-    // Straight out of the document, so it misses the masking pass that the
-    // stored card body already went through on the way in.
     const byId = new Map(
-      notes.map((n) => [n.id, maskPlainNames(plainTextExcerpt(n.content), aliasMap)]),
+      notes.map((n) => [n.id, plainTextExcerpt(n.content)]),
     );
     for (const m of messages) {
       if (
@@ -963,12 +846,6 @@ export async function listImportantMessages(target?: {
     rows.map((r) => r.message),
   );
 
-  const aliasMaps = isClientUser(user)
-    ? await getAliasMapsForProjects(
-        rows.map((r) => r.message.conversation?.projectId ?? r.message.projectId),
-      )
-    : new Map<string, Map<string, AliasIdentity>>();
-
   const out: ImportantMessageDTO[] = [];
   for (const row of rows) {
     const m = row.message;
@@ -983,17 +860,11 @@ export async function listImportantMessages(target?: {
       : m.task
         ? `#${m.task.taskNumber} ${m.task.title}`
         : (m.project?.name ?? "Chat");
-    const projectId = m.conversation?.projectId ?? m.projectId;
-    const aliasMap = (projectId && aliasMaps.get(projectId)) || NO_MASK;
     out.push({
       id: m.id,
-      body: toDisplayBody(maskBody(m.body, aliasMap)),
+      body: toDisplayBody(m.body),
       createdAt: m.createdAt.toISOString(),
-      authorName: maskName(
-        m.authorId,
-        m.author.name ?? m.author.email ?? "Someone",
-        aliasMap,
-      ),
+      authorName: m.author.name ?? m.author.email ?? "Someone",
       threadId,
       threadName,
     });
@@ -1533,8 +1404,6 @@ export async function sendMessage(
           : preview;
       // DMs and groups show the sender's face; project threads show the project
       // logo. The service worker falls back to the app icon when neither exists.
-      // This is the staff-facing icon — notifyAndPush substitutes the alias photo
-      // for any client recipient.
       const notifIcon =
         (isClientRoom
           ? (projectLogoUrl ?? message.author.imageUrl)
@@ -1557,17 +1426,6 @@ export async function sendMessage(
       const publishes: MessageEventPublish[] = [
         { channels: threadChannels, data: { type: "message.new", message: dto } },
       ];
-
-      // Clients read a separate channel carrying the aliased payload, so the real
-      // name is never published anywhere a client can subscribe. Always publish,
-      // even with no aliases assigned, or client chat would go silent.
-      if (conversationId) {
-        const aliasMap = await getAliasMap(projectId);
-        publishes.push({
-          channels: [conversationClientChannel(conversationId)],
-          data: { type: "message.new", message: maskMessageDTO(dto, aliasMap) },
-        });
-      }
 
       const event = await writeMessageEvent(tx, {
         kind: "message.new",
@@ -1604,9 +1462,6 @@ export async function sendMessage(
     // 20s sweep picks the row up as soon as the queue is reachable again.
     await dispatchMessageEvents([event]);
 
-    if (isClientUser(user)) {
-      return maskMessageDTO(dto, await getAliasMap(projectId));
-    }
     return dto;
   });
   if (!result.ok) {
@@ -1655,20 +1510,13 @@ export async function publishTypingEvent(channel: string): Promise<void> {
   const extraUserChannels: string[] = [];
 
   if (namespace === "conv") {
-    // Clients type on the "-client" twin of the channel; resolve back to the
-    // conversation and fan out to both audiences so each sees the other typing.
-    const conversationId = rest.endsWith(CLIENT_CHANNEL_SUFFIX)
-      ? rest.slice(0, -CLIENT_CHANNEL_SUFFIX.length)
-      : rest;
-    if (!conversationId) return;
+    const conversationId = rest;
 
     const convo = await prisma.conversation.findUnique({
       where: { id: conversationId },
       select: {
         kind: true,
-        participants: {
-          select: { memberId: true, member: { select: { systemRole: true } } },
-        },
+        participants: { select: { memberId: true } },
       },
     });
     if (!convo) return;
@@ -1679,33 +1527,11 @@ export async function publishTypingEvent(channel: string): Promise<void> {
       return;
     }
 
-    const others = convo.participants.filter((p) => p.memberId !== user.id);
-    const staffChannel = conversationChannel(conversationId);
-    const clientChannel = conversationClientChannel(conversationId);
-
-    // The `channel` field must match whichever channel the recipient is
-    // subscribed to, or their typing hook filters the event out.
-    await Promise.all([
-      broadcastEphemeral(
-        [
-          staffChannel,
-          ...others
-            .filter((p) => !isClientUser(p.member))
-            .map((p) => userChannel(p.memberId)),
-        ],
-        { type: TYPING_EVENT, memberId: user.id, channel: staffChannel },
-      ),
-      broadcastEphemeral(
-        [
-          clientChannel,
-          ...others
-            .filter((p) => isClientUser(p.member))
-            .map((p) => userChannel(p.memberId)),
-        ],
-        { type: TYPING_EVENT, memberId: user.id, channel: clientChannel },
-      ),
-    ]);
-    return;
+    // Also on each participant's own channel, so the inbox list shows typing
+    // for people who do not have this thread open.
+    for (const p of convo.participants) {
+      if (p.memberId !== user.id) extraUserChannels.push(userChannel(p.memberId));
+    }
   } else if (namespace === "project") {
     if (isClientUser(user)) return;
     if (!(await hasProjectAccess(rest))) return;
@@ -1786,7 +1612,7 @@ export async function markThreadRead(target: {
       where: { conversationId: target.conversationId, memberId: user.id },
       data: { lastReadAt: now },
     });
-    void broadcast(conversationChannelsFor(target.conversationId), {
+    void broadcast([conversationChannel(target.conversationId)], {
       type: "thread.read",
       memberId: user.id,
       lastReadAt: now.toISOString(),
@@ -1878,12 +1704,7 @@ export async function editMessage(
       }
     }
 
-    // The edited body may name someone, so the client channel gets its own copy.
-    const aliasMap = message.conversationId
-      ? await getAliasMap(message.conversation?.projectId ?? message.projectId)
-      : null;
-
-    const { updated, event, clientBody } = await prisma.$transaction(async (tx) => {
+    const { updated, event } = await prisma.$transaction(async (tx) => {
       const updated = await tx.message.update({
         where: { id: message.id },
         data: { body: trimmed, editedAt: new Date() },
@@ -1908,38 +1729,18 @@ export async function editMessage(
         },
       ];
 
-      let clientBody: string | null = null;
-      if (message.conversationId && aliasMap) {
-        clientBody = toDisplayBody(maskBody(updated.body, aliasMap));
-        publishes.push({
-          channels: [conversationClientChannel(message.conversationId)],
-          data: {
-            type: "message.updated",
-            messageId: updated.id,
-            body: clientBody,
-            updatedAt: updated.updatedAt.toISOString(),
-            edited: true,
-          },
-        });
-      }
-
       const event = await writeMessageEvent(tx, {
         kind: "message.updated",
         messageId: updated.id,
         payload: { v: 1, publishes },
       });
-      return { updated, event, clientBody };
+      return { updated, event };
     });
     await dispatchMessageEvents([event]);
 
-    // The editor reads this response straight back into their own bubble, so a
-    // client has to be handed the same copy their channel just received.
     return {
       id: updated.id,
-      body:
-        clientBody !== null && isClientUser(user)
-          ? clientBody
-          : toDisplayBody(updated.body),
+      body: toDisplayBody(updated.body),
       updatedAt: updated.updatedAt.toISOString(),
     };
   });
@@ -2032,7 +1833,7 @@ export async function toggleReaction(
       if (message.taskId) channels.push(taskChannel(message.taskId));
       if (message.projectId) channels.push(projectChannel(message.projectId));
       if (message.conversationId)
-        channels.push(...conversationChannelsFor(message.conversationId));
+        channels.push(conversationChannel(message.conversationId));
       const event = await writeMessageEvent(tx, {
         kind: "reaction.updated",
         messageId,
@@ -2084,7 +1885,7 @@ export async function deleteMessage(
     if (message.taskId) channels.push(taskChannel(message.taskId));
     if (message.projectId) channels.push(projectChannel(message.projectId));
     if (message.conversationId)
-      channels.push(...conversationChannelsFor(message.conversationId));
+      channels.push(conversationChannel(message.conversationId));
 
     const event = await prisma.$transaction(async (tx) => {
       // Tombstone, not a hard delete: a client that was offline learns about
@@ -2175,15 +1976,9 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       conversations = await loadClientConversations();
     }
 
-    const aliasMaps = await getAliasMapsForProjects(
-      conversations.map((c) => c.project?.id),
-    );
-
     return conversations.map((c) => {
       const last = c.messages[0];
       const name = c.project?.name ?? c.title ?? "Client chat";
-      const aliasMap =
-        (c.project?.id && aliasMaps.get(c.project.id)) || NO_MASK;
       return {
         id: `conv-${c.id}`,
         kind: "client" as const,
@@ -2194,10 +1989,8 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         logoUrl: c.project?.logoUrl ?? null,
         peerImageUrl: null,
         peerMemberIds: [],
-        lastMessage: last ? inboxPreview(maskBody(last.body, aliasMap)) : "",
-        lastAuthor: last
-          ? inboxLastAuthor(last, { clientRoom: true, aliasMap })
-          : "",
+        lastMessage: last ? inboxPreview(last.body) : "",
+        lastAuthor: last ? inboxLastAuthor(last, { clientRoom: true }) : "",
         lastAt: last ? last.createdAt.toISOString() : "",
         unread: unreadMap.get(`conv-${c.id}`) ?? 0,
         avatar: generateColor(name),

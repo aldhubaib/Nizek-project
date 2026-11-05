@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireContactsAccess } from "@/lib/contacts-access";
 import { requireProjectMember, requireUser } from "@/lib/auth";
 import { planReorder, positionBetween } from "@/lib/board-order";
 import {
@@ -12,12 +11,6 @@ import {
   type CustomFieldType,
   type FieldShowOn,
 } from "@/lib/fields/types";
-import {
-  DEFAULT_RELATION,
-  parseRelationConfig,
-  stringifyRelationConfig,
-  type RelationConfig,
-} from "@/lib/fields/relations";
 import {
   applyTextScript,
   parseTextConfig,
@@ -58,7 +51,6 @@ export type CustomFieldDTO = {
   label: string;
   type: CustomFieldType;
   options: string[];
-  relation: RelationConfig | null;
   script: TextScript | null;
   binding: string | null;
   required: boolean;
@@ -127,13 +119,12 @@ function revalidate(entityType: string, projectId = "") {
   }
 }
 
+/** Every layout belongs to a project board, so project membership is the gate. */
 async function requireFieldModuleAccess(entityType: string, projectId = "") {
-  if (entityType === "board") {
-    if (!projectId) throw new Error("Open this from a project");
-    await requireProjectMember(projectId);
-    return;
+  if (entityType !== "board" || !projectId) {
+    throw new Error("Open this from a project");
   }
-  await requireContactsAccess();
+  await requireProjectMember(projectId);
 }
 
 function toLayoutDTO(
@@ -276,8 +267,7 @@ function toFieldDTO(row: {
     key: row.key,
     label: row.label,
     type,
-    options: type === "relation" ? [] : parseFieldOptions(row.options),
-    relation: type === "relation" ? parseRelationConfig(row.options) : null,
+    options: parseFieldOptions(row.options),
     script: type === "text" ? parseTextConfig(row.options).script : null,
     userMultiple: type === "user" ? parseUserConfig(row.options).multiple : false,
     countryMultiple:
@@ -320,16 +310,13 @@ async function seedModuleBindings(layoutId: string, entityType: string) {
       type: binding.type,
       binding: binding.key,
       required: Boolean(binding.required),
-      options: binding.relation
-        ? stringifyRelationConfig(binding.relation)
-        : undefined,
       position: gap * (index + 1),
     })),
   });
 }
 
 export async function listFormLayouts(
-  entityType: WorkflowEntityType = "deal",
+  entityType: WorkflowEntityType = "board",
   projectId = "",
 ): Promise<FormLayoutDTO[]> {
   await requireFieldModuleAccess(entityType, projectId);
@@ -347,7 +334,7 @@ export async function createFormLayout(input: {
   name: string;
 }): Promise<ActionResult<FormLayoutDTO>> {
   return fieldAction("layout-create", async () => {
-    const entityType = input.entityType ?? "deal";
+    const entityType = input.entityType ?? "board";
     const projectId = input.projectId ?? "";
     await requireFieldModuleAccess(entityType, projectId);
     const name = await uniqueLayoutName(entityType, projectId, input.name);
@@ -423,7 +410,7 @@ export async function deleteFormLayout(
 }
 
 export async function getCustomFieldCatalog(
-  entityType: WorkflowEntityType = "deal",
+  entityType: WorkflowEntityType = "board",
   layoutId?: string | null,
   projectId = "",
 ): Promise<CustomFieldCatalogDTO> {
@@ -445,7 +432,7 @@ export async function getCustomFieldCatalog(
 }
 
 export async function getAllLayoutCatalogs(
-  entityType: WorkflowEntityType = "deal",
+  entityType: WorkflowEntityType = "board",
   projectId = "",
 ): Promise<Record<string, CustomFieldCatalogDTO>> {
   await requireFieldModuleAccess(entityType, projectId);
@@ -479,7 +466,7 @@ export async function getAllLayoutCatalogs(
 }
 
 export async function listCustomFields(
-  entityType: WorkflowEntityType = "deal",
+  entityType: WorkflowEntityType = "board",
   layoutId?: string | null,
   projectId = "",
 ): Promise<CustomFieldDTO[]> {
@@ -514,7 +501,7 @@ export async function createCustomFieldSection(input: {
   name: string;
 }): Promise<ActionResult<CustomFieldSectionDTO>> {
   return fieldAction("section-create", async () => {
-    const entityType = input.entityType ?? "deal";
+    const entityType = input.entityType ?? "board";
     const name = input.name.trim();
     if (!name) throw new Error("Section name is required");
     if (name.length > MAX_LABEL) throw new Error("Keep the name shorter");
@@ -651,7 +638,7 @@ export async function createCustomField(input: {
   sectionId?: string | null;
 }): Promise<ActionResult<CustomFieldDTO>> {
   return fieldAction("create", async () => {
-    const entityType = input.entityType ?? "deal";
+    const entityType = input.entityType ?? "board";
     const label = input.label.trim();
     if (!label) throw new Error("Field label is required");
     if (label.length > MAX_LABEL) throw new Error("Keep the label shorter");
@@ -718,19 +705,16 @@ export async function createCustomField(input: {
         binding: bound?.key ?? null,
         required: type === "formula" ? false : bound?.required ?? false,
         showOn: type === "formula" ? "hidden" : undefined,
-        options: bound?.relation
-          ? stringifyRelationConfig(bound.relation)
-          : type === "relation"
-            ? stringifyRelationConfig(DEFAULT_RELATION)
-            : type === "user"
-              ? stringifyUserConfig({ multiple: false })
-              : type === "country"
-                ? stringifyCountryConfig({ multiple: false })
-                : type === "url"
-                  ? stringifyUrlConfig({ icon: null })
-                  : type === "formula"
-                    ? stringifyFormulaConfig(DEFAULT_FORMULA)
-                    : undefined,
+        options:
+          type === "user"
+            ? stringifyUserConfig({ multiple: false })
+            : type === "country"
+              ? stringifyCountryConfig({ multiple: false })
+              : type === "url"
+                ? stringifyUrlConfig({ icon: null })
+                : type === "formula"
+                  ? stringifyFormulaConfig(DEFAULT_FORMULA)
+                  : undefined,
         sectionId: input.sectionId ?? null,
         position: positionBetween(last?.position ?? null, null),
       },
@@ -746,7 +730,6 @@ export async function updateCustomField(
     label?: string;
     type?: string;
     options?: string[];
-    relation?: RelationConfig;
     userMultiple?: boolean;
     countryMultiple?: boolean;
     urlIcon?: UrlIconId | null;
@@ -790,9 +773,6 @@ export async function updateCustomField(
     if (input.type !== undefined && !existing.binding) {
       if (!isCustomFieldType(input.type)) throw new Error("Unknown field type");
       data.type = input.type;
-      if (input.type === "relation" && input.relation === undefined) {
-        data.options = stringifyRelationConfig(DEFAULT_RELATION);
-      }
       if (input.type === "user" && input.userMultiple === undefined) {
         data.options = stringifyUserConfig({ multiple: false });
       }
@@ -807,9 +787,6 @@ export async function updateCustomField(
     }
     if (input.options !== undefined && !existing.binding) {
       data.options = JSON.stringify(input.options.map((o) => o.trim()).filter(Boolean));
-    }
-    if (input.relation !== undefined && !existing.binding) {
-      data.options = stringifyRelationConfig(input.relation);
     }
     if (input.userMultiple !== undefined && !existing.binding) {
       data.options = stringifyUserConfig({ multiple: input.userMultiple });

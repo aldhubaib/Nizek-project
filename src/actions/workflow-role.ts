@@ -194,42 +194,29 @@ async function listPeople(scope: {
   entityType: string;
   projectId: string;
 }): Promise<WorkflowRoleCandidateDTO[]> {
-  if (scope.entityType === "board" && scope.projectId) {
-    const members = await prisma.projectMember.findMany({
-      where: { projectId: scope.projectId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            imageUrl: true,
-            systemRole: true,
-          },
+  if (scope.entityType !== "board" || !scope.projectId) return [];
+  const members = await prisma.projectMember.findMany({
+    where: { projectId: scope.projectId },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          imageUrl: true,
+          systemRole: true,
         },
       },
-    });
-    return members
-      .filter((member) => member.user.systemRole !== "CLIENT")
-      .map((member) => ({
-        userId: member.userId,
-        name: member.user.name,
-        email: member.user.email,
-        imageUrl: member.user.imageUrl,
-      }));
-  }
-
-  const allowed = await prisma.contactsPermission.findMany({
-    include: {
-      user: { select: { id: true, name: true, email: true, imageUrl: true } },
     },
   });
-  return allowed.map((row) => ({
-    userId: row.userId,
-    name: row.user.name,
-    email: row.user.email,
-    imageUrl: row.user.imageUrl,
-  }));
+  return members
+    .filter((member) => member.user.systemRole !== "CLIENT")
+    .map((member) => ({
+      userId: member.userId,
+      name: member.user.name,
+      email: member.user.email,
+      imageUrl: member.user.imageUrl,
+    }));
 }
 
 const FLAG_KEYS = [
@@ -475,32 +462,22 @@ export async function setWorkflowMemberRole(input: {
       "manageRoles",
     );
 
-    if (context.entityType === "board") {
-      const projectMember = await prisma.projectMember.findUnique({
-        where: {
-          userId_projectId: {
-            userId: input.userId,
-            projectId: context.projectId,
-          },
+    const projectMember = await prisma.projectMember.findUnique({
+      where: {
+        userId_projectId: {
+          userId: input.userId,
+          projectId: context.projectId,
         },
-        select: { user: { select: { systemRole: true } } },
-      });
-      if (!projectMember) {
-        throw new WorkflowAccessError("That person is not on this project.");
-      }
-      if (projectMember.user.systemRole === "CLIENT") {
-        throw new WorkflowAccessError(
-          "Boards are not available to client accounts.",
-        );
-      }
-    } else {
-      const allowed = await prisma.contactsPermission.findUnique({
-        where: { userId: input.userId },
-        select: { userId: true },
-      });
-      if (!allowed) {
-        throw new WorkflowAccessError("That person cannot access this module.");
-      }
+      },
+      select: { user: { select: { systemRole: true } } },
+    });
+    if (!projectMember) {
+      throw new WorkflowAccessError("That person is not on this project.");
+    }
+    if (projectMember.user.systemRole === "CLIENT") {
+      throw new WorkflowAccessError(
+        "Boards are not available to client accounts.",
+      );
     }
 
     const role = await prisma.moduleRole.findFirst({

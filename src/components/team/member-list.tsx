@@ -9,8 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Trash2, Shield, X, Clock, Mail, Users, AlertTriangle, ArrowRightLeft, Film, Eye, Pencil, UserRound } from "lucide-react";
-import { removeMember, updateMemberRole, cancelInvitation, updateMemberInvitePerms, updateInvitationName, updateMemberName, setMemberRealName } from "@/actions/project";
+import { Trash2, Shield, X, Clock, Mail, Users, AlertTriangle, ArrowRightLeft, Film, Eye, Pencil } from "lucide-react";
+import { removeMember, updateMemberRole, cancelInvitation, updateMemberInvitePerms, updateInvitationName, updateMemberName } from "@/actions/project";
 import { startImpersonationByEmail } from "@/actions/impersonation";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { outlineBadge } from "@/lib/task-label";
@@ -32,15 +32,11 @@ interface Member {
   projectRole: WorkspaceRole | null;
   canInviteMembers: boolean;
   canBypassProof: boolean;
-  /** This project shows them to its client by real name instead of their alias. */
-  showRealName?: boolean;
   user: {
     id: string;
     name: string | null;
     email: string;
     imageUrl: string | null;
-    /** Account-wide exemption, which outranks the per-project switch. */
-    excludeFromAlias?: boolean;
   };
 }
 
@@ -90,8 +86,6 @@ export function MemberList({
   const [transferState, setTransferState] = useState<TransferState | null>(null);
   const [impersonating, setImpersonating] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
-  const [realNameOverrides, setRealNameOverrides] = useState<Record<string, boolean>>({});
-  const [realNameErrors, setRealNameErrors] = useState<Record<string, string>>({});
   const [permOverrides, setPermOverrides] = useState<
     Record<string, Partial<Pick<Member, "canInviteMembers" | "canBypassProof">>>
   >({});
@@ -230,31 +224,6 @@ export function MemberList({
     } catch (err) {
       setPermOverrides((prev) => ({ ...prev, [memberId]: { ...prev[memberId], [field]: !value } }));
       console.error(err);
-    }
-  }
-
-  async function handleToggleRealName(memberId: string, value: boolean) {
-    setRealNameOverrides((prev) => ({ ...prev, [memberId]: value }));
-    setRealNameErrors((prev) => {
-      const next = { ...prev };
-      delete next[memberId];
-      return next;
-    });
-    // Switching back to the alias can be refused when the pool has nothing left,
-    // so the optimistic flip is undone and the reason shown on the card.
-    const revert = (message: string) => {
-      setRealNameOverrides((prev) => ({ ...prev, [memberId]: !value }));
-      setRealNameErrors((prev) => ({ ...prev, [memberId]: message }));
-    };
-    try {
-      const res = await setMemberRealName({ projectId, memberId, showRealName: value });
-      if ("error" in res) {
-        revert(res.error);
-        return;
-      }
-      onTeamChanged?.();
-    } catch (err) {
-      revert((err as Error).message || "Could not change how this member is shown");
     }
   }
 
@@ -461,25 +430,7 @@ export function MemberList({
                       icon={<Film className="w-3 h-3" strokeWidth={1.5} />}
                       label="Bypass"
                     />
-                    <InviteToggle
-                      checked={
-                        member.user.excludeFromAlias ||
-                        (realNameOverrides[member.id] ?? member.showRealName ?? false)
-                      }
-                      onChange={(v) => handleToggleRealName(member.id, v)}
-                      icon={<UserRound className="w-3 h-3" strokeWidth={1.5} />}
-                      label="Real name"
-                      disabled={member.user.excludeFromAlias}
-                      title={
-                        member.user.excludeFromAlias
-                          ? "Excluded from aliases on their account, so clients see their real name on every project"
-                          : "Show this member's real name to this project's client instead of their alias"
-                      }
-                    />
                   </div>
-                  {realNameErrors[member.id] && (
-                    <p className="text-xs text-destructive">{realNameErrors[member.id]}</p>
-                  )}
                 </div>
               )}
             </div>

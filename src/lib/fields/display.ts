@@ -1,39 +1,26 @@
-import { formatDealValue } from "@/lib/deal-value";
+import { formatAmount } from "@/lib/fields/cost";
 import { formatPhoneValue } from "@/lib/dial-codes";
 import { formatCountryCodes } from "@/lib/countries";
 import { parseUserIds } from "@/lib/fields/user-config";
-import { parseRelationIds } from "@/lib/fields/relations";
 import { fieldPriorityLabel, fieldPriorityRank } from "@/lib/fields/priority";
 import { formatArticleField } from "@/lib/fields/article";
 import { formatCostField, sumCostRows, parseCostRows } from "@/lib/fields/cost";
 import { formatInviteField, parseInviteValue } from "@/lib/fields/invite";
 import type { CustomFieldDTO } from "@/actions/custom-field";
-import type { DealDTO } from "@/actions/deal";
-import type { RelatedRecordCatalog } from "@/lib/fields/relations";
+import type { RecordDTO } from "@/lib/modules/types";
 import type { WorkflowUserOption } from "@/actions/workflow";
 
 export type FieldDisplayContext = {
   users: WorkflowUserOption[];
-  related: RelatedRecordCatalog;
   fields?: CustomFieldDTO[];
 };
 
 export function formatFieldValue(
   field: CustomFieldDTO,
-  record: DealDTO,
+  record: RecordDTO,
   ctx: FieldDisplayContext,
 ): string {
   if (field.binding === "title") return record.title;
-  if (field.binding === "value") return formatDealValue(record.value);
-  if (field.binding === "contacts") {
-    return record.contacts
-      .map((row) => `${row.firstName} ${row.lastName}`.trim())
-      .filter(Boolean)
-      .join(", ");
-  }
-  if (field.binding === "companies") {
-    return record.companies.map((row) => row.nameEn).filter(Boolean).join(", ");
-  }
 
   if (field.type === "formula") {
     const parts = field.formula?.parts ?? [];
@@ -84,14 +71,6 @@ export function formatFieldValue(
       .join(", ");
   }
 
-  if (field.type === "relation") {
-    const model = field.relation?.model ?? "company";
-    const options = ctx.related[model] ?? [];
-    return parseRelationIds(raw)
-      .map((id) => options.find((row) => row.id === id)?.title ?? id)
-      .join(", ");
-  }
-
   if (field.type === "phone") return formatPhoneValue(raw);
   if (field.type === "country") return formatCountryCodes(raw);
   if (field.type === "file") return "Attached";
@@ -101,7 +80,7 @@ export function formatFieldValue(
   if (field.type === "article") return formatArticleField(raw);
   if (field.type === "number") {
     const amount = Number(raw);
-    return Number.isFinite(amount) ? formatDealValue(raw) : raw;
+    return Number.isFinite(amount) ? formatAmount(raw) : raw;
   }
 
   return raw;
@@ -109,12 +88,11 @@ export function formatFieldValue(
 
 export function fieldSortValue(
   field: CustomFieldDTO,
-  record: DealDTO,
+  record: RecordDTO,
   ctx: FieldDisplayContext,
 ): string | number {
-  if (field.binding === "value" || field.type === "number") {
-    const raw =
-      field.binding === "value" ? record.value : record.fieldValues?.[field.id];
+  if (field.type === "number") {
+    const raw = record.fieldValues?.[field.id];
     const amount = Number(raw);
     return Number.isFinite(amount) ? amount : "";
   }

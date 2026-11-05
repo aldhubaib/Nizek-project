@@ -13,9 +13,6 @@ import {
 import { QuestionField, type TaskQuestion } from "@/components/kanban/question-field";
 import type { CustomFieldDTO } from "@/actions/custom-field";
 import type { WorkflowUserOption } from "@/actions/workflow";
-import { RelatedField } from "@/components/deals/related-records";
-import type { RelatedRecordCatalog } from "@/lib/fields/relations";
-import { EMPTY_RELATED_CATALOG } from "@/lib/fields/relations";
 import { applyTextScript } from "@/lib/fields/text-config";
 import { fieldAppliesOnForm } from "@/lib/fields/visibility";
 import { PhoneField } from "@/components/fields/phone-field";
@@ -32,8 +29,6 @@ export function FieldControl({
   value,
   onChange,
   users = [],
-  related = EMPTY_RELATED_CATALOG,
-  excludeDealId,
   preview,
   projectId,
   locked,
@@ -42,24 +37,10 @@ export function FieldControl({
   value: string;
   onChange: (next: string) => void;
   users?: WorkflowUserOption[];
-  related?: RelatedRecordCatalog;
-  excludeDealId?: string;
   preview?: string;
   projectId?: string;
   locked?: boolean;
 }) {
-  if (field.type === "relation") {
-    return (
-      <RelatedField
-        field={field}
-        value={value}
-        options={related[field.relation?.model ?? "company"]}
-        excludeId={field.relation?.model === "deal" ? excludeDealId : undefined}
-        onChange={onChange}
-      />
-    );
-  }
-
   const label = (
     <Label className="text-s">
       {field.label}

@@ -6,8 +6,6 @@ import { publish, taskChannel } from "@/lib/centrifugo";
 import { notifyAndPush } from "@/lib/notify";
 import { sendMessage } from "@/actions/messages";
 import { encodeTaskCommentBody } from "@/lib/task-comment-payload";
-import { getAliasMap, NO_MASK } from "@/lib/alias";
-import { isClientUser } from "@/lib/client-chat";
 
 export async function createComment(data: {
   taskId: string;
@@ -121,7 +119,6 @@ export async function createComment(data: {
           linkUrl,
           tag: pushTag,
           threadKey: `task-${data.taskId}`,
-          alias: { projectId: task.projectId, actorUserId: user.id },
         },
         { title, body: notifBody, url: linkUrl, type: "mention" },
       );
@@ -175,8 +172,8 @@ export async function getComments(taskId: string): Promise<{ success: true; comm
     if (!task) return { success: false, error: "Task not found" };
 
     await requireProjectMember(task.projectId);
-    // Internal task discussion, named authors and mentions included. Clients
-    // talk to the team in chat, which is aliased; this thread is not for them.
+    // Internal task discussion. Clients talk to the team in their chat room;
+    // this thread is not for them.
     await requireStaffUser();
 
     const comments = await prisma.taskComment.findMany({
@@ -244,17 +241,8 @@ export async function getProjectMembersForMention(
     include: { user: { select: { id: true, name: true, imageUrl: true } } },
   });
 
-  // A picked name becomes a stored @[Name](id) token, so handing a client the
-  // real one would plant a leak in the message body itself.
-  const aliasMap = isClientUser(user) ? await getAliasMap(projectId) : NO_MASK;
-
   return {
-    members: members.map((m) => {
-      const alias = aliasMap.get(m.user.id);
-      return alias
-        ? { ...m.user, name: alias.name, imageUrl: alias.imageUrl }
-        : m.user;
-    }),
+    members: members.map((m) => m.user),
     currentUserId: user.id,
   };
 }

@@ -9,11 +9,10 @@
 import { countryLabel, parseCountryCodes } from "@/lib/countries";
 import { formatFieldValue, type FieldDisplayContext } from "@/lib/fields/display";
 import { fieldPriorityLabel } from "@/lib/fields/priority";
-import { parseRelationIds } from "@/lib/fields/relations";
 import { parseUserIds } from "@/lib/fields/user-config";
 import { parseFieldAnswers, visibilityChoices } from "@/lib/fields/visibility";
 import type { CustomFieldDTO } from "@/actions/custom-field";
-import type { DealDTO } from "@/actions/deal";
+import type { RecordDTO } from "@/lib/modules/types";
 
 /** Stands in for "this field has no answer", which is not a stored value. */
 export const EMPTY_FIELD_FILTER = "__empty__";
@@ -48,10 +47,6 @@ function tokenLabel(
   if (field.type === "user") {
     return ctx.users.find((user) => user.id === token)?.name || token;
   }
-  if (field.type === "relation") {
-    const model = field.relation?.model ?? "company";
-    return (ctx.related[model] ?? []).find((row) => row.id === token)?.title ?? token;
-  }
   if (field.type === "country") return countryLabel(token);
   return token;
 }
@@ -59,26 +54,17 @@ function tokenLabel(
 /** The values a record contributes to one field's filter. */
 export function fieldFilterTokens(
   field: CustomFieldDTO,
-  record: DealDTO,
+  record: RecordDTO,
   ctx: FieldDisplayContext,
 ): string[] {
   if (field.binding === "title") {
     const title = record.title.trim();
     return title ? [title] : [];
   }
-  if (field.binding === "contacts") {
-    return record.contacts
-      .map((row) => `${row.firstName} ${row.lastName}`.trim())
-      .filter(Boolean);
-  }
-  if (field.binding === "companies") {
-    return record.companies.map((row) => row.nameEn).filter(Boolean);
-  }
 
   const raw = record.fieldValues?.[field.id] ?? "";
 
   if (field.type === "user") return parseUserIds(raw);
-  if (field.type === "relation") return parseRelationIds(raw);
   if (field.type === "country") return parseCountryCodes(raw);
   if (field.type === "file") return raw.trim() ? [FILE_ATTACHED] : [];
   if (pickList(field)) return parseFieldAnswers(raw);
@@ -89,7 +75,7 @@ export function fieldFilterTokens(
 
 export function recordMatchesFieldFilter(
   field: CustomFieldDTO,
-  record: DealDTO,
+  record: RecordDTO,
   ctx: FieldDisplayContext,
   wanted: string,
 ): boolean {
@@ -100,7 +86,7 @@ export function recordMatchesFieldFilter(
 }
 
 export function recordMatchesFieldFilters(
-  record: DealDTO,
+  record: RecordDTO,
   fields: CustomFieldDTO[],
   selected: Record<string, string>,
   ctx: FieldDisplayContext,
@@ -115,7 +101,7 @@ export function recordMatchesFieldFilters(
 
 export function fieldFilterChoices(
   field: CustomFieldDTO,
-  records: DealDTO[],
+  records: RecordDTO[],
   ctx: FieldDisplayContext,
 ): FieldFilterChoice[] {
   const seen = new Map<string, string>();

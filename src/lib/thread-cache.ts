@@ -4,7 +4,6 @@ import type { InboxThread } from "@/actions/messages";
 import { getThreadMessages } from "@/actions/messages";
 import {
   conversationChannel,
-  conversationClientChannel,
   globalPresenceChannel,
   projectChannel,
   taskChannel,
@@ -135,14 +134,10 @@ export function channelsForThread(
     projectId: string | null;
     conversationId: string | null;
   },
-  /** Clients read the aliased twin channel; only they may subscribe to it. */
-  isClientViewer = false,
 ): { channel: string; presenceChannel: string | null } {
   if (thread.conversationId) {
     return {
-      channel: isClientViewer
-        ? conversationClientChannel(thread.conversationId)
-        : conversationChannel(thread.conversationId),
+      channel: conversationChannel(thread.conversationId),
       presenceChannel: globalPresenceChannel(),
     };
   }
@@ -162,9 +157,8 @@ export function channelsForThread(
 export function snapshotFromInboxThread(
   thread: InboxThread,
   currentMemberId: string,
-  isClientViewer = false,
 ): ThreadCacheSnapshot {
-  const { channel, presenceChannel } = channelsForThread(thread, isClientViewer);
+  const { channel, presenceChannel } = channelsForThread(thread);
   return {
     channel,
     presenceChannel,
@@ -195,7 +189,6 @@ export function snapshotFromInboxThread(
 export function prefetchInboxThread(
   thread: InboxThread,
   currentMemberId: string,
-  isClientViewer = false,
 ): void {
   if (typeof window === "undefined") return;
   if (inflightPrefetch.has(thread.id)) return;
@@ -213,8 +206,7 @@ export function prefetchInboxThread(
     .then((page) => {
       const prev = peekThreadCache(thread.id);
       const base =
-        prev?.snapshot ??
-        snapshotFromInboxThread(thread, currentMemberId, isClientViewer);
+        prev?.snapshot ?? snapshotFromInboxThread(thread, currentMemberId);
       putThreadCache(thread.id, {
         snapshot: {
           ...base,

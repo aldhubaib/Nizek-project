@@ -132,7 +132,6 @@ export async function createRecordComment(input: {
           tag: `thread-board-${input.recordId}`,
           threadKey: `board-${input.recordId}`,
           authorId: user.id,
-          alias: { projectId: input.projectId, actorUserId: user.id },
         },
         { title, body, url: linkUrl, type: "mention" },
       );

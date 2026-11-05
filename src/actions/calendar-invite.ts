@@ -27,27 +27,7 @@ async function recordTitle(
   entityType: WorkflowEntityType,
   recordId: string,
 ): Promise<string> {
-  if (entityType === "deal") {
-    const row = await prisma.deal.findUnique({
-      where: { id: recordId },
-      select: { title: true },
-    });
-    return row?.title ?? "Meeting";
-  }
-  if (entityType === "contact") {
-    const row = await prisma.contact.findUnique({
-      where: { id: recordId },
-      select: { title: true },
-    });
-    return row?.title ?? "Meeting";
-  }
-  if (entityType === "company") {
-    const row = await prisma.company.findUnique({
-      where: { id: recordId },
-      select: { nameEn: true },
-    });
-    return row?.nameEn ?? "Meeting";
-  }
+  if (entityType !== "board") return "Meeting";
   const row = await prisma.boardRecord.findUnique({
     where: { id: recordId },
     select: { title: true },

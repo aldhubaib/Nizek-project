@@ -32,7 +32,7 @@ export type MessageFanOutInput = {
   preview: string;
   notifIcon: string | undefined;
   messageCreatedAt: Date;
-  /** Sprint cards in the client room speak as Nizek Bot — no actor alias photo. */
+  /** Sprint cards in the client room speak as Nizek Bot rather than the actor. */
   asBot?: boolean;
 };
 
@@ -45,7 +45,6 @@ export async function notifyMessageRecipients(
   input: MessageFanOutInput,
 ): Promise<CreatedNotification[]> {
   const {
-    projectId,
     userId,
     uniqueRecipients,
     mentionedIds,
@@ -59,10 +58,6 @@ export async function notifyMessageRecipients(
   } = input;
   if (uniqueRecipients.length === 0) return [];
   const pushTag = `thread-${threadId}`;
-  // The title embeds the author's real name, so client recipients need their
-  // own rendered copy — notifyAndPush stores and pushes both variants.
-  // Bot cards keep project-level name masking in the body but drop the
-  // actor photo so the banner does not show the person who triggered it.
   return notifyAndPush(
     {
       recipientIds: uniqueRecipients,
@@ -74,7 +69,6 @@ export async function notifyMessageRecipients(
       threadKey: threadId,
       mentionedIds: mentionedIds ?? [],
       authorId: asBot ? NIZEK_BOT_AUTHOR_ID : userId,
-      alias: { projectId, actorUserId: asBot ? undefined : userId },
     },
     {
       title,

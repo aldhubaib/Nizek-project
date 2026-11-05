@@ -10,8 +10,8 @@ import {
   type FieldDisplayContext,
 } from "@/lib/fields/display";
 import type { CustomFieldDTO } from "@/actions/custom-field";
-import type { DealDTO } from "@/actions/deal";
-import type { DealStageDTO } from "@/actions/deal-stage";
+import type { RecordDTO } from "@/lib/modules/types";
+import type { StageDTO } from "@/actions/record-stage";
 import { TABLE_STATUS_KEY, CARD_RECORD_NUMBER_KEY } from "@/lib/modules/card-fields";
 import { formatRecordNumber } from "@/lib/modules/record-number";
 import { fieldIsLogicallyVisible } from "@/lib/fields/visibility";
@@ -33,12 +33,12 @@ export function ModuleRecordList({
   ctx,
   visibleColumnIds,
 }: {
-  records: DealDTO[];
-  stages: DealStageDTO[];
+  records: RecordDTO[];
+  stages: StageDTO[];
   fields: CustomFieldDTO[];
   sort: ListSort;
   onSort: (next: ListSort) => void;
-  onOpen: (record: DealDTO) => void;
+  onOpen: (record: RecordDTO) => void;
   empty: string;
   ctx: FieldDisplayContext;
   visibleColumnIds: string[];

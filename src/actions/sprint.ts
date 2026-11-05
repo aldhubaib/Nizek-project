@@ -1385,9 +1385,9 @@ export async function getSprintPlanningTasks(sprintId: string): Promise<{
   const { user } = await requireProjectMember(sprint.projectId);
 
   // Every client-facing sprint surface passes hideAssignees, so the client's
-  // browser has no use for these — and the alias mechanism exists precisely to
-  // keep real staff names off client screens. Hidden in the UI is not the same
-  // as absent from the response, so they are dropped here instead.
+  // browser has no use for these: who is on each task is the team's business.
+  // Hidden in the UI is not the same as absent from the response, so they are
+  // dropped here instead.
   const hideStaff = isClientUser(user);
 
   const otherActive = await prisma.sprint.findFirst({
@@ -1641,8 +1641,8 @@ function toSprintProof(proof: ProofRow, hideStaff: boolean): SprintTaskProof {
  * sprint shipped.
  *
  * Clients see the videos — the sprint document is what they are asked to
- * approve, and this is the evidence behind it — but not the names of the staff
- * who recorded them, which they see as aliases everywhere else.
+ * approve, and this is the evidence behind it — but not who on the team
+ * recorded each one.
  */
 export async function getSprintProofOfWork(
   sprintId: string,

@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldControl } from "@/components/fields/field-control";
 import { joinFormulaParts, formulaSourceValues } from "@/lib/fields/formula-config";
-import { RelatedCompanies, RelatedContacts } from "@/components/deals/related-data";
 import { configItems, configText } from "@/lib/workflow/actions";
 import {
   requiredFieldIds,
@@ -14,59 +13,41 @@ import {
   unfilledFieldIds,
   validateDuring,
 } from "@/lib/workflow/engine";
-import { isCustomFieldType, NATIVE_DEAL_FIELDS } from "@/lib/fields/types";
-import { formatDealValue } from "@/lib/deal-value";
+import { isCustomFieldType, NATIVE_FIELDS } from "@/lib/fields/types";
 import { formatRecordNumber } from "@/lib/modules/record-number";
 import type { CustomFieldDTO } from "@/actions/custom-field";
-import type { DealCompanyDTO, DealContactDTO, DealDTO } from "@/actions/deal";
-import type { ContactOption } from "@/actions/contact";
-import type { CompanyOption } from "@/actions/company";
+import type { RecordDTO } from "@/lib/modules/types";
 import type { WorkflowUserOption } from "@/actions/workflow";
 import type { DuringPayload, WorkflowActionDef } from "@/lib/workflow/types";
-import {
-  EMPTY_RELATED_CATALOG,
-  type RelatedRecordCatalog,
-} from "@/lib/fields/relations";
 import { fieldIsLogicallyVisible } from "@/lib/fields/visibility";
 
 export function TransitionDialog({
   open,
-  deal,
+  record,
   fromName,
   toName,
   during,
   fields,
   users,
-  contacts,
-  companies,
-  related = EMPTY_RELATED_CATALOG,
   onClose,
   onConfirm,
 }: {
   open: boolean;
-  deal: DealDTO;
+  record: RecordDTO;
   fromName: string;
   toName: string;
   during: WorkflowActionDef[];
   fields: CustomFieldDTO[];
   users: WorkflowUserOption[];
-  contacts: ContactOption[];
-  companies: CompanyOption[];
-  related?: RelatedRecordCatalog;
   onClose: () => void;
   onConfirm: (payload: DuringPayload) => void;
 }) {
   const snapshot = useMemo(
     () => ({
-      native: {
-        title: deal.title,
-        value: deal.value,
-        contactIds: deal.contacts.map((c) => c.id),
-        companyIds: deal.companies.map((c) => c.id),
-      },
-      custom: deal.fieldValues ?? {},
+      native: { title: record.title },
+      custom: record.fieldValues ?? {},
     }),
-    [deal],
+    [record],
   );
   const fieldLookup = useMemo(
     () =>
@@ -91,35 +72,21 @@ export function TransitionDialog({
       !f.binding &&
       (shownIds.includes(f.id) || shownIds.includes(f.binding ?? "")),
   );
-  const showValue = shownIds.includes("value");
   const showTitle = shownIds.includes("title");
-  const contactsFilled = snapshot.native.contactIds.length > 0;
-  const companiesFilled = snapshot.native.companyIds.length > 0;
-  const showContacts =
-    !contactsFilled &&
-    (shownIds.includes("contacts") ||
-      during.some((a) => a.type === "associate_contacts"));
-  const showCompanies =
-    !companiesFilled &&
-    (shownIds.includes("companies") ||
-      during.some((a) => a.type === "associate_companies"));
   const messages = during.filter((a) => a.type === "message");
   const checklists = during.filter((a) => a.type === "checklist");
   const requiredLabels = requiredIds.map((id) => {
     const fromLayout = fields.find((f) => f.binding === id || f.id === id);
     if (fromLayout) return fromLayout.label;
-    const native = NATIVE_DEAL_FIELDS.find((f) => f.id === id);
+    const native = NATIVE_FIELDS.find((f) => f.id === id);
     if (native) return native.label;
     return id;
   });
 
-  const [title, setTitle] = useState(deal.title);
-  const [value, setValue] = useState(deal.value ?? "");
+  const [title, setTitle] = useState(record.title);
   const [customValues, setCustomValues] = useState<Record<string, string>>(
-    deal.fieldValues ?? {},
+    record.fieldValues ?? {},
   );
-  const [linkedContacts, setLinkedContacts] = useState(deal.contacts);
-  const [linkedCompanies, setLinkedCompanies] = useState(deal.companies);
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
 
@@ -131,9 +98,6 @@ export function TransitionDialog({
       checklist,
       nativePatches: {
         title: showTitle ? title : undefined,
-        value: showValue ? value : undefined,
-        contactIds: showContacts ? linkedContacts.map((c) => c.id) : undefined,
-        companyIds: showCompanies ? linkedCompanies.map((c) => c.id) : undefined,
       },
     };
     const issues = validateDuring(during, snapshot, payload, fieldLookup);
@@ -165,7 +129,7 @@ export function TransitionDialog({
                 <p className="text-s leading-relaxed break-words text-muted-foreground">
                   {requiredLabels.length > 0 ? (
                     <>
-                      This deal cannot leave{" "}
+                      This card cannot leave{" "}
                       <span className="font-medium text-foreground">{fromName}</span>{" "}
                       until{" "}
                       <span className="font-medium text-foreground">
@@ -187,14 +151,9 @@ export function TransitionDialog({
 
             <div className="mb-4 flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-2">
               <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                {formatRecordNumber(deal.recordNumber)}
+                {formatRecordNumber(record.recordNumber)}
               </span>
-              <span className="min-w-0 flex-1 truncate text-s">{deal.title}</span>
-              {deal.value && (
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {formatDealValue(deal.value)}
-                </span>
-              )}
+              <span className="min-w-0 flex-1 truncate text-s">{record.title}</span>
             </div>
 
             <div className="space-y-4">
@@ -209,16 +168,6 @@ export function TransitionDialog({
                   <Input value={title} onChange={(e) => setTitle(e.target.value)} />
                 </FieldBlock>
               )}
-              {showValue && (
-                <FieldBlock label="Value" required={requiredIds.includes("value")}>
-                  <Input
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    inputMode="decimal"
-                    placeholder="Amount"
-                  />
-                </FieldBlock>
-              )}
               {customShown
                 .filter((field) =>
                   fieldIsLogicallyVisible(
@@ -229,7 +178,6 @@ export function TransitionDialog({
                   ),
                 )
                 .map((field) =>
-                field.type === "relation" ||
                 field.type === "formula" ||
                 field.type === "article" ? (
                   <FieldControl
@@ -237,18 +185,11 @@ export function TransitionDialog({
                     field={field}
                     value={customValues[field.id] ?? ""}
                     users={users}
-                    related={related}
-                    excludeDealId={deal.id}
                     preview={
                       field.type === "formula"
                         ? joinFormulaParts(
                             field.formula?.parts ?? [],
-                            formulaSourceValues(
-                              fields,
-                              title,
-                              value,
-                              customValues,
-                            ),
+                            formulaSourceValues(fields, title, customValues),
                             field.formula?.separator,
                           )
                         : undefined
@@ -267,7 +208,6 @@ export function TransitionDialog({
                       field={field}
                       value={customValues[field.id] ?? ""}
                       users={users}
-                      related={related}
                       onChange={(next) =>
                         setCustomValues((prev) => ({ ...prev, [field.id]: next }))
                       }
@@ -294,49 +234,6 @@ export function TransitionDialog({
                   ))}
                 </div>
               ))}
-              {showCompanies && (
-                <FieldBlock
-                  label="Companies"
-                  required={requiredIds.includes("companies")}
-                >
-                  <RelatedCompanies
-                    attached={linkedCompanies}
-                    options={companies}
-                    onAttach={(company) =>
-                      setLinkedCompanies((prev) => [
-                        ...prev,
-                        {
-                          id: company.id,
-                          nameEn: company.name,
-                          nameAr: "",
-                          website: company.website,
-                          industry: company.industry,
-                        } satisfies DealCompanyDTO,
-                      ])
-                    }
-                    onDetach={(id) =>
-                      setLinkedCompanies((prev) => prev.filter((c) => c.id !== id))
-                    }
-                  />
-                </FieldBlock>
-              )}
-              {showContacts && (
-                <FieldBlock
-                  label="Contacts"
-                  required={requiredIds.includes("contacts")}
-                >
-                  <RelatedContacts
-                    attached={linkedContacts}
-                    options={contacts}
-                    onAttach={(contact: ContactOption) =>
-                      setLinkedContacts((prev) => [...prev, contact as DealContactDTO])
-                    }
-                    onDetach={(id) =>
-                      setLinkedContacts((prev) => prev.filter((c) => c.id !== id))
-                    }
-                  />
-                </FieldBlock>
-              )}
             </div>
           </div>
 

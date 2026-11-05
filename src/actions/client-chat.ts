@@ -11,7 +11,6 @@ import {
   isClientUser,
   syncClientConversationParticipants,
 } from "@/lib/client-chat";
-import { getAliasMap, NO_MASK } from "@/lib/alias";
 
 export type ClientChatPerson = {
   id: string;
@@ -108,9 +107,6 @@ export async function getClientChatRoster(projectId: string): Promise<{
     orderBy: { createdAt: "asc" },
   });
 
-  // A client viewing the roster must see aliases, and never a work email —
-  // that gives away the real name just as directly.
-  const aliasMap = clientViewer ? await getAliasMap(projectId) : NO_MASK;
   // Talkers only: curated staff + project clients. View-only project
   // members are not participants, so they never go on this list.
   const people: ClientChatPerson[] = participants
@@ -118,17 +114,14 @@ export async function getClientChatRoster(projectId: string): Promise<{
       if (p.member.id === user.id && !access.canPost) return false;
       return true;
     })
-    .map((p) => {
-      const alias = aliasMap.get(p.member.id);
-      return {
-        id: p.member.id,
-        name: alias ? alias.name : p.member.name,
-        email: alias ? "" : p.member.email,
-        imageUrl: alias ? alias.imageUrl : p.member.imageUrl,
-        systemRole: p.member.systemRole,
-        kind: isClientUser(p.member) ? "client" : "staff",
-      };
-    });
+    .map((p) => ({
+      id: p.member.id,
+      name: p.member.name,
+      email: p.member.email,
+      imageUrl: p.member.imageUrl,
+      systemRole: p.member.systemRole,
+      kind: isClientUser(p.member) ? "client" : "staff",
+    }));
 
   if (clientViewer) {
     return {

@@ -3,7 +3,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
 import { isClientUser } from "@/lib/client-chat";
-import { getAliasMap, maskBody } from "@/lib/alias";
 import { stripPlanningTaskAssignees } from "@/lib/sprint-planning-doc";
 
 export type ClientNoteDoc = {
@@ -19,9 +18,8 @@ export type ClientNoteDoc = {
  * the document, which is not the client's to read. Selecting the two columns
  * here means there is no filtering step to forget: the rest never loads.
  *
- * The body still passes through the alias net, because it was written by staff
- * who name each other in it, and through the assignee stripper, because a
- * sprint document carries real names inside its task nodes.
+ * The body still passes through the assignee stripper: who is working on each
+ * task in a sprint document is the team's business, not the client's.
  */
 export async function getClientNoteDoc(input: {
   projectId: string;
@@ -38,9 +36,8 @@ export async function getClientNoteDoc(input: {
   });
   if (!note) throw new Error("Note not found");
 
-  const aliases = await getAliasMap(input.projectId);
   return {
-    title: maskBody(note.title, aliases),
-    content: maskBody(stripPlanningTaskAssignees(note.content), aliases),
+    title: note.title,
+    content: stripPlanningTaskAssignees(note.content),
   };
 }

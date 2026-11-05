@@ -1,15 +1,12 @@
 import { notFound } from "next/navigation";
 import { requireProjectMember } from "@/lib/auth";
-import { canAccessContacts } from "@/lib/contacts-access";
 import { isProjectAccessError } from "@/lib/project-access";
 import { listWorkflows, listWorkflowUsers } from "@/actions/workflow";
 import { getAllLayoutCatalogs } from "@/actions/custom-field";
 import { ensureProjectBoard, getBoardRecord } from "@/actions/board-record";
 import { getFlowPermissions } from "@/lib/workflow-access";
-import { listRelatedRecordOptions } from "@/actions/related-records";
 import { ModuleRecordForm } from "@/components/modules/module-record-form";
-import { EMPTY_RELATED_CATALOG } from "@/lib/fields/relations";
-import type { DealFlowDTO } from "@/actions/deal-flow";
+import type { FlowDTO } from "@/lib/modules/types";
 
 export default async function BoardRecordPage({
   params,
@@ -17,35 +14,28 @@ export default async function BoardRecordPage({
   params: Promise<{ projectId: string; recordId: string }>;
 }) {
   const { projectId, recordId } = await params;
-  let userId: string;
   try {
-    const { user } = await requireProjectMember(projectId);
-    userId = user.id;
+    await requireProjectMember(projectId);
   } catch (err) {
     if (isProjectAccessError(err)) notFound();
     throw err;
   }
 
   await ensureProjectBoard(projectId);
-  const [record, workflows, catalogs, users, canContacts] = await Promise.all([
+  const [record, workflows, catalogs, users] = await Promise.all([
     getBoardRecord(projectId, recordId),
     listWorkflows("board", projectId),
     getAllLayoutCatalogs("board", projectId),
     listWorkflowUsers(projectId),
-    canAccessContacts(userId),
   ]);
   if (!record) notFound();
 
-  const related = canContacts
-    ? await listRelatedRecordOptions()
-    : EMPTY_RELATED_CATALOG;
-
-  const flows: DealFlowDTO[] = workflows.map((row) => ({
+  const flows: FlowDTO[] = workflows.map((row) => ({
     id: row.id,
     name: row.name,
     position: row.position,
     stageCount: row.statusCount,
-    dealCount: row.recordCount,
+    recordCount: row.recordCount,
     layoutId: row.layoutId,
     blueprintEnabled: row.blueprintEnabled,
   }));
@@ -58,11 +48,8 @@ export default async function BoardRecordPage({
         id: record.id,
         recordNumber: record.recordNumber,
         title: record.title,
-        value: null,
         flowId: record.flowId,
         stageId: record.stageId,
-        contacts: [],
-        companies: [],
         fieldValues: record.fieldValues,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
@@ -72,7 +59,6 @@ export default async function BoardRecordPage({
       flows={flows}
       catalogs={catalogs}
       users={users}
-      related={related}
       permissions={await getFlowPermissions(record.flowId)}
     />
   );

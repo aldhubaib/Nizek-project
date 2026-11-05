@@ -13,7 +13,7 @@ RUN npm install --omit=dev
 
 COPY worker.ts tsconfig.json tsconfig.worker.json ./
 # The message-events fan-out runs the same src/lib modules as the web app
-# (prisma, notify, centrifugo, alias masking, ...), so the whole lib comes
+# (prisma, notify, centrifugo, ...), so the whole lib comes
 # along; only what worker.ts imports is actually loaded.
 COPY src/lib ./src/lib
 # The Prisma client (src/generated/prisma) is gitignored and NOT copied: the

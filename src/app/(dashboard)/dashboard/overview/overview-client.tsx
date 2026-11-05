@@ -1026,8 +1026,8 @@ function TrendRow({ trends }: { trends: OverviewTrends }) {
 /* ── main ── */
 
 /**
- * The portfolio half of the dashboard, shown under the personal half to anyone
- * who can audit.
+ * The portfolio half of the dashboard, shown under the personal half to system
+ * admins.
  *
  * It renders as a section rather than a page: no header bar and no page
  * padding, because the dashboard it sits inside owns both. Everything personal

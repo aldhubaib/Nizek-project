@@ -1,4 +1,4 @@
-import { NATIVE_DEAL_FIELDS, type CustomFieldType } from "@/lib/fields/types";
+import { NATIVE_FIELDS, type CustomFieldType } from "@/lib/fields/types";
 import { isModuleBindingKey } from "@/lib/modules/registry";
 import {
   customFieldIsFilled,
@@ -193,7 +193,7 @@ function lookupIsVisible(
 function isNativeFieldId(id: string): boolean {
   return (
     isModuleBindingKey(id) ||
-    NATIVE_DEAL_FIELDS.some((field) => field.id === id)
+    NATIVE_FIELDS.some((field) => field.id === id)
   );
 }
 
@@ -240,7 +240,7 @@ export function snapshotFieldIsFilled(
   fieldId: string,
   customFields: CustomFieldLookup[],
 ): boolean {
-  const native = NATIVE_DEAL_FIELDS.find((field) => field.id === fieldId);
+  const native = NATIVE_FIELDS.find((field) => field.id === fieldId);
   if (native) return nativeFieldIsFilled(native.id, snapshot.native);
   const field = customFields.find((row) => row.id === fieldId);
   if (!field) return false;
@@ -329,8 +329,6 @@ function applyNativeSet(
   switch (field) {
     case "title":
       return { ...native, title: value };
-    case "value":
-      return { ...native, value: value === "" ? null : value };
     default:
       return native;
   }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Mail, Clock, FolderKanban, Search, X, Ban, Trash2, ShieldCheck, Shield, AlertTriangle, ChevronDown, Eye, Pencil, UserRound, VenetianMask, type LucideIcon } from "lucide-react";
+import { Mail, Clock, FolderKanban, Search, X, Ban, Trash2, ShieldCheck, Shield, AlertTriangle, ChevronDown, Eye, Pencil, UserRound, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddButton } from "@/components/add-button";
 import { PageHeaderActions } from "@/components/page-header-actions";
@@ -37,7 +37,6 @@ interface Member {
   systemRole: string;
   blocked: boolean;
   gender: "MALE" | "FEMALE" | null;
-  excludeFromAlias: boolean;
   createdAt: Date;
   projects: MemberProject[];
   teams: { id: string; name: string }[];
@@ -91,7 +90,6 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
   const [teamFilter, setTeamFilter] = useState<string>("all");
   // Null means the filter is off; clicking the active chip clears it again.
   const [genderFilter, setGenderFilter] = useState<"MALE" | "FEMALE" | "none" | null>(null);
-  const [aliasFilter, setAliasFilter] = useState<"real" | "aliased" | null>(null);
   const [changingRole, setChangingRole] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [projectsMemberId, setProjectsMemberId] = useState<string | null>(null);
@@ -99,7 +97,6 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
   const [inviteLastName, setInviteLastName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteGender, setInviteGender] = useState<GenderChoice>("");
-  const [inviteExcludeFromAlias, setInviteExcludeFromAlias] = useState(false);
   const [inviteIsAdmin, setInviteIsAdmin] = useState(false);
   const [inviteTeamId, setInviteTeamId] = useState("");
   const [inviteProjects, setInviteProjects] = useState<{ projectId: string; roleId: string }[]>([]);
@@ -110,7 +107,6 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
     setInviteLastName("");
     setInviteEmail("");
     setInviteGender("");
-    setInviteExcludeFromAlias(false);
     setInviteIsAdmin(false);
     setInviteTeamId("");
     setInviteProjects([]);
@@ -129,7 +125,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
-    if (!inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim() || !inviteGender) return;
+    if (!inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim()) return;
     if (inviteProjects.some((p) => !p.projectId || !p.roleId)) {
       alert("Select a project and role for every row, or remove the empty rows.");
       return;
@@ -140,10 +136,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
         email: inviteEmail.trim(),
         firstName: inviteFirstName.trim(),
         lastName: inviteLastName.trim(),
-        gender: inviteGender,
-        excludeFromAlias:
-          inviteExcludeFromAlias ||
-          inviteProjects.some((p) => roles.find((r) => r.id === p.roleId)?.isClient),
+        gender: inviteGender || null,
         systemRole: inviteIsAdmin ? "ADMIN" : "DEVELOPER",
         teamId: inviteTeamId || undefined,
         projects: inviteProjects.length > 0 ? inviteProjects : undefined,
@@ -355,29 +348,18 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
   const matchesTeam = (m: Member) =>
     teamFilter === "all" || m.teams.some((t) => t.id === teamFilter);
 
-  // Both tag filters only ever match the people who carry those tags, so a
-  // client — who reads the aliases rather than having one — is never a hit.
   const matchesGender = (m: Member) => {
     if (genderFilter === null) return true;
-    if (m.systemRole === "CLIENT") return false;
     return genderFilter === "none" ? m.gender === null : m.gender === genderFilter;
-  };
-  const matchesAlias = (m: Member) => {
-    if (aliasFilter === null) return true;
-    if (m.systemRole === "CLIENT") return false;
-    return aliasFilter === "real" ? m.excludeFromAlias : !m.excludeFromAlias;
   };
 
   const filteredMembers = members.filter(
-    (m) => matchesSearch(m) && matchesTeam(m) && matchesGender(m) && matchesAlias(m),
+    (m) => matchesSearch(m) && matchesTeam(m) && matchesGender(m),
   );
 
   // Counts follow the team and search already in force, so they describe the
-  // list on screen. They deliberately ignore the other tag filter, which keeps
-  // a number from dropping to zero the moment you pick something next to it.
-  const tagScope = members.filter(
-    (m) => matchesSearch(m) && matchesTeam(m) && m.systemRole !== "CLIENT",
-  );
+  // list on screen.
+  const tagScope = members.filter((m) => matchesSearch(m) && matchesTeam(m));
   const tagFilters = [
     {
       key: "MALE" as const,
@@ -403,27 +385,8 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
       icon: UserRound,
       count: tagScope.filter((m) => m.gender === null).length,
       active: genderFilter === "none",
-      activeClass: "border-orange/40 bg-orange/15 text-orange",
-      onClick: () => setGenderFilter((g) => (g === "none" ? null : "none")),
-    },
-    { key: "divider" as const },
-    {
-      key: "real" as const,
-      label: "Real name",
-      icon: VenetianMask,
-      count: tagScope.filter((m) => m.excludeFromAlias).length,
-      active: aliasFilter === "real",
-      activeClass: "border-violet/40 bg-violet/15 text-violet",
-      onClick: () => setAliasFilter((a) => (a === "real" ? null : "real")),
-    },
-    {
-      key: "aliased" as const,
-      label: "Aliased",
-      icon: VenetianMask,
-      count: tagScope.filter((m) => !m.excludeFromAlias).length,
-      active: aliasFilter === "aliased",
       activeClass: "border-primary/40 bg-primary/15 text-primary",
-      onClick: () => setAliasFilter((a) => (a === "aliased" ? null : "aliased")),
+      onClick: () => setGenderFilter((g) => (g === "none" ? null : "none")),
     },
   ];
 
@@ -505,12 +468,6 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
               <MemberProfileFields
                 gender={inviteGender}
                 onGenderChange={setInviteGender}
-                excludeFromAlias={
-                  inviteExcludeFromAlias ||
-                  inviteProjects.some((p) => roles.find((r) => r.id === p.roleId)?.isClient)
-                }
-                onExcludeFromAliasChange={setInviteExcludeFromAlias}
-                excludeLocked={inviteProjects.some((p) => roles.find((r) => r.id === p.roleId)?.isClient)}
               />
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Team</label>
@@ -620,7 +577,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                 </button>
                 <button
                   type="submit"
-                  disabled={inviting || !inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim() || !inviteGender || inviteProjects.some((p) => !p.projectId || !p.roleId)}
+                  disabled={inviting || !inviteFirstName.trim() || !inviteLastName.trim() || !inviteEmail.trim() || inviteProjects.some((p) => !p.projectId || !p.roleId)}
                   className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-s font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {inviting ? "Adding..." : "Allow Sign In"}
@@ -726,27 +683,19 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
         )}
         {/* Kept on screen while a chip is active even if the team in view has
             nobody to tag, so an empty list always has its cause next to it. */}
-        {(tagScope.length > 0 || genderFilter !== null || aliasFilter !== null) && (
+        {(tagScope.length > 0 || genderFilter !== null) && (
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            {tagFilters.map((f) =>
-              f.key === "divider" ? (
-                <span
-                  key="divider"
-                  aria-hidden
-                  className="mx-1 hidden h-4 w-px bg-border sm:block"
-                />
-              ) : (
-                <TagFilterChip
-                  key={f.key}
-                  label={f.label}
-                  count={f.count}
-                  icon={f.icon}
-                  active={f.active}
-                  activeClass={f.activeClass}
-                  onClick={f.onClick}
-                />
-              ),
-            )}
+            {tagFilters.map((f) => (
+              <TagFilterChip
+                key={f.key}
+                label={f.label}
+                count={f.count}
+                icon={f.icon}
+                active={f.active}
+                activeClass={f.activeClass}
+                onClick={f.onClick}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -762,9 +711,6 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                 .join("") ?? member.email[0]?.toUpperCase();
             const isSelf = member.id === currentUserId;
             const roleLabel = member.systemRole === "ADMIN" ? "Admin" : "Member";
-            // Clients are who the aliases are for, so neither tag says anything
-            // about them.
-            const aliasApplies = member.systemRole !== "CLIENT";
 
             return (
               <div
@@ -878,43 +824,16 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                       config={outlineBadge("Blocked", "text-destructive", "border-destructive/30")}
                     />
                   )}
-                  {aliasApplies && (
-                    <>
-                      <StatusBadge
-                        size="sm"
-                        icon={UserRound}
-                        config={
-                          member.gender
-                            ? outlineBadge(
-                                member.gender === "MALE" ? "Male" : "Female",
-                                "text-muted-foreground",
-                                "border-border",
-                              )
-                            : // The pool is matched on gender, so a blank one is
-                              // the reason someone joins a project unaliased.
-                              outlineBadge("No gender", "text-orange", "border-orange/30")
-                        }
-                        title={
-                          member.gender
-                            ? "Aliases are drawn from the pool of this gender"
-                            : "No gender recorded, so no alias can be drawn for them"
-                        }
-                      />
-                      <StatusBadge
-                        size="sm"
-                        icon={VenetianMask}
-                        config={
-                          member.excludeFromAlias
-                            ? outlineBadge("Real name", "text-violet", "border-violet/30")
-                            : outlineBadge("Aliased", "text-muted-foreground", "border-border")
-                        }
-                        title={
-                          member.excludeFromAlias
-                            ? "Excluded from aliases: clients see their real name on every project"
-                            : "Clients see an alias instead of their real name"
-                        }
-                      />
-                    </>
+                  {member.gender && (
+                    <StatusBadge
+                      size="sm"
+                      icon={UserRound}
+                      config={outlineBadge(
+                        member.gender === "MALE" ? "Male" : "Female",
+                        "text-muted-foreground",
+                        "border-border",
+                      )}
+                    />
                   )}
                 </div>
 
@@ -1179,8 +1098,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
 
 /**
  * Secondary filter chip, sized under the team pills so the row reads as the
- * narrower cut. Carries the same colour as the tag it filters on, so "No
- * gender" and "Real name" match the badges on the cards.
+ * narrower cut.
  */
 function TagFilterChip({
   label,
@@ -1289,7 +1207,6 @@ function EditMemberDialog({
   const [name, setName] = useState(member.name ?? "");
   const [email, setEmail] = useState(member.email);
   const [gender, setGender] = useState<GenderChoice>(member.gender ?? "");
-  const [excludeFromAlias, setExcludeFromAlias] = useState(member.excludeFromAlias);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -1305,10 +1222,6 @@ function EditMemberDialog({
       setError("Email is required");
       return;
     }
-    if (!gender) {
-      setError("Gender is required");
-      return;
-    }
     setSaving(true);
     setError(null);
     try {
@@ -1316,8 +1229,7 @@ function EditMemberDialog({
         userId: member.id,
         name: trimmedName,
         email: trimmedEmail,
-        gender,
-        excludeFromAlias: member.systemRole === "CLIENT" || excludeFromAlias,
+        gender: gender || null,
       });
       if (res?.error) {
         setError(res.error);
@@ -1384,9 +1296,6 @@ function EditMemberDialog({
         <MemberProfileFields
           gender={gender}
           onGenderChange={setGender}
-          excludeFromAlias={member.systemRole === "CLIENT" || excludeFromAlias}
-          onExcludeFromAliasChange={setExcludeFromAlias}
-          excludeLocked={member.systemRole === "CLIENT"}
         />
         {error && <p className="text-xs text-destructive">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
@@ -1399,7 +1308,7 @@ function EditMemberDialog({
           </button>
           <button
             type="submit"
-            disabled={saving || !name.trim() || !email.trim() || !gender}
+            disabled={saving || !name.trim() || !email.trim()}
             className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-s font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             {saving ? "Saving..." : "Save"}

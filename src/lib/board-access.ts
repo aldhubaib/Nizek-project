@@ -72,11 +72,9 @@ async function loadContext(
 
   const { user } = await requireProjectMember(board.projectId);
 
-  // Clients are kept off boards entirely for now. Everything client-facing in
-  // this app runs through the alias layer so a client never sees a real name or
-  // photo, and boards have no alias support yet — a card's assignee would leak
-  // exactly what the aliases exist to hide. This is a v1 limit, not a rule
-  // about what clients should be able to see.
+  // Clients are kept off boards entirely for now: a board is the team's
+  // internal working view, down to who is assigned to each card. This is a v1
+  // limit, not a rule about what clients should be able to see.
   if (user.systemRole === "CLIENT") {
     throw new BoardAccessError("Boards are not available to client accounts.");
   }

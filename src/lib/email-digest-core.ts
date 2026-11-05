@@ -82,11 +82,7 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/**
- * Subject, plain text and HTML for one digest. Lines come from Notification
- * rows, which are already alias-masked for client recipients, so no masking
- * happens here — only the thread name has to be masked by the caller.
- */
+/** Subject, plain text and HTML for one digest. Lines come from Notification rows. */
 export function buildDigestEmail(input: {
   threadName: string;
   lines: DigestLine[];

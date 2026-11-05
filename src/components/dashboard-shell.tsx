@@ -42,10 +42,8 @@ const NotificationGate = dynamic(
 export function DashboardShell({
   children,
   isAdmin = false,
-  canAudit = false,
   canEquity = false,
   canVault = false,
-  canContacts = false,
   isClient = false,
   currentUserId,
   notificationSoundUrl,
@@ -53,10 +51,8 @@ export function DashboardShell({
 }: {
   children: React.ReactNode;
   isAdmin?: boolean;
-  canAudit?: boolean;
   canEquity?: boolean;
   canVault?: boolean;
-  canContacts?: boolean;
   isClient?: boolean;
   currentUserId?: string;
   notificationSoundUrl?: string | null;
@@ -111,13 +107,8 @@ export function DashboardShell({
     router.prefetch("/dashboard/projects");
     if (canVault) router.prefetch("/dashboard/vault");
     if (canEquity) router.prefetch("/dashboard/equity");
-    if (canContacts) {
-      router.prefetch("/dashboard/contacts");
-      router.prefetch("/dashboard/companies");
-      router.prefetch("/dashboard/deals");
-    }
     router.prefetch("/dashboard/settings");
-  }, [router, canVault, canEquity, canContacts]);
+  }, [router, canVault, canEquity]);
 
   const expanded = pinned || hovered;
 
@@ -146,10 +137,8 @@ export function DashboardShell({
             pinned={pinned}
             onTogglePin={() => setPinned(!pinned)}
             isAdmin={isAdmin}
-            canAudit={canAudit}
             canEquity={canEquity}
             canVault={canVault}
-            canContacts={canContacts}
             isClient={isClient}
             logoUrl={logoUrl}
           />
@@ -182,10 +171,8 @@ export function DashboardShell({
         >
           <Sidebar
             isAdmin={isAdmin}
-            canAudit={canAudit}
             canEquity={canEquity}
             canVault={canVault}
-            canContacts={canContacts}
             isClient={isClient}
             logoUrl={logoUrl}
             onNavigate={() => setDrawerOpen(false)}
@@ -214,10 +201,8 @@ export function DashboardShell({
       {showBottomNav && (
         <BottomNav
           isAdmin={isAdmin}
-          canAudit={canAudit}
           canEquity={canEquity}
           canVault={canVault}
-          canContacts={canContacts}
           isClient={isClient}
           hidden={!bottomNavVisible}
           onOpenMenu={() => setDrawerOpen(true)}

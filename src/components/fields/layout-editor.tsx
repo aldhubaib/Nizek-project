@@ -40,11 +40,6 @@ import {
   CUSTOM_FIELD_TYPES,
   CUSTOM_FIELD_TYPE_LABEL,
 } from "@/lib/fields/types";
-import {
-  RELATION_MODELS,
-  RELATION_MODEL_LABEL,
-  type RelationConfig,
-} from "@/lib/fields/relations";
 import type { WorkflowEntityType } from "@/lib/workflow/types";
 import type { TextScript } from "@/lib/fields/text-config";
 import {
@@ -85,7 +80,7 @@ const layoutCollision: CollisionDetection = (args) => {
 
 export function LayoutEditor({
   initial,
-  entityType = "deal",
+  entityType = "board",
   onError,
   onCatalogChange,
 }: {
@@ -611,9 +606,7 @@ function FieldRow({
           {field.required && <span className="ms-1 text-destructive">*</span>}
         </span>
         <span className="ms-2 shrink-0 text-xs text-muted-foreground">
-          {field.type === "relation"
-            ? RELATION_MODEL_LABEL[field.relation?.model ?? "company"]
-            : CUSTOM_FIELD_TYPE_LABEL[field.type]}
+          {CUSTOM_FIELD_TYPE_LABEL[field.type]}
         </span>
       </button>
     </div>
@@ -637,7 +630,6 @@ function FieldProperties({
     label?: string;
     type?: string;
     options?: string[];
-    relation?: RelationConfig;
     userMultiple?: boolean;
     countryMultiple?: boolean;
     script?: TextScript | null;
@@ -838,52 +830,6 @@ function FieldProperties({
           </select>
         </div>
       )}
-      {field.type === "relation" && !field.binding && (
-        <>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Link to</Label>
-            <select
-              value={field.relation?.model ?? "company"}
-              disabled={pending}
-              onChange={(e) =>
-                onUpdate({
-                  relation: {
-                    model: e.target.value as RelationConfig["model"],
-                    multiple: field.relation?.multiple ?? true,
-                  },
-                })
-              }
-              className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-s"
-            >
-              {RELATION_MODELS.map((model) => (
-                <option key={model} value={model}>
-                  {RELATION_MODEL_LABEL[model]}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-muted-foreground">
-              {field.relation?.multiple === false
-                ? "Shows as a dropdown on the form."
-                : "Shows under Related data on the form."}
-            </p>
-          </div>
-          <label className="flex items-center gap-2 text-s">
-            <input
-              type="checkbox"
-              checked={field.relation?.multiple ?? true}
-              onChange={(e) =>
-                onUpdate({
-                  relation: {
-                    model: field.relation?.model ?? "company",
-                    multiple: e.target.checked,
-                  },
-                })
-              }
-            />
-            Allow many
-          </label>
-        </>
-      )}
       {(field.type === "select" ||
         field.type === "multi_select" ||
         field.type === "checkbox") && (
@@ -1046,7 +992,7 @@ function SituationsEditor({
   if (targets.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
-        Add another field (for example a relation), then tick it under the
+        Add another field (for example a user), then tick it under the
         option that should reveal it.
       </p>
     );

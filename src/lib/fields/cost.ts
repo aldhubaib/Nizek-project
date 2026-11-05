@@ -1,4 +1,19 @@
-import { formatDealValue } from "@/lib/deal-value";
+/**
+ * How a money amount is shown.
+ *
+ * Stored as a decimal string with no currency — the team already knows which
+ * one they invoice in — so this only groups thousands and keeps up to three
+ * fraction digits (fils / baisa).
+ */
+export function formatAmount(value: string | null | undefined): string {
+  if (!value) return "";
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return value;
+  return new Intl.NumberFormat("en-KW", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+  }).format(amount);
+}
 
 export type CostRow = {
   title: string;
@@ -63,7 +78,7 @@ export function costFieldIsFilled(raw: string | null | undefined): boolean {
 }
 
 export function formatCostTotal(rows: CostRow[]): string {
-  return formatDealValue(String(sumCostRows(rows))) || "0";
+  return formatAmount(String(sumCostRows(rows))) || "0";
 }
 
 /** Short value for cards and lists. */
@@ -90,7 +105,7 @@ export function formatCostFieldDetail(raw: string | null | undefined): string {
     .map((row) => {
       const title = row.title.trim() || "—";
       const amount = parseCostAmount(row.cost);
-      const cost = amount === null ? "—" : formatDealValue(String(amount));
+      const cost = amount === null ? "—" : formatAmount(String(amount));
       return `${title} ${cost}`;
     })
     .join(", ");

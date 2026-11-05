@@ -4,7 +4,7 @@ import { isProjectAccessError } from "@/lib/project-access";
 import { getWorkflowSettings } from "@/actions/workflow";
 import { listFormLayouts } from "@/actions/custom-field";
 import { ensureProjectBoard } from "@/actions/board-record";
-import { DealFlowsClient } from "@/app/(dashboard)/dashboard/deals/settings/flows/deal-flows-client";
+import { ModuleFlowsClient } from "@/components/modules/module-flows-client";
 
 export default async function ProjectBoardFlowsPage({
   params,
@@ -26,7 +26,7 @@ export default async function ProjectBoardFlowsPage({
   ]);
 
   return (
-    <DealFlowsClient
+    <ModuleFlowsClient
       initial={settings.workflows}
       layouts={layouts}
       entityType="board"

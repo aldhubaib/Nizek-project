@@ -1,6 +1,6 @@
 /**
  * Extra settings for Single line fields, stored in CustomField.options
- * the same way Relation stores `{ model, multiple }`.
+ * the same way User stores `{ multiple }`.
  */
 
 export const TEXT_SCRIPTS = ["arabic"] as const;

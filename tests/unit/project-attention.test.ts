@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   BUCKET_LABELS,
   BUCKET_ORDER,
+  CRITICAL_LATE_MS,
   DAY_MS,
   DELIVERY_STATUS_LABELS,
   STAGE_GROUP_LABELS,
@@ -27,7 +28,6 @@ import {
   type AttentionTier,
   type ProjectAttentionInput,
 } from "@/lib/project-attention";
-import { CRITICAL_LATE_MS } from "@/lib/audit-flags";
 
 // A Sunday, so weekday arithmetic below is easy to follow.
 const SUNDAY = Date.UTC(2026, 7, 30);

@@ -1,26 +1,9 @@
-export const WORKFLOW_ENTITY_TYPES = [
-  "deal",
-  "contact",
-  "company",
-  "board",
-] as const;
+/** The project Board is the one module left on the workflow engine. */
+export const WORKFLOW_ENTITY_TYPES = ["board"] as const;
 export type WorkflowEntityType = (typeof WORKFLOW_ENTITY_TYPES)[number];
 
-export const BOARD_STATUS_KINDS = ["open", "closed"] as const;
-export const CRM_STATUS_KINDS = ["open", "won", "lost"] as const;
-export const WORKFLOW_STATUS_KINDS = [
-  "open",
-  "closed",
-  "won",
-  "lost",
-] as const;
+export const WORKFLOW_STATUS_KINDS = ["open", "closed"] as const;
 export type WorkflowStatusKind = (typeof WORKFLOW_STATUS_KINDS)[number];
-
-export function statusKindsForEntity(
-  entityType: string,
-): readonly WorkflowStatusKind[] {
-  return entityType === "board" ? BOARD_STATUS_KINDS : CRM_STATUS_KINDS;
-}
 
 export const WORKFLOW_HOOKS = [
   "before",
@@ -36,8 +19,6 @@ export const WORKFLOW_ACTION_TYPES = [
   "show_fields",
   "message",
   "checklist",
-  "associate_contacts",
-  "associate_companies",
   "set_field",
   "notify",
   "send_invite",
@@ -90,11 +71,9 @@ export type WorkflowTransitionDef = {
   moveRoleIds?: string[] | null;
 };
 
+/** The columns that live on the record row itself. */
 export type NativeFieldSnapshot = {
   title: string;
-  value: string | null;
-  contactIds: string[];
-  companyIds: string[];
 };
 
 export type FieldSnapshot = {
@@ -106,9 +85,6 @@ export type DuringPayload = {
   customValues?: Record<string, string>;
   nativePatches?: {
     title?: string;
-    value?: string | null;
-    contactIds?: string[];
-    companyIds?: string[];
   };
   checklist?: Record<string, boolean>;
 };

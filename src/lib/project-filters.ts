@@ -2,7 +2,7 @@
 // currently valid contract and no active late-payment contract. This is the
 // same rule as the Expired / Late Payment badges on project cards
 // (see getActiveContract in contract-rules.ts), so anything badged Expired
-// stays out of every task-level dashboard/audit monitor.
+// stays out of every task-level dashboard monitor.
 //
 // endDate is compared against start-of-today because contracts are valid
 // through the end of their last day (isContractActiveOnDate uses 23:59:59).

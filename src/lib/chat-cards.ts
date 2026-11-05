@@ -1,19 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import {
-  conversationChannel,
-  conversationClientChannel,
-  projectChannel,
-  publish,
-} from "@/lib/centrifugo";
-import {
-  getAliasMap,
-  maskImage,
-  maskName,
-  maskNoteActivity,
-  maskPlainNames,
-  type AliasIdentity,
-} from "@/lib/alias";
+import { conversationChannel, projectChannel, publish } from "@/lib/centrifugo";
 import { getClientConversation } from "@/lib/client-chat";
 import { fanOutMessageSideEffects } from "@/lib/message-fanout";
 import {
@@ -107,24 +94,7 @@ function cardDTO(input: {
   };
 }
 
-function maskClientIssue(
-  payload: ClientIssuePayload,
-  map: Map<string, AliasIdentity>,
-): ClientIssuePayload {
-  if (map.size === 0) return payload;
-  return {
-    ...payload,
-    title: maskPlainNames(payload.title, map),
-    ...(payload.excerpt ? { excerpt: maskPlainNames(payload.excerpt, map) } : {}),
-  };
-}
-
-/**
- * Mirror a note-activity card into a project's client room.
- *
- * Two publishes, as everywhere else in this room: staff read the plain
- * channel, clients read the `-client` twin carrying the aliased payload.
- */
+/** Mirror a note-activity card into a project's client room. */
 export async function postNoteActivityToClientRoom(input: {
   authorId: string;
   payload: NoteActivityPayload;
@@ -171,20 +141,6 @@ export async function postNoteActivityToClientRoom(input: {
   });
 
   void publish(conversationChannel(convo.id), { type: "message.new", message: dto });
-
-  const aliasMap = await getAliasMap(projectId);
-  void publish(conversationClientChannel(convo.id), {
-    type: "message.new",
-    message: {
-      ...dto,
-      authorName: asBot ? NIZEK_BOT_NAME : maskName(authorId, authorName, aliasMap),
-      authorImageUrl: asBot
-        ? botImageUrl
-        : maskImage(authorId, dto.authorImageUrl, aliasMap),
-      body: maskPlainNames(dto.body, aliasMap),
-      noteActivity: maskNoteActivity(payload, aliasMap),
-    } satisfies MessageDTO,
-  });
 
   await fanOutMessageSideEffects({
     conversationId: convo.id,
@@ -336,18 +292,6 @@ async function postIssueToClientRoom(ctx: IssueCardContext): Promise<void> {
   });
 
   void publish(conversationChannel(convo.id), { type: "message.new", message: dto });
-
-  const aliasMap = await getAliasMap(projectId);
-  void publish(conversationClientChannel(convo.id), {
-    type: "message.new",
-    message: {
-      ...dto,
-      authorName: maskName(authorId, authorName, aliasMap),
-      authorImageUrl: maskImage(authorId, dto.authorImageUrl, aliasMap),
-      body: maskPlainNames(dto.body, aliasMap),
-      clientIssue: maskClientIssue(payload, aliasMap),
-    } satisfies MessageDTO,
-  });
 
   await fanOutMessageSideEffects({
     conversationId: convo.id,

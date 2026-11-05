@@ -6,7 +6,7 @@ import { isClientUser } from "@/lib/client-chat";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import { createTaskRecord } from "@/lib/create-task-record";
 import { isBuiltInTaskFieldQuestion } from "@/lib/task-readiness";
-import { APP_SETTINGS_ID } from "@/lib/alias-mask";
+import { APP_SETTINGS_ID } from "@/lib/app-settings";
 import { postClientIssueCards } from "@/lib/chat-cards";
 import { clientIssueTypeLabel } from "@/lib/client-issue-payload";
 import type { TaskQuestion } from "@/components/kanban/question-field";

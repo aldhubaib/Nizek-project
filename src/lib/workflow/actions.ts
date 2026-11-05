@@ -34,16 +34,6 @@ export const ACTION_REGISTRY: Record<
     hooks: ["during"],
     description: "Every item must be ticked before the move completes",
   },
-  associate_contacts: {
-    label: "Associate contacts",
-    hooks: ["during"],
-    description: "Prompt to attach contacts",
-  },
-  associate_companies: {
-    label: "Associate companies",
-    hooks: ["during"],
-    description: "Prompt to attach companies",
-  },
   set_field: {
     label: "Set field",
     hooks: ["before", "after", "onEnter", "onLeave"],
@@ -132,9 +122,6 @@ export function cleanActionConfig(
       return {
         userId: typeof input.userId === "string" ? input.userId : "",
       };
-    case "associate_contacts":
-    case "associate_companies":
-      return {};
   }
 }
 

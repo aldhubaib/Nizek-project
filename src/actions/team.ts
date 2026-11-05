@@ -8,7 +8,6 @@ import { cache } from "react";
 import type { Gender, SystemRole, TeamRole } from "@/generated/prisma/client";
 import { parseGender } from "@/lib/member-profile";
 import { membershipRoleFromProjectRole } from "@/lib/client-role";
-import { aliasesEnabled, availableAliasCount } from "@/lib/alias";
 
 async function requireAdmin() {
   const user = await requireUser();
@@ -165,7 +164,6 @@ export async function getTeamMembers() {
     systemRole: u.systemRole,
     blocked: u.blocked,
     gender: u.gender,
-    excludeFromAlias: u.excludeFromAlias,
     createdAt: u.createdAt,
     projects: u.projects.map((p) => ({
       id: p.project.id,
@@ -263,14 +261,13 @@ export async function updateUserProfile(data: {
   userId: string;
   name: string;
   email: string;
-  gender: Gender;
-  excludeFromAlias: boolean;
+  gender?: Gender | null;
 }) {
   await requireAdmin();
 
   const trimmedName = data.name.trim();
   if (!trimmedName) return { error: "Name is required" };
-  let gender: Gender;
+  let gender: Gender | null;
   try {
     gender = parseGender(data.gender);
   } catch (err) {
@@ -300,7 +297,6 @@ export async function updateUserProfile(data: {
         name: trimmedName,
         email: nextEmail,
         gender,
-        excludeFromAlias: data.excludeFromAlias,
       },
     });
     if (target.email.toLowerCase() !== nextEmail) {
@@ -378,8 +374,7 @@ export async function inviteToTeam(data: {
   systemRole: SystemRole;
   firstName: string;
   lastName: string;
-  gender: Gender;
-  excludeFromAlias?: boolean;
+  gender?: Gender | null;
   teamId?: string;
   projects?: { projectId: string; roleId: string }[];
 }) {
@@ -406,24 +401,11 @@ export async function inviteToTeam(data: {
   const roleById = new Map(assignedRoles.map((r) => [r.id, r]));
   const asClient =
     data.systemRole === "CLIENT" || assignedRoles.some((r) => r.isClient);
-  const excludeFromAlias = asClient || Boolean(data.excludeFromAlias);
-
-  // One alias is consumed per project, so the pool must cover every assignment
-  // up front. Catching it here beats letting them sign in and get stuck. With
-  // the mechanism off no alias is consumed, so the pool size is irrelevant.
-  if (!excludeFromAlias && assignments.length > 0 && (await aliasesEnabled(prisma))) {
-    const available = await availableAliasCount(gender);
-    if (available < assignments.length) {
-      throw new Error(
-        `Only ${available} unused ${gender === "MALE" ? "male" : "female"} alias${available === 1 ? "" : "es"} left, but ${assignments.length} project${assignments.length === 1 ? "" : "s"} were selected. Upload more in Settings → Aliases.`,
-      );
-    }
-  }
 
   await prisma.pendingTeamInvite.upsert({
     where: { email },
-    update: { systemRole: data.systemRole, firstName, lastName, teamId, gender, excludeFromAlias },
-    create: { email, systemRole: data.systemRole, firstName, lastName, teamId, gender, excludeFromAlias },
+    update: { systemRole: data.systemRole, firstName, lastName, teamId, gender },
+    create: { email, systemRole: data.systemRole, firstName, lastName, teamId, gender },
   });
 
   await prisma.allowedEmail.upsert({
@@ -443,7 +425,6 @@ export async function inviteToTeam(data: {
         roleId: a.roleId,
         name: displayName,
         gender,
-        excludeFromAlias,
       });
     }
   } else {

@@ -9,7 +9,7 @@ import type { Stage } from "@/generated/prisma/client";
  * - lifecycle stages, which mirror the sprint (or the absence of one)
  * - work stages, which only exist while that sprint is ACTIVE
  *
- * Keeping the mapping here means the board, the roadmap, the audit module and
+ * Keeping the mapping here means the board, the roadmap, the overview and
  * the migration all agree on one answer, instead of each remapping stages at
  * render time the way the client project view used to.
  */

@@ -2,11 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { hasProjectAccess } from "@/lib/project-access";
-import {
-  GLOBAL_PRESENCE_ID,
-  isStaffOnlyChannel,
-  parseConversationChannel,
-} from "@/lib/channels";
+import { GLOBAL_PRESENCE_ID, isStaffOnlyChannel } from "@/lib/channels";
 import {
   connectionToken,
   subscriptionToken,
@@ -102,8 +98,7 @@ async function canSubscribe(
 ): Promise<boolean> {
   const memberId = user.id;
 
-  // Masking happens as the server publishes, so a client on a staff-only feed
-  // would read real names straight from Centrifugo with nothing in the way.
+  // Board and project feeds are the team's; no client screen reads them.
   if (isStaffOnlyChannel(channel) && isClientUser(user)) return false;
 
   const [namespace, rest] = splitChannel(channel);
@@ -129,13 +124,8 @@ async function canSubscribe(
       return hasProjectAccess(task.projectId);
     }
     case "conv": {
-      // A conversation has two channels: the plain one carries real staff names
-      // and the "-client" twin carries aliases. Each audience may only mint a
-      // token for its own, so a client cannot subscribe to unmasked names.
-      const parsed = parseConversationChannel(rest);
-      if (!parsed) return false;
-      const { conversationId, forClient } = parsed;
-      if (forClient !== isClientUser(user)) return false;
+      const conversationId = rest;
+      if (!conversationId) return false;
 
       if (conversationId === ANNOUNCEMENTS_CONVERSATION_ID) {
         return canReadAnnouncements(user);

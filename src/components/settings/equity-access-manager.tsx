@@ -12,9 +12,9 @@ import {
 } from "@/actions/equity";
 
 /**
- * Admin settings: grant members access to the Equity module. Unlike audit
- * access there is no team dimension — equity is all-or-nothing, and admins get
- * it only by granting it to themselves.
+ * Admin settings: grant members access to the Equity module. There is no team
+ * dimension — equity is all-or-nothing, and admins get it only by granting it
+ * to themselves.
  */
 export function EquityAccessManager() {
   const [members, setMembers] = useState<EquityMember[]>([]);

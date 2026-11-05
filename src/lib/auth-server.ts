@@ -59,13 +59,6 @@ export const auth = betterAuth({
         input: false,
         returned: true,
       },
-      excludeFromAlias: {
-        type: "boolean",
-        required: false,
-        defaultValue: false,
-        input: false,
-        returned: true,
-      },
     },
   },
 
@@ -116,7 +109,6 @@ export const auth = betterAuth({
               ...(inviteName ? { name: inviteName } : {}),
               ...(pending ? { systemRole: pending.systemRole } : {}),
               ...(pending?.gender ? { gender: pending.gender } : {}),
-              ...(pending ? { excludeFromAlias: pending.excludeFromAlias } : {}),
             },
           };
         },

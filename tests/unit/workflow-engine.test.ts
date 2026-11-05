@@ -13,16 +13,11 @@ import {
   unfilledFieldIds,
   validateDuring,
 } from "../../src/lib/workflow/engine";
-import { statusKindsForEntity } from "../../src/lib/workflow/types";
+import { WORKFLOW_STATUS_KINDS } from "../../src/lib/workflow/types";
 import type { FieldSnapshot, WorkflowActionDef, WorkflowTransitionDef } from "../../src/lib/workflow/types";
 
 const filled: FieldSnapshot = {
-  native: {
-    title: "Website",
-    value: "1000",
-    contactIds: ["c1"],
-    companyIds: ["co1"],
-  },
+  native: { title: "Website" },
   custom: { fld_priority: "High" },
 };
 
@@ -190,29 +185,29 @@ describe("missingRequiredOnSnapshot", () => {
     expect(
       missingRequiredOnSnapshot(
         {
-          native: { title: "A", value: null, contactIds: [], companyIds: ["x"] },
+          native: { title: "" },
           custom: {},
         },
-        ["value", "contacts", "fld_priority"],
+        ["title", "fld_priority"],
         [{ id: "fld_priority", label: "Priority", type: "text" }],
       ),
-    ).toEqual(["Value", "At least one contact", "Priority"]);
+    ).toEqual(["Title", "Priority"]);
   });
 
   it("skips a required field hidden by a pick list", () => {
     expect(
       missingRequiredOnSnapshot(
         {
-          native: { title: "A", value: null, contactIds: [], companyIds: [] },
+          native: { title: "A" },
           custom: { type: "Personal" },
         },
-        ["fld_company"],
+        ["fld_owner"],
         [
           { id: "type", label: "Type", type: "select" },
           {
-            id: "fld_company",
-            label: "Company",
-            type: "relation",
+            id: "fld_owner",
+            label: "Owner",
+            type: "user",
             visibility: { dependsOn: "type", values: ["Company"] },
           },
         ],
@@ -227,7 +222,7 @@ describe("validateDuring", () => {
       action({
         type: "require_fields",
         hook: "during",
-        config: { fields: ["value"] },
+        config: { fields: ["title"] },
       }),
       action({
         type: "checklist",
@@ -238,11 +233,11 @@ describe("validateDuring", () => {
     expect(
       validateDuring(
         during,
-        { native: { title: "A", value: null, contactIds: [], companyIds: [] }, custom: {} },
+        { native: { title: "" }, custom: {} },
         { checklist: { Called: true } },
         [],
       ),
-    ).toEqual(["Fill Value", "Tick every checklist item"]);
+    ).toEqual(["Fill Title", "Tick every checklist item"]);
   });
 
   it("passes when the payload fills everything", () => {
@@ -250,7 +245,7 @@ describe("validateDuring", () => {
       action({
         type: "require_fields",
         hook: "during",
-        config: { fields: ["value"] },
+        config: { fields: ["title"] },
       }),
       action({
         type: "checklist",
@@ -261,8 +256,8 @@ describe("validateDuring", () => {
     expect(
       validateDuring(
         during,
-        filled,
-        { nativePatches: { value: "50" }, checklist: { Called: true } },
+        { ...filled, native: { title: "" } },
+        { nativePatches: { title: "Website" }, checklist: { Called: true } },
         [],
       ),
     ).toEqual([]);
@@ -318,7 +313,7 @@ describe("actionsForMove / set_field", () => {
   it("includes during actions from the status being left", () => {
     const grouped = actionsForMove({
       fromActions: [
-        action({ id: "leave-req", type: "require_fields", hook: "during", config: { fields: ["value"] } }),
+        action({ id: "leave-req", type: "require_fields", hook: "during", config: { fields: ["title"] } }),
       ],
       toActions: [],
       transition: {
@@ -341,7 +336,7 @@ describe("actionsForMove / set_field", () => {
         action({
           type: "set_field",
           hook: "after",
-          config: { field: "value", value: "0" },
+          config: { field: "title", value: "Renamed" },
         }),
         action({
           type: "set_field",
@@ -351,7 +346,7 @@ describe("actionsForMove / set_field", () => {
       ],
       filled,
     );
-    expect(next.native.value).toBe("0");
+    expect(next.native.title).toBe("Renamed");
     expect(next.custom.fld_x).toBe("done");
   });
 
@@ -366,14 +361,14 @@ describe("actionsForMove / set_field", () => {
       ],
       {
         ...filled,
-        custom: { type: "Company", organizer: '["co_1"]' },
+        custom: { type: "Company", organizer: '["usr_1"]' },
       },
       [
         { id: "type", label: "Type", type: "select" },
         {
           id: "organizer",
           label: "Organizer",
-          type: "relation",
+          type: "user",
           visibility: { dependsOn: "type", values: ["Company"] },
         },
       ],
@@ -385,9 +380,9 @@ describe("actionsForMove / set_field", () => {
   it("collects require_fields ids", () => {
     expect(
       requiredFieldIds([
-        action({ type: "require_fields", hook: "before", config: { fields: ["title", "value"] } }),
+        action({ type: "require_fields", hook: "before", config: { fields: ["title", "fld_x"] } }),
       ]),
-    ).toEqual(["title", "value"]);
+    ).toEqual(["title", "fld_x"]);
   });
 });
 
@@ -409,7 +404,7 @@ describe("snapshotFieldIsFilled", () => {
   it("drops filled fields from the transition prompt list", () => {
     expect(
       unfilledFieldIds(
-        ["title", "value", "fld_priority", "fld_notes"],
+        ["title", "fld_priority", "fld_notes"],
         filled,
         fields,
       ),
@@ -417,9 +412,8 @@ describe("snapshotFieldIsFilled", () => {
   });
 });
 
-describe("statusKindsForEntity", () => {
-  it("offers open/closed on a board and open/won/lost on CRM", () => {
-    expect(statusKindsForEntity("board")).toEqual(["open", "closed"]);
-    expect(statusKindsForEntity("deal")).toEqual(["open", "won", "lost"]);
+describe("WORKFLOW_STATUS_KINDS", () => {
+  it("offers open and closed on a board", () => {
+    expect(WORKFLOW_STATUS_KINDS).toEqual(["open", "closed"]);
   });
 });

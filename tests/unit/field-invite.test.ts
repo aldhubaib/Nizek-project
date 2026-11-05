@@ -47,7 +47,7 @@ describe("calendar invite field", () => {
       location: "Nizek",
       attendees: [
         {
-          kind: "contact",
+          kind: "user",
           id: "c1",
           status: "accepted",
           sentAt: "2026-09-14T06:00:00.000Z",
@@ -155,7 +155,7 @@ describe("calendar invite field", () => {
 describe("invite tokens and ics", () => {
   it("round-trips a signed RSVP token", () => {
     const payload = {
-      entityType: "deal",
+      entityType: "board",
       recordId: "d1",
       fieldId: "f1",
       kind: "user" as const,
@@ -197,8 +197,8 @@ describe("countInviteRsvps", () => {
       countInviteRsvps([
         { kind: "user", id: "u1", status: "accepted", sentAt: "2026-09-14T06:00:00.000Z" },
         { kind: "user", id: "u2", status: "tentative", sentAt: "2026-09-14T06:00:00.000Z" },
-        { kind: "contact", id: "c1", status: "declined", sentAt: "2026-09-14T06:00:00.000Z" },
-        { kind: "contact", id: "c2", status: "needs_action", sentAt: "2026-09-14T06:00:00.000Z" },
+        { kind: "user", id: "c1", status: "declined", sentAt: "2026-09-14T06:00:00.000Z" },
+        { kind: "user", id: "c2", status: "needs_action", sentAt: "2026-09-14T06:00:00.000Z" },
         { kind: "user", id: "u3", status: "accepted", sentAt: "2026-09-14T06:00:00.000Z" },
       ]),
     ).toEqual({ yes: 2, maybe: 1, no: 1, waiting: 1 });

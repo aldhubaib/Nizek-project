@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PageHeader, PageName } from "@/components/page-header";
 import { PageBody } from "@/components/page-body";
-import { getAuditAccess } from "@/actions/audit";
 import { getManagerOverview } from "@/actions/overview";
 import { DeliverySection } from "../overview/overview-client";
 import { DashboardClient } from "../dashboard-client";
@@ -13,10 +12,10 @@ import { DashboardClient } from "../dashboard-client";
  * The dashboard, in two halves.
  *
  * Everyone gets the personal half — their tasks, their sprints, their
- * deadlines. Anyone who can audit gets the delivery half underneath it, which
- * is the same portfolio view the audit module is gated on. They are one page
- * rather than two because a manager was otherwise reading their own tasks in
- * one place and everyone else's work in another.
+ * deadlines. System admins get the delivery half underneath it: the portfolio
+ * view of every project. They are one page rather than two because a manager
+ * was otherwise reading their own tasks in one place and everyone else's work
+ * in another.
  */
 export default async function DashboardPage({
   searchParams,
@@ -29,10 +28,8 @@ export default async function DashboardPage({
   const userId = user.id;
   const now = new Date();
 
-  const [{ project }, access] = await Promise.all([
-    searchParams,
-    getAuditAccess(),
-  ]);
+  const { project } = await searchParams;
+  const seesOverview = user.systemRole === "ADMIN";
 
   const [
     myTasks,
@@ -130,7 +127,7 @@ export default async function DashboardPage({
       take: 5,
     }),
 
-    access.canAudit ? getManagerOverview(project) : Promise.resolve(null),
+    seesOverview ? getManagerOverview(project) : Promise.resolve(null),
   ]);
 
   const stageBreakdown: Record<string, number> = {};

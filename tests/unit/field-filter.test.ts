@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CustomFieldDTO } from "../../src/actions/custom-field";
-import type { DealDTO } from "../../src/actions/deal";
-import { EMPTY_RELATED_CATALOG } from "../../src/lib/fields/relations";
+import type { RecordDTO } from "../../src/lib/modules/types";
 import {
   EMPTY_FIELD_FILTER,
   fieldFilterChoices,
@@ -9,16 +8,15 @@ import {
   recordMatchesFieldFilters,
 } from "../../src/lib/fields/filter";
 
-const ctx = { users: [], related: EMPTY_RELATED_CATALOG, fields: [] };
+const ctx = { users: [], fields: [] };
 
 function field(partial: Partial<CustomFieldDTO> & { id: string }): CustomFieldDTO {
   return {
-    entityType: "deal",
+    entityType: "board",
     key: partial.id,
     label: partial.label ?? partial.id,
     type: "text",
     options: [],
-    relation: null,
     script: null,
     binding: null,
     required: false,
@@ -36,16 +34,13 @@ function field(partial: Partial<CustomFieldDTO> & { id: string }): CustomFieldDT
   };
 }
 
-function record(partial: Partial<DealDTO> = {}): DealDTO {
+function record(partial: Partial<RecordDTO> = {}): RecordDTO {
   return {
     id: "rec_1",
     recordNumber: 1,
     title: "Acme event",
-    value: null,
     flowId: "flow",
     stageId: null,
-    contacts: [],
-    companies: [],
     fieldValues: {},
     createdAt: "",
     updatedAt: "",

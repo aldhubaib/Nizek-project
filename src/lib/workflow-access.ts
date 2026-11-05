@@ -3,7 +3,6 @@ import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
-import { requireContactsAccess } from "@/lib/contacts-access";
 import {
   FULL_WORKFLOW_PERMISSIONS,
   MEMBER_WORKFLOW_PERMISSIONS,
@@ -17,7 +16,7 @@ import {
 } from "@/lib/workflow-permissions";
 
 /**
- * Project membership (or contacts access) decides whether the board is
+ * Project membership decides whether the board is
  * visible. This flow's named roles, plus this flow's blueprint, decide
  * what may be done. Sprint ProjectRole is never read.
  */
@@ -89,19 +88,15 @@ async function assertModuleVisible(
   entityType: string,
   projectId: string,
 ): Promise<{ userId: string; systemRole: string }> {
-  if (entityType === "board") {
-    if (!projectId) {
-      throw new WorkflowAccessError("Open this from a project.");
-    }
-    const { user } = await requireProjectMember(projectId);
-    if (user.systemRole === "CLIENT") {
-      throw new WorkflowAccessError(
-        "Boards are not available to client accounts.",
-      );
-    }
-    return { userId: user.id, systemRole: user.systemRole };
+  if (entityType !== "board" || !projectId) {
+    throw new WorkflowAccessError("Open this from a project.");
   }
-  const user = await requireContactsAccess();
+  const { user } = await requireProjectMember(projectId);
+  if (user.systemRole === "CLIENT") {
+    throw new WorkflowAccessError(
+      "Boards are not available to client accounts.",
+    );
+  }
   return { userId: user.id, systemRole: user.systemRole };
 }
 

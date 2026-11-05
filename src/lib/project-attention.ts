@@ -1,14 +1,33 @@
 // Decision logic for the manager overview: which projects need attention, and
-// in what order. Kept free of Prisma/React so it is unit-testable, the same way
-// audit-flags.ts is.
+// in what order. Kept free of Prisma/React so it is unit-testable.
 //
 // Progress is counted in tasks, never in hours. A sprint's promise is the set of
 // tasks it started with; anything added afterwards is tracked separately so the
 // promise and what happened to it stay distinguishable.
 
-import { CRITICAL_LATE_MS } from "@/lib/audit-flags";
+import { WORK_STAGES } from "@/lib/task-stage";
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** A task that has sat in one stage this long is stuck, whoever holds it. */
+export const CRITICAL_LATE_MS = 7 * DAY_MS;
+
+/** A task waiting on a client answer this long counts as blocked by the client. */
+export const CLIENT_INPUT_WAIT_MS = 2 * DAY_MS;
+
+/**
+ * Stages where a task being slow is somebody's fault.
+ *
+ * Everything outside an active sprint is waiting by design: Backlog, Planned and
+ * Next have not started, and Completed and Shipped have finished. Completed
+ * especially — client acceptance is optional, so a sprint can sit there forever
+ * and its tasks are delivered, not late. Including it would flag every finished
+ * task in the system.
+ *
+ * Done is left out for the same reason at task level: once it is marked Done the
+ * only thing left is the sprint closing, which is not the assignee's to do.
+ */
+export const ACTIVE_STAGES = WORK_STAGES.filter((s) => s !== "DONE");
 
 /** A project with no sprint in flight this long has stopped being planned. */
 export const NO_SPRINT_GAP_DAYS = 3;

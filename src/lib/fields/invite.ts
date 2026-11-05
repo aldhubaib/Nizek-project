@@ -14,7 +14,7 @@ export const INVITE_RSVP = [
 
 export type InviteRsvp = (typeof INVITE_RSVP)[number];
 
-export const INVITE_PERSON_KINDS = ["user", "contact"] as const;
+export const INVITE_PERSON_KINDS = ["user"] as const;
 export type InvitePersonKind = (typeof INVITE_PERSON_KINDS)[number];
 
 export const INVITE_AUDIENCES = ["all", "private"] as const;

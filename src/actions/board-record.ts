@@ -1,7 +1,7 @@
 "use server";
 
 /**
- * Configurable project Board (same engine as Deals).
+ * Configurable project Board.
  *
  * Independent of sprints: never reads or writes Task, Sprint, Stage, or the
  * sprint kanban store. Those stay on the Road map / Active sprint tabs.
@@ -28,13 +28,6 @@ import {
   fieldAppliesOnForm,
 } from "@/lib/fields/visibility";
 import { isCustomFieldType, type CustomFieldType } from "@/lib/fields/types";
-import {
-  RELATION_MODEL_LABEL,
-  parseRelationConfig,
-  parseRelationIds,
-  stringifyRelationIds,
-} from "@/lib/fields/relations";
-import { countRelatedRecords } from "@/actions/related-records";
 import { applyLayoutTextScripts } from "@/lib/fields/text-config";
 import {
   deleteRecordHistory,
@@ -77,12 +70,12 @@ import {
   validateDuring,
 } from "@/lib/workflow/engine";
 import type { DuringPayload, FieldSnapshot } from "@/lib/workflow/types";
-import type { DealDTO, RecordPersonDTO } from "@/actions/deal";
-import type { DealFlowDTO } from "@/actions/deal-flow";
+import type { RecordDTO, RecordPersonDTO } from "@/lib/modules/types";
+import type { FlowDTO } from "@/lib/modules/types";
 import {
-  listDealStages,
-  type DealStageDTO,
-} from "@/actions/deal-stage";
+  listStages,
+  type StageDTO,
+} from "@/actions/record-stage";
 
 const PERSON_SELECT = { id: true, name: true, imageUrl: true } as const;
 
@@ -110,10 +103,10 @@ export type BoardRecordInput = {
 
 export type ProjectBoardDTO = {
   projectId: string;
-  flows: DealFlowDTO[];
+  flows: FlowDTO[];
   flowId: string;
-  stages: DealStageDTO[];
-  cards: DealDTO[];
+  stages: StageDTO[];
+  cards: RecordDTO[];
   transitions: WorkflowTransitionDTO[];
   fields: CustomFieldDTO[];
   users: WorkflowUserOption[];
@@ -152,16 +145,13 @@ async function recordAction<T>(
   }
 }
 
-function boardRecordToDeal(row: BoardRecordDTO): DealDTO {
+function boardRecordToRecord(row: BoardRecordDTO): RecordDTO {
   return {
     id: row.id,
     recordNumber: row.recordNumber,
     title: row.title,
-    value: null,
     flowId: row.flowId,
     stageId: row.stageId,
-    contacts: [],
-    companies: [],
     fieldValues: row.fieldValues,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -194,13 +184,13 @@ function toFlowDTO(row: {
   recordCount: number;
   layoutId: string | null;
   blueprintEnabled: boolean;
-}): DealFlowDTO {
+}): FlowDTO {
   return {
     id: row.id,
     name: row.name,
     position: row.position,
     stageCount: row.statusCount,
-    dealCount: row.recordCount,
+    recordCount: row.recordCount,
     layoutId: row.layoutId,
     blueprintEnabled: row.blueprintEnabled,
   };
@@ -409,23 +399,6 @@ async function cleanInput(
     layoutFieldIds,
   );
 
-  for (const field of layoutFields) {
-    if (field.binding || field.type !== "relation") continue;
-    const config = parseRelationConfig(field.options);
-    let ids = parseRelationIds(fieldValues[field.id]);
-    if (!config.multiple) ids = ids.slice(0, 1);
-    const unique = [...new Set(ids)];
-    if (unique.length > 0) {
-      const found = await countRelatedRecords(config.model, unique);
-      if (found !== unique.length) {
-        throw new Error(
-          `A linked ${RELATION_MODEL_LABEL[config.model].toLowerCase()} is no longer available`,
-        );
-      }
-    }
-    fieldValues[field.id] = stringifyRelationIds(unique);
-  }
-
   const assigneeId =
     input.assigneeId === undefined
       ? undefined
@@ -480,7 +453,7 @@ export async function getProjectBoard(
   const layoutId =
     flows.find((flow) => flow.id === selected)?.layoutId ?? ensured.layoutId;
   const [stages, cards, transitions, users, fields, permissions] = await Promise.all([
-    listDealStages(selected),
+    listStages(selected),
     listBoardRecords(projectId, selected),
     listWorkflowTransitions(selected),
     listWorkflowUsers(projectId),
@@ -493,7 +466,7 @@ export async function getProjectBoard(
     flows,
     flowId: selected,
     stages,
-    cards: cards.map(boardRecordToDeal),
+    cards: cards.map(boardRecordToRecord),
     transitions,
     fields,
     users,
@@ -736,12 +709,7 @@ async function boardSnapshot(projectId: string, recordId: string) {
     statusId: row.statusId,
     assigneeId: row.assigneeId,
     snapshot: {
-      native: {
-        title: row.title,
-        value: null,
-        contactIds: [],
-        companyIds: [],
-      },
+      native: { title: row.title },
       custom: Object.fromEntries(values.map((v) => [v.fieldId, v.value])),
     } satisfies FieldSnapshot,
   };
@@ -892,9 +860,6 @@ export async function moveBoardRecordToStage(
     const merged: FieldSnapshot = {
       native: {
         title: payload.nativePatches?.title ?? loaded.snapshot.native.title,
-        value: loaded.snapshot.native.value,
-        contactIds: loaded.snapshot.native.contactIds,
-        companyIds: loaded.snapshot.native.companyIds,
       },
       custom: { ...loaded.snapshot.custom, ...payload.customValues },
     };

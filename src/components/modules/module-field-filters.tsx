@@ -9,7 +9,7 @@ import {
 } from "@/lib/fields/filter";
 import type { FieldDisplayContext } from "@/lib/fields/display";
 import type { CustomFieldDTO } from "@/actions/custom-field";
-import type { DealDTO } from "@/actions/deal";
+import type { RecordDTO } from "@/lib/modules/types";
 
 export function ModuleFieldFilters({
   fields,
@@ -19,7 +19,7 @@ export function ModuleFieldFilters({
   onChange,
 }: {
   fields: CustomFieldDTO[];
-  records: DealDTO[];
+  records: RecordDTO[];
   ctx: FieldDisplayContext;
   selected: Record<string, string>;
   onChange: (next: Record<string, string>) => void;

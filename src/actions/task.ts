@@ -23,8 +23,6 @@ import {
   priorityLabel,
   type TaskPriorityId,
 } from "@/lib/task-label";
-import { getAliasMap, NO_MASK, type AliasIdentity } from "@/lib/alias";
-import { isClientUser } from "@/lib/client-chat";
 import type { Stage } from "@/generated/prisma/client";
 
 // ─── Stage → Role Track ─────────────────────────────────
@@ -711,8 +709,6 @@ export async function declineTask(data: {
       const notifBody = `#${task.taskNumber} ${task.title}: ${declineSnippet}`;
       const linkUrl = `/dashboard/projects/${task.projectId}/tasks/${task.id}`;
       const pushTag = `thread-task-${task.id}`;
-      // A client submitter (client-review decline) must see the alias, not the
-      // real name of whoever declined.
       await notifyAndPush(
         {
           recipientIds: [submitterId],
@@ -722,7 +718,6 @@ export async function declineTask(data: {
           linkUrl,
           tag: pushTag,
           threadKey: `task-${task.id}`,
-          alias: { projectId: task.projectId, actorUserId: user.id },
         },
         { title, body: notifBody, url: linkUrl, type: "rejection" },
       );
@@ -937,14 +932,6 @@ const BOARD_TASK_SELECT = {
   _count: { select: { notes: true, sprintSnapshots: true } },
 } as const;
 
-/** Aliases to apply to a board read — empty for staff, who see real names. */
-async function boardAliasMap(
-  user: { systemRole: string },
-  projectId: string,
-): Promise<Map<string, AliasIdentity>> {
-  return isClientUser(user) ? getAliasMap(projectId) : NO_MASK;
-}
-
 type BoardPerson = { id: string; name: string | null; imageUrl: string | null };
 
 type BoardTaskRow = {
@@ -955,8 +942,6 @@ type BoardTaskRow = {
   startedAt: Date | null;
   estimatedMinutes: number | null;
   estimateAccuracy: unknown;
-  // Spelled out rather than left to the index signature below, so the masking
-  // in mapBoardTask is type-checked against the select.
   assignee: BoardPerson | null;
   createdBy: BoardPerson;
   answers: { questionId: string; answer: string; question: { type: string } }[];
@@ -978,26 +963,10 @@ function fieldsByType(
   return byType;
 }
 
-/**
- * Board cards carry the assignee's and creator's real name and photo. The client
- * project panel reads the same board (`client-project-panel.tsx`), so an empty
- * map is the only thing that leaves them untouched.
- */
-function maskBoardPerson<T extends BoardPerson | null>(
-  person: T,
-  aliasMap: Map<string, AliasIdentity>,
-): T {
-  if (!person || aliasMap.size === 0) return person;
-  const alias = aliasMap.get(person.id);
-  if (!alias) return person;
-  return { ...person, name: alias.name, imageUrl: alias.imageUrl } as T;
-}
-
 function mapBoardTask(
   task: BoardTaskRow,
   declineCount: number,
   fields: { id: string; type: string }[],
-  aliasMap: Map<string, AliasIdentity> = NO_MASK,
 ) {
   const answerByQuestion = new Map(task.answers.map((a) => [a.questionId, a.answer]));
   const hasAllFields = fields.every((q) =>
@@ -1013,8 +982,6 @@ function mapBoardTask(
 
   return {
     ...task,
-    assignee: maskBoardPerson(task.assignee, aliasMap),
-    createdBy: maskBoardPerson(task.createdBy, aliasMap),
     answers: undefined,
     stageLogs: undefined,
     isReadyForTransition,
@@ -1038,8 +1005,7 @@ function mapBoardTask(
 }
 
 export async function getTasksByProject(projectId: string) {
-  const { user } = await requireProjectMember(projectId);
-  const aliasMap = await boardAliasMap(user, projectId);
+  await requireProjectMember(projectId);
 
   const [tasks, specQuestions, declineCounts] = await Promise.all([
     prisma.task.findMany({
@@ -1071,7 +1037,6 @@ export async function getTasksByProject(projectId: string) {
       task as unknown as BoardTaskRow,
       declinesByTask.get(task.id) ?? 0,
       fieldsByTaskType.get(task.taskType) ?? [],
-      aliasMap,
     ),
   );
 }
@@ -1087,8 +1052,7 @@ export async function getBoardTask(taskId: string, expectedProjectId?: string) {
 
   if (expectedProjectId && task.projectId !== expectedProjectId) return null;
 
-  const { user } = await requireProjectMember(task.projectId as string);
-  const aliasMap = await boardAliasMap(user, task.projectId as string);
+  await requireProjectMember(task.projectId as string);
 
   const [specQuestions, declineCounts] = await Promise.all([
     prisma.defaultQuestion.findMany({
@@ -1099,12 +1063,11 @@ export async function getBoardTask(taskId: string, expectedProjectId?: string) {
   ]);
 
   const fields = fieldsByType(specQuestions).get(task.taskType) ?? [];
-  return mapBoardTask(task as unknown as BoardTaskRow, declineCounts, fields, aliasMap);
+  return mapBoardTask(task as unknown as BoardTaskRow, declineCounts, fields);
 }
 
 export async function pollTaskUpdates(projectId: string) {
-  const { user } = await requireProjectMember(projectId);
-  const aliasMap = await boardAliasMap(user, projectId);
+  await requireProjectMember(projectId);
 
   const tasks = await prisma.task.findMany({
     where: { projectId, archivedAt: null },
@@ -1121,8 +1084,6 @@ export async function pollTaskUpdates(projectId: string) {
       startedAt: true,
       sprintId: true,
       sprint: { select: { name: true } },
-      // No email: nothing on the board renders it, and it would walk past the
-      // alias for any client polling this.
       assignee: { select: { id: true, name: true, imageUrl: true } },
       createdBy: { select: { id: true, name: true, imageUrl: true } },
       stageLogs: {
@@ -1149,8 +1110,8 @@ export async function pollTaskUpdates(projectId: string) {
     stageEnteredAt: t.stageLogs[0]?.enteredAt?.toISOString() ?? null,
     sprintId: t.sprintId,
     sprintName: t.sprint?.name ?? null,
-    assignee: maskBoardPerson(t.assignee, aliasMap),
-    createdBy: maskBoardPerson(t.createdBy, aliasMap),
+    assignee: t.assignee,
+    createdBy: t.createdBy,
   }));
 }
 

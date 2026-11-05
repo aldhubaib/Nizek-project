@@ -56,7 +56,7 @@ export function verifyInviteToken(token: string): InviteTokenPayload | null {
   const parts = fromB64url(encoded).split("|");
   if (parts.length !== 5) return null;
   const [entityType, recordId, fieldId, kind, personId] = parts;
-  if (kind !== "user" && kind !== "contact") return null;
+  if (kind !== "user") return null;
   if (!entityType || !recordId || !fieldId || !personId) return null;
   return { entityType, recordId, fieldId, kind, personId };
 }

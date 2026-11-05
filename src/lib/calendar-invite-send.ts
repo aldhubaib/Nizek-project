@@ -47,29 +47,12 @@ async function resolvePeople(
   const userIds = value.attendees
     .filter((row) => row.kind === "user")
     .map((row) => row.id);
-  const contactIds = value.attendees
-    .filter((row) => row.kind === "contact")
-    .map((row) => row.id);
-  const [users, contacts] = await Promise.all([
-    userIds.length
-      ? prisma.user.findMany({
-          where: { id: { in: userIds } },
-          select: { id: true, name: true, email: true, imageUrl: true },
-        })
-      : Promise.resolve([]),
-    contactIds.length
-      ? prisma.contact.findMany({
-          where: { id: { in: contactIds } },
-          select: {
-            id: true,
-            title: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        })
-      : Promise.resolve([]),
-  ]);
+  const users = userIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true, email: true, imageUrl: true },
+      })
+    : [];
   const map = new Map<
     string,
     { name: string; email: string; imageUrl: string | null; userId: string | null }
@@ -80,19 +63,6 @@ async function resolvePeople(
       email: user.email,
       imageUrl: user.imageUrl,
       userId: user.id,
-    });
-  }
-  for (const contact of contacts) {
-    const name =
-      contact.title.trim() ||
-      `${contact.firstName} ${contact.lastName}`.trim() ||
-      contact.email ||
-      "Contact";
-    map.set(`contact:${contact.id}`, {
-      name,
-      email: contact.email?.trim() || "",
-      imageUrl: null,
-      userId: null,
     });
   }
   return map;

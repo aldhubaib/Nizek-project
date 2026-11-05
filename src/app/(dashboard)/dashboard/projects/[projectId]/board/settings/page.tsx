@@ -4,7 +4,7 @@ import { isProjectAccessError } from "@/lib/project-access";
 import { listWorkflows } from "@/actions/workflow";
 import { listFormLayouts } from "@/actions/custom-field";
 import { ensureProjectBoard } from "@/actions/board-record";
-import { DealSettingsHub } from "@/app/(dashboard)/dashboard/deals/settings/deal-settings-hub";
+import { ModuleSettingsHub } from "@/components/modules/module-settings-hub";
 
 export default async function ProjectBoardSettingsPage({
   params,
@@ -26,7 +26,7 @@ export default async function ProjectBoardSettingsPage({
   ]);
 
   return (
-    <DealSettingsHub
+    <ModuleSettingsHub
       flows={flows}
       layouts={layouts}
       entityType="board"

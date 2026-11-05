@@ -10,12 +10,11 @@ import {
 function field(id: string, sectionId: string | null = null): CustomFieldDTO {
   return {
     id,
-    entityType: "deal",
+    entityType: "board",
     key: id,
     label: id,
     type: "text",
     options: [],
-    relation: null,
     script: null,
     binding: null,
     required: false,
@@ -38,7 +37,7 @@ function catalog(): CustomFieldCatalogDTO {
     sections: [
       {
         id: "sec_a",
-        entityType: "deal",
+        entityType: "board",
         name: "Our Role",
         position: 0,
         columns: 1,
@@ -77,7 +76,7 @@ describe("layout field drag", () => {
         catalog().sections[0],
         {
           id: "sec_b",
-          entityType: "deal",
+          entityType: "board",
           name: "Event Details",
           position: 1,
           columns: 1,

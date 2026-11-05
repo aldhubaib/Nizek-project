@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { APP_SETTINGS_ID } from "@/lib/alias-mask";
+import { APP_SETTINGS_ID } from "@/lib/app-settings";
 import type { TaskType } from "@/generated/prisma/client";
 
 export async function getDefaultQuestions(taskType?: "FEATURE" | "ENHANCEMENT" | "BUG" | "REPORTED_BUG" | "DESIGN") {

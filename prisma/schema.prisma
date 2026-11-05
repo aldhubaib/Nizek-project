@@ -132,7 +132,6 @@ model User {
   systemRole    SystemRole @default(DEVELOPER)
   blocked       Boolean    @default(false)
   gender        Gender?
-  excludeFromAlias Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -167,14 +166,11 @@ model User {
   pushDevices       PushDevice[]              @relation("PushDeviceUser")
   notificationPreference NotificationPreference? @relation("UserNotificationPreference")
   threadNotifPrefs  ThreadNotificationPref[]  @relation("UserThreadNotificationPrefs")
-  auditPermissions  AuditPermission[]         @relation("UserAuditPermissions")
   equityPermission  EquityPermission?         @relation("UserEquityPermission")
   vaultPermissions  VaultPermission[]         @relation("UserVaultPermissions")
   vaultCredentials  VaultCredential[]         @relation("VaultCredentialAuthor")
   vaultFolders      VaultFolder[]             @relation("VaultFolderAuthor")
   vaultActivities   VaultActivity[]           @relation("VaultActivityUser")
-  taskAudits        TaskAudit[]               @relation("AuditCreator")
-  auditBlames       TaskAuditItem[]           @relation("AuditBlamedUser")
   equityActivities  EquityActivity[]          @relation("EquityActivityUser")
   trashedItems      TrashItem[]               @relation("TrashDeletedBy")
   noteCommentThreads NoteCommentThread[]      @relation("NoteCommentThreadAuthor")
@@ -190,7 +186,6 @@ model User {
   proofOfWorkBypassed  ProofOfWork[]              @relation("ProofOfWorkBypassApprover")
   proofBypassRequested ProofBypassPass[]          @relation("ProofBypassRequester")
   proofBypassApproved  ProofBypassPass[]          @relation("ProofBypassApprover")
-  aliasAssignments     AliasAssignment[]          @relation("UserAliasAssignments")
   overviewSnoozes      OverviewSnooze[]           @relation("UserOverviewSnoozes")
 
   boardMemberships     BoardMember[]              @relation("BoardMemberUser")
@@ -209,10 +204,6 @@ model User {
   agreementAcceptances ClientAgreementAcceptance[]  @relation("ClientAgreementAcceptor")
   agreementsAcceptedFor ClientAgreementAcceptance[] @relation("ClientAgreementAcceptedBy")
 
-  contactsPermission ContactsPermission? @relation("UserContactsPermission")
-  companiesCreated   Company[]           @relation("CompanyAuthor")
-  contactsCreated    Contact[]           @relation("ContactAuthor")
-  dealsCreated       Deal[]              @relation("DealAuthor")
   recordHistoryEdits RecordHistory[]     @relation("RecordHistoryActor")
 
   @@index([systemRole])
@@ -227,7 +218,6 @@ model Team {
 
   projects Project[]
   members  TeamMember[]
-  auditPermissions AuditPermission[] @relation("TeamAuditPermissions")
   pendingInvites   PendingTeamInvite[] @relation("PendingInviteTeam")
 }
 
@@ -294,7 +284,6 @@ model Project {
   vaultCredentials VaultCredential[]
   vaultFolders     VaultFolder[]
   vaultPermissions VaultPermission[]
-  aliasAssignments AliasAssignment[]
   overviewSnoozes  OverviewSnooze[]
   /// Back-relation only — the foreign key lives on Board, so the Project table
   /// itself gains no column and a project without a board is unchanged.
@@ -318,13 +307,6 @@ model ProjectMember {
   canInviteMembers Boolean @default(false)
   canInviteClients Boolean @default(false)
   canBypassProof   Boolean @default(false)
-  /**
-   * Show this person's real name to the client on this project alone, while
-   * they stay aliased everywhere else. `User.excludeFromAlias` is the whole-
-   * account version of the same idea; this is the per-project one, for someone
-   * the client already deals with by name here.
-   */
-  showRealName     Boolean @default(false)
 
   createdAt DateTime @default(now())
 
@@ -977,8 +959,8 @@ model Invitation {
 // Private tracker for equity deals with startups (one portfolio per project).
 // Access is granted per user — see src/lib/equity-access.ts.
 
-// Grants one user access to the whole Equity module. Unlike AuditPermission
-// there is no team dimension: equity is all-or-nothing. Admins are deliberately
+// Grants one user access to the whole Equity module. There is no team
+// dimension: equity is all-or-nothing. Admins are deliberately
 // not implicit — this is private financial data, so every holder is a row here
 // and can be pointed at.
 model EquityPermission {
@@ -1796,7 +1778,6 @@ model PendingTeamInvite {
   lastName   String?
   systemRole SystemRole
   gender     Gender?
-  excludeFromAlias Boolean @default(false)
   // Team the person joins automatically once they sign up.
   teamId     String?
   team       Team?      @relation("PendingInviteTeam", fields: [teamId], references: [id], onDelete: SetNull)
@@ -2136,11 +2117,6 @@ model ThreadNotificationPref {
   @@index([threadKey])
 }
 
-// ─── Task Audit module ──────────────────────────────────
-// A manager with an AuditPermission grant reviews flagged tasks daily and
-// assigns responsibility. Admins implicitly have every team.
-
-// Grants a user the right to audit one team's projects.
 /// One attention signal a manager has acknowledged on the overview, hidden until
 /// `until` passes.
 ///
@@ -2166,87 +2142,6 @@ model OverviewSnooze {
   @@unique([userId, projectId, signalType])
   @@index([userId, until])
   @@index([projectId])
-}
-
-model AuditPermission {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation("UserAuditPermissions", fields: [userId], references: [id], onDelete: Cascade)
-  teamId      String
-  team        Team     @relation("TeamAuditPermissions", fields: [teamId], references: [id], onDelete: Cascade)
-  grantedById String?
-  createdAt   DateTime @default(now())
-
-  @@unique([userId, teamId])
-  @@index([userId])
-}
-
-// One daily report per auditor. Items are snapshotted at creation so the
-// report stays stable even as the live board changes during the day.
-model TaskAudit {
-  id          String    @id @default(cuid())
-  // Calendar day of the report, stored at UTC midnight. Reports can only be
-  // created for "today"; reopening the same day resumes the draft.
-  auditDate   DateTime
-  createdById String
-  createdBy   User      @relation("AuditCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  // Teams the auditor selected for this report (subset of their grants).
-  teamIds     String[]
-  teamNames   String[]
-  status      String    @default("draft") // draft | submitted
-  submittedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  items TaskAuditItem[]
-
-  @@unique([createdById, auditDate])
-  @@index([auditDate])
-}
-
-// One flagged task (or overdue deadline note) inside a report, with the
-// manager's verdict. Snapshot columns freeze what the auditor saw.
-model TaskAuditItem {
-  id      String    @id @default(cuid())
-  auditId String
-  audit   TaskAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
-
-  // Exactly one of taskId / noteId is set.
-  taskId String?
-  noteId String?
-
-  flagType String // critical_late | rejected | deadline_overdue | warn_late | client_input
-  severity Int
-
-  // Snapshot of the flagged state at report-creation time.
-  title        String
-  taskNumber   Int?
-  projectId    String
-  projectName  String
-  teamName     String?
-  stage        String?
-  stageLabel   String?
-  stageHours   Int?
-  declineCount Int?
-  dueInDays    Int?
-  assigneeId   String?
-  assigneeName String?
-
-  // True when the same task/note already received a verdict in an earlier
-  // report — shown as "carried over, still unresolved" instead of asking for
-  // a fresh verdict.
-  carriedOver Boolean @default(false)
-
-  verdict      String    @default("pending") // pending | blamed | excused | skipped
-  blamedUserId String?
-  blamedUser   User?     @relation("AuditBlamedUser", fields: [blamedUserId], references: [id], onDelete: SetNull)
-  reasonNote   String?
-  decidedAt    DateTime?
-
-  @@index([auditId])
-  @@index([taskId])
-  @@index([noteId])
-  @@index([blamedUserId])
 }
 
 model BrandingAsset {
@@ -2355,16 +2250,6 @@ model ClientAgreementAcceptance {
 model AppSettings {
   id String @id @default("global")
 
-  /// Whether client-facing surfaces hide staff behind aliases at all.
-  ///
-  /// Defaults to on, and a missing row reads as on, because the unsafe
-  /// direction here is the one that shows a client a real employee name. Turning
-  /// it off stops masking and stops handing out aliases, but deliberately keeps
-  /// every assignment already made: an alias a client has already learned must
-  /// come back to the same person if this is switched on again, rather than
-  /// being handed to somebody else.
-  aliasesEnabled Boolean @default(true)
-
   /// Which issue types a client may raise from the New Issue action in their
   /// chat, picked per type in the admin Questions tab.
   ///
@@ -2381,60 +2266,6 @@ model AppSettings {
   updatedById String?
 
   @@map("AppSettings")
-}
-
-// ─── Aliases (client-facing identities) ──────────────────────────────────────
-//
-// Clients never see real employee names or photos — competitors in the region
-// poach staff off client-facing surfaces. Admins upload a pool of alias
-// name/photo pairs, and each person on each project claims one permanently.
-// Users flagged excludeFromAlias (clients, founders, anyone public) keep their
-// real identity.
-//
-// The whole mechanism can be switched off from the admin Aliases tab; see
-// AppSettings.aliasesEnabled above.
-
-model Alias {
-  id     String @id @default(cuid())
-  name   String
-  gender Gender
-  /// Free text (e.g. "Kuwaiti"). Curation aid only — claiming matches on gender,
-  /// so a thin nationality does not block anyone from getting an alias.
-  nationality String?
-  imageUrl    String?
-  r2Key       String?
-  contentType String?
-  /// Inactive aliases stay assigned but are never handed out again.
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  /// Random draw order. Postgres fills this, so aliases are handed out in an
-  /// unpredictable sequence no matter what order they were imported in —
-  /// otherwise an alphabetised import would be handed out alphabetically and a
-  /// client could spot the pattern across a project.
-  shuffleKey Float @default(dbgenerated("random()"))
-
-  assignment AliasAssignment?
-
-  @@index([gender, active, shuffleKey])
-  @@index([nationality])
-}
-
-model AliasAssignment {
-  id      String @id @default(cuid())
-  /// Unique: an alias is consumed once, so it can never appear on two projects.
-  aliasId String @unique
-  alias   Alias  @relation(fields: [aliasId], references: [id], onDelete: Cascade)
-
-  userId    String
-  user      User    @relation("UserAliasAssignments", fields: [userId], references: [id], onDelete: Cascade)
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-
-  @@unique([userId, projectId])
-  @@index([projectId])
-  @@index([userId])
 }
 
 // ─── Vault (project credentials) ─────────────────────────────────────────────
@@ -2591,7 +2422,7 @@ model AllowedEmail {
 // A Task carries a `Stage` enum whose declaration order is read as progress and
 // whose values are a projection of `Sprint.status`; a board column is a row
 // someone typed a name into and carries no such meaning. Serving both from one
-// table would have put every audit, dashboard and roadmap query that filters on
+// table would have put every dashboard and roadmap query that filters on
 // stage into the path of a card that has no stage to filter on.
 //
 // Ordering is a Float everywhere rather than an Int. A card dropped between two
@@ -2943,126 +2774,7 @@ model BoardCardAttachment {
   @@index([uploadedById])
 }
 
-// ─── Contacts ───────────────────────────────────────────
-
-/// Who can open the Contacts, Companies and Deals modules.
-///
-/// Modelled on EquityPermission rather than on project membership: the
-/// directory is one list for the whole company, not something a project owns,
-/// so there is nothing to scope a grant to. Admins are not implicit — an admin
-/// who needs it grants it to themselves from Admin → Contacts Access, which
-/// leaves a row saying who did it.
-model ContactsPermission {
-  id          String   @id @default(cuid())
-  userId      String   @unique
-  user        User     @relation("UserContactsPermission", fields: [userId], references: [id], onDelete: Cascade)
-  grantedById String?
-  createdAt   DateTime @default(now())
-}
-
-/// An organisation a contact belongs to.
-///
-/// It exists so two contacts at the same place point at one record instead of
-/// repeating a typed-in company name, which is what makes "everyone at X"
-/// answerable. Both names are unique so that stays true.
-model Company {
-  id String @id @default(cuid())
-
-  /// Sequential id in the companies directory. Unique across the workspace.
-  recordNumber Int @unique
-
-  /// Both names are required: the directory is read in English and in Arabic,
-  /// and a record carrying only one of them is unusable in half the places it
-  /// appears. Unique on each, so neither becomes a second spelling of a company
-  /// already in the list.
-  nameEn String @unique
-  nameAr String @default("")
-
-  /// A key into the fixed list in `src/lib/industries.ts`, never typed text —
-  /// the field exists to be queried, and three spellings of "fintech" would be
-  /// three industries.
-  industry String @default("")
-
-  /// ISO 3166-1 alpha-2 codes of the countries the company operates in.
-  ///
-  /// A Postgres array rather than a join table: the codes are a closed set that
-  /// nothing else hangs off, so a table would only add a join. Required in the
-  /// sense that the actions refuse an empty list — SQL cannot say "non-empty
-  /// array" without a check constraint.
-  countries String[]
-
-  website String?
-  notes   String?
-
-  createdById String
-  createdBy   User   @relation("CompanyAuthor", fields: [createdById], references: [id], onDelete: Cascade)
-
-  workflowId String
-  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Restrict)
-
-  statusId String?
-  status   WorkflowStatus? @relation(fields: [statusId], references: [id], onDelete: SetNull)
-
-  contacts Contact[]
-  deals    DealCompany[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([industry])
-  @@index([createdById])
-  @@index([workflowId, statusId])
-}
-
-/// A person in the directory. Title is the only locked field; everything else
-/// comes from the layout catalog, same engine as deals.
-model Contact {
-  id    String @id @default(cuid())
-  /// Sequential id in the contacts directory. Unique across the workspace.
-  recordNumber Int @unique
-  title String
-
-  firstName String @default("")
-  lastName  String @default("")
-
-  /// ISO 3166-1 alpha-2 country of the dialling code, e.g. "KW". Stored beside
-  /// the number rather than folded into it so the picker reopens on the country
-  /// that was chosen, instead of guessing it back from leading digits — which is
-  /// ambiguous across the +1 countries.
-  phoneCountry String @default("")
-  /// National digits only, no dialling code and no separators.
-  phoneNumber  String @default("")
-
-  email String?
-  /// Job title, free text — "CTO", "Head of Marketing".
-  role  String?
-
-  /// Cleared rather than cascaded when a company is deleted: losing the
-  /// organisation should not lose the person.
-  companyId String?
-  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
-
-  workflowId String
-  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Restrict)
-
-  statusId String?
-  status   WorkflowStatus? @relation(fields: [statusId], references: [id], onDelete: SetNull)
-
-  createdById String
-  createdBy   User   @relation("ContactAuthor", fields: [createdById], references: [id], onDelete: Cascade)
-
-  deals DealContact[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([companyId])
-  @@index([workflowId, statusId])
-  @@index([lastName, firstName])
-  @@index([createdById])
-}
-
-/// A process graph for one entity type ("deal" first; contacts later).
+/// A process graph for one project board.
 ///
 /// "Enterprise" and "Inbound" are not the same columns and not the same
 /// allowed moves, so they are two workflows, not two rows on one board.
@@ -3070,7 +2782,7 @@ model Workflow {
   id         String @id @default(cuid())
   entityType String
   name       String
-  /// Empty for module-global flows (deals). Project id for a project board.
+  /// The project whose board this flow belongs to.
   projectId  String @default("")
 
   position Float
@@ -3084,10 +2796,7 @@ model Workflow {
 
   statuses     WorkflowStatus[]
   transitions  WorkflowTransition[]
-  deals        Deal[]
   boardRecords BoardRecord[]
-  contacts     Contact[]
-  companies    Company[]
   roles        WorkflowRole[]
   members      WorkflowMember[]
   moduleRoles  ModuleRole[]
@@ -3144,7 +2853,7 @@ model WorkflowRole {
 }
 
 /// Which role a person holds on a task flow. Membership is drawn from the
-/// project (or contacts access on a global module) — there is no second roster.
+/// project — there is no second roster.
 model WorkflowMember {
   id         String @id @default(cuid())
   workflowId String
@@ -3172,7 +2881,7 @@ model ModuleRole {
   workflowId String
   workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   entityType String
-  /// Empty for deals / contacts / companies. Project id for a project board.
+  /// The project whose board this role belongs to.
   projectId  String   @default("")
 
   name      String
@@ -3237,10 +2946,7 @@ model WorkflowStatus {
   canvasX Float?
   canvasY Float?
 
-  deals          Deal[]
   boardRecords   BoardRecord[]
-  contacts       Contact[]
-  companies      Company[]
   actions        WorkflowAction[]
   transitionsOut WorkflowTransition[] @relation("WorkflowTransitionFrom")
   transitionsIn  WorkflowTransition[] @relation("WorkflowTransitionTo")
@@ -3324,7 +3030,7 @@ model FormLayout {
   id         String @id @default(cuid())
   entityType String
   name       String
-  /// Empty for module-global layouts (deals). Project id for a project board.
+  /// The project whose board this layout belongs to.
   projectId  String @default("")
   position   Float
 
@@ -3371,7 +3077,7 @@ model CustomField {
   type       String @default("text")
   /// JSON array of choices for select / multi_select, `{ model, multiple }` for relation, `{ multiple }` for user, or `{ parts, separator, cardTitle }` for formula.
   options    String?
-  /// Maps this row to a real column or join table (title, value, contacts, …).
+  /// Maps this row to a real column on the record (title).
   /// Null means the value lives in CustomFieldValue.
   binding    String?
   required   Boolean @default(false)
@@ -3422,7 +3128,7 @@ model CustomFieldValue {
   @@index([entityType, recordId])
 }
 
-/// Field-level change log for deals, contacts, companies, and board cards.
+/// Field-level change log for board cards.
 model RecordHistory {
   id         String   @id @default(cuid())
   entityType String
@@ -3443,65 +3149,8 @@ model RecordHistory {
   @@index([userId])
 }
 
-/// A deal in the pipeline. Title is the whole requirement; value and the
-/// people and companies it is about are optional because a deal is often
-/// named before anyone is attached to it.
-model Deal {
-  id    String @id @default(cuid())
-  /// Sequential id in the deals pipeline. Unique across the workspace.
-  recordNumber Int @unique
-  title String
-
-  /// Optional money amount, no currency — the team already knows which one
-  /// they invoice in. Decimal rather than Float so 1.10 stays 1.10.
-  value Decimal? @db.Decimal(14, 3)
-
-  workflowId String
-  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Restrict)
-
-  statusId String?
-  status   WorkflowStatus? @relation(fields: [statusId], references: [id], onDelete: SetNull)
-
-  createdById String
-  createdBy   User   @relation("DealAuthor", fields: [createdById], references: [id], onDelete: Cascade)
-
-  contacts  DealContact[]
-  companies DealCompany[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([workflowId, statusId])
-  @@index([statusId])
-  @@index([createdById])
-  @@index([title])
-}
-
-/// A contact attached to a deal. Cascade both ways: deleting the deal or the
-/// person should drop the link, not the other record.
-model DealContact {
-  dealId    String
-  deal      Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  contactId String
-  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
-
-  @@id([dealId, contactId])
-  @@index([contactId])
-}
-
-/// A company attached to a deal. Same cascade bargain as DealContact.
-model DealCompany {
-  dealId    String
-  deal      Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  companyId String
-  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@id([dealId, companyId])
-  @@index([companyId])
-}
-
-/// A card on a project board. Same workflow + layout engine as a deal;
-/// values for extra fields live in CustomFieldValue (entityType "board").
+/// A card on a project board. Values for extra fields live in
+/// CustomFieldValue (entityType "board").
 model BoardRecord {
   id    String @id @default(cuid())
   title String
@@ -3533,7 +3182,7 @@ model BoardRecord {
   @@unique([projectId, recordNumber])
 }
 
-/// Threaded comments on a workflow record (board card, deal, …). Separate
+/// Threaded comments on a workflow record (board card). Separate
 /// from sprint TaskComment so those stay on tasks.
 model RecordComment {
   id         String @id @default(cuid())
@@ -3580,8 +3229,7 @@ model RecordCommentMention {
   @@index([userId])
 }
 
-/// Next recordNumber to issue. scopeId is empty for deals/contacts/companies
-/// and the project id for the project Board.
+/// Next recordNumber to issue, per project Board (scopeId is the project id).
 model ModuleRecordCounter {
   entityType String
   scopeId    String @default("")

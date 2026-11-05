@@ -311,10 +311,10 @@ export function overlayPlanningTaskAssignees(
  * alone.
  *
  * A saved sprint document carries whoever was on each task at the time, baked
- * into the node's JSON. Clients are not allowed to see real staff names — that
- * is the whole point of the alias mechanism — and hiding the avatar in the UI
- * does nothing about the name sitting in the HTML the browser was sent. This
- * runs before the document leaves the server.
+ * into the node's JSON. Who is working on what is the team's business, not the
+ * client's, and hiding the avatar in the UI does nothing about the name sitting
+ * in the HTML the browser was sent. This runs before the document leaves the
+ * server.
  *
  * Deliberately not `overlayPlanningTaskAssignees(html, [])`: that treats an
  * absent task as departed and wipes its estimate too, and the client is

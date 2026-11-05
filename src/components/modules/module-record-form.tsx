@@ -12,36 +12,14 @@ import { PageBody } from "@/components/page-body";
 import { PageOverflowItems } from "@/components/page-overflow-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { formatRecordNumber } from "@/lib/modules/record-number";
-import { RelatedCompanies, RelatedContacts } from "@/components/deals/related-data";
-import { RelatedField } from "@/components/deals/related-records";
-import {
-  createDeal,
-  deleteDeal,
-  updateDeal,
-  type DealCompanyDTO,
-  type DealContactDTO,
-  type DealDTO,
-} from "@/actions/deal";
-import {
-  createDirectoryRecord,
-  deleteDirectoryRecord,
-  updateDirectoryRecord,
-  type DirectoryEntity,
-} from "@/actions/module-record";
+import type { RecordDTO } from "@/lib/modules/types";
 import {
   createBoardRecord,
   deleteBoardRecord,
   updateBoardRecord,
 } from "@/actions/board-record";
-import type { ContactOption } from "@/actions/contact";
-import type { CompanyOption } from "@/actions/company";
-import type { DealFlowDTO } from "@/actions/deal-flow";
+import type { FlowDTO } from "@/lib/modules/types";
 import type { CustomFieldCatalogDTO, CustomFieldDTO } from "@/actions/custom-field";
-import {
-  EMPTY_RELATED_CATALOG,
-  isRelatedDataLayoutField,
-  type RelatedRecordCatalog,
-} from "@/lib/fields/relations";
 import type { WorkflowUserOption } from "@/actions/workflow";
 import { FieldControl, fieldShowsOnForm } from "@/components/fields/field-control";
 import { joinFormulaParts, formulaSourceValues } from "@/lib/fields/formula-config";
@@ -66,27 +44,21 @@ export function ModuleRecordForm({
   entityType,
   projectId = "",
   record,
-  contacts = [],
-  companies = [],
   flows,
   defaultFlowId,
   defaultStageId,
   catalogs,
   users,
-  related = EMPTY_RELATED_CATALOG,
   permissions = FULL_WORKFLOW_PERMISSIONS,
 }: {
   entityType: WorkflowEntityType;
   projectId?: string;
-  record: DealDTO | null;
-  contacts?: ContactOption[];
-  companies?: CompanyOption[];
-  flows: DealFlowDTO[];
+  record: RecordDTO | null;
+  flows: FlowDTO[];
   defaultFlowId?: string | null;
   defaultStageId?: string | null;
   catalogs: Record<string, CustomFieldCatalogDTO>;
   users: WorkflowUserOption[];
-  related?: RelatedRecordCatalog;
   permissions?: WorkflowPermissions;
 }) {
   const router = useRouter();
@@ -99,13 +71,6 @@ export function ModuleRecordForm({
     record?.flowId ?? defaultFlowId ?? flows[0]?.id ?? "",
   );
   const [title, setTitle] = useState(record?.title ?? "");
-  const [value, setValue] = useState(record?.value ?? "");
-  const [linkedContacts, setLinkedContacts] = useState<DealContactDTO[]>(
-    record?.contacts ?? [],
-  );
-  const [linkedCompanies, setLinkedCompanies] = useState<DealCompanyDTO[]>(
-    record?.companies ?? [],
-  );
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(
     record?.fieldValues ?? {},
   );
@@ -135,46 +100,20 @@ export function ModuleRecordForm({
   const canSave = (record ? canEdit : canCreate) && allFields
     .filter((field) => fieldShowsOnForm(field, mode, fieldValues, allFields))
     .every((field) =>
-      requiredLayoutFieldIsFilled(field, {
-        title,
-        value,
-        contactIds: linkedContacts.map((c) => c.id),
-        companyIds: linkedCompanies.map((c) => c.id),
-        fieldValues,
-      }),
+      requiredLayoutFieldIsFilled(field, { title, fieldValues }),
     );
-  const relatedFields = allFields.filter(
-    (field) =>
-      isRelatedDataLayoutField(field) &&
-      fieldShowsOnForm(field, mode, fieldValues, allFields),
-  );
-  const showCompanies = relatedFields.some((field) => field.binding === "companies");
-  const showContacts = relatedFields.some((field) => field.binding === "contacts");
-  const extraRelations = relatedFields.filter((field) => !field.binding);
 
   async function persist() {
     const input = {
       title,
-      value,
       flowId: record ? record.flowId : flowId,
       stageId: record ? record.stageId : (defaultStageId ?? null),
-      contactIds: linkedContacts.map((c) => c.id),
-      companyIds: linkedCompanies.map((c) => c.id),
       fieldValues,
+      assigneeId: assigneeId || null,
     };
-    if (entityType === "deal") {
-      return record ? updateDeal(record.id, input) : createDeal(input);
-    }
-    if (entityType === "board") {
-      const boardInput = { ...input, assigneeId: assigneeId || null };
-      return record
-        ? updateBoardRecord(projectId, record.id, boardInput)
-        : createBoardRecord(projectId, boardInput);
-    }
-    const directory = entityType as DirectoryEntity;
     return record
-      ? updateDirectoryRecord(directory, record.id, input)
-      : createDirectoryRecord(directory, input);
+      ? updateBoardRecord(projectId, record.id, input)
+      : createBoardRecord(projectId, input);
   }
 
   function save() {
@@ -186,13 +125,7 @@ export function ModuleRecordForm({
           setError(result.error);
           return;
         }
-        router.push(
-          record?.flowId || flowId
-            ? entityType === "board"
-              ? boardHref
-              : `${boardHref}?flow=${record?.flowId ?? flowId}`
-            : boardHref,
-        );
+        router.push(boardHref);
       } catch (err) {
         setError((err as Error).message || "Failed to save");
       }
@@ -204,12 +137,7 @@ export function ModuleRecordForm({
     if (!confirm(`Delete “${record.title}”? This can't be undone.`)) return;
     setError(null);
     startDeleting(async () => {
-      const result =
-        entityType === "deal"
-          ? await deleteDeal(record.id)
-          : entityType === "board"
-            ? await deleteBoardRecord(projectId, record.id)
-            : await deleteDirectoryRecord(entityType as DirectoryEntity, record.id);
+      const result = await deleteBoardRecord(projectId, record.id);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -331,10 +259,8 @@ export function ModuleRecordForm({
         )}
 
         {catalog.sections.map((section) => {
-          const visible = section.fields.filter(
-            (field) =>
-              !isRelatedDataLayoutField(field) &&
-              fieldShowsOnForm(field, mode, fieldValues, allFields),
+          const visible = section.fields.filter((field) =>
+            fieldShowsOnForm(field, mode, fieldValues, allFields),
           );
           if (visible.length === 0) return null;
           return (
@@ -348,12 +274,9 @@ export function ModuleRecordForm({
                   key={field.id}
                   field={field}
                   title={title}
-                  value={value}
                   fieldValues={fieldValues}
                   allFields={allFields}
                   users={users}
-                  related={related}
-                  excludeDealId={record?.id}
                   projectId={projectId}
                   locked={
                     field.binding
@@ -366,7 +289,6 @@ export function ModuleRecordForm({
                       : !canModifyField(permissions, statusId, field.id)
                   }
                   onTitle={setTitle}
-                  onValue={setValue}
                   onField={(next) =>
                     setFieldValues((prev) => ({ ...prev, [field.id]: next }))
                   }
@@ -375,29 +297,22 @@ export function ModuleRecordForm({
             </FormSection>
           );
         })}
-        {catalog.unsectioned.filter(
-          (field) =>
-            !isRelatedDataLayoutField(field) &&
-            fieldShowsOnForm(field, mode, fieldValues, allFields),
+        {catalog.unsectioned.filter((field) =>
+          fieldShowsOnForm(field, mode, fieldValues, allFields),
         ).length > 0 && (
           <FormSection>
             {catalog.unsectioned
-              .filter(
-                (field) =>
-                  !isRelatedDataLayoutField(field) &&
-                  fieldShowsOnForm(field, mode, fieldValues, allFields),
+              .filter((field) =>
+                fieldShowsOnForm(field, mode, fieldValues, allFields),
               )
               .map((field) => (
                 <CatalogField
                   key={field.id}
                   field={field}
                   title={title}
-                  value={value}
                   fieldValues={fieldValues}
                   allFields={allFields}
                   users={users}
-                  related={related}
-                  excludeDealId={record?.id}
                   projectId={projectId}
                   locked={
                     field.binding
@@ -410,68 +325,12 @@ export function ModuleRecordForm({
                       : !canModifyField(permissions, statusId, field.id)
                   }
                   onTitle={setTitle}
-                  onValue={setValue}
                   onField={(next) =>
                     setFieldValues((prev) => ({ ...prev, [field.id]: next }))
                   }
                 />
               ))}
           </FormSection>
-        )}
-
-        {(showCompanies || showContacts || extraRelations.length > 0) && (
-          <div className="space-y-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Related data
-            </p>
-            {showCompanies && (
-              <RelatedCompanies
-                attached={linkedCompanies}
-                options={companies}
-                onAttach={(company) =>
-                  setLinkedCompanies((prev) => [
-                    ...prev,
-                    {
-                      id: company.id,
-                      nameEn: company.name,
-                      nameAr: "",
-                      website: company.website,
-                      industry: company.industry,
-                    },
-                  ])
-                }
-                onDetach={(id) =>
-                  setLinkedCompanies((prev) => prev.filter((c) => c.id !== id))
-                }
-              />
-            )}
-            {showContacts && (
-              <RelatedContacts
-                attached={linkedContacts}
-                options={contacts}
-                onAttach={(contact) =>
-                  setLinkedContacts((prev) => [...prev, contact])
-                }
-                onDetach={(id) =>
-                  setLinkedContacts((prev) => prev.filter((c) => c.id !== id))
-                }
-              />
-            )}
-            {extraRelations.map((field) => (
-              <RelatedField
-                key={field.id}
-                field={field}
-                value={fieldValues[field.id] ?? ""}
-                options={related[field.relation?.model ?? "company"]}
-                excludeId={
-                  field.relation?.model === "deal" ? record?.id : undefined
-                }
-                onChange={(next) =>
-                  setFieldValues((prev) => ({ ...prev, [field.id]: next }))
-                }
-              />
-            ))}
-          </div>
         )}
 
         {error && <p className="text-s text-destructive">{error}</p>}
@@ -502,30 +361,22 @@ export function ModuleRecordForm({
 function CatalogField({
   field,
   title,
-  value,
   fieldValues,
   allFields,
   users,
-  related = EMPTY_RELATED_CATALOG,
-  excludeDealId,
   projectId,
   locked,
   onTitle,
-  onValue,
   onField,
 }: {
   field: CustomFieldDTO;
   title: string;
-  value: string;
   fieldValues: Record<string, string>;
   allFields: CustomFieldDTO[];
   users: WorkflowUserOption[];
-  related?: RelatedRecordCatalog;
-  excludeDealId?: string;
   projectId?: string;
   locked?: boolean;
   onTitle: (next: string) => void;
-  onValue: (next: string) => void;
   onField: (next: string) => void;
 }) {
   const wide =
@@ -551,38 +402,19 @@ function CatalogField({
       </div>
     );
   }
-  if (field.binding === "value") {
-    return (
-      <div className={cn("space-y-1.5", wide)}>
-        <Label className="text-s">
-          {field.label}
-          {field.required && <span className="ms-0.5 text-destructive">*</span>}
-        </Label>
-        <Input
-          value={value}
-          disabled={locked}
-          onChange={(e) => onValue(e.target.value)}
-          placeholder="12,500"
-          inputMode="decimal"
-        />
-      </div>
-    );
-  }
   return (
     <div className={wide}>
       <FieldControl
         field={field}
         value={fieldValues[field.id] ?? ""}
         users={users}
-        related={related}
-        excludeDealId={excludeDealId}
         projectId={projectId}
         locked={locked}
         preview={
           field.type === "formula"
             ? joinFormulaParts(
                 field.formula?.parts ?? [],
-                formulaSourceValues(allFields, title, value, fieldValues),
+                formulaSourceValues(allFields, title, fieldValues),
                 field.formula?.separator,
               )
             : undefined

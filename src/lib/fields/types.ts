@@ -15,7 +15,6 @@ export const CUSTOM_FIELD_TYPES = [
   "country",
   "user",
   "file",
-  "relation",
   "formula",
   "article",
 ] as const;
@@ -40,7 +39,6 @@ export const CUSTOM_FIELD_TYPE_LABEL: Record<
   country: "Country",
   user: "User",
   file: "File",
-  relation: "Relation",
   formula: "Formula",
   article: "Article",
 };
@@ -50,14 +48,10 @@ export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
 export const FIELD_SHOW_ON = ["create", "edit", "both", "hidden"] as const;
 export type FieldShowOn = (typeof FIELD_SHOW_ON)[number];
 
-export const NATIVE_DEAL_FIELDS = [
-  { id: "title", label: "Title" },
-  { id: "value", label: "Value" },
-  { id: "contacts", label: "At least one contact" },
-  { id: "companies", label: "At least one company" },
-] as const;
+/** Columns that live on the record row itself rather than in CustomFieldValue. */
+export const NATIVE_FIELDS = [{ id: "title", label: "Title" }] as const;
 
-export type NativeDealFieldId = (typeof NATIVE_DEAL_FIELDS)[number]["id"];
+export type NativeFieldId = (typeof NATIVE_FIELDS)[number]["id"];
 
 export type FieldCatalogEntry = {
   id: string;
@@ -74,10 +68,6 @@ export function isCustomFieldType(value: string): value is CustomFieldType {
 
 export function isFieldShowOn(value: string): value is FieldShowOn {
   return (FIELD_SHOW_ON as readonly string[]).includes(value);
-}
-
-export function nativeDealFieldLabel(id: string): string {
-  return NATIVE_DEAL_FIELDS.find((f) => f.id === id)?.label ?? id;
 }
 
 export function parseFieldOptions(raw: string | null | undefined): string[] {

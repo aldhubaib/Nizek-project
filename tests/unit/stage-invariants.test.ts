@@ -10,7 +10,7 @@ import {
   isRegression,
   isWorkStage,
 } from "@/lib/task-stage";
-import { ACTIVE_STAGES } from "@/lib/audit-flags";
+import { ACTIVE_STAGES } from "@/lib/project-attention";
 import { STAGE_ORDER } from "@/types";
 import type { Stage } from "@/generated/prisma/client";
 
@@ -145,7 +145,6 @@ describe("stage writes are confined to the two files that own them", () => {
       "src/actions/team.ts",
       "src/actions/project.ts",
       "src/actions/task-highlight-comment.ts",
-      "src/actions/audit.ts",
       "src/actions/client-project.ts",
       "src/actions/task-detail-panel.ts",
     ];

@@ -72,13 +72,11 @@ export function stringifyFormulaConfig(config: FormulaFieldConfig): string {
 export function formulaSourceValues(
   fields: { id: string; binding?: string | null }[],
   title: string,
-  value: string,
   fieldValues: Record<string, string>,
 ): Record<string, string> {
   const values = { ...fieldValues };
   for (const field of fields) {
     if (field.binding === "title") values[field.id] = title;
-    if (field.binding === "value") values[field.id] = value;
   }
   return values;
 }

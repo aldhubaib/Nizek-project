@@ -6,8 +6,7 @@ import {
 } from "../../src/lib/fields/formula-config";
 import { formatFieldValue } from "../../src/lib/fields/display";
 import type { CustomFieldDTO } from "../../src/actions/custom-field";
-import type { DealDTO } from "../../src/actions/deal";
-import { EMPTY_RELATED_CATALOG } from "../../src/lib/fields/relations";
+import type { RecordDTO } from "../../src/lib/modules/types";
 
 describe("joinFormulaParts", () => {
   it("joins first and last name with a space", () => {
@@ -62,14 +61,10 @@ describe("formatFieldValue formula", () => {
     const record = {
       title: "Ignored",
       fieldValues: { first: "Jane", last: "Doe" },
-      contacts: [],
-      companies: [],
-      value: null,
-    } as unknown as DealDTO;
+    } as unknown as RecordDTO;
     expect(
       formatFieldValue(full, record, {
         users: [],
-        related: EMPTY_RELATED_CATALOG,
         fields: [first, last, full],
       }),
     ).toBe("Jane Doe");

@@ -2,9 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getAuditAccess } from "@/actions/audit";
+import { requireUser } from "@/lib/auth";
 import { activeProjectFilter } from "@/lib/project-filters";
-import { ACTIVE_STAGES, CLIENT_INPUT_WAIT_MS } from "@/lib/audit-flags";
 import {
   contractDaysLeft,
   contractWindowStatus,
@@ -13,6 +12,8 @@ import {
 } from "@/lib/contract-rules";
 import type { ContractType } from "@/generated/prisma/client";
 import {
+  ACTIVE_STAGES,
+  CLIENT_INPUT_WAIT_MS,
   DAY_MS,
   MAX_SNOOZE_DAYS,
   compareProjects,
@@ -181,7 +182,7 @@ export interface ManagerOverview {
   portfolio: PortfolioRow[];
   throughputWeeks: ThroughputWeek[];
   /**
-   * Dated contracts in audit scope. Not limited to live windows — expired and
+   * Dated contracts across the portfolio. Not limited to live windows — expired and
    * upcoming rows are included so the contracts panel can filter them.
    */
   contracts: OverviewContract[];
@@ -197,7 +198,7 @@ export interface ManagerOverview {
 
 const LIVE_SPRINT_STATUSES = ["ACTIVE", "PLANNED", "NEXT"] as const;
 
-/** Matches the audit module's caps, so one runaway project cannot starve the rest. */
+/** Row caps, so one runaway project cannot starve the rest. */
 const STUCK_TASK_LIMIT = 500;
 const CLIENT_ANSWER_LIMIT = 500;
 
@@ -337,29 +338,33 @@ function burndownSeries(
 }
 
 /**
- * Every project the current user may oversee, ranked worst-first.
+ * The overview is the admins' portfolio view: who may see it is decided by the
+ * system role alone.
+ */
+async function requireOverviewAccess(): Promise<{ userId: string }> {
+  const user = await requireUser();
+  if (user.systemRole !== "ADMIN") throw new Error("No overview permission");
+  return { userId: user.id };
+}
+
+/**
+ * Every project in the portfolio, ranked worst-first.
  *
  * Scope is deliberately narrow: `activeProjectFilter()` keeps this to projects
  * on a live, non-late-paying contract, so internal and finished work does not
- * pad the list. Admins skip the team filter entirely — they oversee everything,
+ * pad the list. There is no team filter — the overview covers everything,
  * including projects that were never assigned to a team.
  */
 export async function getManagerOverview(
   /** Narrow the whole page to one project. Ignored if it is out of scope. */
   projectId?: string | null,
 ): Promise<ManagerOverview> {
-  const access = await getAuditAccess();
-  if (!access.canAudit) throw new Error("No overview permission");
+  const access = await requireOverviewAccess();
 
   const now = new Date();
   const nowMs = now.getTime();
 
-  const scopeWhere = {
-    ...activeProjectFilter(),
-    ...(access.isAdmin
-      ? {}
-      : { teamId: { in: access.teams.map((t) => t.id) } }),
-  };
+  const scopeWhere = activeProjectFilter();
 
   // The filter narrows on top of the scope rather than replacing it, so a
   // guessed id in the URL cannot reach a project this user may not oversee.
@@ -367,14 +372,9 @@ export async function getManagerOverview(
     ? { AND: [scopeWhere, { id: projectId }] }
     : scopeWhere;
 
-  // Contracts are scoped to the audit teams, not to live windows — expired
-  // and upcoming rows would otherwise vanish behind `activeProjectFilter()`.
-  const contractProjectWhere = {
-    ...(access.isAdmin
-      ? {}
-      : { teamId: { in: access.teams.map((t) => t.id) } }),
-    ...(projectId ? { id: projectId } : {}),
-  };
+  // Contracts are not limited to live windows — expired and upcoming rows
+  // would otherwise vanish behind `activeProjectFilter()`.
+  const contractProjectWhere = projectId ? { id: projectId } : {};
 
   const [projectOptions, projects, contractRows] = await Promise.all([
     prisma.project.findMany({
@@ -523,8 +523,8 @@ export async function getManagerOverview(
       _max: { completedAt: true },
     }),
 
-    // The open stage visit per working task, for the chronic flag. Same rule as
-    // the audit module: only stages where being slow is somebody's fault.
+    // The open stage visit per working task, for the chronic flag. Only stages
+    // where being slow is somebody's fault count (see ACTIVE_STAGES).
     prisma.task.findMany({
       where: {
         projectId: { in: projectIds },
@@ -1005,8 +1005,7 @@ export async function snoozeOverviewSignal(
   signalType: string,
   days: number,
 ): Promise<void> {
-  const access = await getAuditAccess();
-  if (!access.canAudit) throw new Error("No overview permission");
+  const access = await requireOverviewAccess();
 
   if (!Number.isFinite(days) || days <= 0 || days > MAX_SNOOZE_DAYS) {
     throw new Error("Pick a snooze length between 1 and 30 days");
@@ -1031,8 +1030,7 @@ export async function snoozeOverviewSignal(
 
 /** Bring every parked signal back. */
 export async function clearOverviewSnoozes(): Promise<void> {
-  const access = await getAuditAccess();
-  if (!access.canAudit) throw new Error("No overview permission");
+  const access = await requireOverviewAccess();
 
   await prisma.overviewSnooze.deleteMany({ where: { userId: access.userId } });
   revalidatePath("/dashboard");

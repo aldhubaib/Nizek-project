@@ -18,7 +18,6 @@ import {
 } from "@/lib/workflow/actions";
 import {
   WORKFLOW_STATUS_KINDS,
-  statusKindsForEntity,
   type WorkflowHook,
   type WorkflowStatusKind,
 } from "@/lib/workflow/types";
@@ -32,13 +31,11 @@ import type {
 } from "@/actions/workflow";
 import { ALL_FIELDS, type ModifyByRoleMap } from "@/lib/workflow-permissions";
 
-function kindOptions(
-  entityType: string,
-  current: WorkflowStatusKind,
-): readonly WorkflowStatusKind[] {
-  const kinds = statusKindsForEntity(entityType);
-  if ((kinds as readonly string[]).includes(current)) return kinds;
-  return [...kinds, current];
+function kindOptions(current: WorkflowStatusKind): readonly WorkflowStatusKind[] {
+  if ((WORKFLOW_STATUS_KINDS as readonly string[]).includes(current)) {
+    return WORKFLOW_STATUS_KINDS;
+  }
+  return [...WORKFLOW_STATUS_KINDS, current];
 }
 
 export function ActionInspector({
@@ -47,7 +44,6 @@ export function ActionInspector({
   fields,
   users,
   roles,
-  entityType = "deal",
   onUpdateStatus,
   onUpdateTransition,
   onDeleteStatus,
@@ -61,7 +57,6 @@ export function ActionInspector({
   fields: CustomFieldDTO[];
   users: WorkflowUserOption[];
   roles: ModuleRoleOption[];
-  entityType?: string;
   onUpdateStatus: (
     id: string,
     input: {
@@ -89,7 +84,7 @@ export function ActionInspector({
   if (!status) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-s text-muted-foreground">
-        Click a status to set what happens when a deal moves there.
+        Click a status to set what happens when a card moves there.
       </div>
     );
   }
@@ -130,16 +125,14 @@ export function ActionInspector({
           }}
           className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-s"
         >
-          {kindOptions(entityType, status.kind).map((kind) => (
+          {kindOptions(status.kind).map((kind) => (
             <option key={kind} value={kind}>
               {kind}
             </option>
           ))}
         </select>
         <p className="text-xs text-muted-foreground">
-          {entityType === "board"
-            ? "Used later in task reports. Open is still in play; closed is finished."
-            : "Used later in pipeline reports. Open is still in play; won and lost are outcomes."}
+          Used later in task reports. Open is still in play; closed is finished.
         </p>
       </div>
       <WhoCanEdit
@@ -453,13 +446,6 @@ function ActionRow({
             </p>
           )}
         </div>
-      )}
-      {(action.type === "associate_contacts" ||
-        action.type === "associate_companies") && (
-        <p className="text-xs text-muted-foreground">
-          The person making the move will be asked to attach{" "}
-          {action.type === "associate_contacts" ? "contacts" : "companies"}.
-        </p>
       )}
     </div>
   );

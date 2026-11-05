@@ -188,7 +188,6 @@ Run on two accounts (A, B) and, where it says so, an admin. iPhone = installed P
 | A DMs B; B does not open it for 5 minutes. | B gets **one** email "1 new message in A" from `RESEND_FROM` with the line and an Open link. Worker logs `[worker] digest email sent`. |
 | Same, but B opens the thread within 5 minutes (any device). | No email. |
 | A sends 10 messages in 5 minutes. | Still one email, up to 5 lines + "…and 5 more". |
-| B is a client, DM partner has an alias. | The email shows the alias name, never the real name. |
 
 ## Health after each weekly deploy
 

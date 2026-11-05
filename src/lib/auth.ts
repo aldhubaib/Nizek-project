@@ -90,8 +90,8 @@ export async function isImpersonating(): Promise<boolean> {
  *
  * Server actions are callable by any signed-in user who knows the action id, so
  * "no client screen calls this" is not the same as "no client can call it".
- * Actions that hand back real names, emails or photos of the team use this, or
- * a client could read the roster the aliases exist to hide. `requireUser` has
+ * Actions that hand back the team's roster or internal discussion use this, so
+ * a client cannot read them by calling the action directly. `requireUser` has
  * already resolved the effective role, so a client seat counts as a client here.
  */
 export async function requireStaffUser() {

@@ -14,12 +14,9 @@ import {
   LogIn,
   Volume2,
   BellRing,
-  ClipboardCheck,
   PieChart,
   Coins,
   KeyRound,
-  Contact,
-  UserRoundSearch,
   ScrollText,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -32,17 +29,13 @@ import { AppLogoClient } from "./app-logo-client";
 import { LoginSettingsClient } from "./login-settings-client";
 import { NotificationSoundClient } from "./notification-sound-client";
 import { NotificationStatusClient } from "./notification-status-client";
-import { AliasManager } from "@/components/settings/alias-manager";
 import {
   ClientAgreementManager,
   type AgreementFullscreen,
 } from "@/components/settings/client-agreement-manager";
-import { AuditAccessManager } from "@/components/settings/audit-access-manager";
 import { EquityAccessManager } from "@/components/settings/equity-access-manager";
-import { ContactsAccessManager } from "@/components/settings/contacts-access-manager";
 import { CurrencyRateManager } from "@/components/settings/currency-rate-manager";
 import { VaultAccessManager } from "@/components/settings/vault-access-manager";
-import type { AliasDTO, AliasStatsDTO, AliasSwitchDTO, AliasUsageDTO } from "@/actions/alias";
 import type { AgreementAdminView } from "@/actions/client-agreement";
 import type { BrandingAssetDTO } from "@/actions/branding";
 import type { LoginPhotoDTO } from "@/actions/login-photos";
@@ -59,7 +52,6 @@ type TabId =
   | "members"
   | "roles"
   | "contracts"
-  | "aliases"
   | "client-agreement"
   | "questions"
   | "app-logo"
@@ -67,11 +59,9 @@ type TabId =
   | "notification-sound"
   | "push-health"
   | "notification-status"
-  | "audit-access"
   | "equity-access"
   | "exchange-rates"
-  | "vault-access"
-  | "contacts-access";
+  | "vault-access";
 
 type SettingsItem = {
   id: TabId;
@@ -101,12 +91,6 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         label: "Roles",
         icon: Shield,
         desc: "Define roles and permissions across the system.",
-      },
-      {
-        id: "aliases",
-        label: "Aliases",
-        icon: UserRoundSearch,
-        desc: "Alias names and photos shown to clients instead of real staff identities.",
       },
       {
         id: "client-agreement",
@@ -166,12 +150,6 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         desc: "Who has notifications on or off (website and app), whether their last notification was opened, and push delivery health.",
       },
       {
-        id: "audit-access",
-        label: "Audit Access",
-        icon: ClipboardCheck,
-        desc: "Choose who can audit which teams' flagged tasks.",
-      },
-      {
         id: "equity-access",
         label: "Equity Access",
         icon: PieChart,
@@ -189,12 +167,6 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         icon: KeyRound,
         desc: "Choose who can open each project's password vault.",
       },
-      {
-        id: "contacts-access",
-        label: "Contacts Access",
-        icon: Contact,
-        desc: "Choose who can open Contacts, Companies and Deals.",
-      },
     ],
   },
 ];
@@ -211,10 +183,6 @@ interface Props {
   prefixes: any;
   questions: any;
   clientIssueTypes: TaskType[];
-  aliases: AliasDTO[];
-  aliasUsage: AliasUsageDTO[];
-  aliasStats: AliasStatsDTO;
-  aliasSwitch: AliasSwitchDTO;
   agreement: AgreementAdminView;
   branding: Partial<Record<BrandingSlotId, BrandingAssetDTO>>;
   loginPhotos: LoginPhotoDTO[];
@@ -233,10 +201,6 @@ export function AdminPageClient({
   prefixes,
   questions,
   clientIssueTypes,
-  aliases,
-  aliasUsage,
-  aliasStats,
-  aliasSwitch,
   agreement,
   branding,
   loginPhotos,
@@ -284,7 +248,7 @@ export function AdminPageClient({
       {/* Tabs that park a button in the top-right chrome need the extra room. */}
       <PageHeader
         hasMenu={
-          active.id === "members" || active.id === "aliases" || !!agreementDoc
+          active.id === "members" || !!agreementDoc
         }
       >
         {/*
@@ -349,14 +313,6 @@ export function AdminPageClient({
         {active.id === "contracts" && (
           <ContractPrefixManager prefixes={prefixes} />
         )}
-        {active.id === "aliases" && (
-          <AliasManager
-            aliases={aliases}
-            usage={aliasUsage}
-            stats={aliasStats}
-            aliasSwitch={aliasSwitch}
-          />
-        )}
         {active.id === "client-agreement" && (
           <ClientAgreementManager
             view={agreement}
@@ -381,11 +337,9 @@ export function AdminPageClient({
             initialView={rawTab === "push-health" ? "health" : "members"}
           />
         )}
-        {active.id === "audit-access" && <AuditAccessManager />}
         {active.id === "equity-access" && <EquityAccessManager />}
         {active.id === "exchange-rates" && <CurrencyRateManager />}
         {active.id === "vault-access" && <VaultAccessManager />}
-        {active.id === "contacts-access" && <ContactsAccessManager />}
       </div>
     </div>
   );

@@ -32,17 +32,15 @@ export const ThreadRow = memo(function ThreadRow({
   active,
   isOnline,
   currentMemberId,
-  isClient = false,
 }: {
   thread: InboxThread;
   active: boolean;
   isOnline: boolean;
   currentMemberId: string;
-  isClient?: boolean;
 }) {
   const prefetch = () => {
     if (active) return;
-    prefetchInboxThread(thread, currentMemberId, isClient);
+    prefetchInboxThread(thread, currentMemberId);
   };
   return (
     <Link
@@ -189,7 +187,6 @@ export function ThreadGroup({
   pathname,
   online,
   currentMemberId,
-  isClient = false,
 }: {
   label: string;
   icon: LucideIcon;
@@ -199,7 +196,6 @@ export function ThreadGroup({
   pathname: string;
   online: Set<string>;
   currentMemberId: string;
-  isClient?: boolean;
 }) {
   if (threads.length === 0) return null;
   const unread = unreadTotal(threads);
@@ -246,7 +242,6 @@ export function ThreadGroup({
                   thread.peerMemberIds.some((id) => online.has(id))
                 }
                 currentMemberId={currentMemberId}
-                isClient={isClient}
               />
             </li>
           ))}

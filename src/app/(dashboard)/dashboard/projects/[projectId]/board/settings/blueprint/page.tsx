@@ -5,7 +5,7 @@ import { getWorkflowSettings, listWorkflowUsers } from "@/actions/workflow";
 import { listModuleRoles } from "@/actions/workflow-role";
 import { getAllLayoutCatalogs } from "@/actions/custom-field";
 import { ensureProjectBoard } from "@/actions/board-record";
-import { DealSettingsClient } from "@/app/(dashboard)/dashboard/deals/settings/deal-settings-client";
+import { ModuleBlueprintClient } from "@/components/modules/module-blueprint-client";
 
 type Props = {
   params: Promise<{ projectId: string }>;
@@ -34,7 +34,7 @@ export default async function ProjectBoardBlueprintPage({
   ]);
 
   return (
-    <DealSettingsClient
+    <ModuleBlueprintClient
       initial={settings}
       catalogs={catalogs}
       users={users}

@@ -6,13 +6,9 @@ import {
   LayoutDashboard,
   Inbox,
   FolderKanban,
-  ClipboardCheck,
   Settings,
   PieChart,
   KeyRound,
-  Contact,
-  Building2,
-  Handshake,
   Menu,
   Trash,
 } from "lucide-react";
@@ -21,27 +17,21 @@ import { useUnreadStore } from "@/store/unread";
 import { formatUnreadBadge } from "@/lib/chat-unread";
 
 const NAV_ITEMS = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: false },
-  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: false },
-  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: false },
-  { name: "Vault", href: "/dashboard/vault", icon: KeyRound, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: true, trashOnly: false, contactsOnly: false },
-  { name: "Equity", href: "/dashboard/equity", icon: PieChart, adminOnly: false, auditOnly: false, equityOnly: true, vaultOnly: false, trashOnly: false, contactsOnly: false },
-  { name: "Contacts", href: "/dashboard/contacts", icon: Contact, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: true },
-  { name: "Companies", href: "/dashboard/companies", icon: Building2, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: true },
-  { name: "Deals", href: "/dashboard/deals", icon: Handshake, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: true },
-  { name: "Audit", href: "/dashboard/audit", icon: ClipboardCheck, adminOnly: false, auditOnly: true, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: false },
-  { name: "Trash", href: "/dashboard/trash", icon: Trash, adminOnly: false, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: true, contactsOnly: false },
-  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, auditOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false, contactsOnly: false },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, adminOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
+  { name: "Inbox", href: "/dashboard/messages", icon: Inbox, adminOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
+  { name: "Projects", href: "/dashboard/projects", icon: FolderKanban, adminOnly: false, equityOnly: false, vaultOnly: false, trashOnly: false },
+  { name: "Vault", href: "/dashboard/vault", icon: KeyRound, adminOnly: false, equityOnly: false, vaultOnly: true, trashOnly: false },
+  { name: "Equity", href: "/dashboard/equity", icon: PieChart, adminOnly: false, equityOnly: true, vaultOnly: false, trashOnly: false },
+  { name: "Trash", href: "/dashboard/trash", icon: Trash, adminOnly: false, equityOnly: false, vaultOnly: false, trashOnly: true },
+  { name: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true, equityOnly: false, vaultOnly: false, trashOnly: false },
 ];
 
 const MAX_TABS = 5;
 
 interface BottomNavProps {
   isAdmin?: boolean;
-  canAudit?: boolean;
   canEquity?: boolean;
   canVault?: boolean;
-  canContacts?: boolean;
   isClient?: boolean;
   hidden?: boolean;
   onOpenMenu: () => void;
@@ -53,10 +43,8 @@ interface BottomNavProps {
  */
 export function BottomNav({
   isAdmin = false,
-  canAudit = false,
   canEquity = false,
   canVault = false,
-  canContacts = false,
   isClient = false,
   hidden = false,
   onOpenMenu,
@@ -69,11 +57,9 @@ export function BottomNav({
     if (isClient) return item.href === "/dashboard/messages";
     return (
       (!item.adminOnly || isAdmin) &&
-      (!item.auditOnly || canAudit) &&
       (!item.equityOnly || canEquity) &&
       (!item.vaultOnly || canVault) &&
-      (!item.trashOnly || canSeeTrash) &&
-      (!item.contactsOnly || canContacts)
+      (!item.trashOnly || canSeeTrash)
     );
   });
   let visible = allowed.slice(0, MAX_TABS - 1);

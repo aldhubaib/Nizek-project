@@ -11,33 +11,18 @@ import {
 import type { WorkflowEntityType } from "@/lib/workflow/types";
 
 async function emailsByAttendee(
-  attendees: { kind: "user" | "contact"; id: string }[],
+  attendees: { kind: "user"; id: string }[],
 ): Promise<Map<string, string>> {
   const userIds = attendees.filter((row) => row.kind === "user").map((row) => row.id);
-  const contactIds = attendees
-    .filter((row) => row.kind === "contact")
-    .map((row) => row.id);
-  const [users, contacts] = await Promise.all([
-    userIds.length
-      ? prisma.user.findMany({
-          where: { id: { in: userIds } },
-          select: { id: true, email: true },
-        })
-      : Promise.resolve([]),
-    contactIds.length
-      ? prisma.contact.findMany({
-          where: { id: { in: contactIds } },
-          select: { id: true, email: true },
-        })
-      : Promise.resolve([]),
-  ]);
+  const users = userIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, email: true },
+      })
+    : [];
   const map = new Map<string, string>();
   for (const user of users) {
     if (user.email.trim()) map.set(`user:${user.id}`, user.email.trim().toLowerCase());
-  }
-  for (const contact of contacts) {
-    const email = contact.email?.trim().toLowerCase() ?? "";
-    if (email) map.set(`contact:${contact.id}`, email);
   }
   return map;
 }

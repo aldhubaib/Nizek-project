@@ -25,7 +25,6 @@ import {
   taskChannel,
   projectChannel,
   conversationChannel,
-  conversationClientChannel,
   globalPresenceChannel,
 } from "@/lib/channels";
 
@@ -34,7 +33,6 @@ export {
   taskChannel,
   projectChannel,
   conversationChannel,
-  conversationClientChannel,
   globalPresenceChannel,
 };
 

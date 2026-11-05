@@ -3,7 +3,7 @@ import { requireProjectMember } from "@/lib/auth";
 import { isProjectAccessError } from "@/lib/project-access";
 import { getCustomFieldCatalog, listFormLayouts } from "@/actions/custom-field";
 import { ensureProjectBoard } from "@/actions/board-record";
-import { DealLayoutEditorClient } from "@/app/(dashboard)/dashboard/deals/settings/layout/[layoutId]/deal-layout-editor-client";
+import { ModuleLayoutEditorClient } from "@/components/modules/module-layout-editor-client";
 
 export default async function ProjectBoardLayoutEditorPage({
   params,
@@ -25,7 +25,7 @@ export default async function ProjectBoardLayoutEditorPage({
 
   const catalog = await getCustomFieldCatalog("board", layoutId, projectId);
   return (
-    <DealLayoutEditorClient
+    <ModuleLayoutEditorClient
       layout={layout}
       catalog={catalog}
       canDelete={layouts.length > 1}

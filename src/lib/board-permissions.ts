@@ -9,7 +9,7 @@
  * kind, so moving is one flag rather than a graph.
  *
  * Kept free of Prisma and React so it can be unit-tested directly, the same way
- * `src/lib/audit-flags.ts` is.
+ * `src/lib/project-attention.ts` is.
  */
 
 export interface BoardPermissions {

@@ -2,8 +2,6 @@ import "server-only";
 import { Resend } from "resend";
 import { prisma } from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
-import { getAliasMap, maskName, NO_MASK } from "@/lib/alias";
-import { clientViewerIds } from "@/lib/client-role";
 import { CLIENT_CONVERSATION_KIND } from "@/lib/client-chat";
 import {
   defaultThreadLevel,
@@ -42,10 +40,7 @@ async function levelFor(userId: string, threadKey: string): Promise<ThreadNotifi
   return row && isThreadNotificationLevel(row.level) ? row.level : defaultThreadLevel(threadKey);
 }
 
-/**
- * Human name of the thread for the subject line, masked for client
- * recipients so a DM partner's real name never reaches a client inbox.
- */
+/** Human name of the thread for the subject line. */
 async function threadNameFor(threadKey: string, recipientId: string): Promise<string> {
   const [kind, id] = [threadKey.slice(0, threadKey.indexOf("-")), threadKey.slice(threadKey.indexOf("-") + 1)];
   if (kind === "project") {
@@ -77,12 +72,7 @@ async function threadNameFor(threadKey: string, recipientId: string): Promise<st
   if (convo.isGroup) return convo.title?.trim() || "a group";
   const peer = convo.participants.find((p) => p.memberId !== recipientId);
   if (!peer) return "a conversation";
-  const realName = peer.member.name?.trim() || peer.member.email;
-  if (!convo.projectId) return realName;
-  const aliasMap = await getAliasMap(convo.projectId);
-  if (aliasMap === NO_MASK || aliasMap.size === 0) return realName;
-  const clients = await clientViewerIds([recipientId], convo.projectId);
-  return clients.has(recipientId) ? maskName(peer.memberId, realName, aliasMap) : realName;
+  return peer.member.name?.trim() || peer.member.email;
 }
 
 export type DigestOutcome =

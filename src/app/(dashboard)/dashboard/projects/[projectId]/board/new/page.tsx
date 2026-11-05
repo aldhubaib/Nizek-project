@@ -1,15 +1,12 @@
 import { notFound } from "next/navigation";
 import { requireProjectMember } from "@/lib/auth";
-import { canAccessContacts } from "@/lib/contacts-access";
 import { isProjectAccessError } from "@/lib/project-access";
 import { listWorkflows, listWorkflowUsers } from "@/actions/workflow";
 import { getAllLayoutCatalogs } from "@/actions/custom-field";
 import { ensureProjectBoard } from "@/actions/board-record";
 import { getFlowPermissions } from "@/lib/workflow-access";
-import { listRelatedRecordOptions } from "@/actions/related-records";
 import { ModuleRecordForm } from "@/components/modules/module-record-form";
-import { EMPTY_RELATED_CATALOG } from "@/lib/fields/relations";
-import type { DealFlowDTO } from "@/actions/deal-flow";
+import type { FlowDTO } from "@/lib/modules/types";
 
 interface Props {
   params: Promise<{ projectId: string }>;
@@ -21,34 +18,27 @@ export default async function NewBoardRecordPage({
   searchParams,
 }: Props) {
   const { projectId } = await params;
-  let userId: string;
   try {
-    const { user } = await requireProjectMember(projectId);
-    userId = user.id;
+    await requireProjectMember(projectId);
   } catch (err) {
     if (isProjectAccessError(err)) notFound();
     throw err;
   }
 
   await ensureProjectBoard(projectId);
-  const [{ stage, flow }, workflows, catalogs, users, canContacts] =
-    await Promise.all([
-      searchParams,
-      listWorkflows("board", projectId),
-      getAllLayoutCatalogs("board", projectId),
-      listWorkflowUsers(projectId),
-      canAccessContacts(userId),
-    ]);
-  const related = canContacts
-    ? await listRelatedRecordOptions()
-    : EMPTY_RELATED_CATALOG;
+  const [{ stage, flow }, workflows, catalogs, users] = await Promise.all([
+    searchParams,
+    listWorkflows("board", projectId),
+    getAllLayoutCatalogs("board", projectId),
+    listWorkflowUsers(projectId),
+  ]);
 
-  const flows: DealFlowDTO[] = workflows.map((row) => ({
+  const flows: FlowDTO[] = workflows.map((row) => ({
     id: row.id,
     name: row.name,
     position: row.position,
     stageCount: row.statusCount,
-    dealCount: row.recordCount,
+    recordCount: row.recordCount,
     layoutId: row.layoutId,
     blueprintEnabled: row.blueprintEnabled,
   }));
@@ -65,7 +55,6 @@ export default async function NewBoardRecordPage({
       defaultStageId={stage ?? null}
       catalogs={catalogs}
       users={users}
-      related={related}
       permissions={permissions}
     />
   );

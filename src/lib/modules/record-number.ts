@@ -5,8 +5,7 @@ type Db = PrismaClient | Prisma.TransactionClient;
 /**
  * Issue the next sequential id for a module.
  *
- * Deals, contacts, and companies share one workspace sequence each
- * (`scopeId` empty). The project Board sequences per project.
+ * The project Board sequences per project (`scopeId` is the project id).
  */
 export async function takeNextRecordNumber(
   db: Db,
