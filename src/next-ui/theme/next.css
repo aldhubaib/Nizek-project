@@ -1,0 +1,106 @@
+/* New frontend theme: Social AI's admin tokens (see that repo's docs/ui-system.md).
+   Plain CSS, loaded by src/app/(next)/layout.tsx as its own stylesheet; it must stay free of
+   Tailwind at-rules (@theme, @apply, @import) so it passes through PostCSS untouched. The
+   utility names it needs (bg-canvas, text-warning, ...) are declared in globals.css's
+   `@theme inline`. Every rule here is scoped to `.nx`, so the live panel is untouched. */
+
+/* Tokens only. `NxRoot` also puts this class on <html> while the new UI is on screen, so
+   menus, tooltips and sheets that portal to <body> get the same colors. `:root.nx` outranks
+   globals.css's `:root` block on <html> whatever order the stylesheets load in. Nothing here
+   may change <html>'s font-size: rem units depend on it. */
+:root.nx,
+.nx {
+  --radius: 0.5rem;
+
+  --background: oklch(0.13 0 0);
+  --foreground: oklch(0.95 0 0);
+  --card: oklch(0.17 0 0);
+  --card-foreground: oklch(0.95 0 0);
+  --popover: oklch(0.2 0 0);
+  --popover-foreground: oklch(0.95 0 0);
+
+  --primary: oklch(0.92 0 0);
+  --primary-foreground: oklch(0.15 0 0);
+  --secondary: oklch(0.24 0 0);
+  --secondary-foreground: oklch(0.95 0 0);
+  --accent: oklch(0.24 0 0);
+  --accent-foreground: oklch(0.95 0 0);
+  --muted: oklch(0.22 0 0);
+  --muted-foreground: oklch(0.68 0 0);
+  --destructive: oklch(0.62 0.2 25);
+
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.6 0 0);
+
+  --sidebar: oklch(0.11 0 0);
+  --sidebar-foreground: oklch(0.9 0 0);
+  --sidebar-primary: oklch(0.92 0 0);
+  --sidebar-primary-foreground: oklch(0.15 0 0);
+  --sidebar-accent: oklch(0.18 0 0);
+  --sidebar-accent-foreground: oklch(0.95 0 0);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.6 0 0);
+
+  --chart-1: oklch(0.7 0.15 250);
+  --chart-2: oklch(0.72 0.14 160);
+  --chart-3: oklch(0.78 0.16 80);
+  --chart-4: oklch(0.68 0.18 300);
+  --chart-5: oklch(0.7 0.18 20);
+
+  --success: oklch(0.72 0.14 160);
+  --success-foreground: oklch(0.15 0 0);
+  --warning: oklch(0.8 0.16 80);
+  --warning-foreground: oklch(0.2 0 0);
+  --info: oklch(0.7 0.15 250);
+  --info-foreground: oklch(0.15 0 0);
+
+  --canvas: oklch(0.1 0 0);
+}
+
+/* The app surface: the canvas, Inter, 14 px body. On the wrapper <div>, never on <html>. */
+.nx-app {
+  background: var(--canvas);
+  color: var(--foreground);
+  font-family: var(--font-nx-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Portaled content lives in <body>: give it the same type while the new UI is on screen. */
+html.nx body {
+  font-family: var(--font-nx-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Three cards on the canvas: the floating sidebar takes the same surface as the pane so
+   they read as one family. */
+.nx [data-slot="sidebar-wrapper"] {
+  --sidebar: var(--background);
+}
+
+/* The pane header names the page, so a page header with nothing below its (sr-only) title
+   takes no space and the content starts at the top of the pane. */
+.nx [data-slot="page-header"]:not(:has(> :nth-child(2))) {
+  padding-bottom: 0;
+}
+
+/* Blocks size themselves from their pane, never the window. */
+.nx [data-pane-body] {
+  container-type: inline-size;
+}
+
+/* The live panel's theme shrinks a few Tailwind keys (text-xs is 10 px, max-w-xs is 0.25 rem)
+   and globals.css also redefines `.text-xs` outside any layer. The new UI keeps Tailwind's
+   defaults for them; unlayered on purpose so these win on specificity. */
+.nx .text-xs {
+  font-size: 0.75rem;
+}
+.nx .max-w-xs {
+  max-width: 20rem;
+}
+.nx .max-w-xl {
+  max-width: 36rem;
+}

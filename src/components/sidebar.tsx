@@ -12,6 +12,7 @@ import {
   KeyRound,
   Pin,
   PinOff,
+  Sparkles,
   Trash,
 } from "lucide-react";
 import {
@@ -43,6 +44,8 @@ interface SidebarProps {
   isAdmin?: boolean;
   canEquity?: boolean;
   canVault?: boolean;
+  /** Shows the "New panel" entry that opens the new frontend (`/next`). */
+  canNextUi?: boolean;
   isClient?: boolean;
   logoUrl?: string | null;
   onNavigate?: () => void;
@@ -55,6 +58,7 @@ export function Sidebar({
   isAdmin = false,
   canEquity = false,
   canVault = false,
+  canNextUi = false,
   isClient = false,
   logoUrl = null,
   onNavigate,
@@ -172,11 +176,46 @@ export function Sidebar({
         })}
       </nav>
 
+      {canNextUi && !isClient && (
+        <div className="px-s pb-s">
+          <NewPanelLink collapsed={collapsed} />
+        </div>
+      )}
+
       {/* User */}
       <div className={cn("px-s py-s", collapsed && "px-xs")}>
         <UserMenu collapsed={collapsed} onNavigate={onNavigate} />
       </div>
     </div>
+  );
+}
+
+/**
+ * Opens the new frontend. Preview only (see `canPreviewNextUi`). A plain link,
+ * not a client route: the new panel is its own shell, so it starts from a full
+ * page load rather than inside this one.
+ */
+function NewPanelLink({ collapsed }: { collapsed: boolean }) {
+  const link = (
+    // eslint-disable-next-line @next/next/no-html-link-for-pages -- full page load on purpose, see above
+    <a
+      href="/next"
+      className={cn(
+        "flex w-full items-center gap-s rounded-full text-s font-medium leading-none no-underline transition-colors",
+        "text-primary hover:bg-card/60",
+        collapsed ? "justify-center px-0 py-s" : "px-s py-s",
+      )}
+    >
+      <Sparkles className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+      {!collapsed && "New panel"}
+    </a>
+  );
+  if (!collapsed) return link;
+  return (
+    <Tooltip>
+      <TooltipTrigger className="w-full">{link}</TooltipTrigger>
+      <TooltipContent side="right">New panel</TooltipContent>
+    </Tooltip>
   );
 }
 

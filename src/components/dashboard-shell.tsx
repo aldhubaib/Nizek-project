@@ -44,6 +44,7 @@ export function DashboardShell({
   isAdmin = false,
   canEquity = false,
   canVault = false,
+  canNextUi = false,
   isClient = false,
   currentUserId,
   notificationSoundUrl,
@@ -53,6 +54,7 @@ export function DashboardShell({
   isAdmin?: boolean;
   canEquity?: boolean;
   canVault?: boolean;
+  canNextUi?: boolean;
   isClient?: boolean;
   currentUserId?: string;
   notificationSoundUrl?: string | null;
@@ -139,6 +141,7 @@ export function DashboardShell({
             isAdmin={isAdmin}
             canEquity={canEquity}
             canVault={canVault}
+            canNextUi={canNextUi}
             isClient={isClient}
             logoUrl={logoUrl}
           />
@@ -173,6 +176,7 @@ export function DashboardShell({
             isAdmin={isAdmin}
             canEquity={canEquity}
             canVault={canVault}
+            canNextUi={canNextUi}
             isClient={isClient}
             logoUrl={logoUrl}
             onNavigate={() => setDrawerOpen(false)}

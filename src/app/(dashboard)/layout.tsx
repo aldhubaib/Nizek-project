@@ -7,6 +7,7 @@ import { headers } from "next/headers";
 import { getCurrentUser, getImpersonation, needsProfilePhoto, getSession } from "@/lib/auth";
 import { canAccessEquity } from "@/lib/equity-access";
 import { canAccessAnyVault } from "@/lib/vault-access";
+import { canPreviewNextUi } from "@/lib/next-ui-access";
 import { getNotificationSoundUrl, getBrandingMap, brandingUrlWithBust } from "@/lib/branding";
 import { isClientUser } from "@/lib/client-chat";
 import { isClientAllowedPath } from "@/lib/client-routes";
@@ -39,6 +40,7 @@ export default async function DashboardLayout({
 
   const isClient = isClientUser(user);
   const isAdmin = user?.systemRole === "ADMIN";
+  const canNextUi = !isClient && canPreviewNextUi(user);
   const pathname = (await headers()).get("x-pathname") ?? "";
   if (isClient && pathname.startsWith("/dashboard") && !isClientAllowedPath(pathname)) {
     redirect("/dashboard/messages");
@@ -93,6 +95,7 @@ export default async function DashboardLayout({
           isAdmin={isAdmin}
           canEquity={canEquity}
           canVault={canVault}
+          canNextUi={canNextUi}
           currentUserId={user?.id}
           notificationSoundUrl={notificationSoundUrl}
           logoUrl={logoUrl}

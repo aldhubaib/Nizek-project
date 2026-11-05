@@ -6,7 +6,9 @@ alwaysApply: true
 
 # Design system
 
-One rule for every visual decision. Covers web, iOS PWA, and Android. Tokens live in `@theme inline` and `:root` in `src/app/globals.css`. Shell classes (`.app-top-bar`, `.px-app`, etc.) are unlayered so they beat Tailwind preflight.
+**Exemption:** `src/next-ui/**` and `src/app/(next)/**` are the new frontend. Follow `next-ui.mdc` there. Do not apply shirt-size type, `.px-app`, or live-panel tokens to those files.
+
+One rule for every visual decision on the **live panel**. Covers web, iOS PWA, and Android. Tokens live in `@theme inline` and `:root` in `src/app/globals.css`. Shell classes (`.app-top-bar`, `.px-app`, etc.) are unlayered so they beat Tailwind preflight.
 
 ## Breakpoint
 

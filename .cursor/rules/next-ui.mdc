@@ -1,0 +1,37 @@
+---
+description: New Nizek frontend lives in next-ui and /next. Do not mix it with the live panel.
+alwaysApply: true
+---
+
+# New frontend (`next-ui`)
+
+The live panel stays as it is. A second UI is being built beside it, copied in look from Social AI's admin system, not from Social AI's product screens.
+
+## Where things live
+
+- Look: `src/next-ui/theme`, `src/next-ui/ui`, `src/next-ui/patterns`, `src/next-ui/shell`
+- Pages: `src/app/(next)/next/...` (URL `/next`)
+- Brain (allowed): `src/actions`, `src/lib`, Prisma, auth
+
+## Rules
+
+- New screens import only from `@/next-ui/...` for components and styles.
+- Do not import `@/components/ui`, `dashboard-shell`, `sidebar`, or `src/app/globals.css` tokens into the new UI.
+- Do not restyle the live panel in place. Do not delete `(dashboard)` until the switch.
+- If a control is missing, copy it from Social AI (`~/Code/Social Ai/apps/web/src/components/ui`) into `src/next-ui/ui`, rewriting `from "cn"` → `@/next-ui/lib/cn` and `@/components/ui/*` → `@/next-ui/ui/*`. These are shadcn on the unified `radix-ui` package (not `@base-ui/react`, which the live panel uses).
+- Visual tokens for the new UI are scoped to `.nx` in `src/next-ui/theme/next.css` (Social AI dark admin: near-white primary, canvas behind floating cards). `src/app/(next)/layout.tsx` loads that file as its own stylesheet (plain CSS, no `@theme`/`@apply`/`@import`, so PostCSS passes it through and Turbopack hot-reloads it); the utility names it needs (`bg-canvas`, `text-warning`, …) are declared in `globals.css`'s `@theme inline`. Do not `@import` it from `globals.css`: Turbopack does not re-run Tailwind when an imported file changes, so the page keeps stale CSS. `NxRoot` mirrors `.nx` on `<html>` while `/next` is on screen so portaled menus match.
+- Shell = `PaneShell` (`src/next-ui/panes/`): Social AI's pane system, ported. Main pane = the URL path; side pane + tray = the `?pane=<kind>[:<id>],…,at:<n>` query; swap, open full, close main, ⌥-click / middle-click / hover "Open in pane", ⌥1–8, ⌥W, ⌥⇧S, Esc, ⌘K ⌥↵; sheet below 1024 px, bottom drawer below 768 px. URLs live under `BASE = "/next"` (`pane-kinds.ts`) until the switch.
+- Screens live in `src/next-ui/screens/` and must render both from a file route and from `PaneRouter` (client). Inside a screen never use `useRouter`/`usePathname`/`Link` for in-app navigation: use `usePane()`, `AppLink`, `usePaneSearchParams()` from `@/next-ui/panes`. New section or record kind: add it to `SECTIONS` (`pane-kinds.ts`), `PANE_KINDS` (`pane-registry.ts`, with `useLabel` for records) and `PaneRouter`; add a unit test in `tests/unit/next-ui-panes/`.
+- A record that belongs to a record (a project's task or note) is a child record: `SECTIONS[section].children = [{ segment, record }]`, URL `/next/<section>/<id>/<segment>/<id>`, pane id `childId(parent, child)` = `parent_child` (`splitChildId` reads it back).
+- The new UI never links to the live panel: no "Open in current panel", no `/dashboard` hrefs, no `legacyHref`. A screen that is not built yet shows `ComingSoon` (title only); a write that is not built yet is simply absent, not pointed elsewhere.
+- Views are a kind's own pages: `SECTIONS[section].views = ["roadmap", …]` — of the section's record (`/next/projects/<id>/roadmap`, entry `{ kind: "project", id, view }`, token `project:<id>:roadmap`) or, for a section without records, of the section itself (`/next/admin/teams`, entry `{ kind: "admin", view }`, token `admin::teams`). The same kind in another view is the same pane turned to another page (`sameEntry` ignores the view; `mountKey` keeps the screen mounted; `viewKey` gives each page its own scroll). Titles live in `PANE_KINDS[kind].views`; the breadcrumb adds the view as a last crumb. The file route is `[view]/page.tsx` with `notFound()` for an unknown view; the screen takes `view` and switches on it. No tabs inside the pane.
+- The sidebar swaps lists in place (Social AI's admin-menu pattern, three lists): the main list; while the main pane is in a project (`projectIdOf(pathname)`), the project menu — the project's row with a back arrow, then `PROJECT_NAV` (`shell/nav.ts`: About, Road map, Active sprint, Assets, Notes, Team, Vault, Settings); for system admins (`useIsAdmin`) on an admin page (`isAdminPath`), the Administrator menu — a back row, then `ADMIN_NAV` (the live Admin page's sections in groups: Team & roles, Projects, Access, Appearance, Monitoring). The main list ends with the project's row and/or the Administrator row (`ADMIN_ITEM`, a link to the index at `/next/admin`) under a separator. The back arrow (or Escape) shows the main list by hand until the page changes context. Nothing is stored. `useProjectBrief` feeds the project row from the same cache as the screen. The Administrator index (`screens/admin/admin-screen.tsx`) lists every `ADMIN_NAV` item with its `description`; a section not rebuilt yet shows its title and "Not built yet".
+- The signed-in user is `useViewer()` / `useIsAdmin()` (`src/next-ui/lib/viewer.tsx`; `PaneShell` provides it, `null` in bare renders). Editor HTML from the database (notes, task descriptions) renders only through `SafeHtml` (`src/next-ui/lib/safe-html.tsx`, DOMPurify on the client); `htmlToText` + `excerpt` for row previews.
+- `PageHeader` keeps its title `sr-only` and sends `actions` to the pane header (`PaneHeaderPortal`); `PaneHeaderSearch` is the page search.
+- Lists and records are built from Social AI's blocks (`src/next-ui/blocks`, its `docs/blocks-brief.md`): `FilterBar` + `useList` (search, facets, sort pills) above a `Collection` of `RecordRow`s; a record is a `HeaderCard`, then `DetailSection`s of rows. Cards and rows, never tables; container queries (`@xl:`), never window breakpoints. `src/next-ui/screens/projects/` is the worked example. Boards are `LaneBoard` + `Lane` + `TaskCard` (`screens/projects/lanes.tsx`): lanes stack below `@3xl`, scroll sideways above; lane membership is computed in a pure `board-state.ts`, with the live panel's rules (`isMissingDataTask`, sprint helpers), never re-invented.
+- Data: screens are client components reading through react-query (`QueryProvider` in `PaneShell`) over the existing server actions; hooks live in `src/next-ui/data/<section>.ts` (`useProjects`, `useProject`, `useProjectLabel`) so a list and its record share one cache and the breadcrumb label costs no request. Pure helpers next to the screen (`project-state.ts`) get a unit test in `tests/unit/next-ui-<section>/`; a render smoke test (`renderToString` with mocked data hooks and `next/navigation`) catches what the type checker cannot.
+- The live panel's shirt-size type scale (`text-s`, `px-app`) does not apply under `src/next-ui` or `src/app/(next)`.
+
+## Switch
+
+The default URL stays `/dashboard` until every needed screen is rebuilt on `/next`.

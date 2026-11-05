@@ -76,6 +76,14 @@ html[data-scroll-locked] body {
   --radius-xl: calc(var(--radius) * 1.4);
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-4xl: calc(var(--radius) * 2.6);
+  /* Extra keys for the new frontend (/next). Their values are set in
+     src/next-ui/theme/next.css under `.nx`; they stay unset on the live panel. */
+  --color-canvas: var(--canvas);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
 }
 
 :root {
