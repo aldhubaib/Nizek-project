@@ -58,7 +58,9 @@ fi
 
 # --- 3. Live connection string (never printed) -------------------------------------------
 log "Reading the live connection string from Railway (service: $RAILWAY_DB_SERVICE)"
-LIVE_URL="$(railway variables --service "$RAILWAY_DB_SERVICE" --json 2>/dev/null \
+# Always the production environment, whatever the CLI is linked to (there is a
+# staging environment too; see docs/staging.md).
+LIVE_URL="$(railway variables --environment production --service "$RAILWAY_DB_SERVICE" --json 2>/dev/null \
   | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s||"{}");process.stdout.write(v.DATABASE_PUBLIC_URL||"")})')"
 [ -n "$LIVE_URL" ] || fail "Could not read DATABASE_PUBLIC_URL from Railway.
 Run: railway login && railway link --project nizek-project --environment production"

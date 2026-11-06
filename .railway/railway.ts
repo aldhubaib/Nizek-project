@@ -49,7 +49,7 @@ const STAGING = {
   web: "nizek-staging.up.railway.app",
   centrifugo: "nizek-centrifugo-staging.up.railway.app",
   /** Public URL of the `nizek-staging` R2 bucket. Empty = keep the copied value until the bucket exists. */
-  r2PublicUrl: "",
+  r2PublicUrl: "https://pub-b8573fecc9af48d597e9eee50f3ee664.r2.dev",
 };
 
 /** Production addresses, written out so a wrong edit shows up in `railway config plan`. */
@@ -98,24 +98,28 @@ export default defineRailway((ctx) => {
   // (read only) and scripts/load-staging-db.sh.
   db.networking = { privateNetworkEndpoint: "postgres", tcpProxies: { "5432": {} } };
 
+  // Volume sizes are what each environment was created with (staging was
+  // duplicated with 50 GB volumes; volumes can grow but not shrink). Railway
+  // bills volumes by the space actually used.
   const volumeAlerts = { usage: { "80": {}, "95": {}, "100": {} } };
+  const volumeSizeMB = prod ? 5000 : 50000;
   const redisRealtimeVolume = volume("redis-volume", {
     alerts: volumeAlerts,
     allowOnlineResize: true,
     region: "us-west2",
-    sizeMB: 5000,
+    sizeMB: volumeSizeMB,
   });
   const redisQueueVolume = volume("redis-volume-MBV4", {
     alerts: volumeAlerts,
     allowOnlineResize: true,
     region: "us-west2",
-    sizeMB: 5000,
+    sizeMB: volumeSizeMB,
   });
   const postgresVolume = volume("postgres-volume", {
     alerts: volumeAlerts,
     allowOnlineResize: true,
     region: "us-west2",
-    sizeMB: 5000,
+    sizeMB: volumeSizeMB,
   });
 
   // ------------------------------------------------------------------- web app
@@ -184,6 +188,10 @@ export default defineRailway((ctx) => {
       // Emails only from production. Without the key the mailer logs a
       // warning and stays off, so staging never emails real people.
       ...(prod ? { RESEND_API_KEY: preserve() } : {}),
+
+      // The staging build of the mobile app (APP_VARIANT=staging) deep-links
+      // back as nizek-staging://; production trusts only the real app.
+      ...(prod ? {} : { MOBILE_APP_SCHEMES: "nizek,nizek-staging" }),
     },
   });
 

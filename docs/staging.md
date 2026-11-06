@@ -55,13 +55,16 @@ the file. Type-check the file with `cd .railway && npm install && npm run typech
 bash scripts/load-staging-db.sh
 ```
 
-Dumps live (read only), replaces everything in the staging database, clears
-push subscriptions / devices / tokens / outbox, login sessions and
+Dumps live (read only), replaces everything in the staging database, checks
+the copy has the same tables, migrations, indexes and constraints as live,
+clears push subscriptions / devices / tokens / outbox, login sessions and
 verification tokens, then redeploys the staging web app so its pre-deploy
 step applies any migration staging has and live does not. The script refuses
 to run unless the target really is the environment named `staging` and is a
-different server from live. Everyone has to sign in again on staging after a
-reload.
+different server from live, and stops before the clean-up and redeploy if the
+restore did not finish (then just run it again). Takes about five minutes; do
+not deploy to staging while it runs. Everyone has to sign in again on staging
+after a reload.
 
 File links inside copied rows still point at the live public bucket, so they
 open. New uploads and deletes on staging go to the `nizek-staging` bucket only.
@@ -71,23 +74,37 @@ open. New uploads and deletes on staging go to the `nizek-staging` bucket only.
 - No `RESEND_API_KEY`: the mailer logs a warning and sends nothing. (Calendar
   invites, which require email, fail on staging.)
 - `R2_BUCKET_NAME=nizek-staging`, separate from live `nizek-projects`. Same
-  Cloudflare account and keys. The bucket needs the CORS policy from
-  [uploads.md](uploads.md) with the staging origin.
+  Cloudflare account and keys. The bucket has its public development URL on
+  (`R2_PUBLIC_URL`, set in `.railway/railway.ts`) and the CORS policy from
+  [uploads.md](uploads.md) with the staging origin. The R2 API token the app
+  uses must list `nizek-staging` among its buckets, otherwise every upload on
+  staging fails with "Access Denied".
 - Google sign-in uses the same OAuth client as live; the staging callback
   `https://nizek-staging.up.railway.app/api/auth/callback/google` is listed on it.
 - One replica per service instead of two.
 - The cron function calls the staging URL (`CRON_URL`), so deadline reminders
   on staging only touch staging data (and send no email).
+- `MOBILE_APP_SCHEMES=nizek,nizek-staging`: the staging build of the mobile app
+  (`mobile/`, `npm run ios:staging`, scheme `nizek-staging://`) can sign in
+  here. Production trusts only the real app's `nizek://`.
+
+## The mobile app
+
+The mobile app (`mobile/`, its own repository) talks to whichever panel it is
+built for. Its staging variant is a second app, "Nizek Staging", that uses this
+environment by default; see `mobile/README.md` → Staging. The app's `staging`
+branch pairs with the panel's `staging` branch the same way.
 
 ## Centrifugo
 
 Centrifugo is not built from GitHub; it is uploaded from `./centrifugo`
-(Dockerfile + `config.json`). To (re)deploy it:
+(Dockerfile + `config.json`). To (re)deploy it, from the repository root
+(`--path-as-root` matters: without it the CLI uploads the whole repository and
+Railway builds the Next.js app into the Centrifugo service):
 
 ```sh
-cd centrifugo
-railway up --service Centrifugo --environment staging --detach
-railway up --service Centrifugo --environment production --detach   # when live needs it
+railway up ./centrifugo --path-as-root --service Centrifugo --environment staging --detach
+railway up ./centrifugo --path-as-root --service Centrifugo --environment production --detach   # when live needs it
 ```
 
 ## Checking staging

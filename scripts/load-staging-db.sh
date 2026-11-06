@@ -7,13 +7,17 @@
 #   2. Refuses to continue unless the staging string really comes from the environment
 #      named `staging`, and unless live and staging are different servers.
 #   3. Dumps live with Postgres 18 tools (live is Postgres 18).
-#   4. Empties the staging database and restores the dump into it.
+#   4. Empties the staging database and restores the dump into it. Stops hard if the
+#      restore does not finish or the result does not match live (tables, migrations,
+#      indexes, constraints), so a half-loaded staging is never deployed to.
 #   5. Clears everything that could reach real people from staging: push subscriptions,
 #      push devices, mobile push tokens, the push outbox, login sessions, verification
 #      tokens (tables that do not exist yet are skipped).
 #   6. Redeploys the staging web app so its pre-deploy step applies any migration the
 #      staging code has and live does not. (Migrations are taken from the deployed
 #      staging code, never from this checkout.)
+#
+# Do not deploy to staging while it runs (a deploy would migrate a half-loaded database).
 #
 # Usage
 #   bash scripts/load-staging-db.sh                  # asks for confirmation
@@ -77,8 +81,17 @@ host_of() { node -e 'const u = new URL(process.argv[1]); process.stdout.write(`$
 
 log "Reading connection strings from Railway (service: $DB_SERVICE)"
 LIVE_ENV=""; LIVE_URL=""; TARGET_ENV_SEEN=""; TARGET_URL=""
-IFS=$'\t' read -r LIVE_ENV LIVE_URL < <(read_db "$SOURCE_ENV") || true
-IFS=$'\t' read -r TARGET_ENV_SEEN TARGET_URL < <(read_db "$TARGET_ENV") || true
+# The Railway API occasionally answers empty; try a few times before giving up.
+for attempt in 1 2 3; do
+  IFS=$'\t' read -r LIVE_ENV LIVE_URL < <(read_db "$SOURCE_ENV") || true
+  [ -n "$LIVE_URL" ] && break
+  log "Live connection string not returned (attempt $attempt of 3), retrying…"; sleep 5
+done
+for attempt in 1 2 3; do
+  IFS=$'\t' read -r TARGET_ENV_SEEN TARGET_URL < <(read_db "$TARGET_ENV") || true
+  [ -n "$TARGET_URL" ] && break
+  log "Staging connection string not returned (attempt $attempt of 3), retrying…"; sleep 5
+done
 
 [ -n "$LIVE_URL" ] || fail "Could not read DATABASE_PUBLIC_URL for environment $SOURCE_ENV.
 Run: railway login && railway link --project nizek-project"
@@ -97,6 +110,21 @@ TARGET_HOST="$(host_of "$TARGET_URL")"
 log "Source (read only): $SOURCE_ENV  $LIVE_HOST"
 log "Target (overwritten): $TARGET_ENV  $TARGET_HOST"
 
+# Both strings go through Railway's TCP proxy. Keepalives make a dropped connection fail
+# within a couple of minutes instead of hanging for an hour; connect_timeout bounds connects.
+KEEPALIVE="keepalives=1&keepalives_idle=30&keepalives_interval=10&keepalives_count=5&connect_timeout=20"
+with_keepalive() { case "$1" in *\?*) printf '%s&%s' "$1" "$KEEPALIVE" ;; *) printf '%s?%s' "$1" "$KEEPALIVE" ;; esac; }
+LIVE_CONN="$(with_keepalive "$LIVE_URL")"
+TARGET_CONN="$(with_keepalive "$TARGET_URL")"
+
+# Structural fingerprint of a database: base tables, applied migrations, indexes, constraints.
+# Equal on live and staging after a complete restore; data counts may drift while we copy.
+SHAPE_SQL="select
+  (select count(*) from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE') || ' tables, ' ||
+  (select count(*) from \"_prisma_migrations\" where finished_at is not null and rolled_back_at is null) || ' migrations, ' ||
+  (select count(*) from pg_indexes where schemaname = 'public') || ' indexes, ' ||
+  (select count(*) from pg_constraint c join pg_namespace n on n.oid = c.connamespace where n.nspname = 'public') || ' constraints'"
+
 if [ "$ASSUME_YES" -ne 1 ]; then
   printf '\nEverything in the %s database at %s will be replaced. Type "%s" to continue: ' "$TARGET_ENV" "$TARGET_HOST" "$TARGET_ENV"
   read -r answer
@@ -109,29 +137,44 @@ trap 'rm -rf "$WORK"' EXIT
 DUMP="$WORK/live.dump"
 
 log "Dumping live (read-only)…"
-"$PG_BIN/pg_dump" --format=custom --no-owner --no-privileges --file "$DUMP" "$LIVE_URL"
+"$PG_BIN/pg_dump" --format=custom --no-owner --no-privileges --file "$DUMP" "$LIVE_CONN"
 log "Dump size: $(du -h "$DUMP" | cut -f1)"
+LIVE_SHAPE="$(PGOPTIONS='-c default_transaction_read_only=on' "$PG_BIN/psql" "$LIVE_CONN" -At -c "$SHAPE_SQL")"
+log "Live has $LIVE_SHAPE"
+
+# Some dumps carry their own `CREATE SCHEMA public`; create it ourselves only when they don't.
+CREATE_PUBLIC="CREATE SCHEMA public;"
+if "$PG_BIN/pg_restore" --list "$DUMP" | grep -Eq ' SCHEMA - public( |$)'; then CREATE_PUBLIC=""; fi
 
 # --- 5. Empty staging and restore ---------------------------------------------------------
+# Do not deploy to staging while this runs: a deploy would run migrations against a half
+# loaded database (and the deploy scripts would try to "baseline" it).
 log "Emptying the staging database"
-"$PG_BIN/psql" "$TARGET_URL" -v ON_ERROR_STOP=1 -q <<'SQL'
+PGOPTIONS='-c client_min_messages=warning' "$PG_BIN/psql" "$TARGET_CONN" -v ON_ERROR_STOP=1 -q <<SQL
 SELECT pg_terminate_backend(pid)
   FROM pg_stat_activity
  WHERE datname = current_database() AND pid <> pg_backend_pid();
 DROP SCHEMA IF EXISTS public CASCADE;
-CREATE SCHEMA public;
+$CREATE_PUBLIC
 SQL
 
-log "Restoring into staging…"
+log "Restoring into staging (do not interrupt)…"
 RESTORE_LOG="$WORK/restore.log"
-if ! "$PG_BIN/pg_restore" --no-owner --no-privileges --jobs=4 --dbname "$TARGET_URL" "$DUMP" 2>"$RESTORE_LOG"; then
-  printf '[load-staging] pg_restore reported problems (usually harmless ownership notices):\n'
-  tail -n 20 "$RESTORE_LOG" | sed 's/^/    /'
+if ! "$PG_BIN/pg_restore" --no-owner --no-privileges --exit-on-error --jobs=4 --dbname "$TARGET_CONN" "$DUMP" 2>"$RESTORE_LOG"; then
+  printf '[load-staging] pg_restore output (last 20 lines):\n' >&2
+  tail -n 20 "$RESTORE_LOG" | sed 's/^/    /' >&2
+  fail "The restore did not finish. Staging is half loaded: do not deploy to staging, fix the cause (usually the connection) and run this script again."
 fi
 
-# --- 6. Make the copy safe: nothing on staging may reach a real device or mailbox ----------
+# --- 6. Check the copy before touching anything else -------------------------------------
+STAGING_SHAPE="$("$PG_BIN/psql" "$TARGET_CONN" -At -c "$SHAPE_SQL")"
+[ "$STAGING_SHAPE" = "$LIVE_SHAPE" ] \
+  || fail "Staging does not match live after the restore (live: $LIVE_SHAPE; staging: $STAGING_SHAPE). Do not deploy to staging; run this script again."
+log "Restore checked: staging has $STAGING_SHAPE, same as live"
+
+# --- 7. Make the copy safe: nothing on staging may reach a real device or mailbox ----------
 log "Clearing push subscriptions, push devices, mobile push tokens, push outbox, login sessions, verification tokens"
-"$PG_BIN/psql" "$TARGET_URL" -v ON_ERROR_STOP=1 -q <<'SQL'
+"$PG_BIN/psql" "$TARGET_CONN" -v ON_ERROR_STOP=1 -q <<'SQL'
 DO $$
 DECLARE
   wanted text[] := ARRAY['PushSubscription', 'PushDevice', 'MobilePushToken', 'PushOutbox', 'AuthSession', 'Verification'];
@@ -149,16 +192,16 @@ BEGIN
 END $$;
 SQL
 
-# --- 7. Bring the schema up to what the staging code expects -----------------------------
+# --- 8. Bring the schema up to what the staging code expects -----------------------------
 if [ "$REDEPLOY" -eq 1 ]; then
   log "Redeploying the staging web app (its pre-deploy step runs the migrations of the deployed code)"
   railway deployment redeploy --service "$WEB_SERVICE" --environment "$TARGET_ENV" --yes >/dev/null \
     || printf '[load-staging] Redeploy could not be started; run it from the Railway dashboard if staging code has newer migrations than live.\n'
 fi
 
-# --- 8. Summary ---------------------------------------------------------------------------
+# --- 9. Summary ---------------------------------------------------------------------------
 log "Done. Staging now holds:"
-"$PG_BIN/psql" "$TARGET_URL" -At -F ' ' -c '
+"$PG_BIN/psql" "$TARGET_CONN" -At -F ' ' -c '
   select count(*) || '"'"' users'"'"' from "User"
   union all select count(*) || '"'"' projects'"'"' from "Project"
   union all select count(*) || '"'"' tasks'"'"' from "Task"
