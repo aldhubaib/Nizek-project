@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 
 import { useNoteLabel } from "@/next-ui/data/notes";
 import { useProjectLabel } from "@/next-ui/data/projects";
-import { useTaskLabel } from "@/next-ui/data/tasks";
+import { useSprintLabel } from "@/next-ui/data/sprints";
+import { useTaskCrumb, useTaskLabel } from "@/next-ui/data/tasks";
 
 import { sectionOf, type PaneEntry } from "./pane-url";
 
@@ -15,8 +16,10 @@ import { sectionOf, type PaneEntry } from "./pane-url";
 export interface PaneKind {
   kind: string;
   title: string;
-  /** Record kinds: the label of one record, for the breadcrumb (`Projects › <name>`). */
+  /** Record kinds: the label of one record — the tray, the recents, the window title and (unless `useCrumb`) the breadcrumb. */
   useLabel?: (id: string) => string | undefined;
+  /** A shorter name for the breadcrumb's crumb when the label is long (a task's `F-012`); the page shows the rest. */
+  useCrumb?: (id: string) => string | undefined;
   /** A small mark after the label (a status dot); from the same cache as the label. */
   useMark?: (id: string) => ReactNode;
   /** The titles of the record's views (`pane-kinds.ts` names them), for the breadcrumb's last crumb. */
@@ -27,6 +30,7 @@ export interface PaneKind {
 export const PROJECT_VIEW_TITLES: Record<string, string> = {
   roadmap: "Road map",
   sprint: "Active sprint",
+  kanban: "Kanban",
   assets: "Assets",
   notes: "Notes",
   team: "Team",
@@ -38,11 +42,10 @@ export const PROJECT_VIEW_TITLES: Record<string, string> = {
 export const ADMIN_VIEW_TITLES: Record<string, string> = {
   teams: "Teams",
   members: "Members",
-  roles: "Roles",
+  roles: "Role presets",
   "client-agreement": "Client agreement",
   questions: "Questions",
   contracts: "Contracts",
-  "exchange-rates": "Exchange rates",
   "equity-access": "Equity access",
   "vault-access": "Vault access",
   "app-logo": "App logo",
@@ -57,8 +60,9 @@ export const PANE_KINDS: Record<string, PaneKind> = {
   thread: { kind: "thread", title: "Conversation" },
   projects: { kind: "projects", title: "Projects" },
   project: { kind: "project", title: "Project", useLabel: useProjectLabel, views: PROJECT_VIEW_TITLES },
-  task: { kind: "task", title: "Task", useLabel: useTaskLabel },
+  task: { kind: "task", title: "Task", useLabel: useTaskLabel, useCrumb: useTaskCrumb },
   note: { kind: "note", title: "Note", useLabel: useNoteLabel },
+  sprint: { kind: "sprint", title: "Sprint", useLabel: useSprintLabel },
   vault: { kind: "vault", title: "Vault" },
   equity: { kind: "equity", title: "Equity" },
   portfolio: { kind: "portfolio", title: "Portfolio" },

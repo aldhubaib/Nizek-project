@@ -13,13 +13,14 @@ import {
 
 import { AppLink } from "./app-link";
 import { PANE_KINDS, paneSection, paneTitle, viewTitle } from "./pane-registry";
-import { hrefFromEntry, type PaneEntry } from "./pane-url";
+import { hrefFromEntry, parentEntry, type PaneEntry } from "./pane-url";
 
 /**
  * The breadcrumb in a pane header: the section (with its sidebar icon) and, for a record, the
  * record's label after it; a view adds a last crumb ("Projects › Hazawy › Road map",
- * "Administrator › Teams"). Every crumb before the last links back: the section to its front
- * page, the record to its About.
+ * "Administrator › Teams"). A record that lives under another (a sprint's document, a task, a
+ * note) shows that one first ("Projects › Hazawy › Sprint 2"). Every crumb before the last links
+ * back: the section to its front page, a record to its About.
  */
 export function PaneCrumbs({ side, entry, pathname }: { side: boolean; entry: PaneEntry | null; pathname: string }) {
   const section = entry ? paneSection(entry) : undefined;
@@ -34,6 +35,8 @@ export function PaneCrumbs({ side, entry, pathname }: { side: boolean; entry: Pa
   // A section carrying its own query (`/next/projects?status=late`) is still that section's icon.
   const Icon = findNav(root.href.split("?")[0])?.icon;
   const record = entry && entry.id && PANE_KINDS[entry.kind]?.useLabel ? entry : null;
+  const above = record ? parentEntry(record) : undefined;
+  const parent = above && PANE_KINDS[above.kind]?.useLabel ? above : null;
   const view = entry ? viewTitle(entry) : undefined;
   const rootLinks = !!record || !!view;
 
@@ -55,6 +58,18 @@ export function PaneCrumbs({ side, entry, pathname }: { side: boolean; entry: Pa
             </BreadcrumbPage>
           )}
         </BreadcrumbItem>
+        {parent && (
+          <>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem className="min-w-0">
+              <BreadcrumbLink asChild className="truncate" dir="auto">
+                <AppLink href={hrefFromEntry(parent)}>
+                  <RecordLabel key={`${parent.kind}:${parent.id}`} entry={parent} />
+                </AppLink>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+          </>
+        )}
         {record && (
           <>
             <BreadcrumbSeparator />
@@ -88,10 +103,11 @@ export function PaneCrumbs({ side, entry, pathname }: { side: boolean; entry: Pa
 
 const noMark = () => null;
 
-/** The record's label, and after it the kind's mark when it has one. */
+/** The record's crumb (its label, or the kind's shorter name for it), and after it the kind's mark when it has one. */
 function RecordLabel({ entry }: { entry: PaneEntry }) {
-  const useLabel = PANE_KINDS[entry.kind].useLabel!;
-  const useMark = PANE_KINDS[entry.kind].useMark ?? noMark;
+  const kind = PANE_KINDS[entry.kind];
+  const useLabel = kind.useCrumb ?? kind.useLabel!;
+  const useMark = kind.useMark ?? noMark;
   const label = useLabel(entry.id ?? "");
   const mark = useMark(entry.id ?? "");
   return (

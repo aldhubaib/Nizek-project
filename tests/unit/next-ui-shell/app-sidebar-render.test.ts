@@ -16,12 +16,13 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+let kanbanEnabled = false;
 vi.mock("@/next-ui/data/projects", () => ({
   PROJECTS_KEY: ["projects"],
   projectKey: (id: string) => ["projects", id],
   useProjectLabel: () => "Hazawy",
   useProjectBrief: (id: string) =>
-    id === "p1" ? { name: "Hazawy", logoUrl: null, sprintsEnabled: true, counts: { notes: 10, assets: 0, members: 12 } } : undefined,
+    id === "p1" ? { name: "Hazawy", logoUrl: null, sprintsEnabled: true, kanbanEnabled, counts: { notes: 10, assets: 0, members: 12 } } : undefined,
 }));
 
 async function render(role = "ADMIN"): Promise<string> {
@@ -45,7 +46,7 @@ async function render(role = "ADMIN"): Promise<string> {
 
 const MAIN = ["Dashboard", "Inbox", "Projects", "Vault", "Equity", "Trash"];
 const PROJECT = ["About", "Road map", "Active sprint", "Assets", "Notes", "Team", "Vault", "Settings"];
-const ADMIN = ["Teams", "Members", "Roles", "Client agreement", "Questions", "Contracts", "Exchange rates", "Vault access", "App logo", "Member notifications"];
+const ADMIN = ["Teams", "Members", "Role presets", "Client agreement", "Questions", "Contracts", "Vault access", "App logo", "Member notifications"];
 
 describe("the sidebar", () => {
   it("shows the main menu on the project list, with the Administrator row at the foot for an admin", async () => {
@@ -99,6 +100,23 @@ describe("the sidebar", () => {
     // the counts after Notes and Team; none for Assets, which has nothing
     expect(html).toContain(">10<");
     expect(html).toContain(">12<");
+    // no Kanban row while the project's board is off
+    expect(html).not.toContain("<span>Kanban</span>");
+  });
+
+  it("adds the Kanban row, between Active sprint and Assets, once the project's board is on", async () => {
+    pathname = "/next/projects/p1/kanban";
+    kanbanEnabled = true;
+    try {
+      const html = await render();
+      expect(html).toContain("<span>Kanban</span>");
+      expect(html).toMatch(/data-active="true"[^>]*href="\/next\/projects\/p1\/kanban"/);
+      const at = (item: string) => html.indexOf(`<span>${item}</span>`);
+      expect(at("Active sprint")).toBeLessThan(at("Kanban"));
+      expect(at("Kanban")).toBeLessThan(at("Assets"));
+    } finally {
+      kanbanEnabled = false;
+    }
   });
 
   it("lights Road map for a task of the project", async () => {

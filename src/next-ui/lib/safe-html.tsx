@@ -6,22 +6,51 @@ import DOMPurify from "dompurify";
 import { cn } from "@/next-ui/lib/cn";
 import { useHydrated } from "@/next-ui/panes/use-hydrated";
 
-/** Note bodies and task descriptions are editor HTML; this is the plain text for a preview line. */
-export function htmlToText(html: string | null | undefined): string {
-  if (!html) return "";
-  return html
-    .replace(/<br\s*\/?>/gi, " ")
-    // a block's end is a word break; an inline tag (bold, a link) is not
-    .replace(/<\/(p|div|h[1-6]|li|tr|td|th|blockquote|pre)>/gi, " ")
-    .replace(/<[^>]+>/g, "")
+/** The few entities the editor writes, back to characters. */
+function decodeEntities(text: string): string {
+  return text
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
+    .replace(/&#39;/g, "'");
+}
+
+/** Note bodies and task descriptions are editor HTML; this is the plain text for a preview line. */
+export function htmlToText(html: string | null | undefined): string {
+  if (!html) return "";
+  return decodeEntities(
+    html
+      .replace(/<br\s*\/?>/gi, " ")
+      // a block's end is a word break; an inline tag (bold, a link) is not
+      .replace(/<\/(p|div|h[1-6]|li|tr|td|th|blockquote|pre)>/gi, " ")
+      .replace(/<[^>]+>/g, ""),
+  )
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * The same HTML as its blocks of plain text, in order: each paragraph, heading, list item or
+ * table row is one string, empty ones left out. For a card that shows the opening of a note
+ * the way it was written, not as one run-on line.
+ */
+export function htmlToParagraphs(html: string | null | undefined): string[] {
+  if (!html) return [];
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|h[1-6]|li|tr|blockquote|pre)>/gi, "\n")
+    .replace(/<\/(td|th)>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .split("\n")
+    .map((block) => decodeEntities(block).replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+/** How many words the text has, for a "744 words" line. */
+export function wordCount(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
 }
 
 /** The first `max` characters of the text, cut on a word with an ellipsis. */

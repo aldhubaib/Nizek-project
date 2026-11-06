@@ -31,10 +31,12 @@ export const SECTIONS: Record<string, SectionDef> = {
   messages: { record: "thread" },
   projects: {
     record: "project",
-    views: ["roadmap", "sprint", "assets", "notes", "team", "vault", "settings"],
+    views: ["roadmap", "sprint", "kanban", "assets", "notes", "team", "vault", "settings"],
     children: [
       { segment: "tasks", record: "task" },
       { segment: "notes", record: "note" },
+      // a sprint's document: its plan, then its review (`/projects/<id>/sprints/<id>`)
+      { segment: "sprints", record: "sprint" },
     ],
   },
   vault: {},
@@ -48,7 +50,6 @@ export const SECTIONS: Record<string, SectionDef> = {
       "client-agreement",
       "questions",
       "contracts",
-      "exchange-rates",
       "equity-access",
       "vault-access",
       "app-logo",

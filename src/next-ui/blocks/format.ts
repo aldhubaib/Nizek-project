@@ -33,3 +33,20 @@ export function formatFull(n: number | null | undefined): string {
   if (n == null || Number.isNaN(n)) return ""
   return n.toLocaleString("en-US")
 }
+
+/** An estimate or a duration: `45m`, `2h`, `1h 30m`. */
+export function formatMinutes(mins: number): string {
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  if (h > 0 && m > 0) return `${h}h ${m}m`
+  if (h > 0) return `${h}h`
+  return `${m}m`
+}
+
+/** A file's size: `640 B`, `2.4 KB`, `1.2 MB`; "Unknown size" when it was not recorded. */
+export function formatFileSize(bytes: number | null | undefined): string {
+  if (!bytes) return "Unknown size"
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1_048_576).toFixed(1)} MB`
+}

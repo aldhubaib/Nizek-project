@@ -21,24 +21,12 @@ export interface PaneNavigator {
   replace: (href: string) => void;
 }
 
-/** Percentages of the two columns (react-resizable-panels layout), remembered per browser. */
-export interface PaneSizes {
-  main: number;
-  side: number;
-}
-
-export const DEFAULT_SIZES: PaneSizes = { main: 50, side: 50 };
-const SIZES_KEY = "nx:panes:sizes";
 const PINS_KEY = "nx:panes:pins";
 const RECENTS_KEY = "nx:panes:recents";
-
-const isSizes = (v: unknown): v is PaneSizes =>
-  !!v && typeof (v as PaneSizes).main === "number" && typeof (v as PaneSizes).side === "number";
 
 interface PaneStore extends PaneState {
   pathname: string;
   search: string;
-  sizes: PaneSizes;
   /** Tray entries (by `entryKey`) that never drop when the tray is full; per browser. */
   pins: string[];
   /** Side entries opened lately, newest first; feeds "Recents" on the dashboard; per browser. */
@@ -58,7 +46,6 @@ interface PaneStore extends PaneState {
   /** Close the main pane: the visible side entry takes its place and leaves the tray. */
   closeMain: () => void;
   openFull: () => void;
-  setSizes: (sizes: PaneSizes) => void;
   togglePin: (key: string) => void;
   clearRecents: () => void;
   rememberScroll: (key: string, top: number) => void;
@@ -83,7 +70,6 @@ export const usePaneStore = create<PaneStore>()((set, get) => {
     at: 0,
     pathname: "/",
     search: "",
-    sizes: load(SIZES_KEY, DEFAULT_SIZES, isSizes),
     pins: load(PINS_KEY, [], isStrings),
     recents: load(RECENTS_KEY, [], isEntries),
     scroll: {},
@@ -134,10 +120,6 @@ export const usePaneStore = create<PaneStore>()((set, get) => {
     openFull: () => {
       const side = state().stack[state().at];
       if (side) get().nav?.push(hrefFromEntry(side));
-    },
-    setSizes: (sizes) => {
-      set({ sizes });
-      save(SIZES_KEY, sizes);
     },
     togglePin: (key) => {
       const pins = togglePin(get().pins, key);

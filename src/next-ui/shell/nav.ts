@@ -1,6 +1,5 @@
 import {
   BellRing,
-  Coins,
   FileText,
   FolderKanban,
   HelpCircle,
@@ -18,6 +17,7 @@ import {
   Settings,
   Shield,
   ShieldUser,
+  SquareKanban,
   StickyNote,
   Trash,
   Users,
@@ -111,7 +111,12 @@ export const ADMIN_NAV: NavGroup[] = [
     items: [
       { title: "Teams", href: admin("teams"), icon: FolderKanban, description: "Group members into teams and manage their access." },
       { title: "Members", href: admin("members"), icon: Users, description: "Invite people to the system and manage members." },
-      { title: "Roles", href: admin("roles"), icon: Shield, description: "Define project roles and what each may do." },
+      {
+        title: "Role presets",
+        href: admin("roles"),
+        icon: Shield,
+        description: "The roles a new project starts with. Each project edits its own copy in its settings.",
+      },
       {
         title: "Client agreement",
         href: admin("client-agreement"),
@@ -125,12 +130,6 @@ export const ADMIN_NAV: NavGroup[] = [
     items: [
       { title: "Questions", href: admin("questions"), icon: HelpCircle, description: "The default questions added to new tasks." },
       { title: "Contracts", href: admin("contracts"), icon: FileText, description: "Contract number prefixes." },
-      {
-        title: "Exchange rates",
-        href: admin("exchange-rates"),
-        icon: Coins,
-        description: "What each currency is worth, for totalling figures across projects.",
-      },
     ],
   },
   {
@@ -207,6 +206,8 @@ export interface ProjectNavItem {
   icon: LucideIcon;
   /** Only for a project that runs sprints. */
   sprints?: boolean;
+  /** Only for a project with its Kanban switched on. */
+  kanban?: boolean;
   /** Child records (`tasks`, `notes`) that light this row when one is open. */
   children?: string[];
   /** Which count of the project the row shows after its name. */
@@ -217,6 +218,7 @@ export const PROJECT_NAV: ProjectNavItem[] = [
   { title: "About", icon: Info },
   { title: "Road map", view: "roadmap", icon: Map, sprints: true, children: ["tasks"] },
   { title: "Active sprint", view: "sprint", icon: IterationCcw, sprints: true },
+  { title: "Kanban", view: "kanban", icon: SquareKanban, kanban: true },
   { title: "Assets", view: "assets", icon: Paperclip, count: "assets" },
   { title: "Notes", view: "notes", icon: StickyNote, sprints: true, children: ["notes"], count: "notes" },
   { title: "Team", view: "team", icon: Users, count: "members" },
@@ -247,7 +249,13 @@ export function projectNavIsActive(pathname: string, projectId: string, item: Pr
   return splitChildId(e.id)?.parent === projectId && !!item.children?.includes(child.segment);
 }
 
-/** The rows a project shows: all of them, or without the sprint rows for a project tracked another way. */
-export function visibleProjectNav(sprintsEnabled: boolean): ProjectNavItem[] {
-  return PROJECT_NAV.filter((item) => sprintsEnabled || !item.sprints);
+/**
+ * The rows a project shows: without the sprint rows for a project tracked another way, and
+ * with Kanban only while its board is on. Nothing known yet (`undefined`) shows the sprint rows
+ * and not the Kanban, the common case, so the menu does not jump once the project loads.
+ */
+export function visibleProjectNav(ways: { sprintsEnabled: boolean; kanbanEnabled: boolean } | undefined): ProjectNavItem[] {
+  const sprints = ways?.sprintsEnabled ?? true;
+  const kanban = ways?.kanbanEnabled ?? false;
+  return PROJECT_NAV.filter((item) => (sprints || !item.sprints) && (kanban || !item.kanban));
 }

@@ -99,7 +99,7 @@ function ProjectGroup({ projectId, go }: { projectId: string; go: (href: string)
   const brief = useProjectBrief(projectId);
   return (
     <CommandGroup heading={brief?.name ?? "Project"}>
-      {visibleProjectNav(brief?.sprintsEnabled ?? true).map((item) => {
+      {visibleProjectNav(brief).map((item) => {
         const href = projectNavHref(projectId, item);
         return (
           <CommandItem key={href} value={`${brief?.name ?? "Project"} ${item.title}`} data-href={href} onSelect={() => go(href)}>

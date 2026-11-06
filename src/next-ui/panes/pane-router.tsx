@@ -8,6 +8,7 @@ import { DashboardScreen } from "@/next-ui/screens/dashboard-screen";
 import { NoteScreen } from "@/next-ui/screens/projects/note-screen";
 import { ProjectScreen } from "@/next-ui/screens/projects/project-screen";
 import { ProjectsScreen } from "@/next-ui/screens/projects/projects-screen";
+import { SprintScreen } from "@/next-ui/screens/projects/sprint-screen";
 import { TaskScreen } from "@/next-ui/screens/projects/task-screen";
 import { Skeleton } from "@/next-ui/ui/skeleton";
 
@@ -41,6 +42,8 @@ function render(entry: PaneEntry) {
       return <TaskScreen id={id} />;
     case "note":
       return <NoteScreen id={id} />;
+    case "sprint":
+      return <SprintScreen id={id} />;
     default:
       return <ComingSoon title={paneTitle(entry)} />;
   }

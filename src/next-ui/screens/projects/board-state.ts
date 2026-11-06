@@ -132,18 +132,98 @@ export function sprintTimeLeft(s: { endDate: string }, now: Date): string {
 }
 
 export { isClosedSprint };
+export { formatFileSize, formatMinutes } from "@/next-ui/blocks/format";
 
-export function formatMinutes(mins: number): string {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (h > 0 && m > 0) return `${h}h ${m}m`;
-  if (h > 0) return `${h}h`;
-  return `${m}m`;
+/* ------------------------------------------------------------------------------------------ */
+/* Dragging                                                                                    */
+/* ------------------------------------------------------------------------------------------ */
+
+/** What a card was dropped on, on the road map: a lane, a task in a lane, or a sprint card. */
+export type RoadmapDropTarget = { kind: "lane"; lane: TaskLaneId } | { kind: "task"; lane: TaskLaneId; taskId: string } | { kind: "sprint"; sprintId: string; status: string };
+
+/** What a drop on the road map means, worked out from the live panel's rules before anything is sent. */
+export type RoadmapDropAction =
+  | { kind: "none" }
+  | { kind: "refuse"; reason: string }
+  | { kind: "reorder"; lane: TaskLaneId; overTaskId: string }
+  | { kind: "unschedule" }
+  | { kind: "schedule"; column: "PLANNED" | "NEXT"; sprintId: string | null }
+  | { kind: "into-sprint"; sprintId: string; running: boolean };
+
+export const MISSING_DATA_NOTICE = "This task still has missing data. Fill in all required fields first.";
+
+/**
+ * The road map's drop rules, the live panel's: Missing data takes nothing; the Backlog takes a
+ * ready task out of its sprint, or reorders its own; Planned and Next take a ready task into
+ * the lane's sprint (made on the server when the lane is empty) or reorder their own; a sprint
+ * card takes a ready task into that sprint — with a reason when it is running — and a closed
+ * sprint takes nothing. A task dropped where it already is does nothing.
+ */
+export function roadmapDrop(
+  task: LaneTask,
+  target: RoadmapDropTarget,
+  lanes: { planned: Set<string>; next: string | null; firstPlanned: string | null },
+): RoadmapDropAction {
+  const missing = isMissingDataTask(task);
+  const inPlanned = Boolean(task.sprintId && lanes.planned.has(task.sprintId));
+  const inNext = Boolean(task.sprintId && task.sprintId === lanes.next);
+  if (target.kind === "sprint") {
+    if (isClosedSprint(target.status)) return { kind: "none" };
+    if (task.sprintId === target.sprintId) return { kind: "none" };
+    if (missing) return { kind: "refuse", reason: MISSING_DATA_NOTICE };
+    return { kind: "into-sprint", sprintId: target.sprintId, running: target.status === "ACTIVE" };
+  }
+  const lane = target.lane;
+  const overTask = target.kind === "task" && target.taskId !== task.id ? target.taskId : null;
+  switch (lane) {
+    case "missing":
+      return { kind: "none" };
+    case "backlog":
+      if (missing) return { kind: "refuse", reason: MISSING_DATA_NOTICE };
+      if (!task.sprintId) return overTask ? { kind: "reorder", lane, overTaskId: overTask } : { kind: "none" };
+      return { kind: "unschedule" };
+    case "planned":
+      if (missing) return { kind: "refuse", reason: MISSING_DATA_NOTICE };
+      if (inPlanned) return overTask ? { kind: "reorder", lane, overTaskId: overTask } : { kind: "none" };
+      return { kind: "schedule", column: "PLANNED", sprintId: lanes.firstPlanned };
+    case "next":
+      if (missing) return { kind: "refuse", reason: MISSING_DATA_NOTICE };
+      if (inNext) return overTask ? { kind: "reorder", lane, overTaskId: overTask } : { kind: "none" };
+      return { kind: "schedule", column: "NEXT", sprintId: lanes.next };
+  }
 }
 
-export function formatFileSize(bytes: number | null | undefined): string {
-  if (!bytes) return "Unknown size";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1_048_576).toFixed(1)} MB`;
+/** The new `order` of each task that moves when `taskId` is dropped on `overTaskId` in one lane. */
+export function reorderedTasks<T extends { id: string; order: number }>(list: T[], taskId: string, overTaskId: string): { taskId: string; order: number }[] {
+  const from = list.findIndex((t) => t.id === taskId);
+  const to = list.findIndex((t) => t.id === overTaskId);
+  if (from < 0 || to < 0 || from === to) return [];
+  const next = list.slice();
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next.map((t, order) => ({ taskId: t.id, order })).filter(({ taskId: id, order }) => list.find((t) => t.id === id)!.order !== order);
+}
+
+/** One step forward along the sprint board, or back to In development from review (the decline). */
+export function sprintStageMoves(stage: string): { to: SprintStage; decline?: boolean }[] {
+  const i = (SPRINT_STAGES as readonly string[]).indexOf(stage);
+  const out: { to: SprintStage; decline?: boolean }[] = [];
+  if (i >= 0 && i < SPRINT_STAGES.length - 1) out.push({ to: SPRINT_STAGES[i + 1] });
+  if (stage === "INTERNAL_REVIEW") out.push({ to: "IN_DEVELOPMENT", decline: true });
+  return out;
+}
+
+/**
+ * Whether a drag on the sprint board is a move the board allows at all: one stage forward,
+ * review straight to Done, or the decline back from review. Anything else is dropped quietly,
+ * as on the live board.
+ */
+export function isValidSprintMove(from: string, to: string): boolean {
+  const a = (SPRINT_STAGES as readonly string[]).indexOf(from);
+  const b = (SPRINT_STAGES as readonly string[]).indexOf(to);
+  if (a < 0 || b < 0) return false;
+  if (b === a + 1) return true;
+  if (from === "INTERNAL_REVIEW" && to === "DONE") return true;
+  if (from === "INTERNAL_REVIEW" && to === "IN_DEVELOPMENT") return true;
+  return false;
 }

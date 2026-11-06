@@ -38,12 +38,15 @@ export function Chip({
   )
 }
 
-/** One muted fact ("Units 120", "2d"), with an optional label in front; `title` holds the full value. */
+/**
+ * One muted fact ("Units 120", "2d"), with an optional label in front; `title` holds the full
+ * value. A small icon before the value sits on its line (an svg is a block on its own otherwise).
+ */
 export function Fact({ label, children, title, className }: { label?: string; children: React.ReactNode; title?: string; className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-1 text-xs whitespace-nowrap tabular-nums", className)} title={title}>
       {label && <span className="text-muted-foreground/80">{label}</span>}
-      <span className="text-foreground/90">{children}</span>
+      <span className="inline-flex items-center gap-1 text-foreground/90">{children}</span>
     </span>
   )
 }

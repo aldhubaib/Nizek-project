@@ -255,14 +255,14 @@ function OpenInPane({ title, onClick }: { title: string; onClick: () => void }) 
 
 /**
  * The project menu: the project's name behind a back arrow (the row returns to the main list),
- * then its views — About, Road map, Active sprint, Assets, Notes, Team, Vault, Settings — with
- * the same rows, hover action and ⌥-click as the main list. A project without sprints has no
- * Road map, Active sprint or Notes.
+ * then its views — About, Road map, Active sprint, Kanban, Assets, Notes, Team, Vault, Settings
+ * — with the same rows, hover action and ⌥-click as the main list. A project without sprints
+ * has no Road map, Active sprint or Notes; Kanban shows only while the project's board is on.
  */
 function ProjectMenu({ projectId, pathname, onBack }: { projectId: string; pathname: string; onBack: () => void }) {
   const pane = usePane();
   const brief = useProjectBrief(projectId);
-  const items = visibleProjectNav(brief?.sprintsEnabled ?? true);
+  const items = visibleProjectNav(brief);
   return (
     <>
       <SidebarGroup>

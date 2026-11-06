@@ -208,6 +208,17 @@ export function hrefFromEntry(e: PaneEntry): string {
   return path === "/" ? BASE : `${BASE}${path}`;
 }
 
+/**
+ * The record a child record lives under, for the breadcrumb: `{kind: "sprint", id: "<project>_<sprint>"}`
+ * → `{kind: "project", id: "<project>"}`; `undefined` for anything that is not a child record.
+ */
+export function parentEntry(e: PaneEntry): PaneEntry | undefined {
+  const child = CHILD_RECORDS[e.kind];
+  const ids = child && e.id ? splitChildId(e.id) : null;
+  const record = child ? SECTIONS[child.section]?.record : undefined;
+  return ids && record ? { kind: record, id: ids.parent } : undefined;
+}
+
 /** The `pane` value in a search string (`?a=1&pane=…`), or `null`. */
 export function paneParamOf(search: string): string | null {
   return new URLSearchParams(search.replace(/^\?/, "")).get(PANE_PARAM);

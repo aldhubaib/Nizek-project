@@ -21,7 +21,7 @@ describe("the Administrator area", () => {
     const { AdminScreen } = await import("@/next-ui/screens/admin/admin-screen");
     const html = await render(React.createElement(AdminScreen));
     expect(html).toContain('data-testid="admin-index"');
-    for (const title of ["Teams", "Members", "Roles", "Client agreement", "Questions", "Contracts", "Exchange rates"]) {
+    for (const title of ["Teams", "Members", "Role presets", "Client agreement", "Questions", "Contracts"]) {
       expect(html).toContain(title);
     }
     for (const title of ["Equity access", "Vault access", "App logo", "Login page", "Notification sound", "Member notifications"]) {
@@ -36,8 +36,8 @@ describe("the Administrator area", () => {
   it("shows a page that is not rebuilt yet by name, and refuses a name it does not have", async () => {
     const { AdminScreen } = await import("@/next-ui/screens/admin/admin-screen");
     const html = await render(React.createElement(AdminScreen, { view: "roles" }));
-    expect(html).toContain("Roles");
-    expect(html).toContain("Define project roles and what each may do.");
+    expect(html).toContain("Role presets");
+    expect(html).toContain("The roles a new project starts with. Each project edits its own copy in its settings.");
     expect(html).toContain("Not built yet");
     expect(html).not.toContain('data-testid="admin-index"');
     const none = await render(React.createElement(AdminScreen, { view: "nothing" }));

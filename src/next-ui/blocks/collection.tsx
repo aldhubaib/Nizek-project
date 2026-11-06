@@ -6,6 +6,7 @@ import type { LucideIcon } from "lucide-react"
 import { cn } from "@/next-ui/lib/cn"
 
 import { EmptyState } from "@/next-ui/patterns/empty-state"
+import { Button } from "@/next-ui/ui/button"
 
 import { LoadMore } from "./load-more"
 
@@ -24,9 +25,9 @@ function skeletonAt(skeleton: React.ReactNode, index: number): React.ReactNode {
  * the blocks inside size themselves from its width, never the window's. `grid` fills columns
  * of at least `min` px; `masonry` is CSS columns of `min` px (each child avoids breaking);
  * `feed` is one column up to 640 px; `rows` is a plain stacked list. It owns the three list
- * states the DataTable had — skeletons while pending, the empty state, "Nothing matches these
- * filters." — and the count line; `pageSize` shows long lists in slices, the next slice loading
- * as the reader scrolls to the end (`LoadMore`).
+ * states the DataTable had — skeletons while pending, the empty state, "No … match this filter"
+ * with a way back to all of them — and the count line; `pageSize` shows long lists in slices,
+ * the next slice loading as the reader scrolls to the end (`LoadMore`).
  */
 export function Collection<T>({
   layout = "grid",
@@ -38,6 +39,7 @@ export function Collection<T>({
   error,
   empty,
   isFiltered,
+  onClearFilters,
   total,
   noun,
   skeleton,
@@ -55,6 +57,8 @@ export function Collection<T>({
   error?: unknown
   empty: { icon: LucideIcon; title: string; description?: string; action?: React.ReactNode }
   isFiltered?: boolean
+  /** Puts the search and the filters back to all: the "Show all" button when nothing matches. */
+  onClearFilters?: () => void
   /** Rows before filtering, for the "12 of 340" line; defaults to `items.length`. */
   total?: number
   /** The count line under the list ("3,748 posts", "12 of 3,748 posts"); left out when there is no noun. */
@@ -104,7 +108,7 @@ export function Collection<T>({
       ) : count === 0 ? (
         <EmptyState {...empty} />
       ) : all.length === 0 ? (
-        <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">Nothing matches these filters.</p>
+        <NoMatch noun={noun} onClear={onClearFilters} />
       ) : (
         <>
           {layout === "masonry" ? (
@@ -127,6 +131,21 @@ export function Collection<T>({
         <p className="text-xs text-muted-foreground tabular-nums" data-testid="collection-count" data-count={all.length} data-total={count}>
           {isFiltered ? `${all.length} of ${count} ${noun}` : `${count} ${noun}`}
         </p>
+      )}
+    </div>
+  )
+}
+
+/** What a narrowed list shows when nothing is left: the things named, and a way back to all of them. */
+export function NoMatch({ noun, onClear }: { noun?: string; onClear?: () => void }) {
+  const what = noun ?? "items"
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-6 py-12 text-center" data-testid="collection-no-match">
+      <p className="text-sm font-medium">No {what} match this filter</p>
+      {onClear && (
+        <Button variant="outline" size="sm" className="mt-2" onClick={onClear}>
+          Show all {what}
+        </Button>
       )}
     </div>
   )

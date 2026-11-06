@@ -1,26 +1,35 @@
 "use client";
 
+import * as React from "react";
 import { format } from "date-fns";
-import { CheckCircle2, StickyNote } from "lucide-react";
+import { CheckCircle2, Circle, Pencil, StickyNote, Trash2 } from "lucide-react";
 
 import { taskCode } from "@/lib/task-label";
 import { Chip, DetailSection, Fact, HeaderCardSkeleton, RecordRow } from "@/next-ui/blocks";
-import { useNote } from "@/next-ui/data/notes";
+import { useNote, useToggleNoteDone } from "@/next-ui/data/notes";
+import { useProject } from "@/next-ui/data/projects";
 import { SafeHtml } from "@/next-ui/lib/safe-html";
+import { useViewer } from "@/next-ui/lib/viewer";
 import { childId, hrefFromEntry, splitChildId, usePane } from "@/next-ui/panes";
 import { EmptyState } from "@/next-ui/patterns/empty-state";
+import { ErrorNote, errorText } from "@/next-ui/patterns/form-bits";
+import { HeaderAction } from "@/next-ui/patterns/header-action";
 import { PageHeader } from "@/next-ui/patterns/page-header";
 import { Avatar, AvatarFallback, AvatarImage } from "@/next-ui/ui/avatar";
 import { Button } from "@/next-ui/ui/button";
 import { Skeleton } from "@/next-ui/ui/skeleton";
 
+import { DeleteNoteDialog, NoteDialog, WRITABLE_NOTE_TYPES } from "./note-dialogs";
 import { noteTypeLabel, NoteTypeIcon } from "./note-marks";
+import { viewerRights } from "./project-screen";
+import { SprintScreen } from "./sprint-screen";
 import { TaskTypeIcon } from "./task-marks";
 
 /**
- * One note, read here: its kind, title, who wrote it and when, the body as written, and the
- * tasks it is about. Editing, comments and the sprint document tools are in the current
- * panel, one click away.
+ * One note: its kind, title, who wrote it and when, the body as written, and the tasks it is
+ * about. Staff edit it from the header (a road-map item is also marked done there); admins
+ * and project managers delete it. A sprint's document opens as the sprint page itself, where
+ * it is planned and reviewed; its comment threads stay on the live editor.
  */
 export function NoteScreen({ id }: { id: string }) {
   const ids = splitChildId(id);
@@ -28,6 +37,12 @@ export function NoteScreen({ id }: { id: string }) {
   const noteId = ids?.child ?? "";
   const note = useNote(projectId, noteId);
   const pane = usePane();
+  const viewer = useViewer();
+  const project = useProject(projectId);
+  const rights = React.useMemo(() => viewerRights(project.data ?? { members: [], contracts: [] }, viewer?.id, viewer?.systemRole), [project.data, viewer?.id, viewer?.systemRole]);
+  const toggleDone = useToggleNoteDone(projectId);
+  const [dialog, setDialog] = React.useState<null | "edit" | "delete">(null);
+  const [notice, setNotice] = React.useState<string | null>(null);
 
   if (note.isPending) {
     return (
@@ -59,17 +74,36 @@ export function NoteScreen({ id }: { id: string }) {
   }
 
   const n = note.data;
+  if (n.noteType === "SPRINT_DOC" && n.sprintId) return <SprintScreen id={childId(projectId, n.sprintId)} />;
   const linked = [
     ...(n.task ? [n.task] : []),
     ...(n.taskLinks ?? []).map((l) => l.task).filter((t) => t && t.id !== n.task?.id),
   ];
   const done = Boolean(n.completedAt);
+  const editable = rights.canWriteNotes && (WRITABLE_NOTE_TYPES as readonly string[]).includes(n.noteType);
+  const actions = (
+    <>
+      {editable && n.noteType === "DEADLINE" && (
+        <HeaderAction
+          label={done ? "Mark as open" : "Mark as done"}
+          icon={done ? <Circle /> : <CheckCircle2 />}
+          variant="ghost"
+          onClick={() => toggleDone.mutate(n.id, { onError: (err) => setNotice(errorText(err)) })}
+          disabled={toggleDone.isPending}
+          data-testid="toggle-note-done"
+        />
+      )}
+      {editable && <HeaderAction label="Edit note" icon={<Pencil />} onClick={() => setDialog("edit")} data-testid="edit-note-button" />}
+      {rights.canEditSettings && <HeaderAction label="Delete note" icon={<Trash2 />} variant="ghost" onClick={() => setDialog("delete")} data-testid="delete-note-button" />}
+    </>
+  );
 
   return (
     <>
-      <PageHeader title={n.title} />
+      <PageHeader title={n.title} actions={actions} />
 
       <article className="flex flex-col gap-6">
+        {notice && <ErrorNote onClose={() => setNotice(null)}>{notice}</ErrorNote>}
         <header className="flex items-start gap-4">
           <NoteTypeIcon type={n.noteType} className="size-12 [&>svg]:size-6" />
           <div className="min-w-0 flex-1 space-y-1.5">
@@ -130,6 +164,9 @@ export function NoteScreen({ id }: { id: string }) {
           </DetailSection>
         )}
       </article>
+
+      <NoteDialog projectId={projectId || n.projectId} note={n} open={dialog === "edit"} onClose={() => setDialog(null)} />
+      <DeleteNoteDialog projectId={projectId || n.projectId} note={n} open={dialog === "delete"} onClose={() => setDialog(null)} onDeleted={pane.back} />
     </>
   );
 }

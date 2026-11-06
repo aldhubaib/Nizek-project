@@ -20,7 +20,7 @@ import {
 
 describe("the project menu", () => {
   it("lists the project's pages in the agreed order, each a known view with a title", () => {
-    expect(PROJECT_NAV.map((i) => i.title)).toEqual(["About", "Road map", "Active sprint", "Assets", "Notes", "Team", "Vault", "Settings"]);
+    expect(PROJECT_NAV.map((i) => i.title)).toEqual(["About", "Road map", "Active sprint", "Kanban", "Assets", "Notes", "Team", "Vault", "Settings"]);
     for (const item of PROJECT_NAV.slice(1)) {
       expect(VIEWS.project).toContain(item.view);
       expect(PROJECT_VIEW_TITLES[item.view!]).toBe(item.title);
@@ -40,9 +40,12 @@ describe("the project menu", () => {
   });
 
   it("links each row to the view and lights the row for the page, a task lighting the road map", () => {
-    const [about, roadmap, sprint, , notes] = PROJECT_NAV;
+    const [about, roadmap, sprint, kanban, , notes] = PROJECT_NAV;
     expect(projectNavHref("p1", about)).toBe("/next/projects/p1");
     expect(projectNavHref("p1", roadmap)).toBe("/next/projects/p1/roadmap");
+    expect(projectNavHref("p1", kanban)).toBe("/next/projects/p1/kanban");
+    expect(projectNavIsActive("/next/projects/p1/kanban", "p1", kanban)).toBe(true);
+    expect(projectNavIsActive("/next/projects/p1/kanban", "p1", roadmap)).toBe(false);
     expect(projectNavIsActive("/next/projects/p1", "p1", about)).toBe(true);
     expect(projectNavIsActive("/next/projects/p1", "p1", roadmap)).toBe(false);
     expect(projectNavIsActive("/next/projects/p1/sprint", "p1", sprint)).toBe(true);
@@ -52,9 +55,14 @@ describe("the project menu", () => {
     expect(projectNavIsActive("/next/projects/p2/roadmap", "p1", roadmap)).toBe(false);
   });
 
-  it("hides the sprint pages for a project tracked without sprints", () => {
-    expect(visibleProjectNav(true)).toHaveLength(8);
-    expect(visibleProjectNav(false).map((i) => i.title)).toEqual(["About", "Assets", "Team", "Vault", "Settings"]);
+  it("hides the sprint pages for a project tracked without sprints, and shows Kanban only while its board is on", () => {
+    const titles = (ways: Parameters<typeof visibleProjectNav>[0]) => visibleProjectNav(ways).map((i) => i.title);
+    expect(titles({ sprintsEnabled: true, kanbanEnabled: true })).toHaveLength(9);
+    expect(titles({ sprintsEnabled: true, kanbanEnabled: false })).toEqual(["About", "Road map", "Active sprint", "Assets", "Notes", "Team", "Vault", "Settings"]);
+    expect(titles({ sprintsEnabled: false, kanbanEnabled: true })).toEqual(["About", "Kanban", "Assets", "Team", "Vault", "Settings"]);
+    expect(titles({ sprintsEnabled: false, kanbanEnabled: false })).toEqual(["About", "Assets", "Team", "Vault", "Settings"]);
+    // before the project is known: the usual rows, no Kanban, so the menu does not jump
+    expect(titles(undefined)).toEqual(titles({ sprintsEnabled: true, kanbanEnabled: false }));
   });
 });
 
@@ -64,11 +72,10 @@ describe("the Administrator menu", () => {
     expect(ADMIN_NAV_ITEMS.map((i) => i.title)).toEqual([
       "Teams",
       "Members",
-      "Roles",
+      "Role presets",
       "Client agreement",
       "Questions",
       "Contracts",
-      "Exchange rates",
       "Equity access",
       "Vault access",
       "App logo",

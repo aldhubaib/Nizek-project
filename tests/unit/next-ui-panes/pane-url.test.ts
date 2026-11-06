@@ -6,6 +6,7 @@ import {
   isAppHref,
   mountKey,
   paneParamOf,
+  parentEntry,
   parsePane,
   sectionOf,
   serializePane,
@@ -129,19 +130,33 @@ describe("hrefs and entries (under /next until the switch)", () => {
     expect(viewKey({ kind: "admin", view: "teams" })).toBe("admin:teams");
   });
 
-  it("maps a project's tasks and notes as child records, their pane id the two ids joined", () => {
+  it("maps a project's tasks, notes and sprints as child records, their pane id the two ids joined", () => {
     expect(entryFromHref("/next/projects/p1/tasks/t9")).toEqual({ kind: "task", id: "p1_t9" });
     expect(entryFromHref("/next/projects/p1/notes/n2")).toEqual({ kind: "note", id: "p1_n2" });
+    expect(entryFromHref("/next/projects/p1/sprints/s1")).toEqual({ kind: "sprint", id: "p1_s1" });
     expect(hrefFromEntry({ kind: "task", id: "p1_t9" })).toBe("/next/projects/p1/tasks/t9");
     expect(hrefFromEntry({ kind: "note", id: "p1_n2" })).toBe("/next/projects/p1/notes/n2");
+    expect(hrefFromEntry({ kind: "sprint", id: "p1_s1" })).toBe("/next/projects/p1/sprints/s1");
     expect(sectionOf("task")).toBe("projects");
     expect(sectionOf("note")).toBe("projects");
+    expect(sectionOf("sprint")).toBe("projects");
     // an unknown segment, or an id that would break the join, is not a pane
-    expect(entryFromHref("/next/projects/p1/sprints/s1")).toBeNull();
+    expect(entryFromHref("/next/projects/p1/files/f1")).toBeNull();
     expect(entryFromHref("/next/projects/p_1/tasks/t9")).toBeNull();
     // and the grammar carries them in the side stack
     expect(parsePane("task:p1_t9,projects,at:0")).toEqual({ stack: [{ kind: "task", id: "p1_t9" }, { kind: "projects" }], at: 0 });
     expect(serializePane({ stack: [{ kind: "note", id: "p1_n2" }], at: 0 })).toBe("note:p1_n2,at:0");
+  });
+
+  it("names the project a child record lives under, so its breadcrumb reads Projects › project › record", () => {
+    expect(parentEntry({ kind: "sprint", id: "p1_s1" })).toEqual({ kind: "project", id: "p1" });
+    expect(parentEntry({ kind: "task", id: "p1_t9" })).toEqual({ kind: "project", id: "p1" });
+    expect(parentEntry({ kind: "note", id: "p1_n2" })).toEqual({ kind: "project", id: "p1" });
+    expect(hrefFromEntry(parentEntry({ kind: "sprint", id: "p1_s1" })!)).toBe("/next/projects/p1");
+    // a project, a section, or a child id that does not split has nothing above it
+    expect(parentEntry({ kind: "project", id: "p1" })).toBeUndefined();
+    expect(parentEntry({ kind: "projects" })).toBeUndefined();
+    expect(parentEntry({ kind: "sprint", id: "broken" })).toBeUndefined();
   });
 });
 
