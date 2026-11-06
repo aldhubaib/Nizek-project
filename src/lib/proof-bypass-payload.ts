@@ -36,10 +36,15 @@ export function isProofBypassMessage(kind: string): boolean {
   return kind === "proof_bypass";
 }
 
+/**
+ * The one-line preview of a request card. A request is for someone assigned to
+ * record the proof video on the requester's behalf; "approved" means that video
+ * was uploaded and the task moved on.
+ */
 export function proofBypassPreview(payload: ProofBypassPayload): string {
-  if (payload.status === "APPROVED") return "Bypass approved";
-  if (payload.status === "REJECTED") return "Bypass rejected";
-  return "Asked to skip proof-of-work videos";
+  if (payload.status === "APPROVED") return "Proof video uploaded";
+  if (payload.status === "REJECTED") return "Video request declined";
+  return "Asked for a proof video to be uploaded";
 }
 
 export function proofBypassTaskUrl(payload: ProofBypassPayload): string {

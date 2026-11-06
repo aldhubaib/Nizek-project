@@ -126,12 +126,15 @@ export async function createBoardCard(input: {
   columnId: string;
   cardTypeId: string;
   title: string;
+  /** Optional at creation, so a card written in one go (title and words) is one call. */
+  description?: string | null;
 }): Promise<BoardResult<{ id: string }>> {
   return runBoardAction(async () => {
     const context = await requireBoardAction(input.boardId, "createCard");
 
     const title = input.title.trim();
     if (!title) throw new BoardAccessError("A card needs a title.");
+    const description = input.description?.trim() || null;
 
     // Both are checked against this board rather than trusted, so a caller
     // cannot file a card into a column belonging to somebody else's board.
@@ -171,6 +174,7 @@ export async function createBoardCard(input: {
           columnId: input.columnId,
           cardTypeId: input.cardTypeId,
           title,
+          description,
           createdById: context.userId,
           position: positionForIndex(
             siblings.map((row) => row.position),

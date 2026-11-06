@@ -18,6 +18,7 @@ import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import { isQuestionAnswerFilled, isReadinessQuestion, isWaitingOnClientAnswer } from "@/lib/task-readiness";
 import { requireUserOnProject } from "@/lib/project-mentions";
 import { createTaskRecord } from "@/lib/create-task-record";
+import { proofVideoModeOf, taskVideoRequired } from "@/lib/proof-video-mode";
 import {
   isTaskPriority,
   priorityLabel,
@@ -48,43 +49,19 @@ const ALLOWED_ROLES_BY_TRACK: Record<RoleTrack, string[]> = {
   developer: DEV_ROLES,
 };
 
-async function resolveInternalReviewAssignee(projectId: string): Promise<string | null> {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { internalReviewRoleId: true, internalReviewUserId: true },
-  });
-  if (!project) return null;
-
-  if (project.internalReviewUserId) return project.internalReviewUserId;
-
-  if (!project.internalReviewRoleId) return null;
-
-  const member = await prisma.projectMember.findFirst({
-    where: {
-      projectId,
-      roleId: project.internalReviewRoleId,
-      user: { systemRole: { not: "CLIENT" } },
-    },
-    orderBy: [{ createdAt: "asc" }],
-    select: { userId: true },
-  });
-  return member?.userId ?? null;
-}
-
-async function resolveAutoAssignee(
+// Who a task lands on when it enters a stage: PM-side stages (including
+// Internal review) go back to whoever created the task; developer-side stages
+// go to the task's developer, or to whoever is moving it.
+function resolveAutoAssignee(
   stage: string,
   task: { createdById: string; developerId: string | null },
   actingUserId: string,
-  projectId: string,
-): Promise<string | null> {
+): string | null {
   const track = STAGE_ROLE_MAP[stage];
   if (!track) return null;
 
   switch (track) {
     case "pm":
-      if (stage === "INTERNAL_REVIEW") {
-        return (await resolveInternalReviewAssignee(projectId)) ?? task.createdById;
-      }
       return task.createdById;
     case "developer":
       return task.developerId ?? actingUserId;
@@ -343,6 +320,9 @@ export async function moveTask(data: {
     if (!isAdmin && task.stage !== data.stage) {
       const perms = getPermissionsFromRole(member.projectRole);
       if (!canTransition(perms, task.stage, data.stage)) {
+        // Someone who supplied this task's proof for another member — the
+        // approver of a waiver, or the assigned uploader who recorded the
+        // video on their behalf — may carry it into review themselves.
         const approvedThisBypass =
           data.stage === "INTERNAL_REVIEW" &&
           Boolean(data.proofOfWorkId) &&
@@ -351,7 +331,7 @@ export async function moveTask(data: {
               where: {
                 id: data.proofOfWorkId,
                 taskId: task.id,
-                bypassedById: user.id,
+                OR: [{ bypassedById: user.id }, { uploadedById: user.id }],
               },
               select: { id: true },
             }),
@@ -414,7 +394,14 @@ export async function moveTask(data: {
 
     const targetStage = data.stage;
 
-    if (oldStage !== "INTERNAL_REVIEW" && targetStage === "INTERNAL_REVIEW") {
+    // A task proves its work on the way into Internal Review — unless the
+    // project's video mode is "No video", where the sprint review carries the
+    // recording instead and tasks move freely.
+    if (
+      oldStage !== "INTERNAL_REVIEW" &&
+      targetStage === "INTERNAL_REVIEW" &&
+      taskVideoRequired(proofVideoModeOf(task.project.proofVideoMode))
+    ) {
       if (!data.proofOfWorkId) {
         return { success: false, error: "PROOF_REQUIRED" };
       }
@@ -446,11 +433,10 @@ export async function moveTask(data: {
     let autoAssigneeId: string | null | undefined;
     const stickyUpdates: Record<string, string> = {};
     if (oldStage !== targetStage) {
-      autoAssigneeId = await resolveAutoAssignee(
+      autoAssigneeId = resolveAutoAssignee(
         targetStage,
         { createdById: task.createdById, developerId: task.developerId },
         user.id,
-        task.projectId,
       );
 
       const track = STAGE_ROLE_MAP[targetStage];
@@ -556,7 +542,7 @@ export async function declineTask(data: {
     // reviewer fields are rewritten when a member's tasks are transferred on
     // removal, so this resumes onto the new owner instead of pointing at
     // whoever historically held the task.
-    const autoAssigneeId = await resolveAutoAssignee(targetStage, task, user.id, task.projectId);
+    const autoAssigneeId = resolveAutoAssignee(targetStage, task, user.id);
     const autoAssignee = autoAssigneeId
       ? await prisma.user.findUnique({ where: { id: autoAssigneeId }, select: { id: true, name: true } })
       : null;

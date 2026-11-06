@@ -399,6 +399,11 @@ export async function inviteToTeam(data: {
       })
     : [];
   const roleById = new Map(assignedRoles.map((r) => [r.id, r]));
+  // Each role must belong to the project it is being used on.
+  for (const a of assignments) {
+    const pRole = roleById.get(a.roleId);
+    if (!pRole || pRole.projectId !== a.projectId) throw new Error("Invalid project role");
+  }
   const asClient =
     data.systemRole === "CLIENT" || assignedRoles.some((r) => r.isClient);
 
@@ -493,16 +498,16 @@ export async function getProjectsWithRoles() {
   const user = await requireUser();
   if (user.systemRole !== "ADMIN") return [];
 
-  const [projects, roles] = await Promise.all([
-    prisma.project.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.projectRole.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, name: true, isAdmin: true } }),
-  ]);
-
-  return projects.map((p) => ({
-    id: p.id,
-    name: p.name,
-    roles,
-  }));
+  // Each project lists its own roles; a project created by the previous
+  // release during a deploy may briefly have none until it is opened.
+  return prisma.project.findMany({
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      roles: { orderBy: { createdAt: "asc" }, select: { id: true, name: true, isAdmin: true } },
+    },
+  });
 }
 
 export async function cancelTeamInvite(inviteId: string) {

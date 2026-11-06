@@ -74,7 +74,11 @@ export function BypassRequestsPopover({
   useEffect(() => {
     if (!open) return;
     function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      // The upload dialog is portalled to <body>; a click inside it is not
+      // a click away from the list.
+      if (target instanceof Element && target.closest("[data-scroll-lock-root]")) return;
+      if (ref.current && !ref.current.contains(target)) {
         setOpen(false);
       }
     }
@@ -96,8 +100,8 @@ export function BypassRequestsPopover({
       <button
         type="button"
         onClick={handleOpen}
-        aria-label="Video bypass requests"
-        title="Video bypass requests"
+        aria-label="Video bypass — requests to upload a proof video for someone"
+        title="Video bypass"
         className="relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <Film className="h-4 w-4" />

@@ -26,6 +26,7 @@ import { listSprints, type SprintDTO } from "@/actions/sprint";
 
 import type { TaskQuestion } from "@/components/kanban/question-field";
 import { useKanbanStore, type KanbanTask } from "@/store/kanban";
+import type { ProofVideoMode } from "@/lib/proof-video-mode";
 import { Users, KeyRound, Settings, Loader2, Check, Shield } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -116,8 +117,6 @@ interface Project {
   team?: { id: string; name: string } | null;
   contracts: Contract[];
   _count: { tasks: number; meetingNotes: number; assets: number };
-  internalReviewRoleId?: string | null;
-  internalReviewUserId?: string | null;
 }
 
 interface NoteHistoryEntry {
@@ -216,6 +215,8 @@ interface Props {
   sprintsEnabled?: boolean;
   /** This project's board sends Calendar invites and the viewer has not connected Google. */
   needsCalendarConnect?: boolean;
+  /** The project's "Video bypass" rule — see `ProofVideoMode`. */
+  proofVideoMode?: ProofVideoMode;
 }
 
 function TabSpinner() {
@@ -245,6 +246,7 @@ export function ProjectDetailClient({
   boardEnabled = false,
   sprintsEnabled = true,
   needsCalendarConnect = false,
+  proofVideoMode = "SELF",
 }: Props) {
   const canEdit = userPermissions.canModifyTask || userPermissions.isAdmin;
   const isAdmin = userPermissions.isAdmin;
@@ -297,7 +299,7 @@ export function ProjectDetailClient({
 
   const loadTeam = useCallback(async () => {
     const [roles, invitations, nextMembers] = await Promise.all([
-      getRoles(),
+      getRoles(project.id),
       getProjectInvitations(project.id),
       getProjectMembers(project.id),
     ]);
@@ -689,6 +691,7 @@ export function ProjectDetailClient({
                 allowedTaskTypes={allowedTaskTypes}
                 activeContractType={activeContractType}
                 canManage={canEdit}
+                proofVideoMode={proofVideoMode}
                 onOpenBacklog={() => setActiveTab("roadmap")}
               />
             ))}
@@ -806,14 +809,15 @@ export function ProjectDetailClient({
           project={project}
           teams={settingsData?.teams ?? []}
           contractPrefixes={settingsData?.contractPrefixes ?? []}
-          internalMembers={members
-            .filter((m) => m.user.systemRole !== "CLIENT")
-            .map((m) => ({ id: m.user.id, name: m.user.name, imageUrl: m.user.imageUrl }))}
           isAdmin={isAdmin}
           boardExists={boardExists}
           boardEnabled={boardEnabled}
           sprintsEnabled={sprintsEnabled}
-          onClose={() => { setSettingsOpen(false); router.refresh(); }}
+          proofVideoMode={proofVideoMode}
+          members={teamMembers}
+          // Roles may have changed in there; the Team tab reloads them when
+          // its data is cleared.
+          onClose={() => { setSettingsOpen(false); setTeamData(null); router.refresh(); }}
         />,
         document.body
       )}

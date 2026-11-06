@@ -428,7 +428,8 @@ export function MemberList({
                       checked={permOverrides[member.id]?.canBypassProof ?? member.canBypassProof}
                       onChange={(v) => handleToggleInvitePerm(member.id, "canBypassProof", v)}
                       icon={<Film className="w-3 h-3" strokeWidth={1.5} />}
-                      label="Bypass"
+                      label="Videos"
+                      title="Uploads proof videos on behalf of others when the project's Video bypass is set to Assign"
                     />
                   </div>
                 </div>

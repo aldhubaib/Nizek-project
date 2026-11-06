@@ -64,28 +64,36 @@ interface TeamInvite {
   team?: { id: string; name: string } | null;
 }
 
-interface GlobalRole {
+interface ProjectRoleOption {
   id: string;
   name: string;
   isAdmin: boolean;
-  isClient?: boolean;
-  _count: { members: number };
+}
+
+/** A project together with its own roles; every project has its own list. */
+interface ProjectOption {
+  id: string;
+  name: string;
+  roles: ProjectRoleOption[];
 }
 
 interface Props {
   members: Member[];
   invitations: Invitation[];
   teamInvites: TeamInvite[];
-  roles: GlobalRole[];
   /** Non-default workspace teams (Iran, Pakistan, ...) for the invite dialog. */
   workspaceTeams?: { id: string; name: string }[];
-  /** All projects, for pre-assigning the invitee to one. */
-  projectOptions?: { id: string; name: string }[];
+  /** All projects with their roles, for pre-assigning the invitee to one. */
+  projectOptions?: ProjectOption[];
   isAdmin: boolean;
   currentUserId?: string;
 }
 
-export function TeamPageClient({ members, invitations, teamInvites, roles, workspaceTeams = [], projectOptions = [], isAdmin, currentUserId }: Props) {
+function rolesOf(projectOptions: ProjectOption[], projectId: string): ProjectRoleOption[] {
+  return projectOptions.find((p) => p.id === projectId)?.roles ?? [];
+}
+
+export function TeamPageClient({ members, invitations, teamInvites, workspaceTeams = [], projectOptions = [], isAdmin, currentUserId }: Props) {
   const [search, setSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState<string>("all");
   // Null means the filter is off; clicking the active chip clears it again.
@@ -490,8 +498,9 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                       <select
                         value={row.projectId}
                         onChange={(e) =>
+                          // Roles belong to a project, so a new project means a new role pick.
                           setInviteProjects((rows) =>
-                            rows.map((r, i) => (i === idx ? { ...r, projectId: e.target.value } : r)),
+                            rows.map((r, i) => (i === idx ? { projectId: e.target.value, roleId: "" } : r)),
                           )
                         }
                         className="flex-1 min-w-0 h-9 px-2 rounded-lg border border-border bg-card text-s text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
@@ -518,7 +527,7 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
                         className="flex-1 min-w-0 h-9 px-2 rounded-lg border border-border bg-card text-s text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50"
                       >
                         <option value="">Select role...</option>
-                        {roles.map((r) => (
+                        {rolesOf(projectOptions, row.projectId).map((r) => (
                           <option key={r.id} value={r.id}>{r.name}</option>
                         ))}
                       </select>
@@ -1075,7 +1084,6 @@ export function TeamPageClient({ members, invitations, teamInvites, roles, works
         return (
           <MemberProjectsDialog
             member={member}
-            roles={roles}
             projectOptions={projectOptions}
             canManage={isAdmin}
             onClose={() => setProjectsMemberId(null)}
@@ -1321,14 +1329,12 @@ function EditMemberDialog({
 
 function MemberProjectsDialog({
   member,
-  roles,
   projectOptions,
   canManage,
   onClose,
 }: {
   member: Member;
-  roles: GlobalRole[];
-  projectOptions: { id: string; name: string }[];
+  projectOptions: ProjectOption[];
   canManage: boolean;
   onClose: () => void;
 }) {
@@ -1338,7 +1344,9 @@ function MemberProjectsDialog({
   const available = projectOptions.filter((p) => !assignedIds.has(p.id));
 
   const [addProjectId, setAddProjectId] = useState("");
-  const [addRoleId, setAddRoleId] = useState(roles[0]?.id ?? "");
+  // The chosen project's roles; the first one is picked when the project changes.
+  const addRoles = rolesOf(projectOptions, addProjectId);
+  const [addRoleId, setAddRoleId] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [transfer, setTransfer] = useState<{
     project: MemberProject;
@@ -1460,7 +1468,7 @@ function MemberProjectsDialog({
                     className="h-7 max-w-[8.5rem] shrink-0 rounded-md border border-border bg-card px-1.5 text-xs text-foreground disabled:opacity-50"
                   >
                     {!project.roleId && <option value="">{project.roleName || "Role"}</option>}
-                    {roles.map((r) => (
+                    {rolesOf(projectOptions, project.id).map((r) => (
                       <option key={r.id} value={r.id}>{r.name}</option>
                     ))}
                   </select>
@@ -1497,7 +1505,10 @@ function MemberProjectsDialog({
               <div className="flex items-center gap-2">
                 <select
                   value={addProjectId}
-                  onChange={(e) => setAddProjectId(e.target.value)}
+                  onChange={(e) => {
+                    setAddProjectId(e.target.value);
+                    setAddRoleId(rolesOf(projectOptions, e.target.value)[0]?.id ?? "");
+                  }}
                   className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-card px-2 text-s text-foreground"
                 >
                   <option value="">Select project...</option>
@@ -1511,7 +1522,7 @@ function MemberProjectsDialog({
                   disabled={!addProjectId}
                   className="h-9 w-[7.5rem] shrink-0 rounded-lg border border-border bg-card px-2 text-s text-foreground disabled:opacity-50"
                 >
-                  {roles.map((r) => (
+                  {addRoles.map((r) => (
                     <option key={r.id} value={r.id}>{r.name}</option>
                   ))}
                 </select>

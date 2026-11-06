@@ -2,9 +2,8 @@ import { Suspense } from "react";
 import { requireUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { isClientUser } from "@/lib/client-chat";
-import { getTeams, ensureDefaultTeams, getPendingInvitesForTeam, getTeamMembers, getPendingInvitations, getPendingTeamInvites } from "@/actions/team";
+import { getTeams, ensureDefaultTeams, getPendingInvitesForTeam, getTeamMembers, getPendingInvitations, getPendingTeamInvites, getProjectsWithRoles } from "@/actions/team";
 import { getRoles } from "@/actions/role";
-import { getProjectOptions } from "@/actions/project";
 import { getContractPrefixes } from "@/actions/contract-prefix";
 import { getAgreementAdminView } from "@/actions/client-agreement";
 import { getClientIssueTypes, getDefaultQuestions } from "@/actions/default-question";
@@ -34,7 +33,7 @@ export default async function AdminPage() {
     getBrandingAssets(),
     getLoginPhotos(),
     getNotificationSound(),
-    getProjectOptions(),
+    getProjectsWithRoles(),
   ]);
 
   return (

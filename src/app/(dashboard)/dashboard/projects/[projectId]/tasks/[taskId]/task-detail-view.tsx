@@ -29,6 +29,7 @@ import { TaskHistoryDialog } from "@/components/kanban/task-history-dialog";
 import { TaskLifecycleTimeline } from "@/components/task/task-lifecycle-timeline";
 import type { StageVisit, TaskHistoryActivity, TaskHistorySummary } from "@/actions/task-history";
 import { needsProofOfWork } from "@/lib/proof-of-work";
+import { taskVideoRequired, type ProofVideoMode } from "@/lib/proof-video-mode";
 import { useKanbanStore, type MovableStage } from "@/store/kanban";
 import { DeclineDialog } from "@/components/kanban/decline-dialog";
 import { projectNoteUrl, isRoadmapNote } from "@/lib/project-note-url";
@@ -139,6 +140,8 @@ interface Props {
   task: TaskData;
   projectId: string;
   projectName: string;
+  /** The project's video rule; "No video" lets a task enter review without one. */
+  proofVideoMode?: ProofVideoMode;
   questions: QuestionWithType[];
   initialAnswers: Record<string, string>;
   initialNotes: NoteData[];
@@ -165,6 +168,7 @@ export function TaskDetailPage({
   task: initialTask,
   projectId,
   projectName,
+  proofVideoMode = "SELF",
   questions: allQuestions,
   initialAnswers,
   initialNotes,
@@ -182,6 +186,8 @@ export function TaskDetailPage({
   const router = useRouter();
   const questions = allQuestions.filter((q) => q.taskType === initialTask.taskType);
   const typeStyle = taskTypeStyle(initialTask.taskType);
+  const needsVideo = (from: Stage, to: Stage) =>
+    taskVideoRequired(proofVideoMode) && needsProofOfWork(from, to);
   const projectBackHref = backToNoteId
     ? projectNoteUrl(projectId, backToNoteId)
     : projectHrefForTaskReturn(
@@ -365,7 +371,7 @@ export function TaskDetailPage({
 
   async function handleAdminStageChange(stage: Stage) {
     if (stage === taskStage || movingStage) return;
-    if (needsProofOfWork(taskStage, stage)) {
+    if (needsVideo(taskStage, stage)) {
       setShowAdminStages(false);
       setShowProof(true);
       return;
@@ -449,7 +455,7 @@ export function TaskDetailPage({
 
   function handleMoveToNext() {
     if (!nextStage || movingStage) return;
-    if (needsProofOfWork(taskStage, nextStage.id)) {
+    if (needsVideo(taskStage, nextStage.id)) {
       setShowProof(true);
       return;
     }

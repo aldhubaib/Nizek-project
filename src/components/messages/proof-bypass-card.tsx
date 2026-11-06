@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import { Film } from "lucide-react";
-import {
-  approveProofBypass,
-  rejectProofBypass,
-} from "@/actions/proof-bypass-decide";
+import { rejectProofBypass } from "@/actions/proof-bypass-decide";
+import { uploadProofForRequest, type ProofVideoInput } from "@/actions/proof-of-work";
 import { ActivityCard } from "@/components/messages/activity-card";
 import { TaskInboxSlideOver } from "@/components/messages/task-inbox-slide-over";
+import { UploadVideosDialog } from "@/components/proof/upload-videos-dialog";
 import {
   proofBypassTaskUrl,
   type ProofBypassPayload,
@@ -25,19 +24,19 @@ const THEME = {
 };
 
 function category(status: ProofBypassPayload["status"]) {
-  if (status === "APPROVED") return "Bypass approved";
-  if (status === "REJECTED") return "Bypass rejected";
-  return "Video bypass";
+  if (status === "APPROVED") return "Video uploaded";
+  if (status === "REJECTED") return "Request declined";
+  return "Video request";
 }
 
 function excerpt(payload: ProofBypassPayload, status: ProofBypassPayload["status"]) {
   if (status === "APPROVED") {
-    return `${payload.decidedByName ?? "Someone"} approved the bypass. The task moved to Internal Review.`;
+    return `${payload.decidedByName ?? "Someone"} uploaded the proof video. The task moved to Internal Review.`;
   }
   if (status === "REJECTED") {
-    return `${payload.decidedByName ?? "Someone"} rejected the bypass. Upload videos to move the task.`;
+    return `${payload.decidedByName ?? "Someone"} declined. Upload the video yourself to move the task.`;
   }
-  return `${payload.requesterName} wants to skip proof-of-work videos.`;
+  return `${payload.requesterName} asks you to upload the proof video for this task.`;
 }
 
 export function ProofBypassCard({
@@ -51,19 +50,19 @@ export function ProofBypassCard({
 }) {
   const [status, setStatus] = useState(payload.status);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const canDecide = status === "PENDING" && payload.requesterId !== currentUserId;
   const href = proofBypassTaskUrl(payload);
   const title = `${taskCode(payload.taskType, payload.taskNumber)} ${payload.taskTitle}`;
 
-  async function decide(action: "approve" | "reject") {
+  async function decline() {
     setBusy(true);
     setError(null);
     try {
-      if (action === "approve") await approveProofBypass(payload.passId);
-      else await rejectProofBypass(payload.passId);
-      setStatus(action === "approve" ? "APPROVED" : "REJECTED");
+      await rejectProofBypass(payload.passId);
+      setStatus("REJECTED");
     } catch (err) {
       const raw = err instanceof Error ? err.message : "";
       setError(
@@ -74,6 +73,13 @@ export function ProofBypassCard({
     } finally {
       setBusy(false);
     }
+  }
+
+  async function upload(videos: ProofVideoInput[]) {
+    const result = await uploadProofForRequest({ passId: payload.passId, videos });
+    if (!result.success) return result.error;
+    setStatus("APPROVED");
+    return null;
   }
 
   return (
@@ -96,26 +102,35 @@ export function ProofBypassCard({
             <button
               type="button"
               disabled={busy}
-              onClick={() => void decide("reject")}
+              onClick={() => void decline()}
               className="flex items-center justify-center rounded-lg border border-border px-3 py-2.5 text-s font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
             >
-              Reject
+              Decline
             </button>
             <button
               type="button"
               disabled={busy}
-              onClick={() => void decide("approve")}
+              onClick={() => setUploading(true)}
               className={cn(
                 "flex items-center justify-center rounded-lg border px-3 py-2.5 text-s font-medium text-foreground transition-colors disabled:opacity-50",
                 THEME.button,
               )}
             >
-              Approve
+              Upload video
             </button>
           </div>
         ) : null}
         {error ? <p className="text-s text-destructive">{error}</p> : null}
       </ActivityCard>
+      {uploading ? (
+        <UploadVideosDialog
+          title="Upload for someone else"
+          description={`Upload the proof video for ${title} on behalf of ${payload.requesterName}. The task moves to Internal Review once it is up.`}
+          submitLabel="Upload & move"
+          onSubmit={upload}
+          onClose={() => setUploading(false)}
+        />
+      ) : null}
       {panelOpen ? (
         <TaskInboxSlideOver
           taskId={payload.taskId}

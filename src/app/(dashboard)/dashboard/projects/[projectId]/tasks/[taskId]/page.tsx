@@ -6,6 +6,7 @@ import { requireProjectMember } from "@/lib/auth";
 import { getPermissionsFromRole, getAdminPermissions } from "@/lib/permissions";
 import { taskEditBlockedReason } from "@/lib/task-edit-lock";
 import { isProjectAccessError } from "@/lib/project-access";
+import { proofVideoModeOf } from "@/lib/proof-video-mode";
 import { notFound } from "next/navigation";
 import { TaskDetailPage as TaskDetailClient } from "./task-detail-view";
 
@@ -114,6 +115,7 @@ export default async function TaskDetailPage({ params, searchParams }: Props) {
       }}
       projectId={projectId}
       projectName={task.project.name}
+      proofVideoMode={proofVideoModeOf(task.project.proofVideoMode)}
       questions={questions}
       initialAnswers={answersMap}
       initialNotes={notes}

@@ -8,20 +8,18 @@ import {
   listEquityMetrics,
   listEquityRoles,
 } from "@/actions/equity";
-import { getCurrencyRates } from "@/actions/currency-rates";
 import { EquityPageClient } from "../equity-page-client";
 
 export default async function EquityPage() {
   const user = await requireUser();
   if (!(await canAccessEquity(user.id))) redirect("/dashboard");
 
-  const [portfolios, projectOptions, holders, roles, metrics, rates] = await Promise.all([
+  const [portfolios, projectOptions, holders, roles, metrics] = await Promise.all([
     getEquityPortfolios(),
     getEquityProjectOptions(),
     listEquityHolders(),
     listEquityRoles(),
     listEquityMetrics(),
-    getCurrencyRates(),
   ]);
 
   return (
@@ -31,7 +29,6 @@ export default async function EquityPage() {
       holders={holders}
       roles={roles}
       metrics={metrics}
-      rates={rates}
     />
   );
 }

@@ -22,6 +22,7 @@ import type { TaskQuestion } from "./question-field";
 import { StageConfirmDialog, getCheckpoint } from "./stage-confirm-dialog";
 import { ProofOfWorkDialog } from "./proof-of-work-dialog";
 import { needsProofOfWork } from "@/lib/proof-of-work";
+import { taskVideoRequired, type ProofVideoMode } from "@/lib/proof-video-mode";
 import { DeclineDialog, type DeclineAttachment } from "./decline-dialog";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
 import { useProjectTaskSync } from "./use-project-task-sync";
@@ -71,6 +72,8 @@ export interface BoardProps {
   pipelineOnly?: boolean;
   /** Completed sprints: view only, no drag or create. */
   readOnly?: boolean;
+  /** The project's video rule; "No video" lets a card enter review without one. */
+  proofVideoMode?: ProofVideoMode;
   onRemoveFromSprint?: (taskId: string) => void;
 }
 
@@ -111,6 +114,7 @@ export function KanbanBoard({
   filterSprintId,
   pipelineOnly = false,
   readOnly = false,
+  proofVideoMode = "SELF",
   onRemoveFromSprint,
 }: BoardProps) {
   // Selector subscriptions so the board only re-renders on task changes, not on
@@ -381,7 +385,7 @@ export function KanbanBoard({
       return;
     }
 
-    if (needsProofOfWork(fromStage, targetStage)) {
+    if (taskVideoRequired(proofVideoMode) && needsProofOfWork(fromStage, targetStage)) {
       setPendingProof({ taskId: activeId, taskTitle: task.title, order: task.order });
       return;
     }

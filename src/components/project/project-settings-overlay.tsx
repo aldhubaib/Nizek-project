@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, Trash2, Loader2, X as XIcon, ScrollText, AlertTriangle, Archive, Undo2, SquareKanban } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { deleteProject, updateProject, deleteContract, toggleLatePayment, setProjectClientChat, setProjectSprints, setProjectBoard } from "@/actions/project";
+import { deleteProject, updateProject, deleteContract, toggleLatePayment, setProjectClientChat, setProjectSprints, setProjectBoard, setProofVideoMode, setProofUploaders } from "@/actions/project";
+import {
+  PROOF_VIDEO_MODES,
+  PROOF_VIDEO_MODE_HINT,
+  PROOF_VIDEO_MODE_LABEL,
+  type ProofVideoMode,
+} from "@/lib/proof-video-mode";
 import { getRoles } from "@/actions/role";
+import { RolesManager } from "@/components/settings/roles-manager";
 import { createBoard } from "@/actions/board";
 import { getArchivedTasks, restoreTask, permanentlyDeleteTask } from "@/actions/task";
 import { ContractBadge } from "@/components/project/contract-badge";
@@ -46,12 +53,6 @@ interface ContractPrefixOption {
   name: string;
 }
 
-interface ClientMember {
-  id: string;
-  name: string | null;
-  imageUrl: string | null;
-}
-
 interface ProjectSettingsProps {
   project: {
     id: string;
@@ -60,14 +61,11 @@ interface ProjectSettingsProps {
     logoUrl: string | null;
     team?: Team | null;
     contracts: Contract[];
-    internalReviewRoleId?: string | null;
-    internalReviewUserId?: string | null;
     clientChatEnabled?: boolean;
   };
   teams?: Team[];
   contractPrefixes?: ContractPrefixOption[];
-  /** Non-client project members for the internal review user picker. */
-  internalMembers?: ClientMember[];
+  /** System admin or holder of this project's Admin role. */
   isAdmin?: boolean;
   /** Whether a board has been added to this project, switched on or not. */
   boardExists?: boolean;
@@ -75,18 +73,32 @@ interface ProjectSettingsProps {
   boardEnabled?: boolean;
   /** Whether this project runs the sprint pipeline. */
   sprintsEnabled?: boolean;
+  /** The project's "Video bypass" rule — see `ProofVideoMode`. */
+  proofVideoMode?: ProofVideoMode;
+  /** The project's members, for choosing who uploads videos on behalf of others. */
+  members?: VideoUploaderCandidate[];
   onClose: () => void;
+}
+
+/** What the uploader picker needs to know about a member. */
+export interface VideoUploaderCandidate {
+  id: string;
+  role: string;
+  canBypassProof: boolean;
+  projectRole?: { name: string; isClient?: boolean } | null;
+  user: { id: string; name: string | null; email: string; imageUrl: string | null };
 }
 
 export function ProjectSettingsOverlay({
   project,
   teams = [],
   contractPrefixes = [],
-  internalMembers = [],
   isAdmin = false,
   boardExists = false,
   boardEnabled = false,
   sprintsEnabled = true,
+  proofVideoMode = "SELF",
+  members = [],
   onClose,
 }: ProjectSettingsProps) {
   const router = useRouter();
@@ -96,9 +108,6 @@ export function ProjectSettingsOverlay({
   const [logo, setLogo] = useState<string | null>(project.logoUrl);
   const [description, setDescription] = useState(project.description || "");
   const [teamId, setTeamId] = useState(project.team?.id || "");
-  const [internalReviewRoleId, setInternalReviewRoleId] = useState(project.internalReviewRoleId || "");
-  const [internalReviewUserId, setInternalReviewUserId] = useState(project.internalReviewUserId || "");
-  const [roles, setRoles] = useState<{ id: string; name: string }[]>([]);
   const [clientChatEnabled, setClientChatEnabled] = useState(!!project.clientChatEnabled);
   const [clientChatSaving, setClientChatSaving] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -108,18 +117,6 @@ export function ProjectSettingsOverlay({
 
   const [activeTab, setActiveTab] = useState<"general" | "archive">("general");
   useScrollLock(true);
-
-  useEffect(() => {
-    void getRoles()
-      .then((rows) =>
-        setRoles(
-          rows
-            .filter((r) => !r.isClient)
-            .map((r) => ({ id: r.id, name: r.name })),
-        ),
-      )
-      .catch(() => {});
-  }, []);
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -180,8 +177,6 @@ export function ProjectSettingsOverlay({
         description,
         // Empty string = "No team" — send null so the team can be cleared.
         teamId: teamId || null,
-        internalReviewRoleId: internalReviewUserId ? null : (internalReviewRoleId || null),
-        internalReviewUserId: internalReviewUserId || null,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -336,47 +331,6 @@ export function ProjectSettingsOverlay({
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="proj-internal-review" className="text-s font-semibold">Internal Review assignment</Label>
-            <p className="text-xs text-muted-foreground">
-              Tasks moved to Internal Review are auto-assigned to this person or a member with this role.
-            </p>
-            <select
-              id="proj-internal-review"
-              value={internalReviewUserId ? `user:${internalReviewUserId}` : internalReviewRoleId ? `role:${internalReviewRoleId}` : ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v.startsWith("user:")) {
-                  setInternalReviewUserId(v.slice(5));
-                  setInternalReviewRoleId("");
-                } else if (v.startsWith("role:")) {
-                  setInternalReviewUserId("");
-                  setInternalReviewRoleId(v.slice(5));
-                } else {
-                  setInternalReviewUserId("");
-                  setInternalReviewRoleId("");
-                }
-              }}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-s text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">Task creator (default)</option>
-              {roles.length > 0 && (
-                <optgroup label="By role">
-                  {roles.map((role) => (
-                    <option key={role.id} value={`role:${role.id}`}>{role.name}</option>
-                  ))}
-                </optgroup>
-              )}
-              {internalMembers.length > 0 && (
-                <optgroup label="Specific person">
-                  {internalMembers.map((m) => (
-                    <option key={m.id} value={`user:${m.id}`}>{m.name ?? m.id}</option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-          </div>
-
           {/* Client chat */}
           <div className="space-y-2 rounded-md border border-border/60 bg-surface/40 p-3">
             <div className="flex items-start justify-between gap-3">
@@ -456,12 +410,23 @@ export function ProjectSettingsOverlay({
             )}
           </div>
 
+          {/* Roles: this project's own, editable by its admins */}
+          {isAdmin && <ProjectRolesSection projectId={project.id} />}
+
           {isAdmin && (
             <WorkTrackingSection
               projectId={project.id}
               boardExists={boardExists}
               boardEnabled={boardEnabled}
               sprintsEnabled={sprintsEnabled}
+            />
+          )}
+
+          {isAdmin && sprintsEnabled && (
+            <VideoBypassSection
+              projectId={project.id}
+              mode={proofVideoMode}
+              members={members}
             />
           )}
 
@@ -509,6 +474,51 @@ export function ProjectSettingsOverlay({
       </div>
     </div>
   );
+}
+
+/**
+ * The project's roles, loaded here rather than passed in: the overlay is a
+ * client component, so after a role is created, saved or deleted the list is
+ * fetched again instead of waiting for a server re-render.
+ */
+function ProjectRolesSection({ projectId }: { projectId: string }) {
+  const [roles, setRoles] = useState<Awaited<ReturnType<typeof getRoles>> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(
+    () =>
+      getRoles(projectId)
+        .then((rows) => {
+          setRoles(rows);
+          setError(null);
+        })
+        .catch((err: unknown) => {
+          setError(err instanceof Error ? err.message : "Could not load roles");
+        }),
+    [projectId],
+  );
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (roles === null) {
+    return (
+      <div className="space-y-2">
+        <Label className="text-s font-semibold">Roles & Permissions</Label>
+        {error ? (
+          <p className="text-s text-destructive">{error}</p>
+        ) : (
+          <p className="flex items-center gap-xs text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Loading roles…
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return <RolesManager roles={roles} projectId={projectId} onChanged={load} />;
 }
 
 function ContractList({ contracts, isAdmin, projectId, contractPrefixes = [] }: { contracts: Contract[]; isAdmin: boolean; projectId: string; contractPrefixes?: ContractPrefixOption[] }) {
@@ -739,6 +749,166 @@ function WorkTrackingSection({
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The "Video bypass" rule: how a task proves its work before Internal Review.
+ * Three choices, and for "Assign" the staff members who record videos on
+ * behalf of others. Saved as soon as it is changed, like the switches above.
+ */
+function VideoBypassSection({
+  projectId,
+  mode,
+  members,
+}: {
+  projectId: string;
+  mode: ProofVideoMode;
+  members: VideoUploaderCandidate[];
+}) {
+  const router = useRouter();
+  const [current, setCurrent] = useState<ProofVideoMode>(mode);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const staff = members.filter(
+    (m) => m.role !== "CLIENT" && !m.projectRole?.isClient,
+  );
+  const [uploaderIds, setUploaderIds] = useState<string[]>(
+    () => staff.filter((m) => m.canBypassProof).map((m) => m.id),
+  );
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+      router.refresh();
+    } catch (err) {
+      setError((err as Error).message || "Something went wrong.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function chooseMode(next: ProofVideoMode) {
+    if (next === current || busy) return;
+    const before = current;
+    setCurrent(next);
+    void run(async () => {
+      try {
+        await setProofVideoMode({ projectId, mode: next });
+      } catch (err) {
+        setCurrent(before);
+        throw err;
+      }
+    });
+  }
+
+  function toggleUploader(memberId: string, on: boolean) {
+    const before = uploaderIds;
+    const next = on ? [...new Set([...uploaderIds, memberId])] : uploaderIds.filter((id) => id !== memberId);
+    setUploaderIds(next);
+    void run(async () => {
+      try {
+        await setProofUploaders({ projectId, memberIds: next });
+      } catch (err) {
+        setUploaderIds(before);
+        throw err;
+      }
+    });
+  }
+
+  return (
+    <div className="rounded-lg border border-border p-5 space-y-4" data-testid="video-bypass-section">
+      <div>
+        <h3 className="text-s font-semibold">Video bypass</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          How a task proves its work before it enters Internal Review.
+        </p>
+      </div>
+
+      {error && <p className="text-s text-destructive">{error}</p>}
+
+      <div role="radiogroup" aria-label="Video bypass" className="space-y-2">
+        {PROOF_VIDEO_MODES.map((option) => {
+          const selected = option === current;
+          return (
+            <label
+              key={option}
+              className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
+                selected ? "border-primary/60 bg-primary/5" : "border-border hover:bg-muted/40",
+                busy && "opacity-70",
+              )}
+            >
+              <input
+                type="radio"
+                name={`video-bypass-${projectId}`}
+                value={option}
+                checked={selected}
+                disabled={busy}
+                onChange={() => chooseMode(option)}
+                className="mt-0.5 size-4 shrink-0 accent-primary"
+              />
+              <span className="min-w-0">
+                <span className="block text-s font-medium">{PROOF_VIDEO_MODE_LABEL[option]}</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  {PROOF_VIDEO_MODE_HINT[option]}
+                </span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+
+      {current === "ASSIGNED" && (
+        <div className="space-y-2 border-t border-border/50 pt-4">
+          <p className="text-s font-medium">Who uploads on behalf of others</p>
+          <p className="text-xs text-muted-foreground">
+            They receive each request in their inbox and the project chat. Admins can always upload too.
+          </p>
+          {staff.length === 0 ? (
+            <p className="text-xs text-muted-foreground/70">No staff members on this project yet.</p>
+          ) : (
+            <ul className="divide-y divide-border/50 rounded-lg border border-border">
+              {staff.map((m) => {
+                const name = m.user.name ?? m.user.email;
+                const on = uploaderIds.includes(m.id);
+                return (
+                  <li key={m.id} className="flex items-center gap-3 px-3 py-2">
+                    {m.user.imageUrl ? (
+                      <img src={m.user.imageUrl} alt="" className="size-6 shrink-0 rounded-full object-cover" />
+                    ) : (
+                      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
+                        {name.slice(0, 1).toUpperCase()}
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-s">{name}</span>
+                      {m.projectRole?.name ? (
+                        <span className="block truncate text-xs text-muted-foreground">{m.projectRole.name}</span>
+                      ) : null}
+                    </span>
+                    <Switch
+                      checked={on}
+                      disabled={busy}
+                      aria-label={`${name} uploads videos on behalf of others`}
+                      onCheckedChange={(next) => toggleUploader(m.id, next)}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {uploaderIds.length === 0 && staff.length > 0 && (
+            <p className="text-xs text-orange">
+              Nobody is assigned yet, so tasks cannot be handed over until someone is.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

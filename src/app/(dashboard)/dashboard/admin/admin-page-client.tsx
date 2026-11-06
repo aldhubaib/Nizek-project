@@ -15,7 +15,6 @@ import {
   Volume2,
   BellRing,
   PieChart,
-  Coins,
   KeyRound,
   ScrollText,
 } from "lucide-react";
@@ -34,7 +33,6 @@ import {
   type AgreementFullscreen,
 } from "@/components/settings/client-agreement-manager";
 import { EquityAccessManager } from "@/components/settings/equity-access-manager";
-import { CurrencyRateManager } from "@/components/settings/currency-rate-manager";
 import { VaultAccessManager } from "@/components/settings/vault-access-manager";
 import type { AgreementAdminView } from "@/actions/client-agreement";
 import type { BrandingAssetDTO } from "@/actions/branding";
@@ -60,7 +58,6 @@ type TabId =
   | "push-health"
   | "notification-status"
   | "equity-access"
-  | "exchange-rates"
   | "vault-access";
 
 type SettingsItem = {
@@ -88,9 +85,9 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
       },
       {
         id: "roles",
-        label: "Roles",
+        label: "Role presets",
         icon: Shield,
-        desc: "Define roles and permissions across the system.",
+        desc: "The roles a new project starts with. Each project edits its own copy in its settings.",
       },
       {
         id: "client-agreement",
@@ -156,12 +153,6 @@ const SECTIONS: { group: string; items: SettingsItem[] }[] = [
         desc: "Choose who can open the private Equity module.",
       },
       {
-        id: "exchange-rates",
-        label: "Exchange Rates",
-        icon: Coins,
-        desc: "What each currency is worth, for totalling financial figures across projects.",
-      },
-      {
         id: "vault-access",
         label: "Vault Access",
         icon: KeyRound,
@@ -187,7 +178,8 @@ interface Props {
   branding: Partial<Record<BrandingSlotId, BrandingAssetDTO>>;
   loginPhotos: LoginPhotoDTO[];
   notificationSound: NotificationSoundDTO;
-  projectOptions: { id: string; name: string }[];
+  /** Every project with its own roles, for the members tab's project pickers. */
+  projectOptions: { id: string; name: string; roles: { id: string; name: string; isAdmin: boolean }[] }[];
   currentUserId?: string;
 }
 
@@ -300,7 +292,6 @@ export function AdminPageClient({
             members={members}
             invitations={invitations}
             teamInvites={teamInvites}
-            roles={roles}
             workspaceTeams={(teams ?? [])
               .filter((t: { isDefault: boolean }) => !t.isDefault)
               .map((t: { id: string; name: string }) => ({ id: t.id, name: t.name }))}
@@ -338,7 +329,6 @@ export function AdminPageClient({
           />
         )}
         {active.id === "equity-access" && <EquityAccessManager />}
-        {active.id === "exchange-rates" && <CurrencyRateManager />}
         {active.id === "vault-access" && <VaultAccessManager />}
       </div>
     </div>

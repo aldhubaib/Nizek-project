@@ -1,12 +1,12 @@
 "use client";
 
 // The portfolio's financials read across every project at once: two chosen
-// lines per company per month, a combined total in one currency, and the
-// companies ranked by margin.
+// lines per company per month, the companies added up when they report in the
+// same currency, and the companies ranked by margin.
 //
 // Adding figures from different currencies together is the one thing this view
-// must not do quietly, so a project whose currency has no rate is named and left
-// out of the total rather than folded in unconverted.
+// must not do quietly. Nothing here converts, so a portfolio of mixed currencies
+// shows each company on its own and no total.
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -20,8 +20,6 @@ import {
   formatMonth,
   summariseFinancials,
   type MetricDef,
-  type MonthKey,
-  type RateRow,
 } from "@/lib/equity-financials";
 import type { EquityMetricDTO, EquityPortfolioDTO } from "@/actions/equity";
 
@@ -48,11 +46,9 @@ function guessField(metrics: EquityMetricDTO[], pattern: RegExp): string | null 
 export function CrossProjectFinancials({
   portfolios,
   metrics,
-  rates,
 }: {
   portfolios: EquityPortfolioDTO[];
   metrics: EquityMetricDTO[];
-  rates: RateRow[];
 }) {
   const financialMetrics = useMemo(
     () => metrics.filter((m) => m.group === "FINANCIAL" && !isDateMetric(m.type)),
@@ -112,9 +108,8 @@ export function CrossProjectFinancials({
         bottomId: bottom,
         months,
         registry,
-        rates,
       }),
-    [inputs, top, bottom, months, registry, rates],
+    [inputs, top, bottom, months, registry],
   );
 
   // Only companies that actually reported the top line: a company with nothing
@@ -124,6 +119,9 @@ export function CrossProjectFinancials({
   const ranked = [...reporting]
     .filter((r) => r.margin != null)
     .sort((a, b) => (b.margin ?? 0) - (a.margin ?? 0));
+  const total = summary.total;
+  // Reported in more than one currency: each company stands on its own.
+  const mixed = total == null && reporting.length > 0;
 
   const money = (value: number | null, currency: string | null) =>
     value == null
@@ -195,10 +193,8 @@ export function CrossProjectFinancials({
         )}
         <p className="flex-1 min-w-[240px] pb-1.5 text-xs text-muted-foreground">
           The two figures every company is compared on. The fields are shared across projects, so
-          the same choice reads the same everywhere.{" "}
-          {summary.baseCurrency
-            ? `Totals are in ${summary.baseCurrency}.`
-            : "No base currency is set, so nothing can be totalled — set one under Exchange rates in admin."}
+          the same choice reads the same everywhere.
+          {total ? ` Totals are in ${total.currency}.` : ""}
         </p>
       </div>
 
@@ -226,9 +222,6 @@ export function CrossProjectFinancials({
                   ))}
                   <th className="min-w-[110px] border-s border-border px-3 py-2 text-end text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Total
-                  </th>
-                  <th className="min-w-[110px] px-3 py-2 text-end text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    In {summary.baseCurrency ?? "base"}
                   </th>
                   <th className="min-w-[80px] px-3 py-2 text-end text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Margin
@@ -260,21 +253,6 @@ export function CrossProjectFinancials({
                     <td className="border-s border-border px-3 py-1.5 text-end tabular-nums text-foreground">
                       {money(row.topTotal, row.currency)}
                     </td>
-                    <td
-                      className={cn(
-                        "px-3 py-1.5 text-end tabular-nums",
-                        row.topTotalBase == null ? "text-orange" : "text-muted-foreground",
-                      )}
-                      title={
-                        row.topTotalBase == null
-                          ? `No exchange rate for ${row.currency}, so this is left out of the total`
-                          : undefined
-                      }
-                    >
-                      {row.topTotalBase == null
-                        ? "no rate"
-                        : money(row.topTotalBase, summary.baseCurrency)}
-                    </td>
                     <td className="px-3 py-1.5 text-end tabular-nums text-muted-foreground">
                       {formatShare(row.margin)}
                     </td>
@@ -282,54 +260,48 @@ export function CrossProjectFinancials({
                 ))}
 
                 {/* The portfolio, added up. Set apart because it is the one row
-                    here that isn't a company. */}
-                <tr className="border-t-2 border-border bg-primary/[0.05] font-medium">
-                  <th className="sticky left-0 z-10 border-e border-border bg-primary/[0.05] px-3 py-2 text-start">
-                    Portfolio
-                  </th>
-                  {summary.topBase.map((value, i) => (
-                    <td
-                      key={months[i]}
-                      className="px-2 py-2 text-end tabular-nums text-foreground"
-                    >
-                      {value == null ? "—" : compactNumber(value)}
+                    here that isn't a company. Only when every company reports
+                    in the same currency — there is no converting here. */}
+                {total && (
+                  <tr className="border-t-2 border-border bg-primary/[0.05] font-medium">
+                    <th className="sticky left-0 z-10 border-e border-border bg-primary/[0.05] px-3 py-2 text-start">
+                      Portfolio
+                      <span className="ms-1.5 text-xs font-normal text-muted-foreground">
+                        {total.currency}
+                      </span>
+                    </th>
+                    {total.top.map((value, i) => (
+                      <td
+                        key={months[i]}
+                        className="px-2 py-2 text-end tabular-nums text-foreground"
+                      >
+                        {value == null ? "—" : compactNumber(value)}
+                      </td>
+                    ))}
+                    <td className="border-s border-border px-3 py-2 text-end tabular-nums text-foreground">
+                      {money(total.topTotal, total.currency)}
                     </td>
-                  ))}
-                  <td className="border-s border-border px-3 py-2 text-end tabular-nums text-muted-foreground">
-                    —
-                  </td>
-                  <td className="px-3 py-2 text-end tabular-nums text-foreground">
-                    {money(summary.topBaseTotal, summary.baseCurrency)}
-                  </td>
-                  <td className="px-3 py-2 text-end tabular-nums text-foreground">
-                    {formatShare(summary.marginBase)}
-                  </td>
-                </tr>
+                    <td className="px-3 py-2 text-end tabular-nums text-foreground">
+                      {formatShare(total.margin)}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            The months show {topMetric.name.toLowerCase()} in each company&apos;s own currency;
-            the portfolio row is the converted total. Margin is{" "}
+            The months show {topMetric.name.toLowerCase()} in each company&apos;s own currency
+            {total ? "; the portfolio row adds them up" : ""}. Margin is{" "}
             {bottomMetric ? bottomMetric.name.toLowerCase() : "the bottom line"} as a share of{" "}
             {topMetric.name.toLowerCase()}, worked out from the totals.
           </p>
 
-          {summary.excluded.length > 0 && (
-            <div className="space-y-0.5 rounded-lg border border-orange/30 bg-orange/5 px-3 py-2.5">
-              <p className="text-xs font-medium text-orange">
-                {summary.excluded.length} compan
-                {summary.excluded.length === 1 ? "y is" : "ies are"} left out of the total — no
-                exchange rate
-              </p>
-              {summary.excluded.map((e) => (
-                <p key={e.id} className="text-xs text-muted-foreground">
-                  • {e.name} reports in {e.currency}. Add a rate for it under Exchange rates in
-                  admin.
-                </p>
-              ))}
-            </div>
+          {mixed && (
+            <p className="rounded-lg border border-border px-3 py-2.5 text-xs text-muted-foreground">
+              The companies report in different currencies, so there is no portfolio total. Each
+              company is shown in its own.
+            </p>
           )}
 
           {/* ── Margin ranking ── */}
@@ -378,13 +350,13 @@ export function CrossProjectFinancials({
             </div>
           )}
 
-          {/* ── Trend ── */}
-          {reporting.length > 0 && months.length > 1 && (
+          {/* ── Trend ── Stacked bands only make sense in one unit: a USD
+              company drawn beside a KWD one at face value would look three
+              times its size, so a mixed portfolio gets no chart. */}
+          {total && months.length > 1 && (
             <ChartFrame
               title={`${topMetric.name} by company, month by month`}
-              note={`Each company's ${topMetric.name.toLowerCase()} converted to ${
-                summary.baseCurrency ?? "the base currency"
-              }, taking the latest report's version of any month two reports disagree about. A company with no exchange rate is left off.`}
+              note={`Each company's ${topMetric.name.toLowerCase()} in ${total.currency}, taking the latest report's version of any month two reports disagree about.`}
               source={`Financials · ${reporting.length} ${
                 reporting.length === 1 ? "company" : "companies"
               }, ${months.length} months of ${shownYear}`}
@@ -393,7 +365,7 @@ export function CrossProjectFinancials({
                 rows: months.map((month, i) => [
                   formatMonth(month),
                   ...reporting.map((r) => money(r.top[i], r.currency)),
-                  money(summary.topBase[i], summary.baseCurrency),
+                  money(total.top[i], total.currency),
                 ]),
               }}
             >
@@ -402,11 +374,8 @@ export function CrossProjectFinancials({
                 series={reporting.map((row, i) => ({
                   name: row.name,
                   color: SERIES[i % SERIES.length],
-                  // Converted, so the bands are stacked in comparable units —
-                  // a USD company drawn beside a KWD one at face value would
-                  // look three times its size.
-                  values: convertedRow(row, months, rates),
-                  format: (value: number) => money(value, summary.baseCurrency),
+                  values: row.top,
+                  format: (value: number) => money(value, total.currency),
                 }))}
                 format={compactNumber}
                 axisFormat={compactNumber}
@@ -417,17 +386,4 @@ export function CrossProjectFinancials({
       )}
     </div>
   );
-}
-
-/** One company's monthly top line in the base currency, for a shared axis. */
-function convertedRow(
-  row: { top: (number | null)[]; currency: string },
-  months: MonthKey[],
-  rates: RateRow[],
-): (number | null)[] {
-  const rate = rates.find((r) => r.code === row.currency)?.rate ?? null;
-  return months.map((_, i) => {
-    const value = row.top[i];
-    return value == null || rate == null ? null : value * rate;
-  });
 }

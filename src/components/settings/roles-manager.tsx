@@ -58,6 +58,17 @@ interface WorkspaceRole {
 
 interface Props {
   roles: WorkspaceRole[];
+  /**
+   * The project whose roles these are. Left out, the list is the presets a
+   * new project starts with (Administrator).
+   */
+  projectId?: string | null;
+  /**
+   * Called after a role is created, saved or deleted. The Administrator page
+   * re-renders on its own through revalidation; a client-side host such as
+   * the project settings overlay re-fetches here.
+   */
+  onChanged?: () => void | Promise<void>;
 }
 
 interface StagePerms {
@@ -126,7 +137,8 @@ const EMPTY_GENERAL = {
   canViewTaskHistory: false,
 };
 
-export function RolesManager({ roles }: Props) {
+export function RolesManager({ roles, projectId = null, onChanged }: Props) {
+  const isPreset = projectId === null;
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPerms, setNewPerms] = useState({ ...EMPTY_GENERAL });
@@ -144,6 +156,7 @@ export function RolesManager({ roles }: Props) {
     setCreating(true);
     try {
       await createRole({
+        projectId,
         name: newName.trim(),
         isClient: newPerms.isClient,
         canCreateTask: newPerms.isClient ? false : newPerms.canCreateTask,
@@ -167,6 +180,7 @@ export function RolesManager({ roles }: Props) {
       setNewPerms({ ...EMPTY_GENERAL });
       setNewStagePerms(EMPTY_STAGE_PERMS);
       setShowCreate(false);
+      await onChanged?.();
     } catch (err) {
       console.error(err);
     } finally {
@@ -219,6 +233,7 @@ export function RolesManager({ roles }: Props) {
         allowedTransitions: editPerms.isClient ? {} : serializeAllData(editStagePerms),
       });
       setEditingId(null);
+      await onChanged?.();
     } catch (err) {
       console.error(err);
     }
@@ -229,6 +244,7 @@ export function RolesManager({ roles }: Props) {
     try {
       const res = await deleteRole(roleId);
       if (res?.error) alert(res.error);
+      else await onChanged?.();
     } catch (err) {
       alert((err as Error).message);
     }
@@ -238,9 +254,13 @@ export function RolesManager({ roles }: Props) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-s font-semibold text-foreground">Roles & Permissions</h2>
+          <h2 className="text-s font-semibold text-foreground">
+            {isPreset ? "Role presets" : "Roles & Permissions"}
+          </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Define roles with specific task permissions per stage.
+            {isPreset
+              ? "What a new project starts with. Changing a preset does not touch existing projects."
+              : "Who can do what on this project, stage by stage."}
           </p>
         </div>
         <AddButton

@@ -395,11 +395,8 @@ export function InviteMemberDialog({ projectId, roles, canInviteMembers, canInvi
               <Label htmlFor="invite-role">Role</Label>
               {roles.length === 0 ? (
                 <p className="text-s text-muted-foreground">
-                  No roles yet. Create one in{" "}
-                  <a href="/dashboard/roles" className="text-primary underline">
-                    Roles
-                  </a>
-                  .
+                  This project has no roles yet. A project admin can add them under
+                  Roles &amp; Permissions in the project&apos;s settings.
                 </p>
               ) : (
                 <select

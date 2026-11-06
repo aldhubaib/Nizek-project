@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  baseCurrencyOf,
   changeVsPrevious,
-  convertToBase,
   draftToValues,
   figureAt,
   financialMonths,
@@ -367,36 +365,7 @@ describe("marginOf", () => {
   });
 });
 
-describe("currency", () => {
-  const rates = [
-    { code: "KWD", rate: 1, isBase: true },
-    { code: "USD", rate: 0.31, isBase: false },
-  ];
-
-  it("names the base currency the totals are in", () => {
-    expect(baseCurrencyOf(rates)).toBe("KWD");
-    expect(baseCurrencyOf([])).toBeNull();
-  });
-
-  it("converts a figure through its rate", () => {
-    expect(convertToBase(1000, "USD", rates)).toBeCloseTo(310);
-    expect(convertToBase(1000, "KWD", rates)).toBe(1000);
-  });
-
-  // Adding an unconverted figure into the total would be wrong in a way nobody
-  // could see; refusing lets the caller name the project it had to leave out.
-  it("refuses to convert a currency with no rate", () => {
-    expect(convertToBase(1000, "EUR", rates)).toBeNull();
-    expect(convertToBase(1000, null, rates)).toBeNull();
-    expect(convertToBase(null, "USD", rates)).toBeNull();
-  });
-});
-
 describe("summariseFinancials", () => {
-  const rates = [
-    { code: "KWD", rate: 1, isBase: true },
-    { code: "USD", rate: 0.3, isBase: false },
-  ];
   const months = ["2026-01", "2026-02"];
 
   const kuwaiti = {
@@ -416,17 +385,17 @@ describe("summariseFinancials", () => {
       ]),
     ],
   };
+  const neighbour = {
+    id: "kw2",
+    name: "Other Kuwaiti co",
+    currency: "KWD",
+    packs: [pack("kw2-1", month(2026, 3), [["revenue", month(2026, 1), 2000]])],
+  };
   const american = {
     id: "us",
     name: "American co",
     currency: "USD",
-    packs: [pack("us-1", month(2026, 3), [["revenue", month(2026, 1), 2000]])],
-  };
-  const european = {
-    id: "eu",
-    name: "European co",
-    currency: "EUR",
-    packs: [pack("eu-1", month(2026, 3), [["revenue", month(2026, 1), 500]])],
+    packs: [pack("us-1", month(2026, 3), [["revenue", month(2026, 1), 500]])],
   };
 
   const options = {
@@ -434,7 +403,6 @@ describe("summariseFinancials", () => {
     bottomId: "net",
     months,
     registry,
-    rates,
   };
 
   it("reads each project's own figures in its own currency", () => {
@@ -451,50 +419,43 @@ describe("summariseFinancials", () => {
     expect(summary.rows[0].margin).toBeCloseTo(1100 / 2200);
   });
 
-  it("adds the projects together in the base currency", () => {
+  it("adds the projects together when they report in the same currency", () => {
+    const summary = summariseFinancials([kuwaiti, neighbour], options);
+    expect(summary.total?.currency).toBe("KWD");
+    expect(summary.total?.top).toEqual([3000, 1200]);
+    expect(summary.total?.topTotal).toBe(4200);
+    // Only the first company has a bottom line, so the total's is its own.
+    expect(summary.total?.bottomTotal).toBe(1100);
+    expect(summary.total?.margin).toBeCloseTo(1100 / 4200);
+  });
+
+  // Nothing converts any more: a KWD figure and a USD figure added together
+  // would be a number that means nothing, so a mixed portfolio has no total.
+  it("has no total when the projects report in different currencies", () => {
     const summary = summariseFinancials([kuwaiti, american], options);
-    expect(summary.baseCurrency).toBe("KWD");
-    // 1000 KWD + 2000 USD at 0.3
-    expect(summary.topBase[0]).toBeCloseTo(1600);
-    expect(summary.topBase[1]).toBeCloseTo(1200);
-    expect(summary.topBaseTotal).toBeCloseTo(2800);
+    expect(summary.total).toBeNull();
+    expect(summary.rows.map((r) => r.topTotal)).toEqual([2200, 500]);
   });
 
-  // A total short by a company is worse than a total that says which company it
-  // is short by.
-  it("names a project it had to leave out rather than dropping it quietly", () => {
-    const summary = summariseFinancials([kuwaiti, european], options);
-    expect(summary.excluded).toEqual([
-      { id: "eu", name: "European co", currency: "EUR" },
-    ]);
-    expect(summary.topBase[0]).toBeCloseTo(1000);
-  });
-
-  it("still reports an unconvertible project's own figures", () => {
-    const summary = summariseFinancials([european], options);
-    expect(summary.rows[0].topTotal).toBe(500);
-    expect(summary.rows[0].topTotalBase).toBeNull();
-  });
-
-  // Nobody reported, so there is nothing to explain — an absent project isn't
-  // an excluded one.
-  it("has nothing to exclude when a project reported nothing", () => {
+  // A project that reported nothing has nothing to add, so it does not get a
+  // say in which currency the total is in.
+  it("lets a silent project in another currency through", () => {
     const silent = { id: "z", name: "Silent co", currency: "EUR", packs: [] };
-    const summary = summariseFinancials([silent], options);
-    expect(summary.excluded).toEqual([]);
-    expect(summary.topBaseTotal).toBeNull();
+    const summary = summariseFinancials([kuwaiti, silent], options);
+    expect(summary.total?.currency).toBe("KWD");
+    expect(summary.total?.topTotal).toBe(2200);
   });
 
-  it("has no totals at all before any figures are in", () => {
-    const summary = summariseFinancials([], options);
-    expect(summary.topBaseTotal).toBeNull();
-    expect(summary.marginBase).toBeNull();
+  it("has no total at all before any figures are in", () => {
+    expect(summariseFinancials([], options).total).toBeNull();
+    const silent = { id: "z", name: "Silent co", currency: "EUR", packs: [] };
+    expect(summariseFinancials([silent], options).total).toBeNull();
   });
 
   it("leaves both lines empty when no fields have been chosen", () => {
     const summary = summariseFinancials([kuwaiti], { ...options, topId: null, bottomId: null });
     expect(summary.rows[0].top).toEqual([null, null]);
-    expect(summary.topBaseTotal).toBeNull();
+    expect(summary.total).toBeNull();
   });
 
   it("collects every month any project has figures for", () => {

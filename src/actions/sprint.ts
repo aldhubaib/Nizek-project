@@ -45,6 +45,13 @@ import {
 } from "@/actions/meeting-note";
 import { isClientUser } from "@/lib/client-chat";
 import { isProofApprovedStage } from "@/lib/proof-of-work";
+import {
+  proofVideoModeOf,
+  sprintReviewVideoRequired,
+  SPRINT_REVIEW_VIDEO_MISSING,
+  taskVideoRequired,
+  type ProofVideoMode,
+} from "@/lib/proof-video-mode";
 
 /**
  * A partial unique index rejected the write.
@@ -149,6 +156,115 @@ async function requireSprintAction(projectId: string, action: SprintAction) {
     throw new Error(message);
   }
   return { user, member, perms };
+}
+
+/* ------------------------------------------------------------------ */
+/* Sprint review videos                                                */
+/* ------------------------------------------------------------------ */
+
+export type SprintReviewVideoDTO = {
+  id: string;
+  filename: string;
+  url: string;
+  fileSize: number | null;
+  mimeType: string | null;
+  createdAt: Date;
+  uploadedBy: { id: string; name: string | null } | null;
+};
+
+const REVIEW_VIDEO_SELECT = {
+  id: true,
+  filename: true,
+  url: true,
+  fileSize: true,
+  mimeType: true,
+  createdAt: true,
+  uploadedBy: { select: { id: true, name: true } },
+} as const;
+
+export async function getSprintReviewVideos(sprintId: string): Promise<SprintReviewVideoDTO[]> {
+  const sprint = await prisma.sprint.findUnique({
+    where: { id: sprintId },
+    select: { projectId: true },
+  });
+  if (!sprint) throw new Error("Sprint not found");
+  await requireProjectMember(sprint.projectId);
+  return prisma.sprintReviewVideo.findMany({
+    where: { sprintId },
+    orderBy: { createdAt: "asc" },
+    select: REVIEW_VIDEO_SELECT,
+  });
+}
+
+/**
+ * Attach recordings of the sprint review to the sprint. Any staff member on
+ * the project may add one while the sprint is still open; a "No video" project
+ * needs at least one before the sprint can end.
+ */
+export async function addSprintReviewVideos(data: {
+  sprintId: string;
+  videos: { filename: string; url: string; fileSize?: number | null; mimeType?: string | null }[];
+}): Promise<SprintReviewVideoDTO[]> {
+  const sprint = await prisma.sprint.findUnique({
+    where: { id: data.sprintId },
+    select: { projectId: true, status: true },
+  });
+  if (!sprint) throw new Error("Sprint not found");
+  const { user, member } = await requireProjectMember(sprint.projectId);
+  if (member.role === "CLIENT" || isClientUser(user)) {
+    throw new Error("Client accounts cannot upload sprint review videos");
+  }
+  if (isClosedSprint(sprint.status)) throw new Error("This sprint has already ended");
+  const videos = data.videos.filter((v) => v.url && v.filename);
+  if (videos.length === 0) throw new Error("Choose at least one video.");
+
+  await prisma.sprintReviewVideo.createMany({
+    data: videos.map((v) => ({
+      sprintId: data.sprintId,
+      filename: v.filename,
+      url: v.url,
+      fileSize: v.fileSize ?? null,
+      mimeType: v.mimeType ?? null,
+      uploadedById: user.id,
+    })),
+  });
+
+  await publish(projectChannel(sprint.projectId), {
+    type: "sprint-review-video.changed",
+    sprintId: data.sprintId,
+    userId: user.id,
+  });
+  revalidatePath(`/dashboard/projects/${sprint.projectId}`);
+  return getSprintReviewVideos(data.sprintId);
+}
+
+/** The uploader, or someone who may end the sprint, can take a recording down again. */
+export async function removeSprintReviewVideo(videoId: string): Promise<SprintReviewVideoDTO[]> {
+  const video = await prisma.sprintReviewVideo.findUnique({
+    where: { id: videoId },
+    select: { sprintId: true, uploadedById: true, sprint: { select: { projectId: true, status: true } } },
+  });
+  if (!video) throw new Error("Video not found");
+  const { user, member } = await requireProjectMember(video.sprint.projectId);
+  if (isClosedSprint(video.sprint.status)) throw new Error("This sprint has already ended");
+  if (video.uploadedById !== user.id) {
+    const perms =
+      user.systemRole === "ADMIN"
+        ? getAdminPermissions()
+        : getPermissionsFromRole(member.projectRole);
+    if (member.role === "CLIENT" || !canSprint(perms, "end")) {
+      throw new Error("Only the uploader or someone who can end the sprint can remove this video");
+    }
+  }
+
+  await prisma.sprintReviewVideo.delete({ where: { id: videoId } });
+  await publish(projectChannel(video.sprint.projectId), {
+    type: "sprint-review-video.changed",
+    sprintId: video.sprintId,
+    userId: user.id,
+  });
+  revalidatePath(`/dashboard/projects/${video.sprint.projectId}`);
+  return getSprintReviewVideos(video.sprintId);
 }
 
 export type SprintApprovalState = {
@@ -813,6 +929,16 @@ export async function completeSprint(
   if (!doc || !sprintDocHasOutcome(doc.content)) {
     throw new Error("Fill in the sprint review before ending the sprint.");
   }
+  // A "No video" project proves the sprint instead of each task: the review
+  // must carry a recording before the sprint can close.
+  const project = await prisma.project.findUnique({
+    where: { id: existing.projectId },
+    select: { proofVideoMode: true },
+  });
+  if (sprintReviewVideoRequired(proofVideoModeOf(project?.proofVideoMode))) {
+    const videoCount = await prisma.sprintReviewVideo.count({ where: { sprintId } });
+    if (videoCount === 0) throw new Error(SPRINT_REVIEW_VIDEO_MISSING);
+  }
   const reviewDateIso = planningInfoFromHtml(doc.content)?.reviewDateIso || null;
   const fromReview = incompleteReasonsFromReviewHtml(doc.content);
   const removed = await getSprintRemovedTasks(sprintId);
@@ -1363,10 +1489,15 @@ export async function getSprintPlanningTasks(sprintId: string): Promise<{
   tasks: SprintPlanningTask[];
   info: SprintPlanningInfo;
   activeSprintName: string | null;
+  /** The project's video rule, so the document knows whether the review needs a recording. */
+  proofVideoMode: ProofVideoMode;
+  reviewVideos: SprintReviewVideoDTO[];
 }> {
   const sprint = await prisma.sprint.findUnique({
     where: { id: sprintId },
     include: {
+      project: { select: { proofVideoMode: true } },
+      reviewVideos: { orderBy: { createdAt: "asc" }, select: REVIEW_VIDEO_SELECT },
       tasks: {
         where: { archivedAt: null },
         orderBy: { order: "asc" },
@@ -1437,6 +1568,8 @@ export async function getSprintPlanningTasks(sprintId: string): Promise<{
     status: sprint.status,
     tasks,
     activeSprintName: otherActive?.name ?? null,
+    proofVideoMode: proofVideoModeOf(sprint.project.proofVideoMode),
+    reviewVideos: sprint.reviewVideos,
     info: {
       sprintId: sprint.id,
       sprintName: sprint.name,
@@ -1650,20 +1783,32 @@ export async function getSprintProofOfWork(
   const hideStaff = isClientUser(await requireUser());
   const sprint = await prisma.sprint.findUnique({
     where: { id: sprintId },
-    select: { status: true },
+    select: { status: true, project: { select: { proofVideoMode: true } } },
   });
   if (!sprint) return {};
 
   const byTask: Record<string, SprintTaskProof> = {};
+  // On a "No video" project a delivered task with no proof is the rule, not a
+  // gap: the card is told so instead of reporting a missing recording.
+  const noVideoPerTask = !taskVideoRequired(proofVideoModeOf(sprint.project.proofVideoMode));
+  const fillNotRequired = (taskIds: string[]) => {
+    if (!noVideoPerTask) return;
+    for (const taskId of taskIds) {
+      if (!byTask[taskId]) {
+        byTask[taskId] = { id: `not-required-${taskId}`, capturedAtIso: "", videos: [], notRequired: true };
+      }
+    }
+  };
 
   if (isClosedSprint(sprint.status)) {
-    const pinned = await prisma.sprintTaskSnapshot.findMany({
-      where: { sprintId, proofOfWorkId: { not: null } },
+    const snapshots = await prisma.sprintTaskSnapshot.findMany({
+      where: { sprintId, stage: "DONE" },
       select: { taskId: true, proofOfWork: { select: PROOF_SELECT } },
     });
-    for (const snap of pinned) {
+    for (const snap of snapshots) {
       if (snap.proofOfWork) byTask[snap.taskId] = toSprintProof(snap.proofOfWork, hideStaff);
     }
+    fillNotRequired(snapshots.map((snap) => snap.taskId));
     return byTask;
   }
 
@@ -1683,6 +1828,7 @@ export async function getSprintProofOfWork(
   for (const proof of proofs) {
     if (!byTask[proof.taskId]) byTask[proof.taskId] = toSprintProof(proof, hideStaff);
   }
+  fillNotRequired(taskIds);
   return byTask;
 }
 

@@ -3,8 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Film, Loader2, Plus, X } from "lucide-react";
-import { getProofBypassStatus, projectHasProofBypassApprover, requestProofBypass, type ProofBypassStatus } from "@/actions/proof-of-work";
+import {
+  getProofBypassStatus,
+  getProofVideoSettings,
+  requestProofBypass,
+  type ProofBypassStatus,
+  type ProofVideoSettings,
+} from "@/actions/proof-of-work";
 import { enqueueProofUpload } from "@/lib/proof-outbox";
+import { nameList } from "@/lib/proof-video-mode";
 import { useScrollLock } from "@/hooks/use-scroll-lock";
 import { Button } from "@/components/ui/button";
 import { useChannel } from "@/components/realtime/hooks";
@@ -33,20 +40,32 @@ export function ProofOfWorkDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [bypass, setBypass] = useState<ProofBypassStatus | null>(null);
-  const [canAskBypass, setCanAskBypass] = useState(false);
+  const [settings, setSettings] = useState<ProofVideoSettings | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The project's "Assign" mode lets the task be handed to the members assigned
+  // as uploaders, who record the video instead. The other modes offer nothing.
+  const canAskBypass = Boolean(projectId) && (settings?.canHandOver ?? false);
+  const uploaderNames = nameList((settings?.uploaders ?? []).map((u) => u.name ?? ""));
 
   useEffect(() => {
     void getProofBypassStatus(target.taskId).then((status) => setBypass(status));
   }, [target.taskId]);
 
   useEffect(() => {
-    if (!projectId) {
-      setCanAskBypass(false);
-      return;
-    }
-    void projectHasProofBypassApprover(projectId).then(setCanAskBypass);
+    if (!projectId) return;
+    let cancelled = false;
+    void getProofVideoSettings(projectId)
+      .then((s) => {
+        if (!cancelled) setSettings(s);
+      })
+      .catch(() => {
+        if (!cancelled) setSettings(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [projectId]);
 
   useChannel(
@@ -77,7 +96,7 @@ export function ProofOfWorkDialog({
     if (files.length === 0 && !useBypass) {
       setError(
         canAskBypass
-          ? "Upload at least one video, or ask for a bypass."
+          ? "Upload at least one video, or ask someone to upload it for you."
           : "Upload at least one video.",
       );
       return;
@@ -98,12 +117,12 @@ export function ProofOfWorkDialog({
     try {
       const status = await requestProofBypass(target.taskId);
       setBypass(status);
-      // Pending requests wait in the approver inbox — don't leave this
-      // sheet up on "Waiting for approval." Cancel also reverts the
-      // optimistic Internal Review drop on the board.
+      // The request now waits in the uploaders' inbox, and the task moves on
+      // its own once one of them uploads — don't leave this sheet up. Cancel
+      // also reverts the optimistic Internal Review drop on the board.
       if (status.status === "PENDING") onCancel();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not ask for a bypass");
+      setError(err instanceof Error ? err.message : "Could not send the request");
     } finally {
       setBusy(false);
     }
@@ -171,7 +190,11 @@ export function ProofOfWorkDialog({
         {bypass || canAskBypass ? (
           <div className="mt-4">
             {bypass?.status === "PENDING" ? (
-              <p className="text-s text-muted-foreground">Bypass requested. Waiting for approval.</p>
+              <p className="text-s text-muted-foreground">
+                {uploaderNames
+                  ? `Waiting for ${uploaderNames} to upload the video. The task moves to Internal Review when they do.`
+                  : "Waiting for the video to be uploaded. The task moves to Internal Review when it is."}
+              </p>
             ) : bypass?.status === "APPROVED" ? (
               <p className="text-s text-success">
                 Bypass approved{bypass.approvedByName ? ` by ${bypass.approvedByName}` : ""}.
@@ -182,8 +205,13 @@ export function ProofOfWorkDialog({
                 onClick={() => void askBypass()}
                 disabled={busy}
                 className="text-s text-primary hover:underline disabled:opacity-50"
+                title={uploaderNames ? `Assigned: ${uploaderNames}` : undefined}
               >
-                {busy ? "Asking…" : "Ask for Bypass"}
+                {busy
+                  ? "Asking…"
+                  : uploaderNames
+                    ? `Ask ${uploaderNames} to upload it`
+                    : "Ask someone to upload it"}
               </button>
             ) : null}
           </div>

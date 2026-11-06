@@ -9,6 +9,7 @@ import { SprintStatusControl } from "@/components/project/sprint-status-control"
 import { BypassRequestsPopover } from "@/components/project/bypass-requests-popover";
 import type { UserPermissions } from "@/app/(dashboard)/dashboard/projects/[projectId]/project-detail-client";
 import type { TaskQuestion } from "@/components/kanban/question-field";
+import type { ProofVideoMode } from "@/lib/proof-video-mode";
 
 interface Props {
   projectId: string;
@@ -23,6 +24,8 @@ interface Props {
   allowedTaskTypes?: string[];
   activeContractType?: string | null;
   canManage: boolean;
+  /** The project's video rule, handed on to the board. */
+  proofVideoMode?: ProofVideoMode;
   onOpenBacklog?: () => void;
 }
 
@@ -37,6 +40,7 @@ export function SprintsTab({
   currentUserId,
   allowedTaskTypes,
   activeContractType,
+  proofVideoMode = "SELF",
   onOpenBacklog,
 }: Props) {
   const updateTask = useKanbanStore((s) => s.updateTask);
@@ -122,6 +126,7 @@ export function SprintsTab({
           filterSprintId={active.id}
           pipelineOnly
           readOnly={!isActive}
+          proofVideoMode={proofVideoMode}
         />
         </div>
       </div>

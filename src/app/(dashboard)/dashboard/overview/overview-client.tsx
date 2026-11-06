@@ -9,6 +9,7 @@ import {
   BellOff,
   CalendarClock,
   CheckCircle2,
+  ChevronDownIcon,
   FileText,
   LayoutGrid,
   ListChecks,
@@ -16,6 +17,7 @@ import {
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
@@ -475,25 +477,69 @@ function UnfinishedSprints({
 /* ── contracts ── */
 
 const CONTRACT_STATUS_FILTERS = [
-  { id: "all", label: "All statuses" },
   { id: "active", label: "Active" },
   { id: "upcoming", label: "Upcoming" },
   { id: "expired", label: "Expired" },
 ] as const;
 
-const CONTRACT_TYPE_FILTERS: { id: "all" | ContractType; label: string }[] = [
-  { id: "all", label: "All types" },
-  ...(Object.entries(CONTRACT_TYPE_LABELS) as [ContractType, string][]).map(
-    ([id, label]) => ({ id, label }),
-  ),
-];
+const CONTRACT_TYPE_FILTERS: { id: ContractType; label: string }[] = (
+  Object.entries(CONTRACT_TYPE_LABELS) as [ContractType, string][]
+).map(([id, label]) => ({ id, label }));
 
 const NO_TEAM = "__none__";
 
-function pickFilter(set: (value: string) => void) {
-  return (value: string | null) => {
-    if (value) set(value);
+const FILTER_TRIGGER =
+  "flex h-7 w-[150px] shrink-0 items-center justify-between gap-1.5 rounded-[min(var(--radius-md),10px)] border border-input bg-transparent py-2 pr-2 pl-2.5 text-left text-sm whitespace-nowrap outline-none select-none dark:bg-input/30 dark:hover:bg-input/50";
+
+function MultiFilter({
+  allLabel,
+  options,
+  selected,
+  onChange,
+}: {
+  allLabel: string;
+  options: { id: string; label: string }[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const labels = new Map(options.map((option) => [option.id, option.label]));
+  const allOn = selected.length === 0;
+  const trigger = allOn
+    ? allLabel
+    : selected.length === 1
+      ? (labels.get(selected[0]) ?? selected[0])
+      : `${labels.get(selected[0]) ?? selected[0]} +${selected.length - 1}`;
+
+  const toggle = (id: string, on: boolean) => {
+    if (on) onChange([...selected.filter((value) => value !== id), id]);
+    else onChange(selected.filter((value) => value !== id));
   };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className={FILTER_TRIGGER}>
+        <span className="min-w-0 truncate">{trigger}</span>
+        <ChevronDownIcon className="pointer-events-none size-4 shrink-0 text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[150px]">
+        <DropdownMenuCheckboxItem
+          checked={allOn}
+          onCheckedChange={() => onChange([])}
+        >
+          {allLabel}
+        </DropdownMenuCheckboxItem>
+        {options.map((option) => (
+          <DropdownMenuCheckboxItem
+            key={option.id}
+            checked={selected.includes(option.id)}
+            onCheckedChange={(on) => toggle(option.id, on === true)}
+          >
+            {option.label}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 const CONTRACT_STATUS_BADGE: Record<
@@ -528,9 +574,9 @@ function contractDaysTone(row: OverviewContract): string {
 }
 
 function ContractsPanel({ contracts }: { contracts: OverviewContract[] }) {
-  const [statusFilter, setStatusFilter] = useState<string>("active");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [teamFilter, setTeamFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string[]>(["active"]);
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [teamFilter, setTeamFilter] = useState<string[]>([]);
 
   const teamOptions = useMemo(() => {
     const names = new Set<string>();
@@ -539,24 +585,31 @@ function ContractsPanel({ contracts }: { contracts: OverviewContract[] }) {
       if (row.teamName) names.add(row.teamName);
       else hasNone = true;
     }
-    return {
-      names: [...names].sort((a, b) => a.localeCompare(b)),
-      hasNone,
-    };
+    const options = [...names]
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ id: name, label: name }));
+    if (hasNone) options.push({ id: NO_TEAM, label: "No team" });
+    return options;
   }, [contracts]);
 
   const filtered = useMemo(() => {
     return contracts.filter((row) => {
-      if (statusFilter !== "all" && row.status !== statusFilter) return false;
-      if (typeFilter !== "all" && row.contractType !== typeFilter) return false;
-      if (teamFilter === NO_TEAM) return row.teamName === null;
-      if (teamFilter !== "all" && row.teamName !== teamFilter) return false;
+      if (statusFilter.length > 0 && !statusFilter.includes(row.status)) {
+        return false;
+      }
+      if (typeFilter.length > 0 && !typeFilter.includes(row.contractType)) {
+        return false;
+      }
+      if (teamFilter.length > 0) {
+        const teamId = row.teamName ?? NO_TEAM;
+        if (!teamFilter.includes(teamId)) return false;
+      }
       return true;
     });
   }, [contracts, statusFilter, typeFilter, teamFilter]);
 
   const filtering =
-    statusFilter !== "all" || typeFilter !== "all" || teamFilter !== "all";
+    statusFilter.length > 0 || typeFilter.length > 0 || teamFilter.length > 0;
 
   return (
     <Card>
@@ -568,46 +621,24 @@ function ContractsPanel({ contracts }: { contracts: OverviewContract[] }) {
           value={filtered.length}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={statusFilter} onValueChange={pickFilter(setStatusFilter)}>
-            <SelectTrigger size="sm" className="w-[140px] shrink-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent align="end">
-              {CONTRACT_STATUS_FILTERS.map((option) => (
-                <SelectItem key={option.id} value={option.id}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={typeFilter} onValueChange={pickFilter(setTypeFilter)}>
-            <SelectTrigger size="sm" className="w-[140px] shrink-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent align="end">
-              {CONTRACT_TYPE_FILTERS.map((option) => (
-                <SelectItem key={option.id} value={option.id}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={teamFilter} onValueChange={pickFilter(setTeamFilter)}>
-            <SelectTrigger size="sm" className="w-[150px] shrink-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent align="end">
-              <SelectItem value="all">All teams</SelectItem>
-              {teamOptions.names.map((name) => (
-                <SelectItem key={name} value={name}>
-                  {name}
-                </SelectItem>
-              ))}
-              {teamOptions.hasNone && (
-                <SelectItem value={NO_TEAM}>No team</SelectItem>
-              )}
-            </SelectContent>
-          </Select>
+          <MultiFilter
+            allLabel="All statuses"
+            options={[...CONTRACT_STATUS_FILTERS]}
+            selected={statusFilter}
+            onChange={setStatusFilter}
+          />
+          <MultiFilter
+            allLabel="All types"
+            options={CONTRACT_TYPE_FILTERS}
+            selected={typeFilter}
+            onChange={setTypeFilter}
+          />
+          <MultiFilter
+            allLabel="All teams"
+            options={teamOptions}
+            selected={teamFilter}
+            onChange={setTeamFilter}
+          />
         </div>
       </div>
 
@@ -623,9 +654,9 @@ function ContractsPanel({ contracts }: { contracts: OverviewContract[] }) {
             <button
               type="button"
               onClick={() => {
-                setStatusFilter("all");
-                setTypeFilter("all");
-                setTeamFilter("all");
+                setStatusFilter([]);
+                setTypeFilter([]);
+                setTeamFilter([]);
               }}
               className="mt-2 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
             >
@@ -686,7 +717,7 @@ function ContractsPanel({ contracts }: { contracts: OverviewContract[] }) {
                         )}
                       />
                     )}
-                    {statusFilter === "all" && (
+                    {statusFilter.length !== 1 && (
                       <StatusBadge
                         size="xs"
                         config={outlineBadge(

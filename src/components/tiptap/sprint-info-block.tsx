@@ -4,7 +4,22 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Plugin } from "@tiptap/pm/state";
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from "@tiptap/react";
 import { CheckCircle2, MoreVertical, Pencil, Play } from "lucide-react";
-import { completeSprint, getSprintPlanningTasks, getSprintReviewTasks, startSprint, updateSprint } from "@/actions/sprint";
+import {
+  completeSprint,
+  getSprintPlanningTasks,
+  getSprintReviewTasks,
+  startSprint,
+  updateSprint,
+  type SprintReviewVideoDTO,
+} from "@/actions/sprint";
+import { SprintReviewVideos } from "@/components/proof/sprint-review-videos";
+import { useCurrentUser } from "@/components/current-user-provider";
+import {
+  DEFAULT_PROOF_VIDEO_MODE,
+  SPRINT_REVIEW_VIDEO_MISSING,
+  sprintReviewVideoRequired,
+  type ProofVideoMode,
+} from "@/lib/proof-video-mode";
 import { Button } from "@/components/ui/button";
 import { SprintDocHeaderLeft } from "@/components/project/note-slide-over";
 import { SprintMissingCounter } from "@/components/project/sprint-doc-dashboard";
@@ -72,6 +87,11 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
     incompleteReasons: 0,
   });
   const [activeSprintName, setActiveSprintName] = useState<string | null>(null);
+  // A "No video" project ends its sprint on the review recording instead of
+  // per-task proof; the plan payload says which rule applies.
+  const [proofVideoMode, setProofVideoMode] = useState<ProofVideoMode>(DEFAULT_PROOF_VIDEO_MODE);
+  const [reviewVideos, setReviewVideos] = useState<SprintReviewVideoDTO[]>([]);
+  const currentUser = useCurrentUser();
   const tasksRef = useRef<SprintPlanningTask[]>([]);
   const [, startTransition] = useTransition();
   const persistTimer = useRef<number | null>(null);
@@ -103,6 +123,8 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
         setStatus(plan.status);
         setSprintName(plan.sprintName);
         setActiveSprintName(plan.activeSprintName ?? null);
+        setProofVideoMode(plan.proofVideoMode ?? DEFAULT_PROOF_VIDEO_MODE);
+        setReviewVideos(plan.reviewVideos ?? []);
         if (isUnstartedSprint(plan.status)) {
           setTasks(plan.tasks);
           tasksRef.current = plan.tasks;
@@ -134,7 +156,11 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
     useCallback((data: unknown) => {
       const ev = data as { type?: string } | null;
       if (!ev?.type) return;
-      if (ev.type.startsWith("sprint.") || ev.type === "task-updated") {
+      if (
+        ev.type.startsWith("sprint.") ||
+        ev.type === "task-updated" ||
+        ev.type === "sprint-review-video.changed"
+      ) {
         loadRef.current?.();
       }
     }, []),
@@ -253,10 +279,13 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
   const startButtonError = canStart
     ? (error ?? (datesInvalid ? DATE_RANGE_ERROR : null))
     : null;
+  const needsReviewVideo = showOutcome && sprintReviewVideoRequired(proofVideoMode);
+  const reviewVideoMissing = needsReviewVideo && reviewVideos.length === 0;
   const endGaps = canEnd
     ? sprintEndGaps({
         emptyInfoFields: emptyInfoFields + (reviewDateEmpty ? 1 : 0),
         missingIncompleteReasons: fieldGaps.incompleteReasons,
+        missingReviewVideo: reviewVideoMissing,
       })
     : { total: 0, items: [], reason: null };
   const endBlockedReason = endGaps.reason;
@@ -403,6 +432,10 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
     const { reasons, missing } = collectIncompleteReasons();
     if (missing) {
       setError("Add a reason for every incomplete item.");
+      return;
+    }
+    if (reviewVideoMissing) {
+      setError(SPRINT_REVIEW_VIDEO_MISSING);
       return;
     }
     setEndReasons(reasons);
@@ -592,6 +625,20 @@ function SprintInfoNodeView({ node, updateAttributes, editor, extension }: React
               onChange={(e) => setReviewDate(e.target.value)}
               onMouseDown={(e) => e.stopPropagation()}
               className={fieldClass(reviewDateEmpty)}
+            />
+          </div>
+        ) : null}
+
+        {needsReviewVideo ? (
+          <div className="grid grid-cols-2 gap-x-8 border-b border-border py-3.5">
+            {requiredLabel("Sprint Review Video")}
+            <SprintReviewVideos
+              sprintId={sprintId}
+              videos={reviewVideos}
+              canAdd={status === "ACTIVE" && (editable || allowEnd)}
+              canRemoveAny={allowEnd}
+              currentUserId={currentUser?.id ?? null}
+              onChange={setReviewVideos}
             />
           </div>
         ) : null}

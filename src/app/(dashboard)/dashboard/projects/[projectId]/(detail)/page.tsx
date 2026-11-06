@@ -11,6 +11,7 @@ import { isClientUser } from "@/lib/client-chat";
 import { notFound, redirect } from "next/navigation";
 import { ProjectDetailClient } from "../project-detail-client";
 import { viewerBoardState } from "@/actions/board";
+import { proofVideoModeOf } from "@/lib/proof-video-mode";
 import type { KanbanTask } from "@/store/kanban";
 import {
   projectUsesCalendarInvite,
@@ -99,6 +100,7 @@ export default async function ProjectDetailPage({ params }: Props) {
       boardEnabled={board.enabled}
       sprintsEnabled={project.sprintsEnabled}
       needsCalendarConnect={projectHasInvite && !calendarConnected}
+      proofVideoMode={proofVideoModeOf(project.proofVideoMode)}
     />
   );
 }

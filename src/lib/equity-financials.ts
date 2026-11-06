@@ -412,43 +412,12 @@ export function marginOf(
   return profit / revenue;
 }
 
-// ── Currency ────────────────────────────────────────────────────────────────
-
-export interface RateRow {
-  code: string;
-  rate: number;
-  isBase: boolean;
-}
-
-export function baseCurrencyOf(rates: RateRow[]): string | null {
-  return rates.find((r) => r.isBase)?.code ?? null;
-}
-
-/**
- * One project's figure in the base currency.
- *
- * Null when the currency has no rate, rather than passing the number through
- * unconverted. A total that silently added KWD to USD would be wrong in a way
- * nobody could see; a total that says which project it had to leave out can at
- * least be fixed.
- */
-export function convertToBase(
-  value: number | null | undefined,
-  code: string | null | undefined,
-  rates: RateRow[],
-): number | null {
-  if (value == null || !code) return null;
-  const row = rates.find((r) => r.code === code);
-  if (!row || !Number.isFinite(row.rate)) return null;
-  return value * row.rate;
-}
-
 // ── Across projects ─────────────────────────────────────────────────────────
 
 export interface PortfolioFinancials {
   id: string;
   name: string;
-  /** What this project's figures are quoted in — not necessarily the base. */
+  /** What this project's figures are quoted in. */
   currency: string;
   packs: Pack[];
 }
@@ -464,33 +433,34 @@ export interface PortfolioFinancialsRow {
   bottomTotal: number | null;
   /** Bottom line as a share of the top, from the totals rather than averaged. */
   margin: number | null;
-  /** The totals in the base currency, or null when there's no rate to use. */
-  topTotalBase: number | null;
-  bottomTotalBase: number | null;
+}
+
+/** The projects added together, in the one currency they all report in. */
+export interface PortfolioTotal {
+  currency: string;
+  top: (number | null)[];
+  bottom: (number | null)[];
+  topTotal: number | null;
+  bottomTotal: number | null;
+  margin: number | null;
 }
 
 export interface FinancialsSummary {
   months: MonthKey[];
   rows: PortfolioFinancialsRow[];
-  /** Every convertible project added together, per month, in the base currency. */
-  topBase: (number | null)[];
-  bottomBase: (number | null)[];
-  topBaseTotal: number | null;
-  bottomBaseTotal: number | null;
-  marginBase: number | null;
-  baseCurrency: string | null;
   /**
-   * Projects the totals had to leave out, because their currency has no rate.
-   * Named rather than silently dropped — a total short by a company is worse
-   * than a total that says which company it is short by.
+   * The portfolio total, only when every project that reported a figure uses
+   * the same currency. Figures in different currencies cannot be added and
+   * nothing here converts them, so a mixed portfolio has no total rather than
+   * a wrong one. Null too when no project reported anything.
    */
-  excluded: { id: string; name: string; currency: string }[];
+  total: PortfolioTotal | null;
 }
 
 /**
- * Two chosen figures across every project, month by month, added up in one
- * currency. The financial twin of summarisePortfolios in equity-math.ts, which
- * does the same job for equity percentages and valuations.
+ * Two chosen figures across every project, month by month, and their sum when
+ * the projects share a currency. The financial twin of summarisePortfolios in
+ * equity-math.ts, which does the same job for equity percentages and valuations.
  *
  * Which two figures is asked for rather than guessed: the metric registry is
  * global, so the same "Revenue" row is shared by every project, but nothing in
@@ -508,21 +478,13 @@ export function summariseFinancials(
     bottomId,
     months,
     registry,
-    rates,
   }: {
     topId: string | null;
     bottomId: string | null;
     months: MonthKey[];
     registry: Map<string, MetricDef>;
-    rates: RateRow[];
   },
 ): FinancialsSummary {
-  const baseCurrency = baseCurrencyOf(rates);
-  const excluded: { id: string; name: string; currency: string }[] = [];
-
-  const topBase: (number | null)[] = months.map(() => null);
-  const bottomBase: (number | null)[] = months.map(() => null);
-
   const rows = portfolios.map((portfolio) => {
     const series = resolveMonthlySeries(portfolio.packs);
     const ids = [topId, bottomId].filter((id): id is string => !!id);
@@ -530,31 +492,14 @@ export function summariseFinancials(
     const top: (number | null)[] = [];
     const bottom: (number | null)[] = [];
 
-    months.forEach((month, i) => {
+    for (const month of months) {
       const column = monthColumn(series, registry, ids, month);
-      const t = topId ? (column.get(topId) ?? null) : null;
-      const b = bottomId ? (column.get(bottomId) ?? null) : null;
-      top.push(t);
-      bottom.push(b);
-
-      // Converted month by month rather than only on the totals, so a monthly
-      // portfolio line is the sum of the same figures its total is.
-      const tBase = convertToBase(t, portfolio.currency, rates);
-      const bBase = convertToBase(b, portfolio.currency, rates);
-      if (tBase != null) topBase[i] = (topBase[i] ?? 0) + tBase;
-      if (bBase != null) bottomBase[i] = (bottomBase[i] ?? 0) + bBase;
-    });
+      top.push(topId ? (column.get(topId) ?? null) : null);
+      bottom.push(bottomId ? (column.get(bottomId) ?? null) : null);
+    }
 
     const topTotal = ytdTotal(top);
     const bottomTotal = ytdTotal(bottom);
-    const topTotalBase = convertToBase(topTotal, portfolio.currency, rates);
-
-    // Reported something, but in a currency nothing can convert. Worth naming;
-    // a project that reported nothing at all is simply absent from the totals
-    // and has nothing to explain.
-    if ((topTotal != null || bottomTotal != null) && topTotal != null && topTotalBase == null) {
-      excluded.push({ id: portfolio.id, name: portfolio.name, currency: portfolio.currency });
-    }
 
     return {
       id: portfolio.id,
@@ -565,25 +510,40 @@ export function summariseFinancials(
       topTotal,
       bottomTotal,
       margin: marginOf(bottomTotal, topTotal),
-      topTotalBase,
-      bottomTotalBase: convertToBase(bottomTotal, portfolio.currency, rates),
     };
   });
 
-  const topBaseTotal = ytdTotal(topBase);
-  const bottomBaseTotal = ytdTotal(bottomBase);
+  return { months, rows, total: portfolioTotal(rows, months) };
+}
 
-  return {
-    months,
-    rows,
-    topBase,
-    bottomBase,
-    topBaseTotal,
-    bottomBaseTotal,
-    marginBase: marginOf(bottomBaseTotal, topBaseTotal),
-    baseCurrency,
-    excluded,
-  };
+/**
+ * Adds the reporting projects up, month by month, when they all quote the same
+ * currency. A project with no figure on either line has nothing to add and
+ * does not get a say in the currency.
+ */
+function portfolioTotal(
+  rows: PortfolioFinancialsRow[],
+  months: MonthKey[],
+): PortfolioTotal | null {
+  const reporting = rows.filter((r) => r.topTotal != null || r.bottomTotal != null);
+  if (reporting.length === 0) return null;
+  const currency = reporting[0].currency;
+  if (reporting.some((r) => r.currency !== currency)) return null;
+
+  const top: (number | null)[] = months.map(() => null);
+  const bottom: (number | null)[] = months.map(() => null);
+  for (const row of reporting) {
+    months.forEach((_, i) => {
+      const t = row.top[i];
+      const b = row.bottom[i];
+      if (t != null) top[i] = (top[i] ?? 0) + t;
+      if (b != null) bottom[i] = (bottom[i] ?? 0) + b;
+    });
+  }
+
+  const topTotal = ytdTotal(top);
+  const bottomTotal = ytdTotal(bottom);
+  return { currency, top, bottom, topTotal, bottomTotal, margin: marginOf(bottomTotal, topTotal) };
 }
 
 /** Every month any project has figures for, oldest first. */

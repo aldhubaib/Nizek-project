@@ -55,6 +55,7 @@ export function TaskInboxSlideOver({
           task={data.task}
           projectId={data.projectId}
           projectName={data.projectName}
+          proofVideoMode={data.proofVideoMode}
           questions={data.questions}
           initialAnswers={data.initialAnswers}
           initialNotes={data.initialNotes}

@@ -90,7 +90,9 @@ export function describeActivity(a: TaskHistoryActivity): string {
     case "transferred":
       return `${name} removed ${a.oldValue ?? "a member"} → assigned ${a.newValue ?? "another member"}`;
     case "proof_of_work":
-      return `${name} uploaded proof of work${a.newValue ? `: ${a.newValue}` : ""}`;
+      // oldValue names the member the video was recorded for, when it was not
+      // the uploader themselves (the project's "Assign" video mode).
+      return `${name} uploaded proof of work${a.oldValue ? ` for ${a.oldValue}` : ""}${a.newValue ? `: ${a.newValue}` : ""}`;
     case "proof_bypass":
       return `${name} used a bypass (approved by ${a.newValue ?? "a manager"})`;
     default:

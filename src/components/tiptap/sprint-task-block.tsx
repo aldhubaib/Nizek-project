@@ -267,11 +267,13 @@ function SprintTaskNodeView({ node, updateAttributes, editor, extension }: React
             // No video to show, so the card says why rather than leaving a gap
             // that reads as though proof was never asked for.
             <p className="rounded-md border border-border bg-transparent px-3 py-2 text-s leading-relaxed text-muted-foreground">
-              {proof?.bypassedAtIso
-                ? `The proof requirement was waived on ${formatPlanningDate(proof.bypassedAtIso)}${
-                    proof.bypassedByName ? ` by ${proof.bypassedByName}` : ""
-                  }.`
-                : "No proof of work was recorded for this item."}
+              {proof?.notRequired
+                ? "This project records the sprint review video instead of a video per task."
+                : proof?.bypassedAtIso
+                  ? `The proof requirement was waived on ${formatPlanningDate(proof.bypassedAtIso)}${
+                      proof.bypassedByName ? ` by ${proof.bypassedByName}` : ""
+                    }.`
+                  : "No proof of work was recorded for this item."}
             </p>
           )}
         </div>

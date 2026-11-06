@@ -60,6 +60,21 @@ enum SprintStatus {
   SHIPPED
 }
 
+/// The project's rule for the proof-of-work video a task needs to enter
+/// Internal Review (the "video bypass" setting).
+///
+/// SELF: whoever moves the task uploads the video themselves; nobody can waive
+/// it. ASSIGNED: the same, but they may instead hand the task to the members
+/// the project assigned as video uploaders (`ProjectMember.canBypassProof`),
+/// who record and upload the video on their behalf — the task moves into review
+/// when that upload lands. NONE: tasks carry no video; instead the sprint's
+/// review must hold at least one `SprintReviewVideo` before the sprint can end.
+enum ProofVideoMode {
+  SELF
+  ASSIGNED
+  NONE
+}
+
 /// What caused a task to enter a stage. Recorded on every StageLog row so a
 /// transition with no actor can still be explained, instead of looking like an
 /// unattributed edit.
@@ -144,7 +159,6 @@ model User {
   assignedTasks       Task[]    @relation("TaskAssignee")
   createdTasks        Task[]    @relation("TaskCreator")
   developerTasks      Task[]    @relation("TaskDeveloper")
-  internalReviewUserProjects   Project[] @relation("ProjectInternalReviewUser")
   taskActivities TaskActivity[] @relation("ActivityUser")
   stageChanges   StageLog[]     @relation("StageLogActor")
   taskComments   TaskComment[]  @relation("CommentUser")
@@ -164,6 +178,7 @@ model User {
   pushSubscriptions PushSubscription[]        @relation("PushSubscriptionMember")
   pushDeliveryLogs  PushDeliveryLog[]         @relation("PushDeliveryLogRecipient")
   pushDevices       PushDevice[]              @relation("PushDeviceUser")
+  mobilePushTokens  MobilePushToken[]         @relation("MobilePushTokenMember")
   notificationPreference NotificationPreference? @relation("UserNotificationPreference")
   threadNotifPrefs  ThreadNotificationPref[]  @relation("UserThreadNotificationPrefs")
   equityPermission  EquityPermission?         @relation("UserEquityPermission")
@@ -184,8 +199,10 @@ model User {
   taskHighlightSubs    TaskHighlightSubscriber[] @relation("TaskHighlightSubscriber")
   proofOfWorkCreated   ProofOfWork[]              @relation("ProofOfWorkAuthor")
   proofOfWorkBypassed  ProofOfWork[]              @relation("ProofOfWorkBypassApprover")
+  proofOfWorkUploaded  ProofOfWork[]              @relation("ProofOfWorkUploader")
   proofBypassRequested ProofBypassPass[]          @relation("ProofBypassRequester")
   proofBypassApproved  ProofBypassPass[]          @relation("ProofBypassApprover")
+  sprintReviewVideos   SprintReviewVideo[]        @relation("SprintReviewVideoUploader")
   overviewSnoozes      OverviewSnooze[]           @relation("UserOverviewSnoozes")
 
   boardMemberships     BoardMember[]              @relation("BoardMemberUser")
@@ -246,13 +263,10 @@ model Project {
   teamId String?
   team   Team?  @relation(fields: [teamId], references: [id])
 
-  internalReviewRoleId String?
-  internalReviewRole   ProjectRole? @relation("ProjectInternalReviewRole", fields: [internalReviewRoleId], references: [id], onDelete: SetNull)
-
-  internalReviewUserId String?
-  internalReviewUser   User? @relation("ProjectInternalReviewUser", fields: [internalReviewUserId], references: [id], onDelete: SetNull)
-
-  maxPipelineTasks Int @default(3)
+  // The columns "internalReviewRoleId", "internalReviewUserId" and
+  // "maxPipelineTasks" still exist in the database until the follow-up
+  // migration drops them; the previous release reads them while the two
+  // overlap during a deploy. Nothing declares them here any more.
 
   /// When true, a sibling Conversation (kind=client) is the client-facing room.
   clientChatEnabled Boolean @default(false)
@@ -268,10 +282,17 @@ model Project {
   /// needs storing: "no sprints" and "no sprints yet" look identical otherwise.
   sprintsEnabled Boolean @default(true)
 
+  /// How a task proves its work on the way into Internal Review — see
+  /// `ProofVideoMode`. SELF is what every project did before the setting
+  /// existed, so the column arrives with that value everywhere.
+  proofVideoMode ProofVideoMode @default(SELF)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   members      ProjectMember[]
+  /// This project's own roles, copied from the presets when it was created.
+  roles        ProjectRole[]
   contracts    Contract[]
   tasks        Task[]
   sprints      Sprint[]
@@ -306,6 +327,9 @@ model ProjectMember {
 
   canInviteMembers Boolean @default(false)
   canInviteClients Boolean @default(false)
+  /// Assigned to upload proof-of-work videos on behalf of others (the project's
+  /// ASSIGNED video mode). Named for what it did first — approving a waiver of
+  /// the video — and kept, since the same people now record the video instead.
   canBypassProof   Boolean @default(false)
 
   createdAt DateTime @default(now())
@@ -316,9 +340,24 @@ model ProjectMember {
   @@index([projectId, role])
 }
 
+/// A named bundle of permissions on one project's sprint pipeline.
+///
+/// Roles with a `projectId` belong to that project and are managed by its
+/// admins. Roles without one are the presets: what a new project starts with.
+/// Changing a preset never touches an existing project.
 model ProjectRole {
   id                 String  @id @default(cuid())
-  name               String  @unique
+  projectId          String?
+  project            Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// The preset this role was copied from, kept for reference only. A deleted
+  /// preset leaves its copies in place.
+  presetId           String?
+  preset             ProjectRole?  @relation("ProjectRolePreset", fields: [presetId], references: [id], onDelete: SetNull)
+  copies             ProjectRole[] @relation("ProjectRolePreset")
+  /// Unique within a project. Presets have no project, and Postgres treats
+  /// null as distinct, so their names are kept unique by a partial unique
+  /// index in the migration (`ProjectRole_preset_name_key`).
+  name               String
   description        String?
   isAdmin            Boolean @default(false)
   /** Chat-only: assigned users become CLIENT and only see this project's client chat. */
@@ -342,7 +381,9 @@ model ProjectRole {
 
   members     ProjectMember[]
   invitations Invitation[]
-  internalReviewProjects Project[] @relation("ProjectInternalReviewRole")
+
+  @@unique([projectId, name])
+  @@index([projectId])
 }
 
 model ContractPrefix {
@@ -395,6 +436,7 @@ model Sprint {
   snapshots SprintTaskSnapshot[]
   taskPlans SprintTaskPlan[]
   notes     MeetingNote[]
+  reviewVideos SprintReviewVideo[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -605,11 +647,34 @@ model ProofOfWork {
   bypassedById String?
   bypassedBy   User?   @relation("ProofOfWorkBypassApprover", fields: [bypassedById], references: [id], onDelete: SetNull)
   bypassedAt   DateTime?
+  /// Who attached the videos when it was not the author: an assigned uploader
+  /// recording on the author's behalf (ASSIGNED mode). Null when the author did.
+  uploadedById String?
+  uploadedBy   User?   @relation("ProofOfWorkUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
   videos       ProofOfWorkVideo[]
   sprintSnapshots SprintTaskSnapshot[]
   createdAt    DateTime @default(now())
 
   @@index([taskId, createdAt])
+}
+
+/// A recording of the sprint's review, kept on the sprint. A project in the
+/// NONE video mode asks for no video per task and for at least one of these
+/// before the sprint can end; it stays with the sprint afterwards as the record
+/// of what was shown.
+model SprintReviewVideo {
+  id           String   @id @default(cuid())
+  sprintId     String
+  sprint       Sprint   @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  filename     String
+  url          String
+  fileSize     Int?
+  mimeType     String?
+  uploadedById String?
+  uploadedBy   User?    @relation("SprintReviewVideoUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  @@index([sprintId, createdAt])
 }
 
 model ProofOfWorkVideo {
@@ -1613,32 +1678,6 @@ model EquityFinancialReport {
   @@index([portfolioId, publishedAt])
 }
 
-// What one currency is worth in the base currency, for adding up figures across
-// projects that don't report in the same one.
-//
-// Rates are entered by hand rather than fetched: a portfolio total is read
-// months after the fact, and a live rate would make the same historical figure
-// read differently every time it was opened. One row per currency, the base
-// included at a rate of 1.
-model CurrencyRate {
-  id   String @id @default(cuid())
-  code String @unique
-
-  // How many units of the base currency one unit of this currency buys.
-  rate Float
-
-  // Set on the base currency's own row. Exactly one row carries it, enforced by
-  // a partial unique index in the migration — the same trick as EquityHolder's
-  // isUs, and for the same reason: a second base would make every total
-  // ambiguous.
-  isBase Boolean @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([isBase])
-}
-
 // A file uploaded with a financial period: the founders' own statements, held
 // beside the figures entered from them so a figure can be checked against its
 // source. Same shape as a message attachment — the file itself lives on R2 and
@@ -1984,6 +2023,39 @@ model PushSubscription {
   vapidKeyHash String?
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([memberId])
+  @@index([memberId, deviceId])
+  @@index([memberId, failCount])
+}
+
+/// One Expo push token per install of the native mobile app (mobile/). Sits
+/// beside PushSubscription (web push) and is fed by the same PushOutbox jobs:
+/// the worker sends web pushes to subscriptions and Expo pushes to these.
+model MobilePushToken {
+  id       String @id @default(cuid())
+  memberId String
+  member   User   @relation("MobilePushTokenMember", fields: [memberId], references: [id], onDelete: Cascade)
+  /// "ExponentPushToken[…]" — unique per install; re-registering moves it to
+  /// whoever is signed in on that device.
+  token    String @unique
+  /// Stable per install (kept in the device keychain). Shares the active-thread
+  /// heartbeat with web devices so the phone reading a chat is not buzzed.
+  deviceId String
+  /// "ios" | "android"
+  platform   String
+  deviceName String?
+  appVersion String?
+  /// Consecutive failures that will keep failing (bad credentials, oversized).
+  /// Reset on success; retired at PUSH_MAX_FAIL_COUNT. "DeviceNotRegistered"
+  /// deletes the row at once.
+  failCount     Int       @default(0)
+  lastSuccessAt DateTime?
+  lastFailureAt DateTime?
+  lastError     String?
+  lastSeenAt    DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
 
   @@index([memberId])
   @@index([memberId, deviceId])

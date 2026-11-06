@@ -1,3 +1,5 @@
+import { SPRINT_REVIEW_VIDEO_MISSING } from "@/lib/proof-video-mode";
+
 export type SprintPlanningInfo = {
   sprintId: string;
   sprintName?: string;
@@ -160,6 +162,12 @@ export type SprintTaskProof = {
    */
   bypassedByName?: string | null;
   bypassedAtIso?: string | null;
+  /**
+   * The project asks for no video per task (its "No video" mode); the sprint
+   * review recording stands for the work instead. Such an entry has no videos
+   * and no waiver, and the card says so rather than reporting a missing proof.
+   */
+  notRequired?: boolean;
 };
 
 export type SprintPlanningTask = {
@@ -599,6 +607,8 @@ function gapItemsFromCounts(opts: {
   missingDecisions?: number;
   missingRisks?: number;
   missingIncompleteReasons?: number;
+  /** A "No video" project ends its sprint on the review recording, and it is not there yet. */
+  missingReviewVideo?: boolean;
 }): SprintGapItem[] {
   const items: SprintGapItem[] = [];
   if ((opts.emptyInfoFields ?? 0) > 0) {
@@ -643,6 +653,9 @@ function gapItemsFromCounts(opts: {
       label: pluralCount(opts.missingIncompleteReasons!, "incomplete reason", "incomplete reasons"),
     });
   }
+  if (opts.missingReviewVideo) {
+    items.push({ key: "video", count: 1, label: "sprint review video" });
+  }
   return items;
 }
 
@@ -656,6 +669,7 @@ function firstGapReason(items: SprintGapItem[], fallback: string): string {
     return "Fill in Decision and Risk for every task.";
   }
   if (first.key === "reason") return "Add a reason for every incomplete item.";
+  if (first.key === "video") return SPRINT_REVIEW_VIDEO_MISSING;
   return fallback;
 }
 
@@ -694,6 +708,7 @@ export function sprintStartGaps(opts: {
 export function sprintEndGaps(opts: {
   emptyInfoFields: number;
   missingIncompleteReasons: number;
+  missingReviewVideo?: boolean;
 }): SprintGaps {
   const items = gapItemsFromCounts(opts);
   const total = items.reduce((sum, item) => sum + item.count, 0);
@@ -743,6 +758,15 @@ export function sprintInfoNodeHtml(info: SprintPlanningInfo): string {
   return `<div data-type="sprint-info" data-info="${escapeHtml(JSON.stringify(info))}"></div>`;
 }
 
+/** The plan half's prose, shared with the panel that draws the document without an editor. */
+export const SPRINT_INTRO_HEADING = "Introduction";
+export const SPRINT_INTRO_BLURB =
+  "This sprint outlines the development work planned for the upcoming iteration. It serves as a shared commitment between all stakeholders, ensuring the team is aligned on the agreed objectives, priorities, and expected deliverables for the sprint.";
+export const SPRINT_ITEMS_HEADING = "List of Sprint Items";
+export const SPRINT_ITEMS_BLURB =
+  "Below is the list of development items that have been reviewed, prioritized, and agreed upon by the team for this sprint. These items represent the scope of work to be completed during the sprint and will be tracked throughout the development cycle.";
+export const EMPTY_SPRINT_TASKS_TEXT = "No tasks in this sprint yet.";
+
 export function sprintPlanningDocHtml(
   tasks: SprintPlanningTask[],
   info: SprintPlanningInfo,
@@ -754,10 +778,10 @@ export function sprintPlanningDocHtml(
 
   return [
     sprintInfoNodeHtml(info),
-    `<h2>Introduction</h2>`,
-    `<p>This sprint outlines the development work planned for the upcoming iteration. It serves as a shared commitment between all stakeholders, ensuring the team is aligned on the agreed objectives, priorities, and expected deliverables for the sprint.</p>`,
-    `<h2>List of Sprint Items</h2>`,
-    `<p>Below is the list of development items that have been reviewed, prioritized, and agreed upon by the team for this sprint. These items represent the scope of work to be completed during the sprint and will be tracked throughout the development cycle.</p>`,
+    `<h2>${SPRINT_INTRO_HEADING}</h2>`,
+    `<p>${SPRINT_INTRO_BLURB}</p>`,
+    `<h2>${SPRINT_ITEMS_HEADING}</h2>`,
+    `<p>${SPRINT_ITEMS_BLURB}</p>`,
     taskBlocks,
   ].join("");
 }

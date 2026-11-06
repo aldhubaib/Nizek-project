@@ -22,6 +22,8 @@ import {
 import { joinDisplayName, splitDisplayName } from "@/lib/display-name";
 import type { Gender } from "@/generated/prisma/client";
 import { parseGender } from "@/lib/member-profile";
+import { seedProjectRoles } from "@/lib/project-roles";
+import { isProofVideoMode, type ProofVideoMode } from "@/lib/proof-video-mode";
 
 async function requireMemberManagement(projectId: string) {
   const { user, member } = await requireProjectMember(projectId);
@@ -41,6 +43,14 @@ async function requireMemberManagement(projectId: string) {
     throw new Error("Insufficient permissions");
   }
   return { user, member, canInviteMembers, canInviteClients };
+}
+
+// A seat can only be given a role from the same project: never a preset, and
+// never another project's role.
+async function findProjectRole(projectId: string, roleId: string) {
+  const pRole = await prisma.projectRole.findFirst({ where: { id: roleId, projectId } });
+  if (!pRole) throw new Error("Invalid role");
+  return pRole;
 }
 
 async function buildContractCode(prefixId: string, manualNumber?: string): Promise<{ code: string; prefixId: string }> {
@@ -80,46 +90,43 @@ export async function createProject(data: {
     codeData = await buildContractCode(data.contract.prefixId, data.contract.contractNumber);
   }
 
-  const project = await prisma.project.create({
-    data: {
-      name: data.name,
-      description: data.description,
-      ...(data.teamId && { teamId: data.teamId }),
-      contracts: {
-        create: {
-          label: data.contract.label,
-          contractType: data.contract.contractType ?? "FULL_TEAM",
-          startDate,
-          endDate,
-          ...(codeData.code && { code: codeData.code }),
-          ...(codeData.prefixId && { prefixId: codeData.prefixId }),
+  // The project, its own copy of the role presets, and the creator's Admin
+  // seat land together, so a project is never visible without its roles.
+  const project = await prisma.$transaction(async (tx) => {
+    const created = await tx.project.create({
+      data: {
+        name: data.name,
+        description: data.description,
+        ...(data.teamId && { teamId: data.teamId }),
+        contracts: {
+          create: {
+            label: data.contract.label,
+            contractType: data.contract.contractType ?? "FULL_TEAM",
+            startDate,
+            endDate,
+            ...(codeData.code && { code: codeData.code }),
+            ...(codeData.prefixId && { prefixId: codeData.prefixId }),
+          },
         },
       },
-    },
-  });
+    });
 
-  const adminRole = await prisma.projectRole.findFirst({ where: { isAdmin: true } });
-  await prisma.projectMember.create({
-    data: {
-      userId: user.id,
-      role: "ADMIN",
-      projectId: project.id,
-      roleId: adminRole?.id,
-    },
+    const roles = await seedProjectRoles(tx, created.id);
+    const adminRole = roles.find((r) => r.isAdmin);
+    await tx.projectMember.create({
+      data: {
+        userId: user.id,
+        role: "ADMIN",
+        projectId: created.id,
+        roleId: adminRole?.id,
+      },
+    });
+
+    return created;
   });
 
   revalidatePath("/dashboard");
   return project;
-}
-
-// Lean id+name list for admin dropdowns (e.g. the invite dialog).
-export async function getProjectOptions() {
-  const user = await requireUser();
-  if (user.systemRole !== "ADMIN") return [];
-  return prisma.project.findMany({
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
 }
 
 export async function getProjects() {
@@ -132,6 +139,8 @@ export async function getProjects() {
       contracts: true,
       members: { include: { user: { select: { id: true, name: true, imageUrl: true, email: true } }, projectRole: true } },
       _count: { select: { tasks: true, meetingNotes: true, assets: true, members: true } },
+      // whether the project runs a Kanban (a board that is switched on); null when none was added
+      board: { select: { enabled: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -147,6 +156,7 @@ export async function getProject(projectId: string) {
       contracts: { orderBy: { startDate: "desc" } },
       members: { include: { user: { select: { id: true, name: true, imageUrl: true, email: true, systemRole: true } }, projectRole: true } },
       _count: { select: { tasks: true, meetingNotes: true, assets: true } },
+      board: { select: { enabled: true } },
     },
   });
 
@@ -164,18 +174,8 @@ export async function updateProject(data: {
   description?: string;
   logoUrl?: string | null;
   teamId?: string | null;
-  internalReviewRoleId?: string | null;
-  internalReviewUserId?: string | null;
 }) {
   await requireProjectRole(data.projectId, ["ADMIN", "PROJECT_MANAGER"]);
-
-  if (data.internalReviewRoleId) {
-    const role = await prisma.projectRole.findUnique({
-      where: { id: data.internalReviewRoleId },
-      select: { id: true },
-    });
-    if (!role) throw new Error("That role does not exist");
-  }
 
   const updated = await prisma.project.update({
     where: { id: data.projectId },
@@ -184,8 +184,6 @@ export async function updateProject(data: {
       ...(data.description !== undefined && { description: data.description }),
       ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
       ...(data.teamId !== undefined && { teamId: data.teamId || null }),
-      ...(data.internalReviewRoleId !== undefined && { internalReviewRoleId: data.internalReviewRoleId }),
-      ...(data.internalReviewUserId !== undefined && { internalReviewUserId: data.internalReviewUserId }),
     },
   });
 
@@ -262,6 +260,66 @@ export async function setProjectSprints(data: {
   revalidatePath(`/dashboard/projects/${data.projectId}`);
   revalidatePath("/dashboard/projects");
   return { enabled: data.enabled };
+}
+
+/**
+ * The project's rule for proof-of-work videos (the "Video bypass" setting):
+ * everyone uploads their own, assigned members may upload for others, or no
+ * video per task and the sprint review carries one instead. Switching modes
+ * changes nothing already recorded — proofs and requests stay as they are.
+ */
+export async function setProofVideoMode(data: {
+  projectId: string;
+  mode: ProofVideoMode;
+}) {
+  await requireProjectRole(data.projectId, ["ADMIN", "PROJECT_MANAGER"]);
+  if (!isProofVideoMode(data.mode)) throw new Error("Unknown video mode");
+
+  await prisma.project.update({
+    where: { id: data.projectId },
+    data: { proofVideoMode: data.mode },
+  });
+
+  revalidatePath(`/dashboard/projects/${data.projectId}`);
+  return { mode: data.mode };
+}
+
+/**
+ * Which staff members upload proof videos on behalf of others (the "Assign"
+ * video mode). Replaces the whole set: members listed are switched on, every
+ * other member is switched off. Client accounts are never uploaders.
+ */
+export async function setProofUploaders(data: {
+  projectId: string;
+  memberIds: string[];
+}) {
+  await requireProjectRole(data.projectId, ["ADMIN", "PROJECT_MANAGER"]);
+  const wanted = [...new Set(data.memberIds)];
+
+  const staff = await prisma.projectMember.findMany({
+    where: {
+      projectId: data.projectId,
+      id: { in: wanted },
+      role: { not: "CLIENT" },
+      OR: [{ projectRole: null }, { projectRole: { isClient: false } }],
+    },
+    select: { id: true },
+  });
+  const allowed = staff.map((m) => m.id);
+
+  await prisma.$transaction([
+    prisma.projectMember.updateMany({
+      where: { projectId: data.projectId, id: { notIn: allowed }, canBypassProof: true },
+      data: { canBypassProof: false },
+    }),
+    prisma.projectMember.updateMany({
+      where: { projectId: data.projectId, id: { in: allowed } },
+      data: { canBypassProof: true },
+    }),
+  ]);
+
+  revalidatePath(`/dashboard/projects/${data.projectId}`);
+  return { memberIds: allowed };
 }
 
 /**
@@ -466,12 +524,7 @@ export async function inviteMember(data: {
   if (!name) throw new Error("Name is required");
   const gender = parseGender(data.gender);
 
-  const pRole = await prisma.projectRole.findUnique({
-    where: { id: data.roleId },
-  });
-  if (!pRole) {
-    throw new Error("Invalid role");
-  }
+  const pRole = await findProjectRole(data.projectId, data.roleId);
 
   const existingUser = await prisma.user.findUnique({ where: { email }, select: { systemRole: true } });
   const assigningClient = pRole.isClient || existingUser?.systemRole === "CLIENT";
@@ -664,18 +717,13 @@ export async function updateMemberRole(data: {
 }) {
   const { user } = await requireMemberManagement(data.projectId);
 
-  const pRole = await prisma.projectRole.findUnique({
-    where: { id: data.roleId },
-  });
-  if (!pRole) {
-    throw new Error("Invalid role");
-  }
+  const pRole = await findProjectRole(data.projectId, data.roleId);
 
   const member = await prisma.projectMember.findUnique({
     where: { id: data.memberId },
-    select: { userId: true },
+    select: { userId: true, projectId: true },
   });
-  if (!member) throw new Error("Member not found");
+  if (!member || member.projectId !== data.projectId) throw new Error("Member not found");
 
   const memberRole = membershipRoleFromProjectRole(pRole);
   await prisma.projectMember.update({
@@ -709,8 +757,7 @@ export async function addMemberToProject(data: {
 }) {
   const { user, canInviteMembers, canInviteClients } = await requireMemberManagement(data.projectId);
 
-  const pRole = await prisma.projectRole.findUnique({ where: { id: data.roleId } });
-  if (!pRole) throw new Error("Invalid role");
+  const pRole = await findProjectRole(data.projectId, data.roleId);
 
   if (data.userId.startsWith("pending:")) {
     const inviteId = data.userId.replace("pending:", "");
@@ -966,7 +1013,7 @@ export async function updateMemberInvitePerms(data: {
     select: { role: true, projectRole: { select: { isClient: true } } },
   });
   if (target?.role === "CLIENT" || target?.projectRole?.isClient) {
-    throw new Error("Client members cannot invite or bypass");
+    throw new Error("Client members cannot invite or upload videos for others");
   }
 
   await prisma.projectMember.update({

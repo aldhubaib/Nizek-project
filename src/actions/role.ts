@@ -1,16 +1,46 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth";
+import { requireUser, requireProjectMember } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { clientRoleWriteData } from "@/lib/client-role";
+import { canManageProjectRoles, seedProjectRoles } from "@/lib/project-roles";
 
-export async function ensureClientRole() {
-  const byFlag = await prisma.projectRole.findFirst({ where: { isClient: true } });
+/**
+ * Which list of roles an action works on: one project's own roles, or, with
+ * `null`, the presets a new project starts with.
+ */
+type RoleScope = string | null;
+
+async function requireRoleManagement(projectId: RoleScope) {
+  if (projectId === null) {
+    const user = await requireUser();
+    if (user.systemRole !== "ADMIN") throw new Error("Only admins can manage role presets");
+    return user;
+  }
+  const { user, member } = await requireProjectMember(projectId);
+  if (!canManageProjectRoles(user, member)) {
+    throw new Error("Only project admins can manage roles");
+  }
+  return user;
+}
+
+function revalidateRoles(projectId: RoleScope) {
+  if (projectId) revalidatePath(`/dashboard/projects/${projectId}`);
+  revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/team");
+}
+
+/**
+ * Every scope has a chat-only Client role: found by flag, else an existing
+ * role named Client is flipped to chat-only, else one is created.
+ */
+async function ensureClientRole(projectId: RoleScope) {
+  const byFlag = await prisma.projectRole.findFirst({ where: { projectId, isClient: true } });
   if (byFlag) return byFlag;
 
   const byName = await prisma.projectRole.findFirst({
-    where: { name: { equals: "Client", mode: "insensitive" } },
+    where: { projectId, name: { equals: "Client", mode: "insensitive" } },
   });
   if (byName) {
     return prisma.projectRole.update({
@@ -21,6 +51,7 @@ export async function ensureClientRole() {
 
   return prisma.projectRole.create({
     data: {
+      projectId,
       name: "Client",
       description: "Can only access this project's client chat.",
       ...clientRoleWriteData(true),
@@ -28,15 +59,31 @@ export async function ensureClientRole() {
   });
 }
 
-export async function getRoles() {
-  await ensureClientRole();
+/**
+ * A project's roles (any member may read them), or the presets (`null`,
+ * system admins only). A project found with no roles at all gets the presets
+ * copied in first, so it is never left unmanageable.
+ */
+export async function getRoles(projectId: RoleScope = null) {
+  if (projectId === null) {
+    const user = await requireUser();
+    if (user.systemRole !== "ADMIN") throw new Error("Only admins can view role presets");
+  } else {
+    await requireProjectMember(projectId);
+    const count = await prisma.projectRole.count({ where: { projectId } });
+    if (count === 0) await prisma.$transaction((tx) => seedProjectRoles(tx, projectId));
+  }
+
+  await ensureClientRole(projectId);
   return prisma.projectRole.findMany({
+    where: { projectId },
     orderBy: { createdAt: "asc" },
     include: { _count: { select: { members: true } } },
   });
 }
 
 export async function createRole(data: {
+  projectId: RoleScope;
   name: string;
   description?: string;
   isAdmin?: boolean;
@@ -54,18 +101,20 @@ export async function createRole(data: {
   canViewTaskHistory?: boolean;
   allowedTransitions?: Record<string, string[]>;
 }) {
-  const user = await requireUser();
-  if (user.systemRole !== "ADMIN") throw new Error("Only admins can manage roles");
+  const projectId = data.projectId ?? null;
+  await requireRoleManagement(projectId);
 
   const isClient = Boolean(data.isClient);
   const role = await prisma.projectRole.create({
     data: isClient
       ? {
+          projectId,
           name: data.name,
           description: data.description ?? "Can only access this project's client chat.",
           ...clientRoleWriteData(true),
         }
       : {
+          projectId,
           name: data.name,
           description: data.description,
           isAdmin: data.isAdmin ?? false,
@@ -87,8 +136,7 @@ export async function createRole(data: {
         },
   });
 
-  revalidatePath("/dashboard/roles");
-  revalidatePath("/dashboard/admin");
+  revalidateRoles(projectId);
   return role;
 }
 
@@ -110,11 +158,10 @@ export async function updateRole(data: {
   canViewTaskHistory?: boolean;
   allowedTransitions?: Record<string, string[]>;
 }) {
-  const user = await requireUser();
-  if (user.systemRole !== "ADMIN") throw new Error("Only admins can manage roles");
-
   const existing = await prisma.projectRole.findUnique({ where: { id: data.roleId } });
   if (!existing) throw new Error("Role not found");
+  await requireRoleManagement(existing.projectId);
+
   if (existing.isAdmin && data.isClient) {
     throw new Error("The Admin role cannot be chat-only");
   }
@@ -153,8 +200,7 @@ export async function updateRole(data: {
         },
   });
 
-  revalidatePath("/dashboard/roles");
-  revalidatePath("/dashboard/admin");
+  revalidateRoles(existing.projectId);
   return updated;
 }
 
@@ -162,14 +208,18 @@ export async function updateRole(data: {
 // masked in production ("An error occurred in the Server Components render"),
 // so the user would never see the reason.
 export async function deleteRole(roleId: string): Promise<{ error?: string }> {
-  const user = await requireUser();
-  if (user.systemRole !== "ADMIN") return { error: "Only admins can manage roles" };
-
   const role = await prisma.projectRole.findUnique({
     where: { id: roleId },
     include: { _count: { select: { members: true } } },
   });
   if (!role) return { error: "Role not found" };
+
+  try {
+    await requireRoleManagement(role.projectId);
+  } catch (err) {
+    return { error: (err as Error).message };
+  }
+
   if (role.isAdmin) return { error: "Cannot delete the Admin role" };
   if (role._count.members > 0) {
     return {
@@ -179,7 +229,6 @@ export async function deleteRole(roleId: string): Promise<{ error?: string }> {
 
   await prisma.projectRole.delete({ where: { id: roleId } });
 
-  revalidatePath("/dashboard/roles");
-  revalidatePath("/dashboard/admin");
+  revalidateRoles(role.projectId);
   return {};
 }

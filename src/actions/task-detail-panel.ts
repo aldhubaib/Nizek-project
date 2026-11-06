@@ -6,6 +6,7 @@ import { getAdminPermissions, getPermissionsFromRole } from "@/lib/permissions";
 import { taskEditBlockedReason } from "@/lib/task-edit-lock";
 import { getTaskQuestions, getTaskAnswers } from "@/actions/task-question";
 import { getTaskNotes } from "@/actions/meeting-note";
+import { proofVideoModeOf } from "@/lib/proof-video-mode";
 
 export async function getTaskDetailPanel(taskId: string) {
   const task = await prisma.task.findUnique({
@@ -42,6 +43,7 @@ export async function getTaskDetailPanel(taskId: string) {
   return {
     projectId: task.projectId,
     projectName: task.project.name,
+    proofVideoMode: proofVideoModeOf(task.project.proofVideoMode),
     questions,
     initialAnswers,
     initialNotes: notes,

@@ -94,11 +94,14 @@ export interface BoardDTO {
   viewerId: string;
 }
 
-/** The columns a new board starts with, so it is usable before it is configured. */
+/**
+ * The columns a new board starts with, so it is usable before it is configured. They are the
+ * Kanban's three: the new panel's Kanban page is a board with exactly these and one card type.
+ */
 const STARTER_COLUMNS = [
   { name: "To do", color: "slate" },
   { name: "In progress", color: "sky" },
-  { name: "Done", color: "green" },
+  { name: "Completed", color: "green" },
 ];
 
 const STARTER_CARD_TYPE = { name: "Task", icon: DEFAULT_BOARD_ICON, color: "green" };
