@@ -1,5 +1,5 @@
 #!/bin/sh
-# Railway build for the web service (railway.toml -> buildCommand).
+# Railway build for the web service (.railway/railway.ts -> build.buildCommand).
 #
 # Produces .next/standalone with static assets and public/ in place, then
 # VERIFIES the service worker is reachable at the path browsers request.

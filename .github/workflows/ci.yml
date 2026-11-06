@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # Railway deploys `main` to production and `staging` to staging, and both
+    # services wait for this workflow to pass ("Wait for CI").
+    branches: [main, staging]
   pull_request:
 
 jobs:

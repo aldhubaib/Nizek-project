@@ -1,0 +1,13 @@
+{
+  "name": "nizek-project-railway-config",
+  "private": true,
+  "description": "Types for .railway/railway.ts only. Installed separately from the app so the app's package-lock.json stays untouched. Run `npm install` here for editor type-checking; the Railway CLI evaluates railway.ts on its own.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "railway": "3.16.0",
+    "typescript": "^5.9.0"
+  }
+}

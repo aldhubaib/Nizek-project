@@ -202,8 +202,9 @@ Ordering matters because the worker queries new columns and the web writes a
 new table.
 
 1. **Migrate.** `prisma/migrations/20260916170000_push_rewrite` is purely
-   additive. Both services run `node prisma/migrate.mjs` on boot
-   (`railway.toml` start command; `start-worker.sh`), and `migrate deploy`
+   additive. Both services run `node prisma/migrate.mjs`: the web app in its
+   pre-deploy step (`.railway/railway.ts`), the worker on boot
+   (`start-worker.sh`), and `migrate deploy`
    holds an advisory lock, so whichever boots first migrates and the other is
    a no-op.
 2. **Deploy the worker.** It accepts v1 and v2 job shapes, so jobs already in

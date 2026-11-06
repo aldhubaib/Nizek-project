@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     "src/generated/**",
     "test-results/**",
     "playwright-report/**",
+    // Railway infrastructure config (own package.json + tsconfig).
+    ".railway/**",
   ]),
   {
     rules: {
