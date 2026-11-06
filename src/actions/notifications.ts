@@ -6,6 +6,7 @@ import { publish, userChannel } from "@/lib/centrifugo";
 import { NOTIFICATION_READ, NOTIFICATION_READ_ALL } from "@/lib/channels";
 import { unreadCountsFor } from "@/lib/notify";
 import { sumInboxMessageUnreads } from "@/lib/inbox-unread";
+import { enqueueMobileBadgeSync } from "@/lib/push-queue";
 
 export type NotificationDTO = {
   id: string;
@@ -96,5 +97,6 @@ export async function markAllNotificationsRead(): Promise<number> {
     unread: 0,
     inboxUnread,
   });
+  enqueueMobileBadgeSync(user.id);
   return 0;
 }

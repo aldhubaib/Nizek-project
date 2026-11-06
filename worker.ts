@@ -23,6 +23,7 @@ import http from "node:http";
 import { Queue, Worker } from "bullmq";
 import IORedis from "ioredis";
 import webpush from "web-push";
+import { Expo, type ExpoPushMessage } from "expo-server-sdk";
 import { prisma } from "./src/lib/prisma.js";
 import {
   activeThreadRedisKey,
@@ -31,6 +32,7 @@ import {
   PUSH_MAX_FAIL_COUNT,
   PUSH_TTL_SECONDS,
   threadKeyFromPushTag,
+  mapWithConcurrency,
 } from "./src/lib/push-core.js";
 import {
   applyDeliveryEffects,
@@ -38,6 +40,19 @@ import {
   p95,
   type DeliverableSubscription,
 } from "./src/lib/push/delivery.js";
+import {
+  applyExpoDeliveryEffects,
+  deliverBadgeSync,
+  deliverToExpoTokens,
+  processExpoReceipts,
+  type PendingReceipt,
+} from "./src/lib/push/expo-delivery.js";
+import {
+  EXPO_RECEIPT_DELAY_MS,
+  type ExpoResult,
+  type MobileTokenRow,
+} from "./src/lib/mobile-push-core.js";
+import { sumInboxMessageUnreads } from "./src/lib/inbox-unread.js";
 import { sweepOutbox } from "./src/lib/push/outbox-core.js";
 import {
   MESSAGE_EVENTS_QUEUE_NAME,
@@ -83,10 +98,25 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "";
 const vapidConfigured = Boolean(VAPID_PUBLIC && VAPID_PRIVATE);
 if (vapidConfigured) {
   webpush.setVapidDetails("mailto:admin@nizek.com", VAPID_PUBLIC!, VAPID_PRIVATE!);
-  console.log("[worker] VAPID configured — push delivery enabled");
+  console.log("[worker] VAPID configured — web push delivery enabled");
 } else {
-  console.warn("[worker] VAPID keys missing — push delivery DISABLED");
+  console.warn("[worker] VAPID keys missing — web push delivery DISABLED");
 }
+
+// Expo push (native mobile app). Works without a token; EXPO_ACCESS_TOKEN is
+// only needed once "Enhanced Security for Push Notifications" is turned on
+// for the Expo project.
+const expo = new Expo({
+  accessToken: process.env.EXPO_ACCESS_TOKEN || undefined,
+  maxConcurrentRequests: 6,
+});
+const sendExpo = (messages: unknown[]) =>
+  expo.sendPushNotificationsAsync(messages as ExpoPushMessage[]) as Promise<ExpoResult[]>;
+const fetchExpoReceipts = (ids: string[]) =>
+  expo.getPushNotificationReceiptsAsync(ids) as Promise<Record<string, ExpoResult>>;
+console.log(
+  `[worker] Expo push enabled (${process.env.EXPO_ACCESS_TOKEN ? "with" : "without"} access token)`,
+);
 
 // ─── Postgres ────────────────────────────────────────────────────────────────
 // The shared singleton from src/lib/prisma.ts: the message-events fan-out
@@ -121,6 +151,12 @@ const metrics = {
   /** Chat events delivered / failed since the last flush. */
   events: 0,
   eventsFailed: 0,
+  /** Expo (mobile) sends since the last flush. */
+  mobileSends: 0,
+  mobileOk: 0,
+  mobileGone: 0,
+  mobileFailed: 0,
+  mobileBadgeSyncs: 0,
 };
 let lastJobCompletedAt: number | null = null;
 /** Since boot; surfaced on /health so "is suppression working?" has an answer. */
@@ -131,7 +167,8 @@ function flushMetrics() {
     metrics.jobs === 0 &&
     metrics.jobsFailed === 0 &&
     metrics.events === 0 &&
-    metrics.eventsFailed === 0
+    metrics.eventsFailed === 0 &&
+    metrics.mobileBadgeSyncs === 0
   ) {
     return;
   }
@@ -140,6 +177,8 @@ function flushMetrics() {
       `ok=${metrics.ok} gone=${metrics.gone} permanent=${metrics.permanent} ` +
       `transient=${metrics.transient} activeSkipped=${metrics.suppressedActive} ` +
       `p95=${p95(metrics.latencies) ?? "-"}ms ` +
+      `mobile=${metrics.mobileSends}/${metrics.mobileOk}ok/${metrics.mobileGone}gone/${metrics.mobileFailed}failed ` +
+      `badgeSyncs=${metrics.mobileBadgeSyncs} ` +
       `events=${metrics.events} failedEvents=${metrics.eventsFailed}`,
   );
   metrics.events = 0;
@@ -153,6 +192,11 @@ function flushMetrics() {
   metrics.suppressedActive = 0;
   metrics.jobsFailed = 0;
   metrics.latencies = [];
+  metrics.mobileSends = 0;
+  metrics.mobileOk = 0;
+  metrics.mobileGone = 0;
+  metrics.mobileFailed = 0;
+  metrics.mobileBadgeSyncs = 0;
 }
 
 /**
@@ -185,9 +229,35 @@ metricsTimer.unref();
 
 // ─── Job processor ───────────────────────────────────────────────────────────
 
-async function processPushJob(raw: unknown, jobId: string | undefined): Promise<void> {
-  if (!vapidConfigured) return;
+/** Badge jobs and receipt checks share the push queue under their own names. */
+const MOBILE_BADGE_JOB = "mobile-badge";
+const MOBILE_RECEIPTS_JOB = "mobile-receipts";
+const PUSH_JOB = "send";
 
+/**
+ * The number on the phone's app icon: unread chat messages across the inbox,
+ * the same figure the app's Chats tab shows. Never throws — a failed count
+ * means "leave the badge alone" rather than "drop the push".
+ */
+async function inboxBadgeFor(userIds: string[]): Promise<Map<string, number>> {
+  const unique = [...new Set(userIds)];
+  const entries = await mapWithConcurrency(unique, 4, async (id) => {
+    try {
+      return [id, await sumInboxMessageUnreads(id)] as const;
+    } catch (err) {
+      console.error(
+        `[worker] inbox badge count failed for ${id}:`,
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    }
+  });
+  const map = new Map<string, number>();
+  for (const e of entries) if (e) map.set(e[0], e[1]);
+  return map;
+}
+
+async function processPushJob(raw: unknown, jobId: string | undefined): Promise<void> {
   const job = parsePushJob(raw);
   if (!job) {
     console.error(`[worker] job ${jobId} has an unusable payload; dropping`);
@@ -195,8 +265,25 @@ async function processPushJob(raw: unknown, jobId: string | undefined): Promise<
   }
   if (job.recipientIds.length === 0) return;
 
-  const [allSubscriptions, grouped] = await Promise.all([
-    prisma.pushSubscription.findMany({
+  const [allSubscriptions, mobileTokens, grouped] = await Promise.all([
+    vapidConfigured
+      ? prisma.pushSubscription.findMany({
+          where: {
+            memberId: { in: job.recipientIds },
+            failCount: { lt: PUSH_MAX_FAIL_COUNT },
+          },
+          select: {
+            id: true,
+            memberId: true,
+            endpoint: true,
+            p256dh: true,
+            auth: true,
+            failCount: true,
+            deviceId: true,
+          },
+        })
+      : Promise.resolve([]),
+    prisma.mobilePushToken.findMany({
       where: {
         memberId: { in: job.recipientIds },
         failCount: { lt: PUSH_MAX_FAIL_COUNT },
@@ -204,11 +291,10 @@ async function processPushJob(raw: unknown, jobId: string | undefined): Promise<
       select: {
         id: true,
         memberId: true,
-        endpoint: true,
-        p256dh: true,
-        auth: true,
-        failCount: true,
+        token: true,
         deviceId: true,
+        platform: true,
+        failCount: true,
       },
     }),
     prisma.notification.groupBy({
@@ -217,15 +303,24 @@ async function processPushJob(raw: unknown, jobId: string | undefined): Promise<
       _count: { _all: true },
     }),
   ]);
-  if (allSubscriptions.length === 0) return;
+  if (allSubscriptions.length === 0 && mobileTokens.length === 0) return;
 
   // The one device already reading this thread gets no banner; every other
   // device of the same person still does (the service worker shows all pushes).
   const threadKey = threadKeyFromPushTag(job.payload.tag);
+  const activeByDevice = threadKey
+    ? await loadActiveThreads([...allSubscriptions, ...mobileTokens])
+    : new Map<string, string | null>();
+
+  if (mobileTokens.length > 0) {
+    await deliverToMobile(mobileTokens, job.payload, threadKey, activeByDevice);
+  }
+  if (allSubscriptions.length === 0) return;
+
   const { send: subscriptions, suppressed } = partitionByActiveThread(
     allSubscriptions,
     threadKey,
-    threadKey ? await loadActiveThreads(allSubscriptions) : new Map(),
+    activeByDevice,
   );
   metrics.suppressedActive += suppressed.length;
   activeSkippedTotal += suppressed.length;
@@ -268,12 +363,154 @@ async function processPushJob(raw: unknown, jobId: string | undefined): Promise<
   }
 }
 
+// ─── Mobile (Expo) delivery ──────────────────────────────────────────────────
+
+type MobileTokenSelect = MobileTokenRow;
+
+async function deliverToMobile(
+  allTokens: MobileTokenSelect[],
+  payload: Parameters<typeof deliverToExpoTokens>[0]["payload"],
+  threadKey: string | null,
+  activeByDevice: Map<string, string | null>,
+): Promise<void> {
+  const { send: tokens, suppressed } = partitionByActiveThread(
+    allTokens,
+    threadKey,
+    activeByDevice,
+  );
+  metrics.suppressedActive += suppressed.length;
+  activeSkippedTotal += suppressed.length;
+  if (tokens.length === 0) return;
+
+  const badgeByRecipient = await inboxBadgeFor(tokens.map((t) => t.memberId));
+  const effects = await deliverToExpoTokens({
+    tokens,
+    payload,
+    badgeByRecipient,
+    send: sendExpo,
+  });
+  await applyExpoDeliveryEffects(prisma, effects);
+
+  metrics.mobileSends += tokens.length;
+  metrics.mobileOk += effects.counts.ok;
+  metrics.mobileGone += effects.counts.gone;
+  metrics.mobileFailed += effects.counts.permanent + effects.counts.transient;
+  lastMobileSendAt = Date.now();
+
+  const failed = tokens.length - effects.counts.ok;
+  if (failed > 0) {
+    console.error(
+      `[worker] mobile: ${failed}/${tokens.length} sends failed ` +
+        `(tag=${payload.tag ?? "-"} gone=${effects.counts.gone} ` +
+        `permanent=${effects.counts.permanent} transient=${effects.counts.transient})`,
+    );
+  }
+  if (effects.receipts.length > 0) await scheduleReceiptCheck(effects.receipts);
+}
+
+let lastMobileSendAt: number | null = null;
+let lastReceiptCheck: { at: number; checked: number; gone: number; permanent: number } | null =
+  null;
+
+/**
+ * APNs/FCM rejections (uninstalled app, revoked permission) only appear in
+ * receipts, minutes after the send. One delayed job per send batch.
+ */
+async function scheduleReceiptCheck(receipts: PendingReceipt[]): Promise<void> {
+  try {
+    await sweepQueue.add(
+      MOBILE_RECEIPTS_JOB,
+      { receipts },
+      {
+        delay: EXPO_RECEIPT_DELAY_MS,
+        attempts: 3,
+        backoff: { type: "exponential", delay: 60_000 },
+        removeOnComplete: { count: 200 },
+        removeOnFail: { count: 200 },
+      },
+    );
+  } catch (err) {
+    // Not fatal: stale tokens are also caught by the next send's ticket.
+    console.error(
+      "[worker] could not schedule receipt check:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+async function processReceiptJob(raw: unknown): Promise<void> {
+  const list = (raw as { receipts?: unknown } | null)?.receipts;
+  if (!Array.isArray(list)) return;
+  const pending = list.filter(
+    (r): r is PendingReceipt =>
+      !!r &&
+      typeof r === "object" &&
+      typeof (r as PendingReceipt).receiptId === "string" &&
+      typeof (r as PendingReceipt).tokenId === "string" &&
+      typeof (r as PendingReceipt).memberId === "string",
+  );
+  const result = await processExpoReceipts({
+    pending,
+    fetchReceipts: fetchExpoReceipts,
+    db: prisma,
+  });
+  lastReceiptCheck = { at: Date.now(), ...result };
+  if (result.gone > 0 || result.permanent > 0) {
+    console.log(
+      `[worker] receipts: ${result.checked} checked, ${result.gone} devices gone, ` +
+        `${result.permanent} permanent failures`,
+    );
+  }
+}
+
+/**
+ * The person read something on another device (web, second phone). Push the
+ * new inbox total to their iPhones so the badge drops without opening the app.
+ * Android badges follow the app itself, so those tokens are skipped.
+ */
+async function processBadgeSyncJob(raw: unknown): Promise<void> {
+  const userId = (raw as { userId?: unknown } | null)?.userId;
+  if (typeof userId !== "string" || !userId) return;
+  const tokens = await prisma.mobilePushToken.findMany({
+    where: { memberId: userId, platform: "ios", failCount: { lt: PUSH_MAX_FAIL_COUNT } },
+    select: {
+      id: true,
+      memberId: true,
+      token: true,
+      deviceId: true,
+      platform: true,
+      failCount: true,
+    },
+  });
+  if (tokens.length === 0) return;
+  // A phone with a chat open right now is in the foreground and already keeps
+  // its own badge in step with the inbox; only the pocketed ones need a push.
+  const active = await loadActiveThreads(tokens);
+  const idle = tokens.filter((t) => !active.get(`${t.memberId}:${t.deviceId}`));
+  if (idle.length === 0) return;
+  const badge = await sumInboxMessageUnreads(userId);
+  const effects = await deliverBadgeSync({ tokens: idle, badge, send: sendExpo });
+  await applyExpoDeliveryEffects(prisma, effects);
+  metrics.mobileBadgeSyncs += 1;
+  metrics.mobileGone += effects.counts.gone;
+}
+
 // ─── Worker ──────────────────────────────────────────────────────────────────
 
 const worker = new Worker(
   QUEUE_NAME,
   async (job) => {
-    await processPushJob(job.data, job.id);
+    switch (job.name) {
+      case MOBILE_BADGE_JOB:
+        await processBadgeSyncJob(job.data);
+        return;
+      case MOBILE_RECEIPTS_JOB:
+        await processReceiptJob(job.data);
+        return;
+      case PUSH_JOB:
+      default:
+        await processPushJob(job.data, job.id);
+    }
   },
   {
     connection: redis,
@@ -572,6 +809,11 @@ const healthServer = http.createServer(async (_req, res) => {
         lastJobCompletedAt,
         lastSweep,
         activeSkippedTotal,
+        mobilePush: {
+          expoAccessToken: Boolean(process.env.EXPO_ACCESS_TOKEN),
+          lastSendAt: lastMobileSendAt,
+          lastReceiptCheck,
+        },
         messageEvents: {
           concurrency: MESSAGE_EVENT_CONCURRENCY,
           queue: eventCounts,

@@ -14,6 +14,7 @@ import { unreadCountsFor } from "@/lib/notify";
 import { resolveProjectMentionIds } from "@/lib/project-mentions";
 import {
   decodeDeadlineReminderPayload,
+  deadlineReminderPreview,
   isDeadlineReminderMessage,
   NIZEK_BOT_AUTHOR_ID,
   NIZEK_BOT_NAME,
@@ -66,6 +67,7 @@ import {
 } from "@/lib/centrifugo";
 import { NOTIFICATION_READ, TYPING_EVENT } from "@/lib/channels";
 import { threadPushTag } from "@/lib/notification-read";
+import { enqueueMobileBadgeSync } from "@/lib/push-queue";
 import { MAX_MESSAGE_CHARS, messageTooLongError } from "@/lib/message-limits";
 import {
   countInboxMessageUnreads,
@@ -148,6 +150,8 @@ function inboxPreview(body: string): string {
   if (task?.comment) return task.comment;
   const bypass = decodeProofBypassPayload(body);
   if (bypass) return proofBypassPreview(bypass);
+  const reminder = decodeDeadlineReminderPayload(body);
+  if (reminder) return deadlineReminderPreview(reminder);
   return toDisplayBody(body) || "📎 Attachment";
 }
 
@@ -862,7 +866,9 @@ export async function listImportantMessages(target?: {
         : (m.project?.name ?? "Chat");
     out.push({
       id: m.id,
-      body: toDisplayBody(m.body),
+      // Cards (reminders, comments, proof requests…) read as their summary,
+      // not the payload they're stored as.
+      body: inboxPreview(m.body),
       createdAt: m.createdAt.toISOString(),
       authorName: m.author.name ?? m.author.email ?? "Someone",
       threadId,
@@ -1652,6 +1658,9 @@ export async function markThreadRead(target: {
     unread,
     inboxUnread,
   });
+  // Phones that are closed cannot hear the event above; push them the new
+  // badge number so the app icon matches what was just read here.
+  if (inboxThreadId) enqueueMobileBadgeSync(user.id);
   return { unread, inboxUnread };
 }
 

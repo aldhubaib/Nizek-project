@@ -30,6 +30,11 @@ export async function middleware(request: NextRequest) {
   if (!isPublicRoute(pathname)) {
     const sessionCookie = getSessionCookie(request);
     if (!sessionCookie) {
+      // The native app reads JSON; an HTML redirect would look like a parse
+      // error instead of "signed out" (which it handles by showing sign-in).
+      if (pathname.startsWith("/api/mobile/")) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
       console.warn(
         `[auth] unauthenticated access to ${pathname} — redirecting to sign-in`,
       );

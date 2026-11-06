@@ -2,13 +2,28 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { APIError } from "better-auth/api";
+import { expo } from "@better-auth/expo";
 import { prisma } from "@/lib/prisma";
 import { applyPendingInvite, logPendingInviteError } from "@/lib/pending-invite";
 import { joinDisplayName } from "@/lib/display-name";
+import { trustedMobileSchemes } from "@/lib/mobile/scheme";
+
+// The React Native app (./mobile) signs in through the same Google OAuth
+// client. After Google, Better Auth deep-links back into the app, so the app's
+// URL scheme must be a trusted origin (the staging build has its own scheme;
+// see trustedMobileSchemes). `exp://` is Expo's development scheme (Expo Go /
+// dev client on a LAN IP) and is only trusted outside production.
+const mobileTrustedOrigins = [
+  ...trustedMobileSchemes().flatMap((scheme) => [`${scheme}://`, `${scheme}://*`]),
+  ...(process.env.NODE_ENV === "production"
+    ? []
+    : ["exp://", "exp://**", "exp://*:*/**"]),
+];
 
 export const auth = betterAuth({
   baseURL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
   secret: process.env.BETTER_AUTH_SECRET,
+  trustedOrigins: mobileTrustedOrigins,
 
   database: prismaAdapter(prisma, {
     provider: "postgresql",
@@ -138,7 +153,9 @@ export const auth = betterAuth({
     },
   },
 
-  plugins: [nextCookies()],
+  // `expo()` must come before `nextCookies()`: it rewrites the OAuth callback
+  // into an app deep link and hands the session cookie to the app.
+  plugins: [expo(), nextCookies()],
 });
 
 export type Session = typeof auth.$Infer.Session;

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 import type { PushPayload } from "@/lib/push-core";
+import { badgeSyncJobId } from "@/lib/mobile-push-core";
 import {
   dispatchOutboxRows,
   type OutboxRow,
@@ -133,6 +134,37 @@ export async function enqueuePushBounded(
 ): Promise<void> {
   const row = await writePushOutbox(prisma, recipientIds, payload);
   await dispatchOutbox([row]);
+}
+
+/**
+ * Asks the worker to push the person's new inbox-unread total to their phones'
+ * app icon (iOS badge). Called after reads that happened on another device so
+ * the number drops without opening the app. Fire-and-forget; a failure only
+ * leaves a stale badge until the next push or app open.
+ */
+export function enqueueMobileBadgeSync(userId: string): void {
+  if (!userId) return;
+  void withQueueTimeout(
+    getQueue().add(
+      "mobile-badge",
+      { userId },
+      {
+        jobId: badgeSyncJobId(userId),
+        // Small delay so a burst of reads (mark-all, scrolling a thread)
+        // collapses into one push via the deterministic job id.
+        delay: 1500,
+        attempts: 2,
+        removeOnComplete: { count: 200 },
+        removeOnFail: { count: 200 },
+      },
+    ),
+    "Queueing the badge sync",
+  ).catch((err: unknown) => {
+    console.error(
+      "[push] badge sync enqueue failed:",
+      err instanceof Error ? err.message : err,
+    );
+  });
 }
 
 export interface PushQueueHealth {
