@@ -5,6 +5,7 @@ describe("canPreviewNextUi", () => {
   it("lets a listed email in, however it is cased or padded", () => {
     expect(canPreviewNextUi({ email: "aldhubaib@nizek.com" })).toBe(true);
     expect(canPreviewNextUi({ email: "  Aldhubaib@Nizek.com " })).toBe(true);
+    expect(canPreviewNextUi({ email: "alessa@nizek.com" })).toBe(true);
   });
 
   it("keeps everyone else out, admins included", () => {

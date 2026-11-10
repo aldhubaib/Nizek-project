@@ -8,6 +8,7 @@
  */
 const NEXT_UI_PREVIEW_EMAILS: ReadonlySet<string> = new Set([
   "aldhubaib@nizek.com",
+  "alessa@nizek.com",
 ]);
 
 export function canPreviewNextUi(
