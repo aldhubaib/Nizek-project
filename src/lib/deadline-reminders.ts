@@ -17,6 +17,7 @@ import {
   NIZEK_BOT_NAME,
 } from "@/lib/deadline-reminder-payload";
 import { ALL_MENTION_NAME } from "@/lib/mentions";
+import { messageSearchText } from "@/lib/message-search";
 
 /** Days until due: positive = before due, 0 = due today, negative = overdue. */
 export {
@@ -135,6 +136,7 @@ export async function sendDeadlineReminderForNote(options: {
         projectId: note.projectId,
         authorId: options.authorId,
         body,
+        searchText: messageSearchText(body),
         kind: "deadline_reminder",
         mentions: {
           create: mentionIds.map((memberId) => ({ memberId })),

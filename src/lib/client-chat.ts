@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { messageSearchText } from "@/lib/message-search";
 
 export const CLIENT_CONVERSATION_KIND = "client" as const;
 export const DIRECT_CONVERSATION_KIND = "direct" as const;
@@ -373,6 +374,7 @@ export async function postClientSystemMessage(input: {
       projectId: input.projectId,
       authorId: input.authorId,
       body: input.body,
+      searchText: messageSearchText(input.body),
       kind: input.kind ?? "message",
       ...(input.taskId ? { taskId: input.taskId } : {}),
     },

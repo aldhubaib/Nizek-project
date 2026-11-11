@@ -17,6 +17,7 @@ import { notifyAndPush } from "@/lib/notify";
 import { getActiveContract, getAllowedTaskTypes } from "@/lib/contract-rules";
 import { isQuestionAnswerFilled, isReadinessQuestion, isWaitingOnClientAnswer } from "@/lib/task-readiness";
 import { requireUserOnProject } from "@/lib/project-mentions";
+import { messageSearchText } from "@/lib/message-search";
 import { createTaskRecord } from "@/lib/create-task-record";
 import { proofVideoModeOf, taskVideoRequired } from "@/lib/proof-video-mode";
 import {
@@ -633,6 +634,10 @@ export async function declineTask(data: {
         projectId: task.projectId,
         authorId: user.id,
         body: rejectionBody,
+        searchText: messageSearchText(
+          rejectionBody,
+          data.attachments?.map((file) => file.filename) ?? [],
+        ),
         kind: "rejection",
         ...(submitterId && { mentions: { create: [{ memberId: submitterId }] } }),
         ...(data.attachments?.length && {

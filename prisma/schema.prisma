@@ -1905,6 +1905,9 @@ model Message {
   authorId       String
   author         User          @relation("MessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   body           String
+  /// Plain text for search: mentions as "@Name", card copy, attachment names.
+  /// Null on rows written before this column, until the backfill runs.
+  searchText     String?
   kind           String        @default("message")
   createdAt      DateTime      @default(now())
   /// Bumped by edits, reactions and deletes — the "changes since" cursor.
