@@ -1,0 +1,5 @@
+infra: docker compose -f compose.local.yaml up --abort-on-container-exit
+web: sh scripts/local-proc.sh web
+worker: sh scripts/local-proc.sh worker
+collab: sh scripts/local-proc.sh collab
+mobile: sh scripts/local-proc.sh mobile

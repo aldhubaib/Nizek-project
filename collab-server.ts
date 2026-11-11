@@ -1,7 +1,7 @@
 /**
  * Hocuspocus collaborative editing server for sprint planning/review documents.
  *
- * Start: node --import tsx collab-server.ts
+ * Start: npx tsx collab-server.ts
  *
  * Shares the same Postgres as the Next.js app. Documents are loaded/saved from
  * the MeetingNote table. Auth verifies project access using better-auth session
@@ -29,6 +29,14 @@ globals.document ??= dom.window.document;
 globals.DOMParser ??= dom.window.DOMParser;
 globals.Node ??= dom.window.Node;
 
+// These packages are ESM-only. Loaded inside async main() because this repo is
+// CommonJS, and a top-level await makes tsx refuse to start the process.
+void main().catch((err) => {
+  console.error("[collab] failed to start:", err);
+  process.exit(1);
+});
+
+async function main() {
 const { generateHTML, generateJSON } = await import("@tiptap/core");
 const { getSchema } = await import("@tiptap/core");
 const { prosemirrorJSONToYDoc, yXmlFragmentToProsemirrorJSON } = await import("y-prosemirror");
@@ -164,3 +172,4 @@ process.on("SIGTERM", async () => {
   await prisma.$disconnect();
   process.exit(0);
 });
+}

@@ -50,20 +50,24 @@ command -v node >/dev/null || fail "node not found"
 log "Using $("$PG_BIN/pg_dump" --version)"
 
 # --- 2. Local server ----------------------------------------------------------------------
-if ! "$PG_BIN/pg_isready" -h "$PG_HOST" -p "$PG_PORT" -q; then
+# -U matters: with no user, libpq uses the Mac login and Postgres logs a FATAL.
+if ! "$PG_BIN/pg_isready" -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" -q; then
   fail "No Postgres listening on $PG_HOST:$PG_PORT.
-Start the local Postgres 18 server with:
-  $PG_BIN/pg_ctl -D /opt/homebrew/var/postgresql@18 -o \"-p $PG_PORT\" -l /opt/homebrew/var/log/postgresql@18.log start"
+Start the local stack first: npm run local"
 fi
 
 # --- 3. Live connection string (never printed) -------------------------------------------
 log "Reading the live connection string from Railway (service: $RAILWAY_DB_SERVICE)"
-# Always the production environment, whatever the CLI is linked to (there is a
-# staging environment too; see docs/staging.md).
-LIVE_URL="$(railway variables --environment production --service "$RAILWAY_DB_SERVICE" --json 2>/dev/null \
+# Always production, whatever the CLI is linked to. The project id is passed
+# explicitly so this works without `railway link` (see docs/staging.md).
+LIVE_URL="$(railway variable list \
+  --project eb824c62-bc60-485b-887f-d19c44782d2d \
+  --environment production \
+  --service "$RAILWAY_DB_SERVICE" \
+  --json \
   | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s||"{}");process.stdout.write(v.DATABASE_PUBLIC_URL||"")})')"
 [ -n "$LIVE_URL" ] || fail "Could not read DATABASE_PUBLIC_URL from Railway.
-Run: railway login && railway link --project nizek-project --environment production"
+Run: railway login"
 
 # --- 4. Dump live -------------------------------------------------------------------------
 WORK="$(mktemp -d -t nizek-live-db)"
@@ -96,7 +100,10 @@ SQL
 
 # --- 7. Migrations present here but not on live yet ---------------------------------------
 log "Applying migrations from this checkout"
-DATABASE_URL="$LOCAL_URL" DIRECT_DATABASE_URL="$LOCAL_URL" npx prisma migrate deploy
+# Prisma reads the URL, not PGPASSWORD. Encode the password so a special
+# character cannot break the URL or show up in a log.
+PRISMA_URL="postgresql://${PG_USER}:$(node -e 'process.stdout.write(encodeURIComponent(process.env.PGPASSWORD||""))')@${PG_HOST}:${PG_PORT}/${PG_DB}"
+DATABASE_URL="$PRISMA_URL" DIRECT_DATABASE_URL="$PRISMA_URL" npx prisma migrate deploy
 
 # --- 8. Summary ---------------------------------------------------------------------------
 log "Done. The copy now holds:"
@@ -110,8 +117,6 @@ log "Done. The copy now holds:"
 
 cat <<EOF
 
-[pull-live] To use it, .env needs:
-    DATABASE_URL="$LOCAL_URL"
-    DIRECT_DATABASE_URL="$LOCAL_URL"
-then restart: npm run dev
+[pull-live] Copy is on $PG_HOST:$PG_PORT/$PG_DB.
+If .env already points at that database, restart the local stack (Ctrl+C, then npm run local).
 EOF
