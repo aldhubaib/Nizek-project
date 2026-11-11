@@ -26,6 +26,7 @@
 .DS_Store
 *.pem
 /status.md
+dump.rdb
 
 # debug
 npm-debug.log*
