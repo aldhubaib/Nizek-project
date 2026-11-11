@@ -20,6 +20,7 @@ import {
 } from "@/lib/deadline-reminder-payload";
 import { getNizekBotImageUrl } from "@/lib/branding";
 import type { MessageDTO } from "@/actions/messages";
+import { messageSearchText } from "@/lib/message-search";
 
 /**
  * System cards written straight into a thread.
@@ -54,6 +55,7 @@ async function insertCard(input: {
       projectId: input.projectId,
       authorId: input.authorId,
       body: input.body,
+      searchText: messageSearchText(input.body),
       kind: input.kind,
     },
     include: {

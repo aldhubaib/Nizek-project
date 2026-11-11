@@ -69,6 +69,7 @@ import { NOTIFICATION_READ, TYPING_EVENT } from "@/lib/channels";
 import { threadPushTag } from "@/lib/notification-read";
 import { enqueueMobileBadgeSync } from "@/lib/push-queue";
 import { MAX_MESSAGE_CHARS, messageTooLongError } from "@/lib/message-limits";
+import { messageSearchText } from "@/lib/message-search";
 import {
   countInboxMessageUnreads,
   sumInboxMessageUnreads,
@@ -421,6 +422,8 @@ export type ThreadMessage = {
 export type ThreadMessagesPage = {
   messages: ThreadMessage[]; // oldest → newest
   hasMore: boolean;
+  /** True when the page was loaded around an older message and newer ones remain. */
+  hasMoreNewer: boolean;
   /** When this viewer last read the thread. Null = caught up / never read. */
   lastReadAt: string | null;
   /** Other people's messages after lastReadAt. */
@@ -611,10 +614,63 @@ export async function getThreadMessages(input: {
   projectId?: string | null;
   conversationId?: string | null;
   cursorId?: string;
+  /** Load a window centered on this message instead of the newest page. */
+  aroundId?: string;
 }): Promise<ThreadMessagesPage> {
   const user = await requireUser();
   const scope = await resolveThreadScope(user, input);
   const { where } = scope;
+
+  if (input.aroundId) {
+    const target = await prisma.message.findFirst({
+      where: { id: input.aroundId, ...where, deletedAt: null },
+      include: THREAD_MESSAGE_INCLUDE,
+    });
+    if (target) {
+    const olderThan = {
+      OR: [
+        { createdAt: { lt: target.createdAt } },
+        { createdAt: target.createdAt, id: { lt: target.id } },
+      ],
+    };
+    const newerThan = {
+      OR: [
+        { createdAt: { gt: target.createdAt } },
+        { createdAt: target.createdAt, id: { gt: target.id } },
+      ],
+    };
+    const [older, newer] = await Promise.all([
+      prisma.message.findMany({
+        where: { ...where, deletedAt: null, ...olderThan },
+        include: THREAD_MESSAGE_INCLUDE,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: THREAD_PAGE_SIZE + 1,
+      }),
+      prisma.message.findMany({
+        where: { ...where, deletedAt: null, ...newerThan },
+        include: THREAD_MESSAGE_INCLUDE,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: THREAD_PAGE_SIZE + 1,
+      }),
+    ]);
+    const hasMore = older.length > THREAD_PAGE_SIZE;
+    const hasMoreNewer = newer.length > THREAD_PAGE_SIZE;
+    const page = [
+      ...older.slice(0, THREAD_PAGE_SIZE).reverse(),
+      target,
+      ...newer.slice(0, THREAD_PAGE_SIZE),
+    ];
+    const messages = await toThreadMessages(user, page, scope);
+    const unread = await resolveThreadUnreadCursor(user.id, input, where);
+    return {
+      messages,
+      hasMore,
+      hasMoreNewer,
+      lastReadAt: unread.lastReadAt,
+      unreadCount: unread.unreadCount,
+    };
+    }
+  }
 
   const rows = await prisma.message.findMany({
     where: { ...where, deletedAt: null },
@@ -632,7 +688,13 @@ export async function getThreadMessages(input: {
     ? { lastReadAt: null, unreadCount: 0 }
     : await resolveThreadUnreadCursor(user.id, input, where);
 
-  return { messages, hasMore, lastReadAt: unread.lastReadAt, unreadCount: unread.unreadCount };
+  return {
+    messages,
+    hasMore,
+    hasMoreNewer: false,
+    lastReadAt: unread.lastReadAt,
+    unreadCount: unread.unreadCount,
+  };
 }
 
 // ─── Thread catch-up ─────────────────────────────────────────────────────────
@@ -1225,6 +1287,10 @@ export async function sendMessage(
           replyToId: input.replyToId ?? null,
           authorId: user.id,
           body,
+          searchText: messageSearchText(
+            body,
+            attachmentsInput.map((file) => file.filename),
+          ),
           kind: input.kind ?? "message",
           mentions: mentionedIds.length
             ? { create: mentionedIds.map((id) => ({ memberId: id })) }
@@ -1693,6 +1759,7 @@ export async function editMessage(
         taskId: true,
         kind: true,
         conversation: { select: { projectId: true } },
+        attachments: { select: { filename: true } },
       },
     });
     if (!message) throw new Error("Message not found");
@@ -1716,7 +1783,14 @@ export async function editMessage(
     const { updated, event } = await prisma.$transaction(async (tx) => {
       const updated = await tx.message.update({
         where: { id: message.id },
-        data: { body: trimmed, editedAt: new Date() },
+        data: {
+          body: trimmed,
+          editedAt: new Date(),
+          searchText: messageSearchText(
+            trimmed,
+            message.attachments.map((file) => file.filename),
+          ),
+        },
         select: { id: true, body: true, updatedAt: true },
       });
 
@@ -1925,6 +1999,8 @@ export async function deleteMessage(
 export type InboxThread = {
   id: string; // project-<id> | conv-<id>
   kind: "project" | "direct" | "client" | "announcements";
+  /** A 1:1 direct message. Search lists these under People, not Chats. */
+  oneToOne?: boolean;
   name: string;
   subtitle: string;
   projectId: string | null;
@@ -2243,6 +2319,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
     return {
       id: `conv-${c.id}`,
       kind: "direct" as const,
+      oneToOne: true,
       name: peerName,
       subtitle: "Direct message",
       projectId: null,
