@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { messageSearchSnippet, messageSearchText } from "@/lib/message-search";
+import { fileSearchKind, messageSearchSnippet, messageSearchText } from "@/lib/message-search";
 import { encodeNoteCommentBody } from "@/lib/note-comment-payload";
 
 describe("messageSearchText", () => {
@@ -29,6 +29,19 @@ describe("messageSearchText", () => {
 
   it("appends attachment filenames", () => {
     expect(messageSearchText("", ["Q3-plan.pdf"])).toBe("Q3-plan.pdf");
+  });
+});
+
+describe("fileSearchKind", () => {
+  it("treats a photo, a video, and a PDF as one file with a different row", () => {
+    expect(fileSearchKind("image/jpeg", "site.jpg")).toBe("image");
+    expect(fileSearchKind("video/mp4", "walkthrough.mp4")).toBe("video");
+    expect(fileSearchKind("application/pdf", "Q3-plan.pdf")).toBe("file");
+  });
+
+  it("uses the filename when a voice note has no mime", () => {
+    expect(fileSearchKind(null, "note.m4a")).toBe("audio");
+    expect(fileSearchKind("audio/webm", "note.webm")).toBe("audio");
   });
 });
 

@@ -9,7 +9,7 @@ import {
   canReadAnnouncements,
 } from "@/lib/announcements";
 import { CLIENT_CONVERSATION_KIND, isClientUser } from "@/lib/client-chat";
-import { messageSearchSnippet } from "@/lib/message-search";
+import { fileSearchKind, messageSearchSnippet, type FileSearchKind } from "@/lib/message-search";
 
 const PAGE_SIZE = 30;
 const MIN_QUERY = 2;
@@ -117,6 +117,103 @@ export async function searchMessages(input: {
   };
 }
 
+export type FileSearchHit = {
+  id: string;
+  messageId: string;
+  threadId: string;
+  threadName: string;
+  name: string;
+  contentType: string | null;
+  kind: FileSearchKind;
+  createdAt: string;
+  matchStart: number;
+  matchEnd: number;
+};
+
+type FileRaw = {
+  id: string;
+  filename: string;
+  mimeType: string | null;
+  createdAt: Date;
+  messageId: string;
+  conversationId: string | null;
+  projectId: string | null;
+};
+
+/**
+ * Attachments in rooms the viewer can open, newest first.
+ * A photo, a video, and a PDF are the same result. The row's kind is only how it draws.
+ */
+export async function searchFiles(input: {
+  q: string;
+  before?: string | null;
+  beforeId?: string | null;
+}): Promise<{ files: FileSearchHit[]; filesHasMore: boolean }> {
+  const user = await requireUser();
+  const q = input.q.trim();
+  if (q.length < MIN_QUERY) return { files: [], filesHasMore: false };
+
+  const scope = await searchScope(user);
+  if (scope.conversationIds.length === 0 && scope.projectIds.length === 0) {
+    return { files: [], filesHasMore: false };
+  }
+
+  const pattern = `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+  const scopeSql = scopeFilter(scope);
+  const beforeAt = input.before ? new Date(input.before) : null;
+  const cursorSql =
+    beforeAt && !Number.isNaN(beforeAt.getTime()) && input.beforeId
+      ? Prisma.sql`AND (a."createdAt", a.id) < (${beforeAt}, ${input.beforeId})`
+      : Prisma.empty;
+
+  const rows = await prisma.$queryRaw<FileRaw[]>(Prisma.sql`
+    SELECT
+      a.id,
+      a.filename,
+      a."mimeType",
+      a."createdAt",
+      m.id AS "messageId",
+      m."conversationId",
+      m."projectId"
+    FROM "MessageAttachment" a
+    JOIN "Message" m ON m.id = a."messageId"
+    WHERE m."deletedAt" IS NULL
+      AND a.filename ILIKE ${pattern} ESCAPE '\\'
+      AND (${scopeSql})
+      ${cursorSql}
+    ORDER BY a."createdAt" DESC, a.id DESC
+    LIMIT ${PAGE_SIZE + 1}
+  `);
+
+  const filesHasMore = rows.length > PAGE_SIZE;
+  const page = rows.slice(0, PAGE_SIZE);
+  const names = await threadNames(user.id, page);
+
+  return {
+    filesHasMore,
+    files: page.map((row) => {
+      const placed = names.get(row.conversationId ?? `project:${row.projectId}`) ?? {
+        threadId: row.conversationId ? `conv-${row.conversationId}` : `project-${row.projectId}`,
+        threadName: "Chat",
+        oneToOne: false,
+      };
+      const marked = messageSearchSnippet(row.filename, q);
+      return {
+        id: row.id,
+        messageId: row.messageId,
+        threadId: placed.threadId,
+        threadName: placed.threadName,
+        name: row.filename,
+        contentType: row.mimeType,
+        kind: fileSearchKind(row.mimeType, row.filename),
+        createdAt: new Date(row.createdAt).toISOString(),
+        matchStart: marked.matchStart,
+        matchEnd: marked.matchEnd,
+      };
+    }),
+  };
+}
+
 function scopeFilter(scope: { conversationIds: string[]; projectIds: string[] }): Prisma.Sql {
   const parts: Prisma.Sql[] = [];
   if (scope.conversationIds.length > 0) {
@@ -176,7 +273,10 @@ async function searchScope(user: { id: string; systemRole: string }): Promise<{
 
 type Placed = { threadId: string; threadName: string; oneToOne: boolean };
 
-async function threadNames(viewerId: string, rows: RawHit[]): Promise<Map<string, Placed>> {
+async function threadNames(
+  viewerId: string,
+  rows: { conversationId: string | null; projectId: string | null }[],
+): Promise<Map<string, Placed>> {
   const conversationIds = [
     ...new Set(rows.map((row) => row.conversationId).filter((id): id is string => Boolean(id))),
   ];

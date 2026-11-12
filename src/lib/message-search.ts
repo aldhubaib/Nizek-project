@@ -9,6 +9,18 @@ import { decodeProofBypassPayload, proofBypassPreview } from "@/lib/proof-bypass
 import { decodeTaskCommentPayload } from "@/lib/task-comment-payload";
 
 const MENTION_RE = /@\[([^\]]+)\]\(([^)]+)\)/g;
+const AUDIO_EXT = /\.(m4a|mp3|ogg|wav|aac)$/i;
+
+export type FileSearchKind = "image" | "video" | "audio" | "file";
+
+/** How a search row should draw an attachment. Mime wins; the name is the fallback. */
+export function fileSearchKind(mimeType: string | null, filename: string): FileSearchKind {
+  const mime = (mimeType ?? "").toLowerCase();
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/") || AUDIO_EXT.test(filename)) return "audio";
+  return "file";
+}
 
 /** Plain text a person would type to find this message. Not the stored markup. */
 export function messageSearchText(body: string, filenames: string[] = []): string {
