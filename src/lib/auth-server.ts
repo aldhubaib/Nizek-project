@@ -6,6 +6,7 @@ import { expo } from "@better-auth/expo";
 import { prisma } from "@/lib/prisma";
 import { applyPendingInvite, logPendingInviteError } from "@/lib/pending-invite";
 import { joinDisplayName } from "@/lib/display-name";
+import { localDevLoginPlugin } from "@/lib/local-dev-login-plugin";
 import { trustedMobileSchemes } from "@/lib/mobile/scheme";
 
 // The React Native app (./mobile) signs in through the same Google OAuth
@@ -155,7 +156,7 @@ export const auth = betterAuth({
 
   // `expo()` must come before `nextCookies()`: it rewrites the OAuth callback
   // into an app deep link and hands the session cookie to the app.
-  plugins: [expo(), nextCookies()],
+  plugins: [localDevLoginPlugin(), expo(), nextCookies()],
 });
 
 export type Session = typeof auth.$Infer.Session;

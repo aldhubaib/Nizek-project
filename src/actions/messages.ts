@@ -2017,6 +2017,8 @@ export type InboxThread = {
   inactive: boolean;
   /** Client rooms: true when the viewer can open the thread but not post. */
   readOnly?: boolean;
+  /** A note's comment thread. The mobile inbox leaves these out; the panel keeps them. */
+  noteComment?: boolean;
 };
 
 export async function getInboxThreads(): Promise<InboxThread[]> {
@@ -2309,6 +2311,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       avatar: generateColor(name),
       initials: name.charAt(0).toUpperCase(),
       inactive: false,
+      noteComment: Boolean(note),
     };
   });
 

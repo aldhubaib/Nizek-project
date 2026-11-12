@@ -686,30 +686,68 @@ digestWorker.on("failed", (job, err) => {
 });
 digestWorker.on("error", (err) => console.error("[worker] email-digests error:", err.message));
 
-const eventWorker = new Worker(
-  MESSAGE_EVENTS_QUEUE_NAME,
-  async (job) => {
-    const eventId = (job.data as { eventId?: unknown } | null)?.eventId;
-    if (typeof eventId !== "string" || !eventId) return;
-    await processMessageEvent(eventId);
-  },
-  {
-    connection: redis,
-    concurrency: MESSAGE_EVENT_CONCURRENCY,
-    removeOnComplete: { count: 1000 },
-    removeOnFail: { count: 1000 },
-  },
-);
-eventWorker.on("completed", () => {
-  metrics.events += 1;
-});
-eventWorker.on("failed", (job, err) => {
-  metrics.eventsFailed += 1;
-  console.error(`[worker] message event job ${job?.id} failed:`, err.message);
-});
-eventWorker.on("error", (err) => console.error("[worker] message-events error:", err.message));
+function createMessageEventWorker(): Worker {
+  const next = new Worker(
+    MESSAGE_EVENTS_QUEUE_NAME,
+    async (job) => {
+      const eventId = (job.data as { eventId?: unknown } | null)?.eventId;
+      if (typeof eventId !== "string" || !eventId) return;
+      await processMessageEvent(eventId);
+    },
+    {
+      connection: redis,
+      concurrency: MESSAGE_EVENT_CONCURRENCY,
+      removeOnComplete: { count: 1000 },
+      removeOnFail: { count: 1000 },
+    },
+  );
+  next.on("completed", () => {
+    metrics.events += 1;
+  });
+  next.on("failed", (job, err) => {
+    metrics.eventsFailed += 1;
+    console.error(`[worker] message event job ${job?.id} failed:`, err.message);
+  });
+  next.on("error", (err) => console.error("[worker] message-events error:", err.message));
+  return next;
+}
+
+// A Redis blip can leave this loop parked on a dead blocking connection.
+// BullMQ's own watchdog covers a hung BZPOPMIN, not a connection that never
+// comes back. Jobs then sit in "waiting" while the process looks healthy,
+// and open apps only see new messages on refresh. Replace the loop instead.
+let eventWorker = createMessageEventWorker();
+const MESSAGE_EVENT_STUCK_MS = 20_000;
 
 const eventQueue = new Queue(MESSAGE_EVENTS_QUEUE_NAME, { connection: redis });
+let messageEventsStuckSince: number | null = null;
+const messageEventWatch = setInterval(() => {
+  if (shuttingDown) return;
+  void (async () => {
+    const counts = await eventQueue.getJobCounts("waiting", "active");
+    const waiting = counts.waiting ?? 0;
+    const active = counts.active ?? 0;
+    if (waiting === 0 || active > 0) {
+      messageEventsStuckSince = null;
+      return;
+    }
+    messageEventsStuckSince = messageEventsStuckSince ?? Date.now();
+    if (Date.now() - messageEventsStuckSince < MESSAGE_EVENT_STUCK_MS) return;
+    messageEventsStuckSince = null;
+    console.warn(
+      `[worker] message-events left ${waiting} jobs waiting; reconnecting`,
+    );
+    const previous = eventWorker;
+    eventWorker = createMessageEventWorker();
+    previous.close(true).catch(() => {});
+  })().catch((err) => {
+    console.error(
+      "[worker] message-events watch failed:",
+      err instanceof Error ? err.message : err,
+    );
+  });
+}, 5_000);
+messageEventWatch.unref();
 const EVENT_SWEEP_LOCK_KEY = "message-events:sweep-lock";
 let lastEventSweep: { at: number; rows: number } | null = null;
 
@@ -772,6 +810,7 @@ async function shutdown(signal: string) {
   console.log(`[worker] ${signal} received — draining...`);
   clearInterval(sweepTimer);
   clearInterval(eventSweepTimer);
+  clearInterval(messageEventWatch);
   clearInterval(metricsTimer);
   flushMetrics();
   // close() waits for active jobs to finish (bounded by BullMQ's lock duration).

@@ -33,6 +33,11 @@ case "$role" in
     mkdir -p .local
     touch .local/ready
     # .env PORT is 3001. Port 3000 belongs to another app on this machine.
+    # Next will not replace a variable that is already set. These two were
+    # exported empty when the stack started, which hid the values later added
+    # to .env and made Google sign-in fail with CLIENT_ID_AND_SECRET_REQUIRED.
+    if [ -z "${GOOGLE_CLIENT_ID:-}" ]; then unset GOOGLE_CLIENT_ID; fi
+    if [ -z "${GOOGLE_CLIENT_SECRET:-}" ]; then unset GOOGLE_CLIENT_SECRET; fi
     exec npm run dev
     ;;
   worker)

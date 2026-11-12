@@ -1,5 +1,6 @@
 import { AuthLayout, type GalleryPhoto } from "@/components/auth/auth-layout";
 import { GoogleSignIn } from "@/components/auth/google-sign-in";
+import { LocalDevSignIn } from "@/components/auth/local-dev-sign-in";
 import { prisma } from "@/lib/prisma";
 import { getBrandingMap } from "@/lib/branding";
 
@@ -42,7 +43,10 @@ export default async function SignInPage({
   ]);
   return (
     <AuthLayout photos={photos} logoUrl={logoUrl}>
-      <GoogleSignIn initialError={error} />
+      <div className="flex flex-col gap-3">
+        <GoogleSignIn initialError={error} />
+        <LocalDevSignIn />
+      </div>
     </AuthLayout>
   );
 }

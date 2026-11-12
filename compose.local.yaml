@@ -41,11 +41,13 @@ services:
     volumes:
       - ./centrifugo/config.json:/centrifugo/config.json:ro
     ports:
-      - "127.0.0.1:${CENTRIFUGO_HOST_PORT}:8000"
+      # 127.0.0.1 keeps the socket on this Mac. CENTRIFUGO_BIND=0.0.0.0 opens it
+      # to a phone on the same Wi-Fi. Postgres and Redis stay on loopback.
+      - "${CENTRIFUGO_BIND:-127.0.0.1}:${CENTRIFUGO_HOST_PORT}:8000"
     environment:
       CENTRIFUGO_HTTP_SERVER_PORT: "8000"
       CENTRIFUGO_ENGINE_TYPE: memory
-      CENTRIFUGO_CLIENT_ALLOWED_ORIGINS: "http://localhost:3001 http://127.0.0.1:3001 http://localhost:3000"
+      CENTRIFUGO_CLIENT_ALLOWED_ORIGINS: "http://localhost:3001 http://127.0.0.1:3001 http://localhost:3000 ${CENTRIFUGO_EXTRA_ORIGINS:-}"
       CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: ${CENTRIFUGO_TOKEN_HMAC_SECRET_KEY}
       CENTRIFUGO_HTTP_API_KEY: ${CENTRIFUGO_API_KEY}
     restart: "no"
