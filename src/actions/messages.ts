@@ -68,6 +68,8 @@ import {
 import { NOTIFICATION_READ, TYPING_EVENT } from "@/lib/channels";
 import { threadPushTag } from "@/lib/notification-read";
 import { enqueueMobileBadgeSync } from "@/lib/push-queue";
+import { resolveMobileThreadMeta } from "@/lib/mobile/thread-meta";
+import { unreadMarkPlan } from "@/lib/unread-mark";
 import { MAX_MESSAGE_CHARS, messageTooLongError } from "@/lib/message-limits";
 import { messageSearchText } from "@/lib/message-search";
 import {
@@ -1673,8 +1675,9 @@ export async function markThreadRead(target: {
         userId: user.id,
         threadId: inboxThreadId,
         lastReadAt: now,
+        markedUnread: false,
       },
-      update: { lastReadAt: now },
+      update: { lastReadAt: now, markedUnread: false },
     });
   }
 
@@ -1728,6 +1731,65 @@ export async function markThreadRead(target: {
   // badge number so the app icon matches what was just read here.
   if (inboxThreadId) enqueueMobileBadgeSync(user.id);
   return { unread, inboxUnread };
+}
+
+/**
+ * Flag a chat so it looks unread on this account. Does not move lastReadAt
+ * and does not publish thread.read, so the other person's receipt stays.
+ */
+export async function markThreadUnread(threadId: string): Promise<void> {
+  const user = await requireUser();
+  if (await isImpersonating()) return;
+
+  const meta = await resolveMobileThreadMeta(threadId);
+  const target = meta.target;
+  const inboxThreadId = target.conversationId
+    ? `conv-${target.conversationId}`
+    : target.projectId && !target.taskId
+      ? `project-${target.projectId}`
+      : null;
+  if (!inboxThreadId) return;
+
+  const existing = await prisma.chatReadCursor.findUnique({
+    where: { userId_threadId: { userId: user.id, threadId: inboxThreadId } },
+    select: { threadId: true },
+  });
+
+  let clientRoomNeverOpened = false;
+  if (!existing && target.conversationId) {
+    const conv = await prisma.conversation.findUnique({
+      where: { id: target.conversationId },
+      select: { kind: true },
+    });
+    if (conv?.kind === CLIENT_CONVERSATION_KIND) {
+      const foreign = await prisma.message.count({
+        where: {
+          conversationId: target.conversationId,
+          deletedAt: null,
+          authorId: { not: user.id },
+        },
+      });
+      clientRoomNeverOpened = foreign > 0;
+    }
+  }
+
+  const plan = unreadMarkPlan({ hasCursor: Boolean(existing), clientRoomNeverOpened });
+  if (plan === "skip") return;
+  if (plan === "flag") {
+    await prisma.chatReadCursor.update({
+      where: { userId_threadId: { userId: user.id, threadId: inboxThreadId } },
+      data: { markedUnread: true },
+    });
+    return;
+  }
+  await prisma.chatReadCursor.create({
+    data: {
+      userId: user.id,
+      threadId: inboxThreadId,
+      lastReadAt: new Date(),
+      markedUnread: true,
+    },
+  });
 }
 
 /** Sum of unread messages across inbox threads. */
@@ -2019,6 +2081,8 @@ export type InboxThread = {
   readOnly?: boolean;
   /** A note's comment thread. The mobile inbox leaves these out; the panel keeps them. */
   noteComment?: boolean;
+  /** Personal reminder. The unread count can still be zero; their receipt is unchanged. */
+  markedUnread?: boolean;
 };
 
 export async function getInboxThreads(): Promise<InboxThread[]> {
@@ -2063,28 +2127,31 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       conversations = await loadClientConversations();
     }
 
-    return conversations.map((c) => {
-      const last = c.messages[0];
-      const name = c.project?.name ?? c.title ?? "Client chat";
-      return {
-        id: `conv-${c.id}`,
-        kind: "client" as const,
-        name,
-        subtitle: "Chatting with Nizek",
-        projectId: c.project?.id ?? null,
-        conversationId: c.id,
-        logoUrl: c.project?.logoUrl ?? null,
-        peerImageUrl: null,
-        peerMemberIds: [],
-        lastMessage: last ? inboxPreview(last.body) : "",
-        lastAuthor: last ? inboxLastAuthor(last, { clientRoom: true }) : "",
-        lastAt: last ? last.createdAt.toISOString() : "",
-        unread: unreadMap.get(`conv-${c.id}`) ?? 0,
-        avatar: generateColor(name),
-        initials: name.charAt(0).toUpperCase(),
-        inactive: c.project ? !getActiveContract(c.project.contracts) : false,
-      };
-    });
+    return applyMarkedUnread(
+      user.id,
+      conversations.map((c) => {
+        const last = c.messages[0];
+        const name = c.project?.name ?? c.title ?? "Client chat";
+        return {
+          id: `conv-${c.id}`,
+          kind: "client" as const,
+          name,
+          subtitle: "Chatting with Nizek",
+          projectId: c.project?.id ?? null,
+          conversationId: c.id,
+          logoUrl: c.project?.logoUrl ?? null,
+          peerImageUrl: null,
+          peerMemberIds: [],
+          lastMessage: last ? inboxPreview(last.body) : "",
+          lastAuthor: last ? inboxLastAuthor(last, { clientRoom: true }) : "",
+          lastAt: last ? last.createdAt.toISOString() : "",
+          unread: unreadMap.get(`conv-${c.id}`) ?? 0,
+          avatar: generateColor(name),
+          initials: name.charAt(0).toUpperCase(),
+          inactive: c.project ? !getActiveContract(c.project.contracts) : false,
+        };
+      }),
+    );
   }
 
   const [projects, clientConversations, noteCommentConversations, dmConversations] = await Promise.all([
@@ -2357,7 +2424,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
   });
 
   // Pinned: stays first no matter how long since the last announcement.
-  return [await buildAnnouncementsThread(unreadMap), ...sorted];
+  return applyMarkedUnread(user.id, [await buildAnnouncementsThread(unreadMap), ...sorted]);
 }
 
 export type InboxChanges = {
@@ -2454,6 +2521,16 @@ async function buildAnnouncementsThread(
     initials: "A",
     inactive: false,
   };
+}
+
+async function applyMarkedUnread(userId: string, threads: InboxThread[]): Promise<InboxThread[]> {
+  const marks = await prisma.chatReadCursor.findMany({
+    where: { userId, markedUnread: true },
+    select: { threadId: true },
+  });
+  if (marks.length === 0) return threads;
+  const ids = new Set(marks.map((mark) => mark.threadId));
+  return threads.map((thread) => (ids.has(thread.id) ? { ...thread, markedUnread: true } : thread));
 }
 
 // ─── Direct conversations ─────────────────────────────────────────────────────

@@ -1888,6 +1888,8 @@ model ChatReadCursor {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   threadId   String
   lastReadAt DateTime
+  /// Personal reminder. Does not move lastReadAt, so the other person's read receipt stays.
+  markedUnread Boolean @default(false)
   updatedAt  DateTime @updatedAt
 
   @@id([userId, threadId])
