@@ -47,6 +47,8 @@ export async function searchMessages(input: {
   q: string;
   before?: string | null;
   beforeId?: string | null;
+  /** Limit hits to one chat. Omitted for the global search. */
+  thread?: { taskId?: string; projectId?: string; conversationId?: string };
 }): Promise<{ messages: MessageSearchHit[]; hasMore: boolean }> {
   const user = await requireUser();
   const q = input.q.trim();
@@ -81,8 +83,13 @@ export async function searchMessages(input: {
     FROM "Message" m
     JOIN "User" u ON u.id = m."authorId"
     WHERE m."deletedAt" IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM "MessageHidden" h
+        WHERE h."messageId" = m.id AND h."userId" = ${user.id}
+      )
       AND m."searchText" ILIKE ${pattern} ESCAPE '\\'
       AND (${scopeSql})
+      ${threadSql(input.thread)}
       ${cursorSql}
     ORDER BY m."createdAt" DESC, m.id DESC
     LIMIT ${PAGE_SIZE + 1}
@@ -178,6 +185,10 @@ export async function searchFiles(input: {
     FROM "MessageAttachment" a
     JOIN "Message" m ON m.id = a."messageId"
     WHERE m."deletedAt" IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM "MessageHidden" h
+        WHERE h."messageId" = m.id AND h."userId" = ${user.id}
+      )
       AND a.filename ILIKE ${pattern} ESCAPE '\\'
       AND (${scopeSql})
       ${cursorSql}
@@ -212,6 +223,18 @@ export async function searchFiles(input: {
       };
     }),
   };
+}
+
+function threadSql(
+  thread?: { taskId?: string; projectId?: string; conversationId?: string },
+): Prisma.Sql {
+  if (!thread) return Prisma.empty;
+  if (thread.taskId) return Prisma.sql`AND m."taskId" = ${thread.taskId}`;
+  if (thread.conversationId) return Prisma.sql`AND m."conversationId" = ${thread.conversationId}`;
+  if (thread.projectId) {
+    return Prisma.sql`AND m."conversationId" IS NULL AND m."projectId" = ${thread.projectId}`;
+  }
+  return Prisma.empty;
 }
 
 function scopeFilter(scope: { conversationIds: string[]; projectIds: string[] }): Prisma.Sql {

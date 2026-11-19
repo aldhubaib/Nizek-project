@@ -24,7 +24,7 @@ import {
 } from "@/actions/messages";
 import { nextSyncCursor } from "@/lib/thread-changes";
 import { useCentrifugo } from "@/components/realtime/centrifugo-provider";
-import { usePresence } from "@/components/realtime/hooks";
+import { useInboxTyping, usePresence } from "@/components/realtime/hooks";
 import { globalPresenceChannel } from "@/lib/channels";
 import { useNotificationStore } from "@/store/notifications";
 import { PageName } from "@/components/page-header";
@@ -157,6 +157,7 @@ export function ThreadSidebar({
   const cent = useCentrifugo();
   const online = usePresence(cent ? globalPresenceChannel() : null);
   const currentMemberId = cent?.memberId ?? "";
+  const typingLabels = useInboxTyping(currentMemberId);
   const threadUnread = useNotificationStore((s) => s.threadUnread);
   const threadPreviews = useNotificationStore((s) => s.threadPreviews);
   const lastInboxThreadId = useNotificationStore((s) => s.lastInboxThreadId);
@@ -553,6 +554,7 @@ export function ThreadSidebar({
               active={pathname === `/dashboard/messages/${announcementsRow.id}`}
               isOnline={false}
               currentMemberId={currentMemberId}
+              typingLabel={typingLabels[announcementsRow.id]}
             />
           </li>
         )}
@@ -594,6 +596,7 @@ export function ThreadSidebar({
               pathname={pathname}
               online={online}
               currentMemberId={currentMemberId}
+              typingLabels={typingLabels}
             />
             <ThreadGroup
               label="Direct"
@@ -604,6 +607,7 @@ export function ThreadSidebar({
               pathname={pathname}
               online={online}
               currentMemberId={currentMemberId}
+              typingLabels={typingLabels}
             />
             <ThreadGroup
               label="Clients"
@@ -614,6 +618,7 @@ export function ThreadSidebar({
               pathname={pathname}
               online={online}
               currentMemberId={currentMemberId}
+              typingLabels={typingLabels}
             />
           </>
         ) : (
@@ -627,6 +632,7 @@ export function ThreadSidebar({
                   thread.peerMemberIds.some((id) => online.has(id))
                 }
                 currentMemberId={currentMemberId}
+                typingLabel={typingLabels[thread.id]}
               />
             </li>
           ))
@@ -642,6 +648,7 @@ export function ThreadSidebar({
             pathname={pathname}
             online={online}
             currentMemberId={currentMemberId}
+              typingLabels={typingLabels}
           />
         )}
           </>

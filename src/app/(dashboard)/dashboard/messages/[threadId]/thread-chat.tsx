@@ -79,6 +79,7 @@ import {
 } from "@/lib/read-receipts";
 import { ClientChatPeopleManager } from "@/components/messages/client-chat-people";
 import { ClientIssueSlideOver } from "@/components/messages/client-issue-slide-over";
+import { canDeleteForEveryone } from "@/lib/message-delete";
 import {
   toggleReaction,
   deleteMessage as deleteMessageAction,
@@ -1206,12 +1207,15 @@ export function ThreadChat({
 
   const handleDelete = useCallback((id: string) => {
     if (readOnly) return;
+    const message = messages.find((m) => m.id === id);
     setSelectedId(null);
     setMessages((prev) => prev.filter((m) => m.id !== id));
+    const everyone =
+      message != null && canDeleteForEveryone(message.createdAt, message.authorId, currentMemberId);
     startTransition(async () => {
-      await deleteMessageAction(id);
+      await deleteMessageAction(id, everyone ? "everyone" : "me");
     });
-  }, [readOnly]);
+  }, [readOnly, messages, currentMemberId]);
 
   // Reads through a ref so the callback identity stays stable — depending on
   // `messages` here re-renders every memoized MessageRow on each new message.

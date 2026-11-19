@@ -29,6 +29,10 @@ export async function countInboxMessageUnreads(
       WHERE m."projectId" IS NOT NULL
         AND m."conversationId" IS NULL
         AND m."deletedAt" IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM "MessageHidden" h
+          WHERE h."messageId" = m.id AND h."userId" = ${userId}
+        )
         AND m."authorId" <> ${userId}
         AND m."createdAt" > c."lastReadAt"
         AND EXISTS (
@@ -47,6 +51,10 @@ export async function countInboxMessageUnreads(
        AND c."threadId" = ('conv-' || m."conversationId")
       WHERE m."conversationId" IS NOT NULL
         AND m."deletedAt" IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM "MessageHidden" h
+          WHERE h."messageId" = m.id AND h."userId" = ${userId}
+        )
         AND m."authorId" <> ${userId}
         AND (
           EXISTS (

@@ -85,6 +85,77 @@ export function usePresence(channel: string | null): Set<string> {
 
 const TYPING_TTL = 4000;
 
+/** `conv:abc` → `conv-abc`, `project:x` → `project-x`. */
+function threadIdFromChannel(channel: string): string | null {
+  const idx = channel.indexOf(":");
+  if (idx === -1) return null;
+  const ns = channel.slice(0, idx);
+  const rest = channel.slice(idx + 1);
+  if (ns === "conv" || ns === "project") return `${ns}-${rest}`;
+  return null;
+}
+
+function typingListLabel(names: string[]): string | null {
+  const short = names.map((name) => {
+    const clean = name.includes("@") ? name.split("@")[0] : name;
+    return clean.trim().split(/\s+/)[0] || clean;
+  });
+  if (short.length === 0) return null;
+  if (short.length === 1) return `${short[0]} is typing…`;
+  if (short.length === 2) return `${short[0]} and ${short[1]} are typing…`;
+  return `${short[0]} and ${short.length - 1} others are typing…`;
+}
+
+/** "Name is typing…" for each inbox row, from the signed-in user's own channel. */
+export function useInboxTyping(memberId: string): Record<string, string> {
+  const [map, setMap] = useState<Record<string, Record<string, { name: string; at: number }>>>({});
+
+  useChannel(memberId ? userChannel(memberId) : null, (data) => {
+    const d = data as { type?: string; memberId?: string; name?: string; channel?: string } | null;
+    if (!d || d.type !== TYPING_EVENT || !d.channel || !d.memberId) return;
+    if (d.memberId === memberId) return;
+    const id = threadIdFromChannel(d.channel);
+    if (!id) return;
+    const name = d.name?.trim() || "Someone";
+    setMap((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], [d.memberId!]: { name, at: Date.now() } },
+    }));
+  });
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const cutoff = Date.now() - TYPING_TTL;
+      setMap((prev) => {
+        let changed = false;
+        const next: Record<string, Record<string, { name: string; at: number }>> = {};
+        for (const [threadId, typers] of Object.entries(prev)) {
+          const live: Record<string, { name: string; at: number }> = {};
+          for (const [id, typer] of Object.entries(typers)) {
+            if (typer.at >= cutoff) live[id] = typer;
+            else changed = true;
+          }
+          if (Object.keys(live).length > 0) next[threadId] = live;
+          else changed = true;
+        }
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const labels: Record<string, string> = {};
+  for (const [threadId, typers] of Object.entries(map)) {
+    const names = Object.values(typers)
+      .sort((a, b) => b.at - a.at)
+      .map((typer) => typer.name);
+    const label = typingListLabel(names);
+    if (label) labels[threadId] = label;
+  }
+  return labels;
+}
+
+
 // Typing indicator over a channel. Returns the set of member ids currently
 // typing (excluding self) and a `notifyTyping()` to broadcast that you're typing.
 export function useTyping(

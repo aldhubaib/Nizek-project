@@ -32,11 +32,13 @@ export const ThreadRow = memo(function ThreadRow({
   active,
   isOnline,
   currentMemberId,
+  typingLabel,
 }: {
   thread: InboxThread;
   active: boolean;
   isOnline: boolean;
   currentMemberId: string;
+  typingLabel?: string | null;
 }) {
   const prefetch = () => {
     if (active) return;
@@ -127,9 +129,13 @@ export const ThreadRow = memo(function ThreadRow({
                 : "text-muted-foreground",
             )}
           >
-            {thread.lastAuthor
-              ? `${thread.lastAuthor}: ${thread.lastMessage}`
-              : thread.subtitle}
+            {typingLabel ? (
+              <span>{typingLabel}</span>
+            ) : thread.lastAuthor ? (
+              `${thread.lastAuthor}: ${thread.lastMessage}`
+            ) : (
+              thread.subtitle
+            )}
           </div>
           {thread.unread > 0 && !active && (
             <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold leading-none text-primary-foreground">
@@ -187,6 +193,7 @@ export function ThreadGroup({
   pathname,
   online,
   currentMemberId,
+  typingLabels,
 }: {
   label: string;
   icon: LucideIcon;
@@ -196,6 +203,7 @@ export function ThreadGroup({
   pathname: string;
   online: Set<string>;
   currentMemberId: string;
+  typingLabels?: Record<string, string>;
 }) {
   if (threads.length === 0) return null;
   const unread = unreadTotal(threads);
@@ -242,6 +250,7 @@ export function ThreadGroup({
                   thread.peerMemberIds.some((id) => online.has(id))
                 }
                 currentMemberId={currentMemberId}
+                typingLabel={typingLabels?.[thread.id]}
               />
             </li>
           ))}

@@ -71,6 +71,7 @@ import { enqueueMobileBadgeSync } from "@/lib/push-queue";
 import { resolveMobileThreadMeta } from "@/lib/mobile/thread-meta";
 import { unreadMarkPlan } from "@/lib/unread-mark";
 import { MAX_MESSAGE_CHARS, messageTooLongError } from "@/lib/message-limits";
+import { canDeleteForEveryone } from "@/lib/message-delete";
 import { messageSearchText } from "@/lib/message-search";
 import {
   countInboxMessageUnreads,
@@ -261,8 +262,13 @@ export type MessageAttachment = {
 // A message's reactions grouped by emoji. Each client derives count + "mine".
 export type ReactionSummary = { emoji: string; memberIds: string[] };
 
-// Server-side allowlist so arbitrary strings can't be stored as reactions.
-const ALLOWED_EMOJIS = ["👍", "❤️", "😂", "🎉", "✅", "👀"];
+// Keep this in sync with REACTION_EMOJIS in the phone app.
+const ALLOWED_EMOJIS = [
+  "👍", "❤️", "😂", "😮", "😢", "🙏",
+  "🔥", "🎉", "👏", "✅", "👀", "💯",
+  "😍", "🤔", "😭", "🤣", "🙌", "👎",
+  "💪", "✨", "🤝", "😴", "🤯", "🥳",
+];
 
 export type MessageDTO = {
   id: string;
@@ -625,7 +631,7 @@ export async function getThreadMessages(input: {
 
   if (input.aroundId) {
     const target = await prisma.message.findFirst({
-      where: { id: input.aroundId, ...where, deletedAt: null },
+      where: { id: input.aroundId, ...where, deletedAt: null, hides: { none: { userId: user.id } } },
       include: THREAD_MESSAGE_INCLUDE,
     });
     if (target) {
@@ -643,13 +649,13 @@ export async function getThreadMessages(input: {
     };
     const [older, newer] = await Promise.all([
       prisma.message.findMany({
-        where: { ...where, deletedAt: null, ...olderThan },
+        where: { ...where, deletedAt: null, hides: { none: { userId: user.id } }, ...olderThan },
         include: THREAD_MESSAGE_INCLUDE,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: THREAD_PAGE_SIZE + 1,
       }),
       prisma.message.findMany({
-        where: { ...where, deletedAt: null, ...newerThan },
+        where: { ...where, deletedAt: null, hides: { none: { userId: user.id } }, ...newerThan },
         include: THREAD_MESSAGE_INCLUDE,
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         take: THREAD_PAGE_SIZE + 1,
@@ -675,7 +681,7 @@ export async function getThreadMessages(input: {
   }
 
   const rows = await prisma.message.findMany({
-    where: { ...where, deletedAt: null },
+    where: { ...where, deletedAt: null, hides: { none: { userId: user.id } } },
     include: THREAD_MESSAGE_INCLUDE,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: THREAD_PAGE_SIZE + 1,
@@ -736,9 +742,9 @@ export async function getThreadChangesSince(
   const { where } = scope;
   const serverTime = new Date();
 
-  const [rows, deleted] = await Promise.all([
+  const [rows, deleted, hidden] = await Promise.all([
     prisma.message.findMany({
-      where: { ...where, deletedAt: null, updatedAt: { gt: since } },
+      where: { ...where, deletedAt: null, hides: { none: { userId: user.id } }, updatedAt: { gt: since } },
       include: THREAD_MESSAGE_INCLUDE,
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       take: THREAD_CHANGES_CAP + 1,
@@ -747,6 +753,11 @@ export async function getThreadChangesSince(
       where: { ...where, deletedAt: { gt: since } },
       select: { id: true },
       orderBy: { deletedAt: "desc" },
+      take: THREAD_CHANGES_CAP,
+    }),
+    prisma.messageHidden.findMany({
+      where: { userId: user.id, createdAt: { gt: since }, message: where },
+      select: { messageId: true },
       take: THREAD_CHANGES_CAP,
     }),
   ]);
@@ -758,7 +769,7 @@ export async function getThreadChangesSince(
 
   return {
     messages,
-    deletedIds: deleted.map((d) => d.id),
+    deletedIds: [...new Set([...deleted.map((d) => d.id), ...hidden.map((h) => h.messageId)])],
     serverTime: serverTime.toISOString(),
     truncated,
   };
@@ -879,7 +890,7 @@ export async function listImportantMessages(target?: {
   const rows = await prisma.importantMessage.findMany({
     where: {
       userId: user.id,
-      message: { ...(threadFilter ?? {}), deletedAt: null },
+      message: { ...(threadFilter ?? {}), deletedAt: null, hides: { none: { userId: user.id } } },
     },
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -1609,6 +1620,13 @@ export async function publishTypingEvent(channel: string): Promise<void> {
   } else if (namespace === "project") {
     if (isClientUser(user)) return;
     if (!(await hasProjectAccess(rest))) return;
+    const members = await prisma.projectMember.findMany({
+      where: { projectId: rest },
+      select: { userId: true },
+    });
+    for (const member of members) {
+      if (member.userId !== user.id) extraUserChannels.push(userChannel(member.userId));
+    }
   } else if (namespace === "task") {
     if (isClientUser(user)) return;
     const task = await prisma.task.findFirst({
@@ -1622,7 +1640,12 @@ export async function publishTypingEvent(channel: string): Promise<void> {
 
   await broadcastEphemeral(
     [trimmed, ...extraUserChannels],
-    { type: TYPING_EVENT, memberId: user.id, channel: trimmed },
+    {
+      type: TYPING_EVENT,
+      memberId: user.id,
+      name: user.name?.trim() || user.email,
+      channel: trimmed,
+    },
   );
 }
 
@@ -1799,7 +1822,7 @@ export async function getInboxUnreadCount(): Promise<number> {
 }
 
 /**
- * Edit own message body (within a reasonable window). Sets updatedAt via Prisma.
+ * Edit own message body. There is no time limit. Sets updatedAt via Prisma.
  */
 export async function editMessage(
   messageId: string,
@@ -1815,7 +1838,6 @@ export async function editMessage(
       select: {
         id: true,
         authorId: true,
-        createdAt: true,
         conversationId: true,
         projectId: true,
         taskId: true,
@@ -1829,9 +1851,6 @@ export async function editMessage(
       throw new Error("You can only edit your own messages");
     if (message.kind !== "message")
       throw new Error("This message cannot be edited");
-    const ageMs = Date.now() - message.createdAt.getTime();
-    if (ageMs > 24 * 60 * 60 * 1000)
-      throw new Error("Messages can only be edited within 24 hours");
     if (message.conversationId) {
       const convo = await prisma.conversation.findUnique({
         where: { id: message.conversationId },
@@ -1999,6 +2018,7 @@ export async function toggleReaction(
 
 export async function deleteMessage(
   messageId: string,
+  scope: "me" | "everyone" = "everyone",
 ): Promise<ActionResult<void>> {
   return safeAction("Delete message", async () => {
     const user = await requireUser();
@@ -2008,14 +2028,27 @@ export async function deleteMessage(
       select: {
         id: true,
         authorId: true,
+        createdAt: true,
         conversationId: true,
         projectId: true,
         taskId: true,
       },
     });
     if (!message) throw new Error("Message not found");
-    if (message.authorId !== user.id)
-      throw new Error("You can only delete your own messages");
+    await assertCanReadMessage(user, message);
+
+    if (scope === "me" || !canDeleteForEveryone(message.createdAt, message.authorId, user.id)) {
+      if (scope === "everyone") {
+        throw new Error("This message can only be deleted for you now");
+      }
+      await prisma.messageHidden.upsert({
+        where: { messageId_userId: { messageId: message.id, userId: user.id } },
+        create: { messageId: message.id, userId: user.id },
+        update: {},
+      });
+      return;
+    }
+
     if (message.conversationId) {
       const convo = await prisma.conversation.findUnique({
         where: { id: message.conversationId },
@@ -2054,6 +2087,40 @@ export async function deleteMessage(
     });
     await dispatchMessageEvents([event]);
   });
+}
+
+async function assertCanReadMessage(
+  user: { id: string; systemRole: string },
+  message: { authorId: string; conversationId: string | null; projectId: string | null },
+) {
+  if (message.authorId === user.id) return;
+  if (message.conversationId === ANNOUNCEMENTS_CONVERSATION_ID) {
+    if (!canReadAnnouncements(user)) throw new Error("Permission denied");
+    return;
+  }
+  if (message.conversationId) {
+    const convo = await prisma.conversation.findUnique({
+      where: { id: message.conversationId },
+      select: { kind: true },
+    });
+    if (!convo) throw new Error("Permission denied");
+    if (convo.kind === CLIENT_CONVERSATION_KIND) {
+      const access = await canAccessClientConversation(message.conversationId, user);
+      if (!access.ok) throw new Error("Permission denied");
+      return;
+    }
+    const part = await prisma.conversationParticipant.findFirst({
+      where: { conversationId: message.conversationId, memberId: user.id },
+      select: { id: true },
+    });
+    if (!part) throw new Error("Permission denied");
+    return;
+  }
+  if (message.projectId) {
+    if (!(await hasProjectAccess(message.projectId))) throw new Error("Permission denied");
+    return;
+  }
+  throw new Error("Permission denied");
 }
 
 // ─── Inbox ─────────────────────────────────────────────────────────────────
@@ -2113,7 +2180,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
             },
           },
           messages: {
-            where: { deletedAt: null },
+            where: { deletedAt: null, hides: { none: { userId: user.id } } },
             orderBy: { createdAt: "desc" },
             take: 1,
             include: { author: { select: { id: true, name: true, email: true } } },
@@ -2165,7 +2232,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
         logoUrl: true,
         contracts: { select: CONTRACT_SELECT },
         messages: {
-          where: { conversationId: null, deletedAt: null },
+          where: { conversationId: null, deletedAt: null, hides: { none: { userId: user.id } } },
           orderBy: { createdAt: "desc" },
           take: 1,
           include: { author: { select: { id: true, name: true, email: true } } },
@@ -2197,7 +2264,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
           select: { id: true },
         },
         messages: {
-          where: { deletedAt: null },
+          where: { deletedAt: null, hides: { none: { userId: user.id } } },
           orderBy: { createdAt: "desc" },
           take: 1,
           include: { author: { select: { id: true, name: true, email: true } } },
@@ -2237,7 +2304,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
           },
         },
         messages: {
-          where: { deletedAt: null },
+          where: { deletedAt: null, hides: { none: { userId: user.id } } },
           orderBy: { createdAt: "desc" },
           take: 1,
           include: { author: { select: { id: true, name: true, email: true } } },
@@ -2260,7 +2327,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       take: 100,
       include: {
         messages: {
-          where: { deletedAt: null },
+          where: { deletedAt: null, hides: { none: { userId: user.id } } },
           orderBy: { createdAt: "desc" },
           take: 1,
           include: { author: { select: { id: true, name: true, email: true } } },
@@ -2424,7 +2491,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
   });
 
   // Pinned: stays first no matter how long since the last announcement.
-  return applyMarkedUnread(user.id, [await buildAnnouncementsThread(unreadMap), ...sorted]);
+  return applyMarkedUnread(user.id, [await buildAnnouncementsThread(user.id, unreadMap), ...sorted]);
 }
 
 export type InboxChanges = {
@@ -2488,12 +2555,17 @@ export async function getInboxChangesSince(sinceIso: string): Promise<InboxChang
 }
 
 async function buildAnnouncementsThread(
+  userId: string,
   unreadMap: Map<string, number>,
 ): Promise<InboxThread> {
   const [, last] = await Promise.all([
     getOrCreateAnnouncementsConversation(),
     prisma.message.findFirst({
-      where: { conversationId: ANNOUNCEMENTS_CONVERSATION_ID, deletedAt: null },
+      where: {
+        conversationId: ANNOUNCEMENTS_CONVERSATION_ID,
+        deletedAt: null,
+        hides: { none: { userId } },
+      },
       orderBy: { createdAt: "desc" },
       select: {
         body: true,

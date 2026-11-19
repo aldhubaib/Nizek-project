@@ -1,5 +1,5 @@
 import { searchFiles, searchMessages } from "@/actions/message-search";
-import { mobileRoute } from "@/lib/mobile/route";
+import { mobileRoute, parseThreadId } from "@/lib/mobile/route";
 
 export const runtime = "nodejs";
 
@@ -14,11 +14,13 @@ export const GET = mobileRoute(async (req) => {
   const beforeId = req.nextUrl.searchParams.get("beforeId");
   const fileBefore = req.nextUrl.searchParams.get("fileBefore");
   const fileBeforeId = req.nextUrl.searchParams.get("fileBeforeId");
+  const threadKey = req.nextUrl.searchParams.get("thread");
+  const thread = threadKey ? parseThreadId(threadKey) : undefined;
   const pagingMessages = Boolean(before && beforeId);
-  const pagingFiles = Boolean(fileBefore && fileBeforeId);
+  const pagingFiles = Boolean(fileBefore && fileBeforeId) && !thread;
 
   if (pagingMessages && !pagingFiles) {
-    const messages = await searchMessages({ q, before, beforeId });
+    const messages = await searchMessages({ q, before, beforeId, thread });
     return { ...messages, files: [], filesHasMore: false };
   }
   if (pagingFiles && !pagingMessages) {
@@ -26,9 +28,8 @@ export const GET = mobileRoute(async (req) => {
     return { messages: [], hasMore: false, ...files };
   }
 
-  const [messages, files] = await Promise.all([
-    searchMessages({ q }),
-    searchFiles({ q }),
-  ]);
+  const messages = await searchMessages({ q, thread });
+  if (thread) return { ...messages, files: [], filesHasMore: false };
+  const files = await searchFiles({ q });
   return { ...messages, ...files };
 });

@@ -6,14 +6,16 @@ export const runtime = "nodejs";
 
 type Params = { messageId: string };
 
-/** PATCH { body } → edit own message (24h window, enforced by the action). */
+/** PATCH { body } → edit own message. There is no time limit. */
 export const PATCH = mobileRoute<Params>(async (req: NextRequest, { messageId }) => {
   const input = await readJson<{ body: string }>(req);
   return unwrap(await editMessage(messageId, typeof input.body === "string" ? input.body : ""));
 });
 
-/** DELETE → soft-delete own message. */
-export const DELETE = mobileRoute<Params>(async (_req, { messageId }) => {
-  unwrap(await deleteMessage(messageId));
+/** DELETE { scope: "me" | "everyone" } → hide for you, or remove it for the chat. */
+export const DELETE = mobileRoute<Params>(async (req: NextRequest, { messageId }) => {
+  const input = await readJson<{ scope?: string }>(req);
+  const scope = input.scope === "me" ? "me" : "everyone";
+  unwrap(await deleteMessage(messageId, scope));
   return { ok: true };
 });
