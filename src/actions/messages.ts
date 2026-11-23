@@ -87,7 +87,7 @@ import { messageSearchText } from "@/lib/message-search";
 import { cleanVoiceDuration, cleanVoiceWaveform, readVoiceWaveform } from "@/lib/voice-note-meta";
 import {
   countInboxMessageUnreads,
-  sumInboxMessageUnreads,
+  countUnreadInboxChats,
 } from "@/lib/inbox-unread";
 import {
   assertCanPostClientConversation,
@@ -1906,10 +1906,10 @@ export async function markThreadUnread(threadId: string): Promise<void> {
   });
 }
 
-/** Sum of unread messages across inbox threads. */
+/** Unread chats across the inbox (note-comment threads excluded). */
 export async function getInboxUnreadCount(): Promise<number> {
   const user = await requireUser();
-  return sumInboxMessageUnreads(user.id);
+  return countUnreadInboxChats(user.id);
 }
 
 /**

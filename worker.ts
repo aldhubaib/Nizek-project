@@ -52,7 +52,8 @@ import {
   type ExpoResult,
   type MobileTokenRow,
 } from "./src/lib/mobile-push-core.js";
-import { sumInboxMessageUnreads } from "./src/lib/inbox-unread.js";
+import { countUnreadInboxChats } from "./src/lib/inbox-unread.js";
+import { ensureInboxReadCursors } from "./src/lib/message-fanout.js";
 import { sweepOutbox } from "./src/lib/push/outbox-core.js";
 import {
   MESSAGE_EVENTS_QUEUE_NAME,
@@ -236,15 +237,15 @@ const MOBILE_RECEIPTS_JOB = "mobile-receipts";
 const PUSH_JOB = "send";
 
 /**
- * The number on the phone's app icon: unread chat messages across the inbox,
- * the same figure the app's Chats tab shows. Never throws — a failed count
- * means "leave the badge alone" rather than "drop the push".
+ * The number on the phone's app icon: unread chats (not messages), excluding
+ * note-comment threads — same figure as the app's Chats tab. Never throws —
+ * a failed count means "leave the badge alone" rather than "drop the push".
  */
 async function inboxBadgeFor(userIds: string[]): Promise<Map<string, number>> {
   const unique = [...new Set(userIds)];
   const entries = await mapWithConcurrency(unique, 4, async (id) => {
     try {
-      return [id, await sumInboxMessageUnreads(id)] as const;
+      return [id, await countUnreadInboxChats(id)] as const;
     } catch (err) {
       console.error(
         `[worker] inbox badge count failed for ${id}:`,
@@ -417,6 +418,12 @@ async function deliverToMobile(
         `permanent=${effects.counts.permanent} transient=${effects.counts.transient})`,
     );
   }
+  // Transient Expo hiccups must retry via BullMQ backoff instead of dropping.
+  if (effects.counts.transient > 0) {
+    throw new Error(
+      `Expo transient failures: ${effects.counts.transient}/${tokens.length} (tag=${payload.tag ?? "-"})`,
+    );
+  }
   if (effects.receipts.length > 0) await scheduleReceiptCheck(effects.receipts);
 }
 
@@ -500,7 +507,7 @@ async function processBadgeSyncJob(raw: unknown): Promise<void> {
   const active = await loadActiveThreads(tokens);
   const idle = tokens.filter((t) => !active.get(`${t.memberId}:${t.deviceId}`));
   if (idle.length === 0) return;
-  const badge = await sumInboxMessageUnreads(userId);
+  const badge = await countUnreadInboxChats(userId);
   const effects = await deliverBadgeSync({ tokens: idle, badge, send: sendExpo });
   await applyExpoDeliveryEffects(prisma, effects);
   metrics.mobileBadgeSyncs += 1;
@@ -620,6 +627,16 @@ async function processMessageEvent(eventId: string): Promise<void> {
         ...payload.fanOut,
         messageCreatedAt: new Date(payload.fanOut.messageCreatedAt),
       };
+      // Seed unread cursors and advance delivery before push is queued so the
+      // first message to a new recipient gets a delivered tick immediately.
+      const cursorTargets = await ensureInboxReadCursors(input);
+      if (cursorTargets.length > 0) {
+        await recordThreadDelivered(prisma, broadcast, {
+          threadId: input.threadId,
+          userIds: cursorTargets,
+          at: input.messageCreatedAt,
+        });
+      }
       if (!row.notifiedAt) {
         const created = await notifyMessageRecipients(input);
         await prisma.messageEvent.update({
@@ -644,7 +661,10 @@ async function processMessageEvent(eventId: string): Promise<void> {
           }
         }
       }
-      await fanOutMessageSideEffects(input, { skipNotifications: true });
+      await fanOutMessageSideEffects(input, {
+        skipNotifications: true,
+        skipReadCursors: true,
+      });
     }
 
     await prisma.messageEvent.update({

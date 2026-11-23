@@ -80,11 +80,67 @@ export async function notifyMessageRecipients(
   );
 }
 
+/**
+ * Seed ChatReadCursor rows for recipients before push is queued so
+ * `recordThreadDelivered` can advance `lastDeliveredAt` on the first message.
+ * Idempotent (`skipDuplicates`).
+ */
+export async function ensureInboxReadCursors(input: MessageFanOutInput): Promise<string[]> {
+  const {
+    conversationId,
+    projectId,
+    taskId,
+    userId,
+    participantIds,
+    uniqueRecipients,
+    mentionedIds,
+    threadId,
+    messageCreatedAt,
+  } = input;
+
+  let inboxTargets: string[];
+  if (conversationId) {
+    inboxTargets = participantIds;
+  } else if (projectId && !taskId) {
+    const members = await prisma.projectMember.findMany({
+      where: {
+        projectId,
+        role: { not: "CLIENT" },
+        user: { systemRole: { not: "CLIENT" } },
+        OR: [{ roleId: null }, { projectRole: { isClient: false } }],
+      },
+      select: { userId: true },
+    });
+    inboxTargets = members.map((m) => m.userId);
+    if (!inboxTargets.includes(userId)) inboxTargets.push(userId);
+  } else {
+    inboxTargets = [...(mentionedIds ?? uniqueRecipients), userId];
+  }
+
+  const cursorTargets = [...new Set(inboxTargets)].filter((id) => id !== userId);
+  if (
+    cursorTargets.length > 0 &&
+    (conversationId || (projectId && !taskId))
+  ) {
+    await prisma.chatReadCursor.createMany({
+      data: cursorTargets.map((id) => ({
+        userId: id,
+        threadId,
+        lastReadAt: new Date(messageCreatedAt.getTime() - 1),
+      })),
+      skipDuplicates: true,
+    });
+  }
+  return cursorTargets;
+}
+
 export async function fanOutMessageSideEffects(
   input: MessageFanOutInput,
   opts: {
     /** Notifications were already created (worker retry) — do the rest only. */
     skipNotifications?: boolean;
+    /** Cursors were already seeded before push — skip createMany. */
+    skipReadCursors?: boolean;
   } = {},
 ) {
   const {
@@ -99,15 +155,18 @@ export async function fanOutMessageSideEffects(
     threadId,
     authorName,
     preview,
-    messageCreatedAt,
     asBot,
   } = input;
+
+  // Everything below (except notify) is idempotent. Seed cursors before push
+  // so the first message to a recipient can get a delivered tick.
+  if (!opts.skipReadCursors) {
+    await ensureInboxReadCursors(input);
+  }
 
   if (!opts.skipNotifications) {
     await notifyMessageRecipients(input);
   }
-
-  // Everything below is idempotent: re-running it after a crash is harmless.
 
   if (conversationId) {
     await prisma.conversation.update({
@@ -136,21 +195,6 @@ export async function fanOutMessageSideEffects(
     // names (plus the author), as before — candidates may now be the whole
     // project, but that is for the notification level filter, not the inbox.
     inboxTargets = [...(mentionedIds ?? uniqueRecipients), userId];
-  }
-
-  const cursorTargets = [...new Set(inboxTargets)].filter((id) => id !== userId);
-  if (
-    cursorTargets.length > 0 &&
-    (conversationId || (projectId && !taskId))
-  ) {
-    await prisma.chatReadCursor.createMany({
-      data: cursorTargets.map((id) => ({
-        userId: id,
-        threadId,
-        lastReadAt: new Date(messageCreatedAt.getTime() - 1),
-      })),
-      skipDuplicates: true,
-    });
   }
 
   await broadcastInboxPreview(inboxTargets, {
