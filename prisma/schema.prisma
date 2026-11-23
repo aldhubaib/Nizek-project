@@ -1907,9 +1907,11 @@ model Message {
   conversationId String?
   conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   replyToId      String?
-  authorId       String
-  author         User          @relation("MessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-  body           String
+  authorId        String
+  author          User          @relation("MessageAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  /// Client-generated idempotency key so retries never create duplicate messages.
+  clientMessageId String?
+  body            String
   /// Plain text for search: mentions as "@Name", card copy, attachment names.
   /// Null on rows written before this column, until the backfill runs.
   searchText     String?
@@ -1929,6 +1931,7 @@ model Message {
   importantFor ImportantMessage[]
   hides       MessageHidden[]
 
+  @@unique([authorId, clientMessageId])
   @@index([taskId, createdAt])
   @@index([projectId, createdAt])
   @@index([conversationId, createdAt])

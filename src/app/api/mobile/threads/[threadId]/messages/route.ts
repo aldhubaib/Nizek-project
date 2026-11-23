@@ -14,6 +14,7 @@ export const GET = mobileRoute<Params>(async (req: NextRequest, { threadId }) =>
 
 type SendBody = {
   body: string;
+  clientMessageId?: string | null;
   replyToId?: string | null;
   attachments?: {
     filename: string;
@@ -25,7 +26,7 @@ type SendBody = {
   }[];
 };
 
-/** POST { body, replyToId?, attachments? } → the created message. */
+/** POST { body, clientMessageId?, replyToId?, attachments? } → the created message. */
 export const POST = mobileRoute<Params>(async (req: NextRequest, { threadId }) => {
   const input = await readJson<SendBody>(req);
   const target = parseThreadId(threadId);
@@ -46,6 +47,7 @@ export const POST = mobileRoute<Params>(async (req: NextRequest, { threadId }) =
     await sendMessage({
       ...target,
       body: typeof input.body === "string" ? input.body : "",
+      clientMessageId: typeof input.clientMessageId === "string" ? input.clientMessageId : null,
       replyToId: input.replyToId ?? undefined,
       attachments,
     }),

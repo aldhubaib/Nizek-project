@@ -5,6 +5,10 @@ import type { Prisma } from "@/generated/prisma/client";
 import { isImpersonating, requireUser } from "@/lib/auth";
 import { resolveThreadAccess } from "@/lib/chat-auth";
 import { isClientAccount } from "@/lib/client-role";
+import {
+  isClientMessageIdUniqueError,
+  normalizeClientMessageId,
+} from "@/lib/client-message-id";
 import { INTERNAL_MESSAGE_KIND_TOKEN } from "@/lib/internal-message-token";
 import {
   resolveSafeMessageKind,
@@ -305,6 +309,7 @@ const ALLOWED_EMOJIS = [
 
 export type MessageDTO = {
   id: string;
+  clientMessageId?: string | null;
   taskId: string | null;
   projectId: string | null;
   conversationId: string | null;
@@ -367,6 +372,7 @@ function toMessageAttachment(a: {
 
 type SendMessageInput = {
   body: string;
+  clientMessageId?: string | null;
   taskId?: string | null;
   projectId?: string | null;
   conversationId?: string | null;
@@ -1307,7 +1313,48 @@ export async function sendMessage(
       );
     }
 
-    const { dto, event } = await prisma.$transaction(async (tx) => {
+    const clientMessageId = normalizeClientMessageId(input.clientMessageId);
+
+    const findExistingByClientId = async (): Promise<MessageDTO | null> => {
+      if (!clientMessageId) return null;
+      const existing = await prisma.message.findUnique({
+        where: {
+          authorId_clientMessageId: { authorId: user.id, clientMessageId },
+        },
+        include: {
+          author: { select: { id: true, name: true, email: true, imageUrl: true } },
+          attachments: { select: ATTACHMENT_SELECT },
+        },
+      });
+      if (!existing) return null;
+      return {
+        id: existing.id,
+        clientMessageId: existing.clientMessageId,
+        taskId: existing.taskId,
+        projectId: existing.projectId,
+        conversationId: existing.conversationId,
+        kind: existing.kind,
+        authorId: existing.authorId,
+        authorName: existing.author.name ?? existing.author.email ?? "Someone",
+        authorImageUrl: existing.author.imageUrl ?? null,
+        body: toDisplayBody(existing.body),
+        createdAt: existing.createdAt.toISOString(),
+        attachments: existing.attachments.map(toMessageAttachment),
+        replyToId: existing.replyToId ?? null,
+        task:
+          existing.taskId && existing.projectId
+            ? { id: existing.taskId, projectId: existing.projectId, number: taskNumber, title: taskTitle }
+            : null,
+        mentions: parseMentionNames(existing.body),
+      };
+    };
+
+    const existingDto = await findExistingByClientId();
+    if (existingDto) return existingDto;
+
+    let txResult: { dto: MessageDTO; event: Awaited<ReturnType<typeof writeMessageEvent>> };
+    try {
+      txResult = await prisma.$transaction(async (tx) => {
       const message = await tx.message.create({
         data: {
           taskId,
@@ -1315,6 +1362,7 @@ export async function sendMessage(
           conversationId,
           replyToId: input.replyToId ?? null,
           authorId: user.id,
+          clientMessageId,
           body,
           searchText: messageSearchText(
             body,
@@ -1422,6 +1470,7 @@ export async function sendMessage(
 
       const dto: MessageDTO = {
         id: message.id,
+        clientMessageId: message.clientMessageId,
         taskId,
         projectId,
         conversationId,
@@ -1555,7 +1604,16 @@ export async function sendMessage(
       });
 
       return { dto, event };
-    });
+      });
+    } catch (err) {
+      if (isClientMessageIdUniqueError(err)) {
+        const dup = await findExistingByClientId();
+        if (dup) return dup;
+      }
+      throw err;
+    }
+
+    const { dto, event } = txResult;
 
     // After commit. If Redis is down this logs and returns; the worker's
     // 20s sweep picks the row up as soon as the queue is reachable again.
