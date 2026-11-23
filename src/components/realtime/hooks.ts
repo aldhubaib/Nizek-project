@@ -202,13 +202,8 @@ export function useTyping(
     const now = Date.now();
     if (now - lastSentRef.current < 1500) return;
     lastSentRef.current = now;
-    cent?.publish(channel, {
-      type: TYPING_EVENT,
-      memberId: cent.memberId,
-      channel,
-    });
     void publishTypingEvent(channel);
-  }, [cent, channel]);
+  }, [channel]);
 
   return { typing: Object.keys(typingMap), notifyTyping };
 }

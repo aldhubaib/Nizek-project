@@ -1,34 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import type { LinkPreview } from "@/lib/link-preview";
+import {
+  assertSafePreviewUrl,
+  LruTtlCache,
+  readLimitedText,
+  safeFetchWithRedirects,
+  UnsafeUrlError,
+} from "@/lib/link-preview-guard";
 
 export const runtime = "nodejs";
 
-// Server-side cache so repeated views of the same link (very common in chat)
-// don't re-fetch and re-parse the target page every time. Keyed by URL.
 const PREVIEW_TTL_MS = 60 * 60 * 1000; // 1h
-const previewCache = new Map<string, { data: LinkPreview & { unavailable?: boolean }; expires: number }>();
+const MAX_CACHE_ENTRIES = 500;
+const FETCH_TIMEOUT_MS = 6000;
+const MAX_HTML_BYTES = 500_000;
 
-function getCachedPreview(url: string) {
-  const hit = previewCache.get(url);
-  if (!hit) return undefined;
-  if (hit.expires < Date.now()) {
-    previewCache.delete(url);
-    return undefined;
-  }
-  return hit.data;
-}
-
-function setCachedPreview(url: string, data: LinkPreview & { unavailable?: boolean }) {
-  previewCache.set(url, { data, expires: Date.now() + PREVIEW_TTL_MS });
-  if (previewCache.size > 2000) {
-    const now = Date.now();
-    for (const [k, v] of previewCache) if (v.expires < now) previewCache.delete(k);
-  }
-}
+const previewCache = new LruTtlCache<LinkPreview & { unavailable?: boolean }>(
+  MAX_CACHE_ENTRIES,
+  PREVIEW_TTL_MS,
+);
 
 function cachedJson(url: string, data: LinkPreview & { unavailable?: boolean }) {
-  setCachedPreview(url, data);
+  previewCache.set(url, data);
   return NextResponse.json(data, {
     headers: { "Cache-Control": "private, max-age=3600" },
   });
@@ -72,16 +66,14 @@ export async function GET(req: NextRequest) {
 
   let parsed: URL;
   try {
-    parsed = new URL(target);
-  } catch {
-    return NextResponse.json({ error: "Invalid url" }, { status: 400 });
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return NextResponse.json({ error: "Unsupported protocol" }, { status: 400 });
+    parsed = await assertSafePreviewUrl(target);
+  } catch (err) {
+    const message = err instanceof UnsafeUrlError ? err.message : "Invalid url";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 
   const cacheKey = parsed.toString();
-  const cached = getCachedPreview(cacheKey);
+  const cached = previewCache.get(cacheKey);
   if (cached) {
     return NextResponse.json(cached, {
       headers: { "Cache-Control": "private, max-age=3600" },
@@ -98,37 +90,38 @@ export async function GET(req: NextRequest) {
     favicon: `${parsed.origin}/favicon.ico`,
   };
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(parsed.toString(), {
+    const { res, finalUrl } = await safeFetchWithRedirects(parsed, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (compatible; NizekBot/1.0; +https://nizek.app) link-preview",
         Accept: "text/html,application/xhtml+xml",
       },
       signal: controller.signal,
-      redirect: "follow",
     });
-    clearTimeout(timeout);
 
     const contentType = res.headers.get("content-type") ?? "";
     if (!res.ok) {
       return cachedJson(cacheKey, { ...fallback, unavailable: true });
     }
     if (contentType.startsWith("image/")) {
-      return cachedJson(cacheKey, { ...fallback, image: parsed.toString() });
+      return cachedJson(cacheKey, { ...fallback, image: finalUrl.toString() });
     }
     if (!contentType.includes("html")) {
       return cachedJson(cacheKey, fallback);
     }
 
-    const html = (await res.text()).slice(0, 500_000);
+    const html = await readLimitedText(res, MAX_HTML_BYTES);
 
     const toAbsolute = (value: string | null): string | null => {
       if (!value) return null;
       try {
-        return new URL(value, parsed.origin).toString();
+        const resolved = new URL(value, finalUrl.origin);
+        if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return null;
+        return resolved.toString();
       } catch {
         return null;
       }
@@ -171,7 +164,7 @@ export async function GET(req: NextRequest) {
           /<link[^>]+rel=["'](?:shortcut )?icon["'][^>]+href=["']([^"']*)["']/i,
           /<link[^>]+href=["']([^"']*)["'][^>]+rel=["'](?:shortcut )?icon["']/i,
         ]),
-      ) ?? `${parsed.origin}/favicon.ico`;
+      ) ?? `${finalUrl.origin}/favicon.ico`;
 
     const preview: LinkPreview = {
       url: parsed.toString(),
@@ -182,7 +175,12 @@ export async function GET(req: NextRequest) {
       favicon,
     };
     return cachedJson(cacheKey, preview);
-  } catch {
+  } catch (err) {
+    if (err instanceof UnsafeUrlError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     return cachedJson(cacheKey, { ...fallback, unavailable: true });
+  } finally {
+    clearTimeout(timeout);
   }
 }
