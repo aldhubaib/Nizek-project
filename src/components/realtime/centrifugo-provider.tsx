@@ -47,8 +47,6 @@ type CentrifugoContextValue = {
     onStale?: StaleHandler,
     onReconnect?: ReconnectHandler,
   ) => () => void;
-  /** Publish an ephemeral event (e.g. typing) to a channel. */
-  publish: (channel: string, data: unknown) => void;
   /** Fetch current presence (online members) for a channel. */
   presence: (channel: string) => Promise<string[]>;
   /** Get the Subscription instance for a channel (for join/leave listeners). */
@@ -313,19 +311,6 @@ export function CentrifugoProvider({
     [ensureSub],
   );
 
-  const publish = useCallback((channel: string, data: unknown) => {
-    const client = clientRef.current;
-    if (!client) return;
-    const sub = client.getSubscription(channel);
-    if (sub && sub.state === "subscribed") {
-      sub.publish(data).catch(() => {
-        client.publish(channel, data).catch(() => {});
-      });
-      return;
-    }
-    client.publish(channel, data).catch(() => {});
-  }, []);
-
   const presence = useCallback(
     async (channel: string): Promise<string[]> => {
       const entry = ensureSub(channel);
@@ -352,11 +337,10 @@ export function CentrifugoProvider({
       enabled: Boolean(WS_URL),
       memberId,
       subscribe,
-      publish,
       presence,
       getSubscription,
     }),
-    [connected, memberId, subscribe, publish, presence, getSubscription],
+    [connected, memberId, subscribe, presence, getSubscription],
   );
 
   return (

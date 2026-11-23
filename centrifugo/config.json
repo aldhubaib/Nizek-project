@@ -24,7 +24,6 @@
         "history_size": 100,
         "history_ttl": "1800s",
         "force_recovery": true,
-        "allow_publish_for_subscriber": true,
         "allow_presence_for_subscriber": true
       },
       {
@@ -34,7 +33,6 @@
         "history_size": 100,
         "history_ttl": "1800s",
         "force_recovery": true,
-        "allow_publish_for_subscriber": true,
         "allow_presence_for_subscriber": true
       },
       {
@@ -44,7 +42,6 @@
         "history_size": 200,
         "history_ttl": "3600s",
         "force_recovery": true,
-        "allow_publish_for_subscriber": true,
         "allow_presence_for_subscriber": true
       },
       {
