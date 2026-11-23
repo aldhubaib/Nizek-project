@@ -1,5 +1,8 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { unreadChatCountFromMaps } from "@/lib/inbox-unread-chats";
+
+export { unreadChatCountFromMaps } from "@/lib/inbox-unread-chats";
 
 type UnreadRow = { id: string; n: number | bigint };
 
@@ -119,4 +122,27 @@ export async function sumInboxMessageUnreads(userId: string): Promise<number> {
   let total = 0;
   for (const n of map.values()) total += n;
   return total;
+}
+
+/**
+ * App-icon / Chats-tab badge: unread chats excluding note-comment threads.
+ * Matches the mobile `unreadChatCount` definition.
+ */
+export async function countUnreadInboxChats(userId: string): Promise<number> {
+  const [messageUnreads, noteRows, markedRows] = await Promise.all([
+    countInboxMessageUnreads(userId),
+    prisma.conversation.findMany({
+      where: { noteCommentThread: { isNot: null } },
+      select: { id: true },
+    }),
+    prisma.chatReadCursor.findMany({
+      where: { userId, markedUnread: true },
+      select: { threadId: true },
+    }),
+  ]);
+  return unreadChatCountFromMaps({
+    messageUnreads,
+    noteCommentThreadIds: noteRows.map((r) => r.id),
+    markedUnreadThreadIds: markedRows.map((r) => r.threadId),
+  });
 }
