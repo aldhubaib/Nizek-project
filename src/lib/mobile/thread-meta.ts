@@ -62,6 +62,8 @@ export type MobileThreadMeta = {
   memberNames: Record<string, string>;
   /** Everyone's avatar URL (or null) — for Message Info rows. */
   memberAvatars: Record<string, string | null>;
+  /** Optional role label per member for Chat Info (project role / staff / client). */
+  memberRoles?: Record<string, string>;
   /** Everyone except the viewer. */
   peerMemberIds: string[];
   /** Who can be @mentioned from the composer. */
@@ -88,6 +90,7 @@ export async function resolveMobileThreadMeta(
 
   const memberNames: Record<string, string> = {};
   const memberAvatars: Record<string, string | null> = {};
+  const memberRoles: Record<string, string> = {};
   const peerReads: Record<string, string> = {};
   const peerDeliveries: Record<string, string> = {};
 
@@ -108,7 +111,13 @@ export async function resolveMobileThreadMeta(
     });
     if (!task) throw notFound();
     if (!(await hasProjectAccess(task.projectId))) throw notFound();
-    const mentionables = await projectMentionables(task.projectId, user.id, memberNames, memberAvatars);
+    const mentionables = await projectMentionables(
+      task.projectId,
+      user.id,
+      memberNames,
+      memberAvatars,
+      memberRoles,
+    );
     return {
       threadId,
       kind: "task",
@@ -119,6 +128,7 @@ export async function resolveMobileThreadMeta(
       avatarUrl: task.project.logoUrl ?? null,
       memberNames,
       memberAvatars,
+      memberRoles,
       peerMemberIds: Object.keys(memberNames).filter((id) => id !== user.id),
       mentionables,
       peerReads,
@@ -145,7 +155,7 @@ export async function resolveMobileThreadMeta(
     });
     if (!project) throw notFound();
     const [mentionables] = await Promise.all([
-      projectMentionables(project.id, user.id, memberNames, memberAvatars),
+      projectMentionables(project.id, user.id, memberNames, memberAvatars, memberRoles),
       loadPeerCursors(threadId, user.id, peerReads, peerDeliveries),
     ]);
     const peerMemberIds = Object.keys(memberNames).filter((id) => id !== user.id);
@@ -159,6 +169,7 @@ export async function resolveMobileThreadMeta(
       avatarUrl: project.logoUrl ?? null,
       memberNames,
       memberAvatars,
+      memberRoles,
       peerMemberIds,
       mentionables,
       peerReads,
@@ -183,6 +194,7 @@ export async function resolveMobileThreadMeta(
     for (const m of staff) {
       memberNames[m.id] = m.name ?? m.email;
       memberAvatars[m.id] = m.imageUrl ?? null;
+      memberRoles[m.id] = "Staff";
     }
     return {
       threadId,
@@ -194,6 +206,7 @@ export async function resolveMobileThreadMeta(
       avatarUrl: null,
       memberNames,
       memberAvatars,
+      memberRoles,
       peerMemberIds: staff.map((m) => m.id).filter((id) => id !== user.id),
       mentionables: staff
         .filter((m) => m.id !== user.id)
@@ -237,6 +250,7 @@ export async function resolveMobileThreadMeta(
     for (const p of convo.participants) {
       memberNames[p.member.id] = p.member.name ?? p.member.email;
       memberAvatars[p.member.id] = p.member.imageUrl ?? null;
+      memberRoles[p.member.id] = client && p.member.id === user.id ? "You" : "Member";
       if (p.memberId !== user.id && p.lastReadAt) {
         setNewer(peerReads, p.memberId, p.lastReadAt.toISOString());
         setNewer(peerDeliveries, p.memberId, p.lastReadAt.toISOString());
@@ -261,6 +275,7 @@ export async function resolveMobileThreadMeta(
       avatarUrl: access.project.logoUrl ?? null,
       memberNames,
       memberAvatars,
+      memberRoles,
       peerMemberIds: others.map((m) => m.id),
       mentionables: others
         .map((m) => ({ id: m.id, name: m.name ?? m.email }))
@@ -309,6 +324,7 @@ export async function resolveMobileThreadMeta(
   for (const p of convo.participants) {
     memberNames[p.member.id] = p.member.name ?? p.member.email;
     memberAvatars[p.member.id] = p.member.imageUrl ?? null;
+    memberRoles[p.member.id] = "Member";
     if (p.memberId !== user.id && p.lastReadAt) {
       setNewer(peerReads, p.memberId, p.lastReadAt.toISOString());
       setNewer(peerDeliveries, p.memberId, p.lastReadAt.toISOString());
@@ -325,6 +341,7 @@ export async function resolveMobileThreadMeta(
     channel: conversationChannel(convo.id),
     memberNames,
     memberAvatars,
+    memberRoles,
     peerMemberIds,
     peerReads,
     peerDeliveries,
@@ -342,7 +359,13 @@ export async function resolveMobileThreadMeta(
       title: note.title,
       subtitle: `${note.project.name} · Note comment`,
       avatarUrl: null,
-      mentionables: await projectMentionables(note.projectId, user.id, memberNames, memberAvatars),
+      mentionables: await projectMentionables(
+        note.projectId,
+        user.id,
+        memberNames,
+        memberAvatars,
+        memberRoles,
+      ),
     };
   }
   if (convo.taskHighlightThread) {
@@ -353,7 +376,13 @@ export async function resolveMobileThreadMeta(
       title: task.title,
       subtitle: `${task.project.name} · Task comment`,
       avatarUrl: null,
-      mentionables: await projectMentionables(task.projectId, user.id, memberNames, memberAvatars),
+      mentionables: await projectMentionables(
+        task.projectId,
+        user.id,
+        memberNames,
+        memberAvatars,
+        memberRoles,
+      ),
     };
   }
 
@@ -400,23 +429,46 @@ async function loadPeerCursors(
   }
 }
 
-/** Project members minus the viewer; also fills `memberNames` and `memberAvatars` for everyone. */
+/** Project members minus the viewer; also fills names, avatars, and roles for everyone. */
 async function projectMentionables(
   projectId: string,
   viewerId: string,
   memberNames: Record<string, string>,
   memberAvatars: Record<string, string | null>,
+  memberRoles: Record<string, string>,
 ): Promise<{ id: string; name: string }[]> {
   const members = await prisma.projectMember.findMany({
     where: { projectId },
-    select: { user: { select: { id: true, name: true, email: true, imageUrl: true } } },
+    select: {
+      role: true,
+      projectRole: { select: { name: true, isClient: true } },
+      user: { select: { id: true, name: true, email: true, imageUrl: true } },
+    },
   });
   const out: { id: string; name: string }[] = [];
-  for (const { user } of members) {
+  for (const row of members) {
+    const user = row.user;
     const name = user.name ?? user.email;
     memberNames[user.id] = name;
     memberAvatars[user.id] = user.imageUrl ?? null;
+    memberRoles[user.id] =
+      row.projectRole?.name ??
+      (row.role === "CLIENT" || row.projectRole?.isClient ? "Client" : titleCaseRole(row.role));
     if (user.id !== viewerId) out.push({ id: user.id, name });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function titleCaseRole(role: string): string {
+  switch (role) {
+    case "ADMIN":
+      return "Admin";
+    case "PROJECT_MANAGER":
+      return "Project manager";
+    case "CLIENT":
+      return "Client";
+    case "MEMBER":
+    default:
+      return "Member";
+  }
 }
