@@ -73,6 +73,7 @@ import { unreadMarkPlan } from "@/lib/unread-mark";
 import { MAX_MESSAGE_CHARS, messageTooLongError } from "@/lib/message-limits";
 import { canDeleteForEveryone } from "@/lib/message-delete";
 import { messageSearchText } from "@/lib/message-search";
+import { cleanVoiceDuration, cleanVoiceWaveform, readVoiceWaveform } from "@/lib/voice-note-meta";
 import {
   countInboxMessageUnreads,
   sumInboxMessageUnreads,
@@ -257,6 +258,9 @@ export type MessageAttachment = {
   contentType: string | null;
   sizeBytes: number | null;
   isImage: boolean;
+  /** Voice notes recorded by a client that measures them. */
+  durationMs?: number | null;
+  waveform?: number[] | null;
 };
 
 // A message's reactions grouped by emoji. Each client derives count + "mine".
@@ -298,7 +302,39 @@ type AttachmentInput = {
   url: string;
   fileSize?: number | null;
   mimeType?: string | null;
+  durationMs?: number | null;
+  waveform?: number[] | null;
 };
+
+const ATTACHMENT_SELECT = {
+  id: true,
+  filename: true,
+  url: true,
+  fileSize: true,
+  mimeType: true,
+  durationMs: true,
+  waveform: true,
+} as const;
+
+function toMessageAttachment(a: {
+  id: string;
+  filename: string;
+  url: string;
+  fileSize: number | null;
+  mimeType: string | null;
+  durationMs: number | null;
+  waveform: unknown;
+}): MessageAttachment {
+  return {
+    id: a.id,
+    name: a.filename,
+    url: a.url,
+    contentType: a.mimeType,
+    sizeBytes: a.fileSize,
+    isImage: isImageType(a.mimeType),
+    ...(a.durationMs != null ? { durationMs: a.durationMs, waveform: readVoiceWaveform(a.waveform) } : {}),
+  };
+}
 
 type SendMessageInput = {
   body: string;
@@ -456,7 +492,7 @@ const THREAD_MESSAGE_INCLUDE = {
     orderBy: { createdAt: "asc" },
   },
   attachments: {
-    select: { id: true, filename: true, url: true, fileSize: true, mimeType: true },
+    select: ATTACHMENT_SELECT,
     orderBy: { createdAt: "asc" },
   },
   task: { select: { id: true, taskNumber: true, title: true, projectId: true } },
@@ -556,14 +592,7 @@ async function toThreadMessages(
       updatedAt: c.updatedAt.toISOString(),
       edited,
       replyToId: c.replyToId ?? null,
-      attachments: c.attachments.map((a) => ({
-        id: a.id,
-        name: a.filename,
-        url: a.url,
-        contentType: a.mimeType,
-        sizeBytes: a.fileSize,
-        isImage: isImageType(a.mimeType),
-      })),
+      attachments: c.attachments.map(toMessageAttachment),
       reactions: [...byEmoji.entries()].map(([emoji, memberIds]) => ({ emoji, memberIds })),
       kind: c.kind,
       task: c.task
@@ -1310,31 +1339,29 @@ export async function sendMessage(
             : undefined,
           attachments: attachmentsInput.length
             ? {
-                create: attachmentsInput.map((a) => ({
-                  filename: a.filename,
-                  url: a.url,
-                  fileSize: a.fileSize ?? null,
-                  mimeType: a.mimeType ?? null,
-                })),
+                create: attachmentsInput.map((a) => {
+                  const audio = Boolean(a.mimeType?.startsWith("audio/"));
+                  const durationMs = audio ? cleanVoiceDuration(a.durationMs) : null;
+                  const waveform = durationMs != null ? cleanVoiceWaveform(a.waveform) : null;
+                  return {
+                    filename: a.filename,
+                    url: a.url,
+                    fileSize: a.fileSize ?? null,
+                    mimeType: a.mimeType ?? null,
+                    durationMs,
+                    ...(waveform ? { waveform } : {}),
+                  };
+                }),
               }
             : undefined,
         },
         include: {
           author: { select: { id: true, name: true, email: true, imageUrl: true } },
-          attachments: {
-            select: { id: true, filename: true, url: true, fileSize: true, mimeType: true },
-          },
+          attachments: { select: ATTACHMENT_SELECT },
         },
       });
 
-      const attachments: MessageAttachment[] = message.attachments.map((a) => ({
-        id: a.id,
-        name: a.filename,
-        url: a.url,
-        contentType: a.mimeType,
-        sizeBytes: a.fileSize,
-        isImage: isImageType(a.mimeType),
-      }));
+      const attachments: MessageAttachment[] = message.attachments.map(toMessageAttachment);
 
       const authorName = message.author.name ?? message.author.email ?? "Someone";
       const noteCommentPayload = isNoteCommentMessage(message.kind)

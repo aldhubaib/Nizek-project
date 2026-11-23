@@ -2,6 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MAX_VOICE_NOTE_MS, VOICE_NOTE_BITS_PER_SECOND } from "@/lib/message-limits";
+import type { VoiceMeta } from "@/lib/message-outbox";
+import { summarizeVoiceLevels } from "@/lib/voice-note-meta";
+
+// AAC first: iPhones cannot decode WebM/Opus, so a note recorded in Chrome or
+// Safari as AAC plays everywhere. Firefox has no AAC encoder and falls back.
+const VOICE_MIME_TYPES = ["audio/mp4;codecs=mp4a.40.2", "audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+
+function peakLevel(analyser: AnalyserNode, buf: Uint8Array<ArrayBuffer>): number {
+  analyser.getByteTimeDomainData(buf);
+  let peak = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const v = Math.abs(buf[i] - 128) / 128;
+    if (v > peak) peak = v;
+  }
+  return Math.min(1, peak * 2.5);
+}
 
 /**
  * WhatsApp-style hold-to-record voice notes. Owns the MediaRecorder, the
@@ -11,7 +27,7 @@ import { MAX_VOICE_NOTE_MS, VOICE_NOTE_BITS_PER_SECOND } from "@/lib/message-lim
  * `onSend` receives the finished audio File; the caller decides how to deliver
  * it (normally by enqueuing it on the outbox as an attachment).
  */
-export function useVoiceRecorder({ onSend }: { onSend: (file: File) => void }) {
+export function useVoiceRecorder({ onSend }: { onSend: (file: File, voice?: VoiceMeta) => void }) {
   const [recording, setRecording] = useState(false);
   const [recordPaused, setRecordPaused] = useState(false);
   const [recordSecs, setRecordSecs] = useState(0);
@@ -28,6 +44,7 @@ export function useVoiceRecorder({ onSend }: { onSend: (file: File) => void }) {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const recordPausedRef = useRef(false);
+  const levelsRef = useRef<number[]>([]);
   const holdStartXRef = useRef<number | null>(null);
   /** Set when pointer-up happens before MediaRecorder is ready. */
   const holdEndedRef = useRef<{ ended: boolean; cancel: boolean }>({
@@ -76,9 +93,7 @@ export function useVoiceRecorder({ onSend }: { onSend: (file: File) => void }) {
         setHoldRecording(false);
         return;
       }
-      const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(
-        (t) => MediaRecorder.isTypeSupported(t),
-      );
+      const mimeType = VOICE_MIME_TYPES.find((t) => MediaRecorder.isTypeSupported(t));
       // Speech-grade bitrate: a 10-minute note stays a few MB instead of the
       // browser default (often 128 kbps+), which made long notes fail upload.
       const recOptions: MediaRecorderOptions = {
@@ -91,22 +106,27 @@ export function useVoiceRecorder({ onSend }: { onSend: (file: File) => void }) {
       discardRecordingRef.current = false;
       recordAccumulatedRef.current = 0;
       recordPausedRef.current = false;
+      levelsRef.current = [];
       setRecordPaused(false);
       rec.ondataavailable = (e) => {
         if (e.data.size > 0) recordChunksRef.current.push(e.data);
       };
       rec.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
+        const durationMs =
+          recordAccumulatedRef.current +
+          (recordStartedAtRef.current ? Date.now() - recordStartedAtRef.current : 0);
+        const voice: VoiceMeta = { durationMs, waveform: summarizeVoiceLevels(levelsRef.current) };
         cleanupRecordingResources();
         if (!discardRecordingRef.current && recordChunksRef.current.length > 0) {
-          const type = rec.mimeType || "audio/webm";
+          const type = rec.mimeType || mimeType || "audio/webm";
           const ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
           const stamp = new Date();
           const name = `Voice message ${stamp.toLocaleDateString()} ${stamp
             .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
             .replace(/:/g, ".")}.${ext}`;
           const file = new File([new Blob(recordChunksRef.current, { type })], name, { type });
-          onSendRef.current(file);
+          onSendRef.current(file, voice);
         }
         recordChunksRef.current = [];
       };
@@ -127,7 +147,11 @@ export function useVoiceRecorder({ onSend }: { onSend: (file: File) => void }) {
       recordStartedAtRef.current = Date.now();
       setRecordSecs(0);
       setRecording(true);
+      const levelBuf = analyserRef.current ? new Uint8Array(analyserRef.current.fftSize) : null;
       recordTimerRef.current = setInterval(() => {
+        if (analyserRef.current && levelBuf && !recordPausedRef.current) {
+          levelsRef.current.push(peakLevel(analyserRef.current, levelBuf));
+        }
         const running = recordStartedAtRef.current
           ? Date.now() - recordStartedAtRef.current
           : 0;

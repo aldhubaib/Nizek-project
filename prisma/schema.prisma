@@ -1993,6 +1993,10 @@ model MessageAttachment {
   url       String
   fileSize  Int?
   mimeType  String?
+  // Voice notes: length and loudness bars (0–100 ints) measured by the recorder,
+  // so players draw the note before downloading it.
+  durationMs Int?
+  waveform   Json?
   createdAt DateTime @default(now())
 
   @@index([messageId])

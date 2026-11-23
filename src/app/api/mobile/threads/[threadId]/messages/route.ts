@@ -20,6 +20,8 @@ type SendBody = {
     url: string;
     fileSize?: number | null;
     mimeType?: string | null;
+    durationMs?: number | null;
+    waveform?: number[] | null;
   }[];
 };
 
@@ -35,6 +37,9 @@ export const POST = mobileRoute<Params>(async (req: NextRequest, { threadId }) =
           url: a.url,
           fileSize: typeof a.fileSize === "number" ? a.fileSize : null,
           mimeType: typeof a.mimeType === "string" ? a.mimeType : null,
+          // Checked again in sendMessage; passed through as sent.
+          durationMs: typeof a.durationMs === "number" ? a.durationMs : null,
+          waveform: Array.isArray(a.waveform) ? a.waveform : null,
         }))
     : [];
   const message = unwrap(

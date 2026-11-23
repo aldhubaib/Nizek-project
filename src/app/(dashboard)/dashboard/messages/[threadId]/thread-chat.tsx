@@ -117,6 +117,7 @@ import {
   retryOutboxEntry,
   discardOutboxEntry,
   useThreadOutbox,
+  type VoiceMeta,
 } from "@/lib/message-outbox";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/lib/upload-limits";
 import {
@@ -1122,7 +1123,7 @@ export function ThreadChat({
 
   // Send a finished recording through the normal attachment pipeline.
   const sendVoice = useCallback(
-    (file: File) => {
+    (file: File, voice?: VoiceMeta) => {
       if (!threadKey) return;
       const replyId = replyTo;
       setReplyTo(null);
@@ -1131,7 +1132,7 @@ export function ThreadChat({
         target,
         body: "",
         replyToId: replyId,
-        files: [{ key: `voice-${Date.now()}`, file, previewUrl: null }],
+        files: [{ key: `voice-${Date.now()}`, file, previewUrl: null, voice }],
       });
       scrollToBottom();
     },
