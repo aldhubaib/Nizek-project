@@ -121,7 +121,12 @@ export async function fanOutMessageSideEffects(
     inboxTargets = participantIds;
   } else if (projectId && !taskId) {
     const members = await prisma.projectMember.findMany({
-      where: { projectId },
+      where: {
+        projectId,
+        role: { not: "CLIENT" },
+        user: { systemRole: { not: "CLIENT" } },
+        OR: [{ roleId: null }, { projectRole: { isClient: false } }],
+      },
       select: { userId: true },
     });
     inboxTargets = members.map((m) => m.userId);
