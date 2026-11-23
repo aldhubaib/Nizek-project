@@ -36,7 +36,11 @@ export type OutboxFile = {
   statusText?: string | null;
   /** Set once the file is in R2 — retries skip files that already have it. */
   uploaded?: UploadedFile;
+  /** Voice notes: measured by the recorder, stored with the attachment. */
+  voice?: VoiceMeta;
 };
+
+export type VoiceMeta = { durationMs: number; waveform: number[] };
 
 export type OutboxEntry = {
   tempId: string;
@@ -116,7 +120,7 @@ export function enqueueOutboxMessage(input: {
   body: string;
   replyToId?: string | null;
   taskRefId?: string | null;
-  files?: { key: string; file: File; previewUrl: string | null }[];
+  files?: { key: string; file: File; previewUrl: string | null; voice?: VoiceMeta }[];
 }): void {
   const files = input.files ?? [];
   const entry: OutboxEntry = {
@@ -135,6 +139,7 @@ export function enqueueOutboxMessage(input: {
       previewUrl: f.previewUrl,
       progress: 0,
       status: "uploading" as const,
+      ...(f.voice ? { voice: f.voice } : {}),
     })),
     status: files.length > 0 ? "uploading" : "sending",
     errorMessage: null,
@@ -210,13 +215,13 @@ function deliver(tempId: string) {
         taskId: entry.taskRefId ?? entry.target.taskId,
         body: entry.body,
         attachments: entry.files
-          .map((f) => f.uploaded)
-          .filter((u): u is UploadedFile => u != null)
-          .map((u) => ({
+          .filter((f): f is OutboxFile & { uploaded: UploadedFile } => f.uploaded != null)
+          .map(({ uploaded: u, voice }) => ({
             filename: u.filename,
             url: u.url,
             fileSize: u.fileSize,
             mimeType: u.mimeType,
+            ...(voice ? { durationMs: voice.durationMs, waveform: voice.waveform } : {}),
           })),
         replyToId: entry.replyToId ?? undefined,
       });
