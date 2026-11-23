@@ -64,7 +64,7 @@ function stackEnv() {
     POSTGRES_USER: decodeURIComponent(db.username),
     POSTGRES_PASSWORD: decodeURIComponent(db.password),
     POSTGRES_DB: decodeURIComponent(db.pathname.replace(/^\//, "")),
-    PG_HOST_PORT: db.port || "5432",
+    PG_HOST_PORT: db.port || "5434",
     REDIS_HOST_PORT: redis.port || "6379",
     CENTRIFUGO_HOST_PORT: centrifugoPort,
   };

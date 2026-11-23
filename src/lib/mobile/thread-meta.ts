@@ -60,12 +60,16 @@ export type MobileThreadMeta = {
   avatarUrl: string | null;
   /** Everyone in the thread (incl. viewer) — for "Seen by" and mention chips. */
   memberNames: Record<string, string>;
+  /** Everyone's avatar URL (or null) — for Message Info rows. */
+  memberAvatars: Record<string, string | null>;
   /** Everyone except the viewer. */
   peerMemberIds: string[];
   /** Who can be @mentioned from the composer. */
   mentionables: { id: string; name: string }[];
   /** memberId → ISO of that member's last read (never the viewer). */
   peerReads: Record<string, string>;
+  /** memberId → ISO of that member's last delivery (never the viewer). */
+  peerDeliveries: Record<string, string>;
   /** Project has no active contract / client chat disabled → composer locked. */
   inactive: boolean;
   /** Can open but not post (client rooms the viewer is not assigned to). */
@@ -83,7 +87,9 @@ export async function resolveMobileThreadMeta(
   const notFound = () => new Error("Not found");
 
   const memberNames: Record<string, string> = {};
+  const memberAvatars: Record<string, string | null> = {};
   const peerReads: Record<string, string> = {};
+  const peerDeliveries: Record<string, string> = {};
 
   if (threadId.startsWith("task-")) {
     if (client) throw notFound();
@@ -102,7 +108,7 @@ export async function resolveMobileThreadMeta(
     });
     if (!task) throw notFound();
     if (!(await hasProjectAccess(task.projectId))) throw notFound();
-    const mentionables = await projectMentionables(task.projectId, user.id, memberNames);
+    const mentionables = await projectMentionables(task.projectId, user.id, memberNames, memberAvatars);
     return {
       threadId,
       kind: "task",
@@ -112,9 +118,11 @@ export async function resolveMobileThreadMeta(
       subtitle: task.project.name,
       avatarUrl: task.project.logoUrl ?? null,
       memberNames,
+      memberAvatars,
       peerMemberIds: Object.keys(memberNames).filter((id) => id !== user.id),
       mentionables,
       peerReads,
+      peerDeliveries,
       inactive: !getActiveContract(task.project.contracts),
       readOnly: false,
       replyOnly: false,
@@ -136,7 +144,10 @@ export async function resolveMobileThreadMeta(
       },
     });
     if (!project) throw notFound();
-    const mentionables = await projectMentionables(project.id, user.id, memberNames);
+    const [mentionables] = await Promise.all([
+      projectMentionables(project.id, user.id, memberNames, memberAvatars),
+      loadPeerCursors(threadId, user.id, peerReads, peerDeliveries),
+    ]);
     const peerMemberIds = Object.keys(memberNames).filter((id) => id !== user.id);
     return {
       threadId,
@@ -147,9 +158,11 @@ export async function resolveMobileThreadMeta(
       subtitle: `Project chat · ${peerMemberIds.length + 1} members`,
       avatarUrl: project.logoUrl ?? null,
       memberNames,
+      memberAvatars,
       peerMemberIds,
       mentionables,
       peerReads,
+      peerDeliveries,
       inactive: !getActiveContract(project.contracts),
       readOnly: false,
       replyOnly: false,
@@ -160,11 +173,17 @@ export async function resolveMobileThreadMeta(
   if (threadId === ANNOUNCEMENTS_THREAD_ID) {
     if (!canReadAnnouncements(user)) throw notFound();
     await getOrCreateAnnouncementsConversation();
-    const staff = await prisma.user.findMany({
-      where: { systemRole: { not: "CLIENT" }, blocked: false },
-      select: { id: true, name: true, email: true },
-    });
-    for (const m of staff) memberNames[m.id] = m.name ?? m.email;
+    const [staff] = await Promise.all([
+      prisma.user.findMany({
+        where: { systemRole: { not: "CLIENT" }, blocked: false },
+        select: { id: true, name: true, email: true, imageUrl: true },
+      }),
+      loadPeerCursors(threadId, user.id, peerReads, peerDeliveries),
+    ]);
+    for (const m of staff) {
+      memberNames[m.id] = m.name ?? m.email;
+      memberAvatars[m.id] = m.imageUrl ?? null;
+    }
     return {
       threadId,
       kind: "announcements",
@@ -174,12 +193,14 @@ export async function resolveMobileThreadMeta(
       subtitle: ANNOUNCEMENTS_SUBTITLE,
       avatarUrl: null,
       memberNames,
+      memberAvatars,
       peerMemberIds: staff.map((m) => m.id).filter((id) => id !== user.id),
       mentionables: staff
         .filter((m) => m.id !== user.id)
         .map((m) => ({ id: m.id, name: m.name ?? m.email }))
         .sort((a, b) => a.name.localeCompare(b.name)),
       peerReads,
+      peerDeliveries,
       inactive: false,
       readOnly: false,
       replyOnly: !canPostAnnouncement(user),
@@ -198,22 +219,27 @@ export async function resolveMobileThreadMeta(
   if (convoMeta.kind === CLIENT_CONVERSATION_KIND) {
     const access = await canAccessClientConversation(conversationId, user);
     if (!access.ok || !access.conversation || !access.project) throw notFound();
-    const convo = await prisma.conversation.findUnique({
-      where: { id: conversationId },
-      include: {
-        participants: {
-          include: {
-            member: { select: { id: true, name: true, email: true } },
+    const [convo] = await Promise.all([
+      prisma.conversation.findUnique({
+        where: { id: conversationId },
+        include: {
+          participants: {
+            include: {
+              member: { select: { id: true, name: true, email: true, imageUrl: true } },
+            },
           },
+          project: { select: { contracts: { select: CONTRACT_SELECT } } },
         },
-        project: { select: { contracts: { select: CONTRACT_SELECT } } },
-      },
-    });
+      }),
+      loadPeerCursors(threadId, user.id, peerReads, peerDeliveries),
+    ]);
     if (!convo) throw notFound();
     for (const p of convo.participants) {
       memberNames[p.member.id] = p.member.name ?? p.member.email;
+      memberAvatars[p.member.id] = p.member.imageUrl ?? null;
       if (p.memberId !== user.id && p.lastReadAt) {
-        peerReads[p.memberId] = p.lastReadAt.toISOString();
+        setNewer(peerReads, p.memberId, p.lastReadAt.toISOString());
+        setNewer(peerDeliveries, p.memberId, p.lastReadAt.toISOString());
       }
     }
     const others = convo.participants
@@ -234,11 +260,13 @@ export async function resolveMobileThreadMeta(
             : "Client chat · View only",
       avatarUrl: access.project.logoUrl ?? null,
       memberNames,
+      memberAvatars,
       peerMemberIds: others.map((m) => m.id),
       mentionables: others
         .map((m) => ({ id: m.id, name: m.name ?? m.email }))
         .sort((a, b) => a.name.localeCompare(b.name)),
       peerReads,
+      peerDeliveries,
       inactive:
         !access.project.clientChatEnabled ||
         !getActiveContract(convo.project?.contracts ?? []),
@@ -249,36 +277,41 @@ export async function resolveMobileThreadMeta(
   }
 
   if (client) throw notFound();
-  const convo = await prisma.conversation.findFirst({
-    where: { id: conversationId, participants: { some: { memberId: user.id } } },
-    include: {
-      participants: {
-        include: {
-          member: { select: { id: true, name: true, email: true, imageUrl: true } },
+  const [convo] = await Promise.all([
+    prisma.conversation.findFirst({
+      where: { id: conversationId, participants: { some: { memberId: user.id } } },
+      include: {
+        participants: {
+          include: {
+            member: { select: { id: true, name: true, email: true, imageUrl: true } },
+          },
         },
-      },
-      noteCommentThread: {
-        select: {
-          note: {
-            select: { projectId: true, title: true, project: { select: { name: true } } },
+        noteCommentThread: {
+          select: {
+            note: {
+              select: { projectId: true, title: true, project: { select: { name: true } } },
+            },
+          },
+        },
+        taskHighlightThread: {
+          select: {
+            task: {
+              select: { projectId: true, title: true, project: { select: { name: true } } },
+            },
           },
         },
       },
-      taskHighlightThread: {
-        select: {
-          task: {
-            select: { projectId: true, title: true, project: { select: { name: true } } },
-          },
-        },
-      },
-    },
-  });
+    }),
+    loadPeerCursors(threadId, user.id, peerReads, peerDeliveries),
+  ]);
   if (!convo) throw notFound();
 
   for (const p of convo.participants) {
     memberNames[p.member.id] = p.member.name ?? p.member.email;
+    memberAvatars[p.member.id] = p.member.imageUrl ?? null;
     if (p.memberId !== user.id && p.lastReadAt) {
-      peerReads[p.memberId] = p.lastReadAt.toISOString();
+      setNewer(peerReads, p.memberId, p.lastReadAt.toISOString());
+      setNewer(peerDeliveries, p.memberId, p.lastReadAt.toISOString());
     }
   }
   const others = convo.participants
@@ -291,8 +324,10 @@ export async function resolveMobileThreadMeta(
     target: { conversationId: convo.id },
     channel: conversationChannel(convo.id),
     memberNames,
+    memberAvatars,
     peerMemberIds,
     peerReads,
+    peerDeliveries,
     inactive: false,
     readOnly: false,
     replyOnly: false,
@@ -307,7 +342,7 @@ export async function resolveMobileThreadMeta(
       title: note.title,
       subtitle: `${note.project.name} · Note comment`,
       avatarUrl: null,
-      mentionables: await projectMentionables(note.projectId, user.id, memberNames),
+      mentionables: await projectMentionables(note.projectId, user.id, memberNames, memberAvatars),
     };
   }
   if (convo.taskHighlightThread) {
@@ -318,7 +353,7 @@ export async function resolveMobileThreadMeta(
       title: task.title,
       subtitle: `${task.project.name} · Task comment`,
       avatarUrl: null,
-      mentionables: await projectMentionables(task.projectId, user.id, memberNames),
+      mentionables: await projectMentionables(task.projectId, user.id, memberNames, memberAvatars),
     };
   }
 
@@ -337,20 +372,50 @@ export async function resolveMobileThreadMeta(
   };
 }
 
-/** Project members minus the viewer; also fills `memberNames` for everyone. */
+function setNewer(map: Record<string, string>, id: string, iso: string) {
+  const prev = map[id];
+  if (!prev || new Date(iso).getTime() > new Date(prev).getTime()) {
+    map[id] = iso;
+  }
+}
+
+async function loadPeerCursors(
+  threadId: string,
+  viewerId: string,
+  peerReads: Record<string, string>,
+  peerDeliveries: Record<string, string>,
+) {
+  const cursors = await prisma.chatReadCursor.findMany({
+    where: { threadId, userId: { not: viewerId } },
+    select: { userId: true, lastReadAt: true, lastDeliveredAt: true },
+  });
+  for (const c of cursors) {
+    const readIso = c.lastReadAt.toISOString();
+    setNewer(peerReads, c.userId, readIso);
+    // Reading implies delivered; take whichever timestamp is newer.
+    setNewer(peerDeliveries, c.userId, readIso);
+    if (c.lastDeliveredAt) {
+      setNewer(peerDeliveries, c.userId, c.lastDeliveredAt.toISOString());
+    }
+  }
+}
+
+/** Project members minus the viewer; also fills `memberNames` and `memberAvatars` for everyone. */
 async function projectMentionables(
   projectId: string,
   viewerId: string,
   memberNames: Record<string, string>,
+  memberAvatars: Record<string, string | null>,
 ): Promise<{ id: string; name: string }[]> {
   const members = await prisma.projectMember.findMany({
     where: { projectId },
-    select: { user: { select: { id: true, name: true, email: true } } },
+    select: { user: { select: { id: true, name: true, email: true, imageUrl: true } } },
   });
   const out: { id: string; name: string }[] = [];
   for (const { user } of members) {
     const name = user.name ?? user.email;
     memberNames[user.id] = name;
+    memberAvatars[user.id] = user.imageUrl ?? null;
     if (user.id !== viewerId) out.push({ id: user.id, name });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));

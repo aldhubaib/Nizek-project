@@ -63,6 +63,7 @@ import {
   sweepMessageEvents,
 } from "./src/lib/message-events-core.js";
 import { broadcast } from "./src/lib/centrifugo.js";
+import { recordThreadDelivered } from "./src/lib/chat-delivery.js";
 import {
   fanOutMessageSideEffects,
   notifyMessageRecipients,
@@ -390,6 +391,17 @@ async function deliverToMobile(
     send: sendExpo,
   });
   await applyExpoDeliveryEffects(prisma, effects);
+
+  if (threadKey && effects.successIds.length > 0) {
+    const okIds = new Set(effects.successIds);
+    const deliveredUserIds = tokens
+      .filter((t) => okIds.has(t.id))
+      .map((t) => t.memberId);
+    void recordThreadDelivered(prisma, broadcast, {
+      threadId: threadKey,
+      userIds: deliveredUserIds,
+    });
+  }
 
   metrics.mobileSends += tokens.length;
   metrics.mobileOk += effects.counts.ok;

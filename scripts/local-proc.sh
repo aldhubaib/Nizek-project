@@ -56,9 +56,15 @@ case "$role" in
     ;;
   mobile)
     cd ../Nizek-mobile
-    # The installed Simulator app is Nizek Staging. This override sends it to the
-    # local panel instead of Railway. Port 3001 is the panel; 3000 is another app.
-    export EXPO_PUBLIC_API_URL=http://localhost:3001
+    # Sends Nizek Staging at the local panel instead of Railway. Port 3001 is the
+    # panel; 3000 is another app. A phone cannot use localhost, so publish the
+    # Mac's LAN address. The Simulator can reach that address too.
+    lan_ip="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)"
+    if [ -n "$lan_ip" ]; then
+      export EXPO_PUBLIC_API_URL="http://${lan_ip}:3001"
+    else
+      export EXPO_PUBLIC_API_URL=http://localhost:3001
+    fi
     exec npm run start:staging
     ;;
   *)

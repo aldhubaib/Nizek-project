@@ -1698,19 +1698,27 @@ export async function markThreadRead(target: {
         userId: user.id,
         threadId: inboxThreadId,
         lastReadAt: now,
+        lastDeliveredAt: now,
         markedUnread: false,
       },
-      update: { lastReadAt: now, markedUnread: false },
+      update: { lastReadAt: now, lastDeliveredAt: now, markedUnread: false },
     });
   }
 
-  // DMs: advance lastReadAt so senders can show read receipts.
+  // Advance participant cursor (DMs/groups) and broadcast `thread.read` on
+  // both conversations and project chats so senders see live blue ticks.
   if (target.conversationId) {
     await prisma.conversationParticipant.updateMany({
       where: { conversationId: target.conversationId, memberId: user.id },
       data: { lastReadAt: now },
     });
     void broadcast([conversationChannel(target.conversationId)], {
+      type: "thread.read",
+      memberId: user.id,
+      lastReadAt: now.toISOString(),
+    });
+  } else if (target.projectId && !target.taskId) {
+    void broadcast([projectChannel(target.projectId)], {
       type: "thread.read",
       memberId: user.id,
       lastReadAt: now.toISOString(),
