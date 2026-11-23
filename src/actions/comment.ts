@@ -5,6 +5,7 @@ import { requireProjectMember, requireStaffUser } from "@/lib/auth";
 import { publish, taskChannel } from "@/lib/centrifugo";
 import { notifyAndPush } from "@/lib/notify";
 import { sendMessage } from "@/actions/messages";
+import { INTERNAL_MESSAGE_KIND_TOKEN } from "@/lib/internal-message-token";
 import { encodeTaskCommentBody } from "@/lib/task-comment-payload";
 
 export async function createComment(data: {
@@ -92,6 +93,7 @@ export async function createComment(data: {
           mentionTokens,
         ),
         kind: "task_comment",
+        _internalKindToken: INTERNAL_MESSAGE_KIND_TOKEN,
         attachments: data.attachments,
       });
       postedToChannel = posted.ok;

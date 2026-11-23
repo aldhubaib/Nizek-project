@@ -5,6 +5,11 @@ import type { Prisma } from "@/generated/prisma/client";
 import { isImpersonating, requireUser } from "@/lib/auth";
 import { resolveThreadAccess } from "@/lib/chat-auth";
 import { isClientAccount } from "@/lib/client-role";
+import { INTERNAL_MESSAGE_KIND_TOKEN } from "@/lib/internal-message-token";
+import {
+  resolveSafeMessageKind,
+  validateMessageAttachments,
+} from "@/lib/upload-validation";
 import { hasProjectAccess } from "@/lib/project-access";
 import { getActiveContract } from "@/lib/contract-rules";
 import {
@@ -366,6 +371,7 @@ type SendMessageInput = {
   projectId?: string | null;
   conversationId?: string | null;
   kind?: string;
+  _internalKindToken?: string;
   attachments?: AttachmentInput[];
   replyToId?: string;
 };
@@ -1073,13 +1079,25 @@ export async function sendMessage(
     const user = await requireUser();
 
     const body = input.body.trim();
-    const attachmentsInput = input.attachments ?? [];
-    if (!body && attachmentsInput.length === 0) {
+    const rawAttachments = input.attachments ?? [];
+    if (!body && rawAttachments.length === 0) {
       throw new Error("Message is empty");
     }
     if (body.length > MAX_MESSAGE_CHARS) {
       throw new Error(messageTooLongError(body.length));
     }
+    const attachmentCheck = validateMessageAttachments(rawAttachments, {
+      r2PublicUrl: process.env.R2_PUBLIC_URL,
+    });
+    if (!attachmentCheck.ok) {
+      throw new Error(attachmentCheck.error);
+    }
+    const attachmentsInput = attachmentCheck.attachments;
+    const safeKind = resolveSafeMessageKind(
+      input.kind,
+      input._internalKindToken,
+      INTERNAL_MESSAGE_KIND_TOKEN,
+    );
 
     let taskId = input.taskId ?? null;
     let projectId = input.projectId ?? null;
@@ -1302,7 +1320,7 @@ export async function sendMessage(
             body,
             attachmentsInput.map((file) => file.filename),
           ),
-          kind: input.kind ?? "message",
+          kind: safeKind,
           mentions: mentionedIds.length
             ? { create: mentionedIds.map((id) => ({ memberId: id })) }
             : undefined,

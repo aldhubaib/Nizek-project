@@ -1,19 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth-server";
+import { requireUser } from "@/lib/auth";
 import { uploadToR2, generateR2Key } from "@/lib/r2";
 import {
   MAX_PROXY_UPLOAD_BYTES,
   MAX_PROXY_UPLOAD_LABEL,
 } from "@/lib/upload-limits";
+import { validateUploadFile } from "@/lib/upload-validation";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  const session = await auth.api.getSession({ headers: req.headers });
-  if (!session?.user) {
+  let user: Awaited<ReturnType<typeof requireUser>>;
+  try {
+    user = await requireUser();
+  } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const userId = session.user.id;
+  const userId = user.id;
 
   let form: FormData;
   try {
@@ -33,14 +36,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const check = validateUploadFile({
+    filename: file.name || "file",
+    mimeType: file.type,
+    fileSize: file.size,
+    maxBytes: MAX_PROXY_UPLOAD_BYTES,
+  });
+  if (!check.ok) {
+    return NextResponse.json({ error: check.error }, { status: 400 });
+  }
+
   try {
     const contentType = file.type || "application/octet-stream";
-    const key = generateR2Key(`uploads/${userId}`, file.name || "file");
+    const key = generateR2Key(`uploads/${userId}`, check.filename);
     const buffer = Buffer.from(await file.arrayBuffer());
     const url = await uploadToR2(buffer, key, contentType);
     return NextResponse.json({
       url,
-      filename: file.name || "file",
+      filename: check.filename,
       fileSize: file.size,
       mimeType: file.type || null,
       key,

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireProjectMember } from "@/lib/auth";
 import { sendMessage } from "@/actions/messages";
+import { INTERNAL_MESSAGE_KIND_TOKEN } from "@/lib/internal-message-token";
 import { DIRECT_CONVERSATION_KIND } from "@/lib/client-chat";
 import { getProjectMentionMembers } from "@/lib/project-mentions";
 import { toMentionTokens } from "@/lib/note-mentions";
@@ -181,6 +182,7 @@ export async function createNoteComment(data: {
     conversationId,
     body: messageBody,
     kind: isNew ? "note_comment" : "message",
+    _internalKindToken: INTERNAL_MESSAGE_KIND_TOKEN,
   });
   if (!sent.ok) throw new Error(sent.error);
 

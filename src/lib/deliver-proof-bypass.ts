@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { INTERNAL_MESSAGE_KIND_TOKEN } from "@/lib/internal-message-token";
 import {
   encodeProofBypassBody,
   type ProofBypassPayload,
@@ -46,6 +47,7 @@ export async function postBypassInbox(conversationId: string, payload: ProofBypa
     conversationId,
     body: encodeProofBypassBody(payload),
     kind: "proof_bypass",
+    _internalKindToken: INTERNAL_MESSAGE_KIND_TOKEN,
   });
   if (!sent.ok) throw new Error(sent.error);
   await prisma.conversation.update({
@@ -73,6 +75,7 @@ export async function postBypassToProjectChat(
     projectId: payload.projectId,
     body: tokens ? `${tokens}\n${encodeProofBypassBody(payload)}` : encodeProofBypassBody(payload),
     kind: "proof_bypass",
+    _internalKindToken: INTERNAL_MESSAGE_KIND_TOKEN,
   });
   if (!sent.ok) throw new Error(sent.error);
 }
