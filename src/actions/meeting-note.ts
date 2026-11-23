@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { INTERNAL_MESSAGE_KIND_TOKEN } from "@/lib/internal-message-token";
 import { requireProjectMember, requireProjectRole, requireUser } from "@/lib/auth";
 import {
   canSprint,
@@ -1066,6 +1067,7 @@ async function postNoteActivityToChat(payload: {
     projectId: payload.projectId,
     body: payload.mentionAll ? `${encoded}\n${ALL_MENTION_TOKEN}` : encoded,
     kind: "note_activity",
+    _internalKindToken: INTERNAL_MESSAGE_KIND_TOKEN,
   });
   if (!sent.ok) {
     console.error("[note activity chat]", sent.error);
