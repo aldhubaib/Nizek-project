@@ -2005,6 +2005,8 @@ model MessageAttachment {
   createdAt DateTime @default(now())
 
   @@index([messageId])
+  /// GIN trigram index created in migration for ILIKE filename search.
+  /// Prisma cannot express gin_trgm_ops; see MessageAttachment_filename_trgm_idx.
 }
 
 model Notification {
@@ -2088,6 +2090,7 @@ model MobilePushToken {
   @@index([memberId])
   @@index([memberId, deviceId])
   @@index([memberId, failCount])
+  @@index([deviceId])
 }
 
 /// Last known push state of one browser/PWA install, reported by the client.
