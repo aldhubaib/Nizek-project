@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { isImpersonating, requireUser } from "@/lib/auth";
+import { resolveThreadAccess } from "@/lib/chat-auth";
+import { isClientAccount } from "@/lib/client-role";
 import { hasProjectAccess } from "@/lib/project-access";
 import { getActiveContract } from "@/lib/contract-rules";
 import {
@@ -144,19 +146,41 @@ function toDisplayBody(body: string): string {
   return body.replace(MENTION_RE, "@$1");
 }
 
+function safeCardPreview(fn: () => string | null): string | null {
+  try {
+    return fn();
+  } catch {
+    return null;
+  }
+}
+
 function inboxPreview(body: string): string {
-  const activity = decodeNoteActivityPayload(body);
-  if (activity) return noteActivityPreview(activity);
-  const issue = decodeClientIssuePayload(body);
-  if (issue) return clientIssuePreview(issue);
-  const note = decodeNoteCommentPayload(body);
-  if (note?.comment) return note.comment;
-  const task = decodeTaskCommentPayload(body);
-  if (task?.comment) return task.comment;
-  const bypass = decodeProofBypassPayload(body);
-  if (bypass) return proofBypassPreview(bypass);
-  const reminder = decodeDeadlineReminderPayload(body);
-  if (reminder) return deadlineReminderPreview(reminder);
+  const cardPreview =
+    safeCardPreview(() => {
+      const activity = decodeNoteActivityPayload(body);
+      return activity ? noteActivityPreview(activity) : null;
+    }) ??
+    safeCardPreview(() => {
+      const issue = decodeClientIssuePayload(body);
+      return issue ? clientIssuePreview(issue) : null;
+    }) ??
+    safeCardPreview(() => {
+      const note = decodeNoteCommentPayload(body);
+      return note?.comment ?? null;
+    }) ??
+    safeCardPreview(() => {
+      const task = decodeTaskCommentPayload(body);
+      return task?.comment ?? null;
+    }) ??
+    safeCardPreview(() => {
+      const bypass = decodeProofBypassPayload(body);
+      return bypass ? proofBypassPreview(bypass) : null;
+    }) ??
+    safeCardPreview(() => {
+      const reminder = decodeDeadlineReminderPayload(body);
+      return reminder ? deadlineReminderPreview(reminder) : null;
+    });
+  if (cardPreview) return cardPreview;
   return toDisplayBody(body) || "📎 Attachment";
 }
 
@@ -509,51 +533,19 @@ async function resolveThreadScope(
     conversationId?: string | null;
   },
 ): Promise<ThreadScope> {
-  let where: ThreadWhere;
-  let isClientRoom = false;
-  if (input.conversationId) {
-    const convoMeta = await prisma.conversation.findUnique({
-      where: { id: input.conversationId },
-      select: { id: true, kind: true },
-    });
-    if (!convoMeta) throw new Error("Permission denied");
-    if (convoMeta.kind === ANNOUNCEMENTS_CONVERSATION_KIND) {
-      if (!canReadAnnouncements(user)) throw new Error("Permission denied");
-    } else if (convoMeta.kind === CLIENT_CONVERSATION_KIND) {
-      const access = await canAccessClientConversation(input.conversationId, user);
-      if (!access.ok) throw new Error("Permission denied");
-      isClientRoom = true;
-    } else {
-      const convo = await prisma.conversation.findFirst({
-        where: {
-          id: input.conversationId,
-          participants: { some: { memberId: user.id } },
-        },
-        select: { id: true },
-      });
-      if (!convo) throw new Error("Permission denied");
-    }
-    where = { conversationId: input.conversationId };
-  } else if (input.taskId) {
-    if (isClientUser(user)) throw new Error("Permission denied");
-    const task = await prisma.task.findFirst({
-      where: { id: input.taskId },
-      select: { projectId: true },
-    });
-    if (!task) throw new Error("Not found");
-    if (!(await hasProjectAccess(task.projectId)))
-      throw new Error("Permission denied");
-    where = { taskId: input.taskId };
-  } else if (input.projectId) {
-    if (isClientUser(user)) throw new Error("Permission denied");
-    if (!(await hasProjectAccess(input.projectId)))
-      throw new Error("Permission denied");
-    // Internal project chat only — never fold client-room messages in.
-    where = { projectId: input.projectId, conversationId: null };
-  } else {
+  if (!input.conversationId && !input.taskId && !input.projectId) {
     throw new Error("No thread specified");
   }
-  return { where, isClientRoom };
+  const access = await resolveThreadAccess(user, input);
+  if (!access.allowed) throw new Error("Permission denied");
+
+  const where: ThreadWhere = input.conversationId
+    ? { conversationId: input.conversationId }
+    : input.taskId
+      ? { taskId: input.taskId }
+      : { projectId: input.projectId!, conversationId: null };
+
+  return { where, isClientRoom: access.isClientRoom };
 }
 
 /** Rows (oldest → newest) to the wire shape. */
@@ -832,32 +824,8 @@ async function userCanAccessMessage(
     taskId: string | null;
   },
 ): Promise<boolean> {
-  if (message.conversationId) {
-    const convo = await prisma.conversation.findUnique({
-      where: { id: message.conversationId },
-      select: { kind: true },
-    });
-    if (!convo) return false;
-    if (convo.kind === CLIENT_CONVERSATION_KIND) {
-      const access = await canAccessClientConversation(
-        message.conversationId,
-        user,
-      );
-      return access.ok;
-    }
-    const part = await prisma.conversationParticipant.findFirst({
-      where: {
-        conversationId: message.conversationId,
-        memberId: user.id,
-      },
-      select: { id: true },
-    });
-    return Boolean(part);
-  }
-  const projectId = message.projectId;
-  if (!projectId) return false;
-  if (isClientUser(user)) return false;
-  return hasProjectAccess(projectId);
+  const access = await resolveThreadAccess(user, message);
+  return access.allowed;
 }
 
 export async function toggleImportantMessage(
@@ -1178,6 +1146,7 @@ export async function sendMessage(
         projectLogoUrl = access.project?.logoUrl ?? convoMeta.project?.logoUrl ?? null;
         groupName = `${projectName} · Client`;
       } else {
+        if (isClientUser(user)) throw new Error("Permission denied");
         const isParticipant = convoMeta.participants.some(
           (p) => p.memberId === user.id,
         );
@@ -1635,7 +1604,10 @@ export async function publishTypingEvent(channel: string): Promise<void> {
     if (convo.kind === CLIENT_CONVERSATION_KIND) {
       const access = await canAccessClientConversation(conversationId, user);
       if (!access.ok || !access.canPost) return;
-    } else if (!convo.participants.some((p) => p.memberId === user.id)) {
+    } else if (
+      isClientUser(user) ||
+      !convo.participants.some((p) => p.memberId === user.id)
+    ) {
       return;
     }
 
@@ -1648,7 +1620,12 @@ export async function publishTypingEvent(channel: string): Promise<void> {
     if (isClientUser(user)) return;
     if (!(await hasProjectAccess(rest))) return;
     const members = await prisma.projectMember.findMany({
-      where: { projectId: rest },
+      where: {
+        projectId: rest,
+        role: { not: "CLIENT" },
+        user: { systemRole: { not: "CLIENT" } },
+        OR: [{ roleId: null }, { projectRole: { isClient: false } }],
+      },
       select: { userId: true },
     });
     for (const member of members) {
@@ -1691,6 +1668,9 @@ export async function markThreadRead(target: {
   conversationId?: string | null;
 }): Promise<{ unread: number; inboxUnread: number } | void> {
   const user = await requireUser();
+
+  const access = await resolveThreadAccess(user, target);
+  if (!access.allowed) throw new Error("Permission denied");
 
   const linkUrl = target.conversationId
     ? `/dashboard/messages/conv-${target.conversationId}`
@@ -1962,31 +1942,8 @@ export async function toggleReaction(
     });
     if (!message) throw new Error("Message not found");
 
-    if (message.conversationId === ANNOUNCEMENTS_CONVERSATION_ID) {
-      // No participant rows here — membership is every non-client user.
-      if (!canReadAnnouncements(user)) throw new Error("Permission denied");
-    } else if (message.conversationId) {
-      const convo = await prisma.conversation.findUnique({
-        where: { id: message.conversationId },
-        select: { kind: true },
-      });
-      if (!convo) throw new Error("Permission denied");
-      if (convo.kind === CLIENT_CONVERSATION_KIND) {
-        await assertCanPostClientConversation(message.conversationId, user);
-      } else {
-        const part = await prisma.conversationParticipant.findFirst({
-          where: {
-            conversationId: message.conversationId,
-            memberId: user.id,
-          },
-          select: { id: true },
-        });
-        if (!part) throw new Error("Permission denied");
-      }
-    } else if (message.projectId) {
-      if (!(await hasProjectAccess(message.projectId)))
-        throw new Error("Permission denied");
-    } else {
+    const access = await resolveThreadAccess(user, message);
+    if (!access.allowed || (access.isClientRoom && !access.canPost)) {
       throw new Error("Permission denied");
     }
 
@@ -2647,13 +2604,17 @@ export async function getOrCreateDirectConversation(
 ): Promise<ActionResult<string>> {
   return safeAction("Open Conversation", async () => {
     const user = await requireUser();
+    if (isClientUser(user)) throw new Error("Permission denied");
     if (otherMemberId === user.id) throw new Error("Cannot message yourself");
 
     const other = await prisma.user.findUnique({
       where: { id: otherMemberId },
-      select: { id: true, blocked: true },
+      select: { id: true, blocked: true, systemRole: true },
     });
     if (!other || other.blocked) throw new Error("User not found");
+    if (isClientUser(other) || (await isClientAccount(other.id))) {
+      throw new Error("Permission denied");
+    }
 
     const existing = await prisma.conversation.findFirst({
       where: {

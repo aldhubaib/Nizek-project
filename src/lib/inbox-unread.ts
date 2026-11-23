@@ -37,8 +37,13 @@ export async function countInboxMessageUnreads(
         AND m."createdAt" > c."lastReadAt"
         AND EXISTS (
           SELECT 1 FROM "ProjectMember" pm
+          INNER JOIN "User" u ON u.id = pm."userId"
+          LEFT JOIN "ProjectRole" pr ON pr.id = pm."roleId"
           WHERE pm."projectId" = m."projectId"
             AND pm."userId" = ${userId}
+            AND pm.role <> 'CLIENT'
+            AND u."systemRole" <> 'CLIENT'
+            AND COALESCE(pr."isClient", false) = false
         )
       GROUP BY m."projectId"
     `,
@@ -62,6 +67,14 @@ export async function countInboxMessageUnreads(
             FROM "ConversationParticipant" p
             WHERE p."conversationId" = conv.id
               AND p."memberId" = ${userId}
+          )
+          OR (
+            conv.kind = 'announcements'
+            AND EXISTS (
+              SELECT 1 FROM "User" u
+              WHERE u.id = ${userId}
+                AND u."systemRole" <> 'CLIENT'
+            )
           )
           OR (
             conv."projectId" IS NOT NULL

@@ -1,22 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
-import { hasProjectAccess } from "@/lib/project-access";
+import { resolveThreadAccess } from "@/lib/chat-auth";
 import { GLOBAL_PRESENCE_ID, isStaffOnlyChannel } from "@/lib/channels";
 import {
   connectionToken,
   subscriptionToken,
   isCentrifugoConfigured,
 } from "@/lib/centrifugo";
-import {
-  canAccessClientConversation,
-  CLIENT_CONVERSATION_KIND,
-  isClientUser,
-} from "@/lib/client-chat";
-import {
-  ANNOUNCEMENTS_CONVERSATION_ID,
-  canReadAnnouncements,
-} from "@/lib/announcements";
+import { isClientUser } from "@/lib/client-chat";
 
 export const runtime = "nodejs";
 
@@ -113,39 +104,16 @@ async function canSubscribe(
       return rest === GLOBAL_PRESENCE_ID;
     }
     case "project": {
-      return hasProjectAccess(rest);
+      if (!rest) return false;
+      return (await resolveThreadAccess(user, { projectId: rest })).allowed;
     }
     case "task": {
-      const task = await prisma.task.findFirst({
-        where: { id: rest },
-        select: { projectId: true },
-      });
-      if (!task) return false;
-      return hasProjectAccess(task.projectId);
+      if (!rest) return false;
+      return (await resolveThreadAccess(user, { taskId: rest })).allowed;
     }
     case "conv": {
-      const conversationId = rest;
-      if (!conversationId) return false;
-
-      if (conversationId === ANNOUNCEMENTS_CONVERSATION_ID) {
-        return canReadAnnouncements(user);
-      }
-      const convo = await prisma.conversation.findUnique({
-        where: { id: conversationId },
-        select: { kind: true },
-      });
-      if (!convo) return false;
-      // Client rooms: anyone who can open the thread (assigned people, other
-      // project members as viewers, or admin) must be on the realtime channel.
-      if (convo.kind === CLIENT_CONVERSATION_KIND) {
-        const access = await canAccessClientConversation(conversationId, user);
-        return access.ok;
-      }
-      const participant = await prisma.conversationParticipant.findFirst({
-        where: { conversationId, memberId },
-        select: { id: true },
-      });
-      return Boolean(participant);
+      if (!rest) return false;
+      return (await resolveThreadAccess(user, { conversationId: rest })).allowed;
     }
     default:
       return false;
