@@ -121,6 +121,7 @@ export async function createComment(data: {
           linkUrl,
           tag: pushTag,
           threadKey: `task-${data.taskId}`,
+          mentionedIds: mentionRecipients,
         },
         { title, body: notifBody, url: linkUrl, type: "mention" },
       );

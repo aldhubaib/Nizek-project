@@ -64,16 +64,13 @@ export function isThreadNotificationLevel(v: unknown): v is ThreadNotificationLe
 }
 
 /**
- * What a thread does when the person never chose a level. Direct, group and
- * client rooms are conversations with you, so every message counts; project
- * and task threads are busy shared rooms, so only mentions do (Slack's
- * default for channels).
+ * What a thread does when the person never chose a level. Every thread starts
+ * at every message. Mentions and Off are explicit choices, stored per person.
  */
 export function defaultThreadLevel(
-  threadKey: string | null | undefined,
+  _threadKey: string | null | undefined,
 ): ThreadNotificationLevel {
-  if (!threadKey) return "all";
-  return threadKey.startsWith("conv-") ? "all" : "mentions";
+  return "all";
 }
 
 export function effectiveThreadLevel(
@@ -84,17 +81,11 @@ export function effectiveThreadLevel(
 }
 
 /**
- * Notification types that are about the recipient personally. They count as a
- * "mention" even without an @ in the body: a declined task, an explicit
- * mention type from comments.
- */
-const DIRECTED_TYPES = new Set(["mention", "rejection"]);
-
-/**
  * Filters recipients down to those who should receive a notification of the
  * given type in the given thread, according to their stored preferences and
  * their per-thread level. Missing preference rows mean "all defaults"
- * (everything on); a missing level means the thread's default level.
+ * (everything on); a missing level means every message. Mentions only keeps
+ * people listed in `mentionedIds` — the type string does not widen that set.
  */
 export function filterRecipientsByPreferences(input: {
   recipientIds: string[];
@@ -109,7 +100,6 @@ export function filterRecipientsByPreferences(input: {
   const { recipientIds, type, threadKey, prefsByUser } = input;
   const levels = input.levelsByUser ?? new Map<string, ThreadNotificationLevel>();
   const mentioned = new Set(input.mentionedIds ?? []);
-  const directedType = DIRECTED_TYPES.has(type);
   return recipientIds.filter((rid) => {
     const prefs = prefsByUser.get(rid) ?? DEFAULT_PREFERENCES;
     if (!typeAllowedByPreferences(type, prefs)) return false;
@@ -117,7 +107,7 @@ export function filterRecipientsByPreferences(input: {
     if (!threadKey) return true;
     const level = effectiveThreadLevel(threadKey, levels.get(rid));
     if (level === "none") return false;
-    if (level === "mentions") return mentioned.has(rid) || directedType;
+    if (level === "mentions") return mentioned.has(rid);
     return true;
   });
 }

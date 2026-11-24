@@ -2,7 +2,7 @@
 // the worker image copies src/lib and runs this with tsx, and the unit tests
 // exercise the policy directly.
 
-import { PUSH_TTL_SECONDS, threadKeyFromPushTag, type PushPayload } from "./push-core";
+import { PUSH_TTL_SECONDS, pushThreadKey, type PushPayload } from "./push-core";
 
 /** Android notification channel the app creates on first launch. */
 export const MOBILE_PUSH_CHANNEL_ID = "messages";
@@ -81,7 +81,7 @@ export function buildExpoMessage(
   payload: PushPayload,
   opts: { badge: number },
 ): ExpoMessage {
-  const threadKey = threadKeyFromPushTag(payload.tag) ?? undefined;
+  const threadKey = pushThreadKey(payload) ?? undefined;
   const data: MobilePushData = {
     kind: "notification",
     url: payload.url,

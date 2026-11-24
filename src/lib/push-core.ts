@@ -10,6 +10,13 @@ export interface PushPayload {
   icon?: string;
   /** Notification type ("message" | "mention" | ...) for delivery logging. */
   type?: string;
+  /**
+   * Chat this push opens and suppresses, when the tag is not `thread-…`
+   * (deadline reminders). Must be `conv-` / `project-` / `task-`.
+   */
+  threadId?: string;
+  /** Keep the web bell and web push. Do not deliver to the phone. */
+  skipMobile?: boolean;
 }
 
 /** How long the push service should retain an undelivered push (seconds). */
@@ -38,6 +45,18 @@ export function threadKeyFromPushTag(tag: string | null | undefined): string | n
   if (!tag || !tag.startsWith(THREAD_PUSH_TAG_PREFIX)) return null;
   const key = tag.slice(THREAD_PUSH_TAG_PREFIX.length);
   return key || null;
+}
+
+/**
+ * Chat a push belongs to. An explicit `threadId` wins so a deadline can open
+ * the project chat without reusing that chat's tag (which would replace its banner).
+ */
+export function pushThreadKey(payload: {
+  tag?: string | null;
+  threadId?: string | null;
+}): string | null {
+  if (isValidThreadKey(payload.threadId)) return payload.threadId;
+  return threadKeyFromPushTag(payload.tag);
 }
 
 /** Accepts only the "conv-…" / "project-…" / "task-…" keys the client sends. */

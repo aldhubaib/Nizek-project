@@ -100,6 +100,24 @@ describe("mobile push: message shape", () => {
     });
   });
 
+  it("opens the project chat for a deadline without reusing that chat's tag", () => {
+    const m = buildExpoMessage(
+      "ExponentPushToken[abcdefghijkl]",
+      {
+        title: "Deadline",
+        body: "Due tomorrow",
+        url: "/dashboard/projects/p1/notes/n1",
+        tag: "deadline-n1-0",
+        type: "deadline",
+        threadId: "project-p1",
+      },
+      { badge: 1 },
+    );
+    expect(m.threadId).toBe("project-p1");
+    expect(m.data?.threadId).toBe("project-p1");
+    expect(m.data?.tag).toBe("deadline-n1-0");
+  });
+
   it("omits the thread for non-chat notifications", () => {
     const m = buildExpoMessage("ExponentPushToken[abcdefghijkl]", {
       title: "Deadline",

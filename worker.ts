@@ -31,7 +31,7 @@ import {
   partitionByActiveThread,
   PUSH_MAX_FAIL_COUNT,
   PUSH_TTL_SECONDS,
-  threadKeyFromPushTag,
+  pushThreadKey,
   mapWithConcurrency,
 } from "./src/lib/push-core.js";
 import {
@@ -309,7 +309,7 @@ async function processPushJob(raw: unknown, jobId: string | undefined): Promise<
 
   // The one device already reading this thread gets no banner; every other
   // device of the same person still does (the service worker shows all pushes).
-  const threadKey = threadKeyFromPushTag(job.payload.tag);
+  const threadKey = pushThreadKey(job.payload);
   const activeByDevice = threadKey
     ? await loadActiveThreads([...allSubscriptions, ...mobileTokens])
     : new Map<string, string | null>();
@@ -375,6 +375,7 @@ async function deliverToMobile(
   threadKey: string | null,
   activeByDevice: Map<string, string | null>,
 ): Promise<void> {
+  if (payload.skipMobile) return;
   const { send: tokens, suppressed } = partitionByActiveThread(
     allTokens,
     threadKey,

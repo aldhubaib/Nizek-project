@@ -131,9 +131,10 @@ export async function createRecordComment(input: {
           linkUrl,
           tag: `thread-board-${input.recordId}`,
           threadKey: `board-${input.recordId}`,
+          mentionedIds: mentionRecipients,
           authorId: user.id,
         },
-        { title, body, url: linkUrl, type: "mention" },
+        { title, body, url: linkUrl, type: "mention", skipMobile: true },
       );
     }
 

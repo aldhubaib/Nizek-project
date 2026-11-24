@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { conversationChannel, projectChannel, publish } from "@/lib/centrifugo";
 import { getClientConversation } from "@/lib/client-chat";
+import { chatPushFields } from "@/lib/chat-push-copy";
 import { fanOutMessageSideEffects } from "@/lib/message-fanout";
 import {
   encodeNoteActivityBody,
@@ -153,8 +154,11 @@ export async function postNoteActivityToClientRoom(input: {
     participantIds,
     uniqueRecipients: participantIds.filter((id) => id !== authorId),
     notifyType: "message",
-    title: `${authorName} · ${project.name} · Client`,
-    notifBody: preview,
+    ...chatPushFields({
+      authorName,
+      place: `${project.name} · Client`,
+      message: preview,
+    }),
     url: `/dashboard/messages/conv-${convo.id}`,
     threadId: `conv-${convo.id}`,
     authorName,
@@ -252,11 +256,10 @@ async function postIssueToProjectChat(ctx: IssueCardContext): Promise<void> {
     isClientRoom: false,
     participantIds: staffIds,
     uniqueRecipients: staffIds.filter((id) => id !== authorId),
-    // Not "mention": nobody was named. It rides the same preference and mute
-    // switches as anything else posted in the project channel.
+    // Addressed to the team, so Mentions still delivers the card. Off still mutes.
+    mentionedIds: staffIds.filter((id) => id !== authorId),
     notifyType: "message",
-    title: `${authorName} · ${project.name}`,
-    notifBody: preview,
+    ...chatPushFields({ authorName, place: project.name, message: preview }),
     url: `/dashboard/messages/project-${projectId}`,
     threadId: `project-${projectId}`,
     authorName,
@@ -304,8 +307,11 @@ async function postIssueToClientRoom(ctx: IssueCardContext): Promise<void> {
     participantIds,
     uniqueRecipients: participantIds.filter((id) => id !== authorId),
     notifyType: "message",
-    title: `${authorName} · ${project.name} · Client`,
-    notifBody: preview,
+    ...chatPushFields({
+      authorName,
+      place: `${project.name} · Client`,
+      message: preview,
+    }),
     url: `/dashboard/messages/conv-${convo.id}`,
     threadId: `conv-${convo.id}`,
     authorName,

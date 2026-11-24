@@ -21,8 +21,12 @@ export type MessageFanOutInput = {
   participantIds: string[];
   /** Candidates for a notification; the per-thread level filter decides. */
   uniqueRecipients: string[];
-  /** Who the message names — what level "mentions" keys on. */
+  /** Who the message names — what level "mentions" keys on. Includes reply authors. */
   mentionedIds?: string[];
+  /** Body @mentions only. The inbox @ uses this, so a plain reply does not light it. */
+  inboxMentionIds?: string[];
+  /** Web bell and web push still go out. The phone skips threads it cannot list. */
+  skipMobile?: boolean;
   notifyType: string;
   title: string;
   notifBody: string;
@@ -55,6 +59,7 @@ export async function notifyMessageRecipients(
     threadId,
     notifIcon,
     asBot,
+    skipMobile,
   } = input;
   if (uniqueRecipients.length === 0) return [];
   const pushTag = `thread-${threadId}`;
@@ -76,6 +81,7 @@ export async function notifyMessageRecipients(
       url,
       type: notifyType,
       icon: notifIcon,
+      ...(skipMobile ? { skipMobile: true as const } : {}),
     },
   );
 }
@@ -156,6 +162,7 @@ export async function fanOutMessageSideEffects(
     authorName,
     preview,
     asBot,
+    inboxMentionIds,
   } = input;
 
   // Everything below (except notify) is idempotent. Seed cursors before push
@@ -207,5 +214,6 @@ export async function fanOutMessageSideEffects(
     lastAuthor: authorName,
     lastMessage: preview,
     lastAt: new Date().toISOString(),
+    mentionedIds: inboxMentionIds ?? [],
   });
 }
