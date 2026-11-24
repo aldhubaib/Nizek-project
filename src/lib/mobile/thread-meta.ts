@@ -13,6 +13,7 @@ import {
   CLIENT_CONVERSATION_KIND,
   isClientUser,
 } from "@/lib/client-chat";
+import { getThreadNotificationLevel } from "@/actions/notification-preferences";
 import {
   ANNOUNCEMENTS_CONVERSATION_ID,
   ANNOUNCEMENTS_SUBTITLE,
@@ -74,14 +75,22 @@ export type MobileThreadMeta = {
   inactive: boolean;
   /** Can open but not post (client rooms the viewer is not assigned to). */
   readOnly: boolean;
+  /** Resolved notification level for the viewer. */
+  notifications: "all" | "mentions" | "none";
   /** Announcements for non-admins: may reply to a post, not start one. */
   replyOnly: boolean;
   isClientRoom: boolean;
 };
 
-export async function resolveMobileThreadMeta(
+export async function resolveMobileThreadMeta(threadId: string): Promise<MobileThreadMeta> {
+  const meta = await loadMobileThreadMeta(threadId);
+  const setting = await getThreadNotificationLevel(threadId);
+  return { ...meta, notifications: setting.level };
+}
+
+async function loadMobileThreadMeta(
   threadId: string,
-): Promise<MobileThreadMeta> {
+): Promise<Omit<MobileThreadMeta, "notifications">> {
   const user = await requireUser();
   const client = isClientUser(user);
   const notFound = () => new Error("Not found");

@@ -45,10 +45,10 @@ describe("typeAllowedByPreferences", () => {
 });
 
 describe("thread levels", () => {
-  it("defaults conversations to every message and project/task threads to mentions", () => {
+  it("defaults every thread to every message", () => {
     expect(defaultThreadLevel("conv-1")).toBe("all");
-    expect(defaultThreadLevel("project-1")).toBe("mentions");
-    expect(defaultThreadLevel("task-1")).toBe("mentions");
+    expect(defaultThreadLevel("project-1")).toBe("all");
+    expect(defaultThreadLevel("task-1")).toBe("all");
     expect(defaultThreadLevel(null)).toBe("all");
   });
 
@@ -107,7 +107,7 @@ describe("filterRecipientsByPreferences", () => {
     expect(other).toEqual(["a"]);
   });
 
-  it("project threads notify only the mentioned by default", () => {
+  it("a project thread with no stored choice notifies everyone", () => {
     const out = filterRecipientsByPreferences({
       recipientIds: ["mentioned", "quiet"],
       type: "message",
@@ -115,7 +115,28 @@ describe("filterRecipientsByPreferences", () => {
       prefsByUser: new Map(),
       mentionedIds: ["mentioned"],
     });
-    expect(out).toEqual(["mentioned"]);
+    expect(out).toEqual(["mentioned", "quiet"]);
+  });
+
+  it("mentions only keeps the named person, on a project thread and for a rejection", () => {
+    const project = filterRecipientsByPreferences({
+      recipientIds: ["mentioned", "quiet"],
+      type: "mention",
+      threadKey: "project-1",
+      prefsByUser: new Map(),
+      levelsByUser: levels({ mentioned: "mentions", quiet: "mentions" }),
+      mentionedIds: ["mentioned"],
+    });
+    expect(project).toEqual(["mentioned"]);
+    const rejection = filterRecipientsByPreferences({
+      recipientIds: ["named", "other"],
+      type: "rejection",
+      threadKey: "task-3",
+      prefsByUser: new Map(),
+      levelsByUser: levels({ named: "mentions", other: "mentions" }),
+      mentionedIds: ["named"],
+    });
+    expect(rejection).toEqual(["named"]);
   });
 
   it("a member who chose every message gets unmentioned project messages", () => {
@@ -124,7 +145,7 @@ describe("filterRecipientsByPreferences", () => {
       type: "message",
       threadKey: "project-1",
       prefsByUser: new Map(),
-      levelsByUser: levels({ eager: "all" }),
+      levelsByUser: levels({ eager: "all", quiet: "mentions" }),
       mentionedIds: [],
     });
     expect(out).toEqual(["eager"]);
@@ -149,16 +170,6 @@ describe("filterRecipientsByPreferences", () => {
       mentionedIds: ["picky"],
     });
     expect(named).toEqual(["picky", "normal"]);
-  });
-
-  it("personal types (mention, rejection) count as a mention", () => {
-    const out = filterRecipientsByPreferences({
-      recipientIds: ["a"],
-      type: "rejection",
-      threadKey: "task-3",
-      prefsByUser: new Map(),
-    });
-    expect(out).toEqual(["a"]);
   });
 
   it("none beats a mention", () => {

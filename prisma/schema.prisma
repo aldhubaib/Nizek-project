@@ -2206,8 +2206,7 @@ model NotificationPreference {
 //   all      — every message notifies (row + push + chime + email fallback)
 //   mentions — only when they are @mentioned / replied to
 //   none     — never (no row, no push, no chime, no email)
-// No row means the thread's default: direct, group and client rooms are "all";
-// project and task threads are "mentions". threadKey: "task-{id}" |
+// No row means the thread's default: every message. threadKey: "task-{id}" |
 // "conv-{id}" | "project-{id}". The thread itself always updates live.
 model ThreadNotificationPref {
   userId    String

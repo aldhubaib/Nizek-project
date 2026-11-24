@@ -12,6 +12,8 @@ export type InboxPreviewEvent = {
   lastAuthor: string;
   lastMessage: string;
   lastAt: string;
+  /** Body @mentions. The phone lights the inbox @ when this list contains the viewer. */
+  mentionedIds?: string[];
 };
 
 /**

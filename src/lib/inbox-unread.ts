@@ -117,6 +117,60 @@ export async function countInboxMessageUnreads(
   return map;
 }
 
+type IdRow = { id: string | null };
+
+/**
+ * Threads where an unread message @mentions this person. A reply with no @
+ * does not qualify. Same cursor rules as the unread counts.
+ */
+export async function mentionUnreadThreadIds(userId: string): Promise<Set<string>> {
+  const [projectRows, convRows] = await Promise.all([
+    prisma.$queryRaw<IdRow[]>`
+      SELECT DISTINCT m."projectId" AS id
+      FROM "Message" m
+      INNER JOIN "MessageMention" mm
+        ON mm."messageId" = m.id AND mm."memberId" = ${userId}
+      INNER JOIN "ChatReadCursor" c
+        ON c."userId" = ${userId}
+       AND c."threadId" = ('project-' || m."projectId")
+      WHERE m."projectId" IS NOT NULL
+        AND m."conversationId" IS NULL
+        AND m."deletedAt" IS NULL
+        AND m."authorId" <> ${userId}
+        AND m."createdAt" > c."lastReadAt"
+        AND NOT EXISTS (
+          SELECT 1 FROM "MessageHidden" h
+          WHERE h."messageId" = m.id AND h."userId" = ${userId}
+        )
+    `,
+    prisma.$queryRaw<IdRow[]>`
+      SELECT DISTINCT m."conversationId" AS id
+      FROM "Message" m
+      INNER JOIN "Conversation" conv ON conv.id = m."conversationId"
+      INNER JOIN "MessageMention" mm
+        ON mm."messageId" = m.id AND mm."memberId" = ${userId}
+      INNER JOIN "ChatReadCursor" c
+        ON c."userId" = ${userId}
+       AND c."threadId" = ('conv-' || m."conversationId")
+      WHERE m."conversationId" IS NOT NULL
+        AND m."deletedAt" IS NULL
+        AND m."authorId" <> ${userId}
+        AND NOT EXISTS (
+          SELECT 1 FROM "MessageHidden" h
+          WHERE h."messageId" = m.id AND h."userId" = ${userId}
+        )
+        AND (
+          (c."lastReadAt" IS NOT NULL AND m."createdAt" > c."lastReadAt")
+          OR (c."lastReadAt" IS NULL AND conv.kind = 'client')
+        )
+    `,
+  ]);
+  const ids = new Set<string>();
+  for (const row of projectRows) if (row.id) ids.add(`project-${row.id}`);
+  for (const row of convRows) if (row.id) ids.add(`conv-${row.id}`);
+  return ids;
+}
+
 export async function sumInboxMessageUnreads(userId: string): Promise<number> {
   const map = await countInboxMessageUnreads(userId);
   let total = 0;

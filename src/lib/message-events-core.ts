@@ -40,6 +40,8 @@ export type MessageEventFanOut = {
   participantIds: string[];
   uniqueRecipients: string[];
   mentionedIds?: string[];
+  inboxMentionIds?: string[];
+  skipMobile?: boolean;
   notifyType: string;
   title: string;
   notifBody: string;
@@ -195,6 +197,8 @@ export function parseMessageEventPayload(raw: unknown): MessageEventPayload | nu
       participantIds: f.participantIds,
       uniqueRecipients: f.uniqueRecipients,
       mentionedIds: isStringArray(f.mentionedIds) ? f.mentionedIds : [],
+      inboxMentionIds: isStringArray(f.inboxMentionIds) ? f.inboxMentionIds : [],
+      skipMobile: f.skipMobile === true ? true : undefined,
       notifyType: typeof f.notifyType === "string" ? f.notifyType : "message",
       title: typeof f.title === "string" ? f.title : "",
       notifBody: typeof f.notifBody === "string" ? f.notifBody : "",

@@ -709,6 +709,7 @@ export async function declineTask(data: {
           linkUrl,
           tag: pushTag,
           threadKey: `task-${task.id}`,
+          mentionedIds: [submitterId],
         },
         { title, body: notifBody, url: linkUrl, type: "rejection" },
       );

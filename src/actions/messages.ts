@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { isImpersonating, requireUser } from "@/lib/auth";
 import { resolveThreadAccess } from "@/lib/chat-auth";
+import { chatPushFields } from "@/lib/chat-push-copy";
 import { isClientAccount } from "@/lib/client-role";
 import {
   isClientMessageIdUniqueError,
@@ -88,7 +89,9 @@ import { cleanVoiceDuration, cleanVoiceWaveform, readVoiceWaveform } from "@/lib
 import {
   countInboxMessageUnreads,
   countUnreadInboxChats,
+  mentionUnreadThreadIds,
 } from "@/lib/inbox-unread";
+import { isThreadNotificationLevel, type ThreadNotificationLevel } from "@/lib/notification-prefs";
 import {
   assertCanPostClientConversation,
   canAccessClientConversation,
@@ -1493,18 +1496,34 @@ export async function sendMessage(
         proofBypass: proofBypassPayload,
       };
 
-      // Recipients + notification (mention-driven; DMs notify all participants).
+      // Recipients + notification. The per-thread level (all / mentions / none)
+      // decides who actually gets one. Default is every message. Project and
+      // task candidates are every non-client member, so someone who left the
+      // default really gets every message, and Mentions only keeps `namedIds`.
       let url: string;
       let threadId: string;
-      // Candidates for a notification. The per-thread level filter (in
-      // notify.ts) decides who actually gets one: "all" / "mentions" / "none",
-      // defaulting to every message in conversations and mentions only in
-      // project and task threads. Project and task candidates are therefore
-      // every non-client member, not just the mentioned ones, so a member who
-      // chose "every message" for a thread really gets every message.
       let recipients: string[];
-      /** Who this message names — what level "mentions" keys on. */
+      /** Body @mentions plus the person a reply answers. Mentions level keys on this. */
       let namedIds: string[] = mentionedIds;
+      let replyAuthorId: string | null = announcementReplyAuthorId;
+      if (input.replyToId && !replyAuthorId) {
+        const parent = await tx.message.findFirst({
+          where: {
+            id: input.replyToId,
+            deletedAt: null,
+            authorId: { not: user.id },
+            ...(conversationId
+              ? { conversationId }
+              : {
+                  projectId,
+                  conversationId: null,
+                  ...(taskId ? { taskId } : { taskId: null }),
+                }),
+          },
+          select: { authorId: true },
+        });
+        replyAuthorId = parent?.authorId ?? null;
+      }
       if (conversationId) {
         url = `/dashboard/messages/conv-${conversationId}`;
         threadId = `conv-${conversationId}`;
@@ -1529,27 +1548,23 @@ export async function sendMessage(
           ...new Set([...members.map((m) => m.userId), ...mentionedIds]),
         ].filter((id) => id !== user.id);
       }
+      if (replyAuthorId) namedIds = [...new Set([replyAuthorId, ...namedIds])];
 
-      const notifyType =
+      const notifyType = input.kind === "rejection" ? "rejection" : "message";
+      // Slack-shaped banner. The bold line is the room. The sender leads the
+      // message. A direct message has no room, so the bold line is the person.
+      const place = conversationId ? groupName || null : projectName || "Project";
+      const messageText =
         input.kind === "rejection"
-          ? "rejection"
-          : conversationId || mentionedIds.length === 0
-            ? "message"
-            : "mention";
-      // Where the message came from, right in the OS banner: the group name, an
-      // explicit "Direct message", or the task's project. Kept short — iOS
-      // truncates banner titles around 30 characters, so anything appended after
-      // "mentioned you in …" was never visible. Author first, context right
-      // after, and the task name moves into the body (which gets two lines).
-      const title = conversationId
-        ? `${authorName} · ${groupName || "Direct message"}`
-        : input.kind === "rejection"
-          ? `${authorName} declined "${taskTitle}"`
-          : `${authorName} · ${projectName}`;
-      const notifBody =
-        taskTitle && input.kind !== "rejection"
-          ? `"${taskTitle}" — ${preview}`
-          : preview;
+          ? `declined "${taskTitle}"`
+          : taskTitle
+            ? `"${taskTitle}" — ${preview}`
+            : preview;
+      const { title, notifBody } = chatPushFields({
+        authorName,
+        place,
+        message: messageText,
+      });
       // DMs and groups show the sender's face; project threads show the project
       // logo. The service worker falls back to the app icon when neither exists.
       const notifIcon =
@@ -1590,6 +1605,8 @@ export async function sendMessage(
             participantIds,
             uniqueRecipients,
             mentionedIds: namedIds.filter((id) => id !== user.id),
+            inboxMentionIds: mentionedIds.filter((id) => id !== user.id),
+            skipMobile: Boolean(noteCommentThreadId || taskHighlightThreadId),
             notifyType,
             title,
             notifBody,
@@ -2218,6 +2235,10 @@ export type InboxThread = {
   noteComment?: boolean;
   /** Personal reminder. The unread count can still be zero; their receipt is unchanged. */
   markedUnread?: boolean;
+  /** An unread message in this thread @mentions the viewer. A plain reply does not. */
+  mentionUnread?: boolean;
+  /** Resolved per-thread level. Missing means every message. */
+  notifications?: ThreadNotificationLevel;
 };
 
 export async function getInboxThreads(): Promise<InboxThread[]> {
@@ -2262,7 +2283,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
       conversations = await loadClientConversations();
     }
 
-    return applyMarkedUnread(
+    return finishInbox(
       user.id,
       conversations.map((c) => {
         const last = c.messages[0];
@@ -2559,7 +2580,7 @@ export async function getInboxThreads(): Promise<InboxThread[]> {
   });
 
   // Pinned: stays first no matter how long since the last announcement.
-  return applyMarkedUnread(user.id, [await buildAnnouncementsThread(user.id, unreadMap), ...sorted]);
+  return finishInbox(user.id, [await buildAnnouncementsThread(user.id, unreadMap), ...sorted]);
 }
 
 export type InboxChanges = {
@@ -2661,6 +2682,26 @@ async function buildAnnouncementsThread(
     initials: "A",
     inactive: false,
   };
+}
+
+async function finishInbox(userId: string, threads: InboxThread[]): Promise<InboxThread[]> {
+  const [marked, mentions, prefs] = await Promise.all([
+    applyMarkedUnread(userId, threads),
+    mentionUnreadThreadIds(userId),
+    prisma.threadNotificationPref.findMany({
+      where: { userId },
+      select: { threadKey: true, level: true },
+    }),
+  ]);
+  const levels = new Map<string, ThreadNotificationLevel>();
+  for (const row of prefs) {
+    if (isThreadNotificationLevel(row.level)) levels.set(row.threadKey, row.level);
+  }
+  return marked.map((thread) => ({
+    ...thread,
+    mentionUnread: mentions.has(thread.id),
+    notifications: levels.get(thread.id) ?? "all",
+  }));
 }
 
 async function applyMarkedUnread(userId: string, threads: InboxThread[]): Promise<InboxThread[]> {

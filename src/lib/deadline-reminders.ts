@@ -210,7 +210,14 @@ export async function sendDeadlineReminderForNote(options: {
     if (rows.length > 0) {
       void enqueuePush(
         rows.map((r) => r.recipientId),
-        { title, body: preview, url: linkUrl, tag: pushTag, type: "deadline" },
+        {
+          title,
+          body: preview,
+          url: linkUrl,
+          tag: pushTag,
+          type: "deadline",
+          threadId: `project-${note.projectId}`,
+        },
       );
     }
   }
@@ -226,6 +233,7 @@ export async function sendDeadlineReminderForNote(options: {
     lastAuthor: NIZEK_BOT_NAME,
     lastMessage: preview,
     lastAt: new Date().toISOString(),
+    mentionedIds: mentionIds,
   });
 
   return { ok: true, messageId: message.id };

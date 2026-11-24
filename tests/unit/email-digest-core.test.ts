@@ -3,6 +3,7 @@ import {
   EMAIL_DIGEST_DELAY_MS,
   authorFromTitle,
   buildDigestEmail,
+  digestLine,
   emailDigestJobId,
   enqueueEmailDigests,
   shouldSendDigest,
@@ -55,6 +56,12 @@ describe("email digest: content", () => {
     expect(authorFromTitle("Sara · Direct message")).toBe("Sara");
     expect(authorFromTitle("Mentioned you")).toBe("Mentioned you");
     expect(authorFromTitle("   ")).toBe("Someone");
+  });
+
+  it("does not prefix a room line that already names the sender", () => {
+    expect(digestLine("Gala", "Reyhaneh: hey")).toBe("Reyhaneh: hey");
+    expect(digestLine("Reyhaneh", "hey")).toBe("Reyhaneh: hey");
+    expect(digestLine("Sara · Direct message", "hi")).toBe("Sara: hi");
   });
 
   it("caps at five lines, counts the rest and includes the link", () => {

@@ -72,6 +72,19 @@ export function authorFromTitle(title: string): string {
   return (idx === -1 ? title : title.slice(0, idx)).trim() || "Someone";
 }
 
+/**
+ * One digest line. Older banners stored the author in the title. Room banners
+ * now store "Name: message" in the body, and a direct message stores the
+ * person in the title with the text alone in the body.
+ */
+export function digestLine(title: string, body: string | null): string {
+  const text = (body ?? "").trim();
+  const author = authorFromTitle(title);
+  if (!text) return author;
+  if (!title.includes(" · ") && text.includes(": ")) return text;
+  return `${author}: ${text}`;
+}
+
 export type DigestLine = { title: string; body: string | null; createdAt: Date };
 
 function escapeHtml(s: string): string {
@@ -98,10 +111,7 @@ export function buildDigestEmail(input: {
   const plural = total === 1 ? "message" : "messages";
   const subject = `${total} new ${plural} in ${input.threadName}`;
 
-  const textLines = shown.map((l) => {
-    const body = (l.body ?? "").trim();
-    return body ? `${authorFromTitle(l.title)}: ${body}` : authorFromTitle(l.title);
-  });
+  const textLines = shown.map((l) => digestLine(l.title, l.body));
   const text = [
     `You have ${total} unread ${plural} in ${input.threadName}.`,
     "",
@@ -117,10 +127,11 @@ export function buildDigestEmail(input: {
 
   const htmlLines = shown
     .map((l) => {
-      const body = (l.body ?? "").trim();
-      return `<li style="margin:0 0 8px"><strong>${escapeHtml(authorFromTitle(l.title))}</strong>${
-        body ? `: ${escapeHtml(body)}` : ""
-      }</li>`;
+      const line = digestLine(l.title, l.body);
+      const split = line.indexOf(": ");
+      const strong = split === -1 ? line : line.slice(0, split);
+      const rest = split === -1 ? "" : line.slice(split);
+      return `<li style="margin:0 0 8px"><strong>${escapeHtml(strong)}</strong>${escapeHtml(rest)}</li>`;
     })
     .join("");
   const html = `<!doctype html><html><body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#111">
